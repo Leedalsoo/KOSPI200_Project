@@ -1,5 +1,10 @@
 # add to application/bootstrap.py
 # existing imports plus:
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
 from application.composition.live_runtime_tick_entry import LiveRuntimeTickEntry
 
 @dataclass(frozen=True)

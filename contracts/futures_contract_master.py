@@ -1,15 +1,11 @@
 """KIS index-futures contract projection from fo_idx_code_mts.mst.
-
-Authoritative meanings follow KIS 종목마스터정보(지수선물옵션).h
+Authoritative meanings follow KIS 종목마스터정보(지수선물옵션).h.
 """
-
 from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Iterable, Optional
 
 KIS_FUTURES_INFO_TYPES = frozenset({"1", "3", "7", "9", "B"})
-
 KIS_CURRENT_MONTH_CODE = "1"
 
 
@@ -58,7 +54,7 @@ def parse_kis_futures_contracts(raw_content: str) -> tuple[KisFuturesContractIde
 
 def select_current_futures_contract(
     records: Iterable[KisFuturesContractIdentity],
-# *,
+    *,
     underlying_short_code: Optional[str] = None,
     underlying_name: Optional[str] = None,
 ) -> KisFuturesContractIdentity:
@@ -86,11 +82,12 @@ class KisCurrentFuturesContractSource:
         )
 
     def with_target(
-# self,
-# *,
+        self,
+        *,
         underlying_short_code: Optional[str] = None,
         underlying_name: Optional[str] = None,
     ) -> "KisCurrentFuturesContractSource":
+        """Return a source view using an explicit Application target selector."""
         return KisCurrentFuturesContractSource(
             self._records,
             underlying_short_code=underlying_short_code,

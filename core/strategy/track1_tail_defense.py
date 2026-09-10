@@ -70,8 +70,8 @@ class Track1TailDefense(Strategy):
         return payload if isinstance(payload, Track1Input) else None
 
     def _build_fence_signal(self, fence_type: str, strike: float, tag: int, reason: str) -> Signal:
-        pass
         # Legacy Track1 explicitly creates these fence legs as OPTION qty=1.
+        # The side is the explicit side of this signal, not a generic direction→side conversion.
         side = "BUY" if fence_type == "CALL" else "SELL"
         proposal = StrategyExecutionProposal(
             proposed_quantity=1,
@@ -84,15 +84,13 @@ class Track1TailDefense(Strategy):
             strike=Decimal(str(strike)),
         )
         return Signal(self.strategy_id, side, 1.0,
-# f"FENCE_BUILD:{fence_type}:{strike}:#{tag}:{reason}",
+                      f"FENCE_BUILD:{fence_type}:{strike}:#{tag}:{reason}",
                       execution_proposal=proposal)
 
     def evaluate(self, context: StrategyContext) -> Sequence[Signal]:
         if context.strategy_id != self.strategy_id:
-            pass
             raise ValueError("strategy context mismatch")
         if not self._initialized:
-            pass
             self.initialize(context)
 
         track_input = self._input(context)
@@ -100,16 +98,12 @@ class Track1TailDefense(Strategy):
         signals: list[Signal] = []
 
         if track_input is not None:
-            pass
             if track_input.current_time is not None:
-                pass
                 current_date = track_input.current_time.date()
                 if self.state.hedge_count_date != current_date:
-                    pass
                     self.state.futures_hedge_count = 0
                     self.state.hedge_count_date = current_date
             if track_input.days_to_expiry is not None and track_input.days_to_expiry <= 4.0:
-                pass
                 if self.state.active_fence_type is not None:
                     signals.append(Signal(
                         self.strategy_id,
@@ -131,11 +125,9 @@ class Track1TailDefense(Strategy):
                     self.state.active_fence_strike = None
                 return signals
             if track_input.active_vol is not None and track_input.base_vol is not None:
-                pass
                 self.state.fence_distance = 12.5 if track_input.active_vol > track_input.base_vol * 1.15 else 7.5
 
         if not self.state.market_opened:
-            pass
             self.state.base_price = price
             self.state.market_opened = True
             call_outer = self._round_strike(price + 12.5)
@@ -151,7 +143,6 @@ class Track1TailDefense(Strategy):
             )
 
         if self.state.active_fence_type is None or self.state.active_fence_strike is None:
-            pass
             return signals
 
         base = self.state.base_price or price
@@ -159,19 +150,15 @@ class Track1TailDefense(Strategy):
         approaching = (price <= base - warning if self.state.active_fence_type == "PUT" else price >= base + warning)
 
         if approaching and self.state.active_hedge is None:
-            pass
             momentum_confirmed = track_input.momentum_confirmed if track_input is not None else False
             if momentum_confirmed and self.state.futures_hedge_count < self.max_hedge_allowed:
-                pass
                 self.state.active_hedge = "SELL" if self.state.active_fence_type == "PUT" else "BUY"
                 self.state.hedge_entry_price = price
                 hedge_qty = 0
                 if track_input.short_option_net_delta is not None:
-                    pass
                     from core.risk.delta_hedge_quantity import delta_to_mini_futures_qty
                     hedge_qty = delta_to_mini_futures_qty(track_input.short_option_net_delta)
                 if hedge_qty <= 0:
-                    pass
                     self.state.active_hedge = None
                     self.state.hedge_entry_price = None
                     return signals
@@ -194,7 +181,6 @@ class Track1TailDefense(Strategy):
                 ))
 
         if self.state.active_hedge and self.state.hedge_entry_price is not None:
-            pass
             reverted = ((self.state.active_hedge == "SELL" and price - self.state.hedge_entry_price >= 1.5) or
                         (self.state.active_hedge == "BUY" and self.state.hedge_entry_price - price >= 1.5))
             if reverted:

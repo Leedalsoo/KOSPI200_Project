@@ -2,9 +2,9 @@ from decimal import Decimal
 
 import pytest
 
-from track4_kis_greeks_ws_adapter import (
-KISIndexOptionGreeksWebSocketAdapter,
-# Track4KisWebSocketAdapterInvalid,
+from contracts.track4_kis_greeks_ws_adapter import (
+    KISIndexOptionGreeksWebSocketAdapter,
+    Track4KisWebSocketAdapterInvalid,
 )
 
 
@@ -34,7 +34,6 @@ def test_h0iocnt0_wire_frame_reaches_provider_without_recalculation() -> None:
 
 def test_unexpected_tr_id_is_rejected() -> None:
     with pytest.raises(Track4KisWebSocketAdapterInvalid):
-        pass
         KISIndexOptionGreeksWebSocketAdapter().adapt(
             _frame().replace("H0IOCNT0", "H0IFCNT0"),
             observed_at="2026-09-06T10:15:30+09:00",
@@ -44,7 +43,6 @@ def test_unexpected_tr_id_is_rejected() -> None:
 def test_field_count_mismatch_is_rejected() -> None:
     frame = _frame().replace("|58|", "|57|")
     with pytest.raises(Track4KisWebSocketAdapterInvalid):
-        pass
         KISIndexOptionGreeksWebSocketAdapter().adapt(
             frame, observed_at="2026-09-06T10:15:30+09:00"
         )

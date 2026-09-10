@@ -1,8 +1,8 @@
 import pytest
 
 from application.composition.virtual_contract_mapping_loader import (
-VirtualContractMappingConfigurationError,
-VirtualContractMappingLoader,
+    VirtualContractMappingConfigurationError,
+    VirtualContractMappingLoader,
 )
 
 
@@ -39,13 +39,10 @@ def test_loads_explicit_contract_mappings():
 def test_loader_is_fail_closed(source, error):
     loader = VirtualContractMappingLoader()
     if error is None:
-        pass
         assert loader.load(source) == {}
     else:
-        pass
         with pytest.raises(VirtualContractMappingConfigurationError, match=error):
-            pass
-loader.load(source)
+            loader.load(source)
 
 
 def test_duplicate_key_is_rejected():
@@ -57,7 +54,7 @@ def test_duplicate_key_is_rejected():
     }
 
     with pytest.raises(
-VirtualContractMappingConfigurationError,
+        VirtualContractMappingConfigurationError,
         match="DUPLICATE_SCENARIO_CONTRACT_KEY",
     ):
         VirtualContractMappingLoader().load(source)

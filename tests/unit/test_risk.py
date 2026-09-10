@@ -42,15 +42,15 @@ def test_risk_evaluation_result_allow_contract():
         token=token,
     )
 
-# assert result.is_approved is True
+    assert result.is_approved is True
     assert result.decision == "ALLOW"
     assert result.original_qty == 3
     assert result.approved_qty == 3
-# assert result.rejection_reason is None
+    assert result.rejection_reason is None
     assert result.required_margin == 750000.0
     assert result.estimated_margin_ratio == 0.20
     assert result.token == token
-# assert result.reduced_command is None
+    assert result.reduced_command is None
 
 
 def test_risk_evaluation_result_reduce_contract():
@@ -66,10 +66,10 @@ def test_risk_evaluation_result_reduce_contract():
         reduced_command=reduced_command,
     )
 
-# assert result.is_approved is True
+    assert result.is_approved is True
     assert result.decision == "REDUCE"
     assert result.approved_qty == 4
-# assert result.reduced_command is reduced_command
+    assert result.reduced_command is reduced_command
 
 
 def test_risk_evaluation_result_deny_contract():
@@ -81,9 +81,9 @@ def test_risk_evaluation_result_deny_contract():
         rejection_reason="POSITION_LIMIT",
     )
 
-# assert result.is_approved is False
+    assert result.is_approved is False
     assert result.decision == "DENY"
     assert result.approved_qty == 0
     assert result.rejection_reason == "POSITION_LIMIT"
-# assert result.token is None
-# assert result.reduced_command is None
+    assert result.token is None
+    assert result.reduced_command is None

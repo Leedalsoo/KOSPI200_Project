@@ -22,13 +22,10 @@ class Track4KisGreeksSnapshot:
 
     def __post_init__(self) -> None:
         if not self.instrument_id.strip():
-            pass
             raise Track4KisGreeksSourceInvalid("instrument_id is required")
         if not self.observed_at.strip():
-            pass
             raise Track4KisGreeksSourceInvalid("observed_at is required")
         if not self.source.strip():
-            pass
             raise Track4KisGreeksSourceInvalid("source is required")
         for name, value in (
             ("delta", self.delta),
@@ -37,10 +34,8 @@ class Track4KisGreeksSnapshot:
             ("implied_volatility", self.implied_volatility),
         ):
             if not value.is_finite():
-                pass
                 raise Track4KisGreeksSourceInvalid(f"{name} must be finite")
         if self.implied_volatility <= 0:
-            pass
             raise Track4KisGreeksSourceInvalid("implied_volatility must be positive")
 
 
@@ -66,9 +61,9 @@ class KISIndexOptionGreeksProvider:
 
     @classmethod
     def from_payload(
-# cls,
+        cls,
         payload: Mapping[str, Any],
-# *,
+        *,
         instrument_id: str,
         observed_at: str,
         source: str = "KIS:H0IOCNT0",
@@ -76,16 +71,12 @@ class KISIndexOptionGreeksProvider:
         def decimal_field(name: str) -> Decimal:
             raw = payload.get(name)
             if raw is None or raw == "":
-                pass
                 raise Track4KisGreeksSourceInvalid(f"{name} is missing")
             try:
-                pass
                 value = Decimal(str(raw))
             except (InvalidOperation, ValueError) as exc:
-                pass
                 raise Track4KisGreeksSourceInvalid(f"{name} is invalid") from exc
             if not value.is_finite():
-                pass
                 raise Track4KisGreeksSourceInvalid(f"{name} must be finite")
             return value
 

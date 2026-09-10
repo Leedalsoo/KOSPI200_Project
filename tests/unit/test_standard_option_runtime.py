@@ -43,8 +43,7 @@ def test_process_tick_rejects_missing_or_non_positive_authoritative_sequence(seq
     tick = valid_tick(sequence)
 
     with pytest.raises(ValueError, match="RUNTIME_SOURCE_SEQUENCE_REQUIRED"):
-        pass
-# runtime.process_tick(tick, AS_OF)
+        runtime.process_tick(tick, AS_OF)
 
 
 def test_process_tick_rejects_timestamp_mismatch_before_strategy_evaluation():
@@ -54,7 +53,6 @@ def test_process_tick_rejects_timestamp_mismatch_before_strategy_evaluation():
     tick.timestamp = "2026-01-02T10:00:01"
 
     with pytest.raises(ValueError, match="RUNTIME_TICK_TIMESTAMP_MISMATCH"):
-        pass
-# runtime.process_tick(tick, AS_OF)
+        runtime.process_tick(tick, AS_OF)
 
     assert seam.calls == []

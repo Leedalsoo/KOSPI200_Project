@@ -12,8 +12,8 @@ def test_runtime_context_derives_stable_ids_from_authoritative_sequences():
 
 @pytest.mark.parametrize("tick_sequence,local_sequence", [(0, 1), (-1, 1), (1, 0), (1, -1)])
 def test_runtime_context_fails_closed_for_missing_or_invalid_sequences(
-# tick_sequence,
-# local_sequence,
+    tick_sequence,
+    local_sequence,
 ):
     with pytest.raises(ValueError):
         pass

@@ -20,9 +20,9 @@ def test_constructor_preserves_float_input_compatibility_at_boundary():
         vol_spike_threshold_multiplier=1.30,
     )
 
-# assert isinstance(config.max_daily_loss_krw, Decimal)
-# assert isinstance(config.max_margin_utilization_ratio, Decimal)
-# assert isinstance(config.vol_spike_threshold_multiplier, Decimal)
+    assert isinstance(config.max_daily_loss_krw, Decimal)
+    assert isinstance(config.max_margin_utilization_ratio, Decimal)
+    assert isinstance(config.vol_spike_threshold_multiplier, Decimal)
     assert config.max_daily_loss_krw == Decimal(str(100.25))
     assert config.max_margin_utilization_ratio == Decimal(str(0.85))
     assert config.vol_spike_threshold_multiplier == Decimal(str(1.30))
@@ -79,7 +79,6 @@ def test_duration_values_remain_float_domain():
 )
 def test_invalid_decimal_thresholds_fail_fast(field, value, error):
     with pytest.raises(ValueError, match=error):
-        pass
         RiskConfig(**{field: value})
 
 
@@ -90,7 +89,7 @@ def test_invalid_decimal_thresholds_fail_fast(field, value, error):
         ("max_order_qty", True, "MAX_ORDER_QTY_POSITIVE_INT_REQUIRED"),
         (
             "max_position_per_instrument",
-# -1,
+            -1,
             "MAX_POSITION_PER_INSTRUMENT_POSITIVE_INT_REQUIRED",
         ),
         ("max_daily_loss_krw", "0", "MAX_DAILY_LOSS_KRW_POSITIVE_REQUIRED"),
@@ -114,7 +113,6 @@ def test_invalid_decimal_thresholds_fail_fast(field, value, error):
 )
 def test_invalid_domain_ranges_fail_fast(field, value, error):
     with pytest.raises(ValueError, match=error):
-        pass
         RiskConfig(**{field: value})
 
 
@@ -129,7 +127,7 @@ def test_invalid_domain_ranges_fail_fast(field, value, error):
 )
 def test_invalid_timeouts_fail_fast(field, value):
     with pytest.raises(
-# ValueError,
+        ValueError,
         match=f"{field.upper()}_NONNEGATIVE_FINITE_REQUIRED",
     ):
         RiskConfig(**{field: value})

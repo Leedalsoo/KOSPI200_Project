@@ -3,8 +3,8 @@ from decimal import Decimal
 import pytest
 
 from contracts.track4_kis_greeks_provider import (
-KISIndexOptionGreeksProvider,
-# Track4KisGreeksSourceInvalid,
+    KISIndexOptionGreeksProvider,
+    Track4KisGreeksSourceInvalid,
 )
 
 
@@ -29,8 +29,7 @@ def test_kis_payload_projects_authoritative_greeks_and_iv():
 
 def test_missing_kis_greeks_fail_closed():
     with pytest.raises(Track4KisGreeksSourceInvalid):
-        pass
-KISIndexOptionGreeksProvider.from_payload(
+        KISIndexOptionGreeksProvider.from_payload(
             {
                 "delta": "0.5",
                 "gama": "0.01",
@@ -43,8 +42,7 @@ KISIndexOptionGreeksProvider.from_payload(
 
 def test_invalid_iv_fails_closed():
     with pytest.raises(Track4KisGreeksSourceInvalid):
-        pass
-KISIndexOptionGreeksProvider.from_payload(
+        KISIndexOptionGreeksProvider.from_payload(
             {
                 "delta": "0.5",
                 "gama": "0.01",

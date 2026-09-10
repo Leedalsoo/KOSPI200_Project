@@ -41,7 +41,7 @@ def test_consumer_connects_subscribes_and_adapts_trade_frame():
     received = []
     consumer = KISIndexFuturesMarketConsumer(transport, KISIndexFuturesMarketWebSocketAdapter(), received.append)
 
-# asyncio.run(consumer.start("101S12"))
+    asyncio.run(consumer.start("101S12"))
     observation = asyncio.run(consumer.receive_once())
 
     assert transport.calls == [

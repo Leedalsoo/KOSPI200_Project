@@ -32,10 +32,10 @@ def test_source_returns_complete_authoritative_identity() -> None:
 
 def test_source_may_return_none_when_unresolved() -> None:
     source: AuthoritativeOptionIdentitySource = FixtureAuthoritativeSource(None)
-# assert source.get_identity("missing-selector") is None
+    assert source.get_identity("missing-selector") is None
 
 
 def test_source_contract_does_not_synthesize_identity() -> None:
     source: AuthoritativeOptionIdentitySource = FixtureAuthoritativeSource(None)
     result = source.get_identity({"shrn_iscd": "101V3000"})
-# assert result is None
+    assert result is None

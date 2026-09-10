@@ -17,7 +17,7 @@ def base(**kwargs):
         is_new_week_start=True,
         active_vol=Decimal("1.0"),
     )
-# values.update(kwargs)
+    values.update(kwargs)
     return Track7MarketInput(**values)
 
 
@@ -69,7 +69,7 @@ def test_skew_stop_and_normal_exit():
 
 def test_preemptive_take_profit_requires_real_ma_inputs():
     s = Track7VolatilitySkewWeeklyInsurance()
-# s.evaluate_insurance_buy(base())
+    s.evaluate_insurance_buy(base())
     assert s.evaluate_preemptive_take_profit(base()) == ()
     signals = s.evaluate_preemptive_take_profit(base(ma_1m=Decimal("354"), ma_3m=Decimal("353"), ma_5m=Decimal("352"), ma_10m=Decimal("351")))
     assert signals and signals[0].direction == "PREEMPTIVE_LIMIT_TAKE_PROFIT"
@@ -77,7 +77,7 @@ def test_preemptive_take_profit_requires_real_ma_inputs():
 
 def test_expiry_cutoff_limit_then_fallback():
     s = Track7VolatilitySkewWeeklyInsurance()
-# s.evaluate(context(base()))
+    s.evaluate(context(base()))
     assert s.evaluate(context(base(time_str="15:05:00", is_expiry_day=True)))[0].direction == "CLOSE_WEEKLY_INSURANCE_LIMIT"
     assert s.evaluate(context(base(time_str="15:15:00", is_expiry_day=True)))[0].direction == "CLOSE_WEEKLY_INSURANCE_FALLBACK_MARKET"
 
@@ -94,6 +94,6 @@ def test_strategy_id_mismatch_is_noop():
 def test_strategy_has_no_legacy_order_dependency():
     from core.strategy import track7_volatility_skew_weekly_insurance
     source = inspect.getsource(track7_volatility_skew_weekly_insurance)
-# assert "OrderRequest" not in source
-# assert "Broker" not in source
-# assert "TimeService" not in source
+    assert "OrderRequest" not in source
+    assert "Broker" not in source
+    assert "TimeService" not in source

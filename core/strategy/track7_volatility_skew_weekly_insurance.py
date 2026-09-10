@@ -168,12 +168,10 @@ class Track7VolatilitySkewWeeklyInsurance:
                 return cutoff
         signals: list[Signal] = []
         if not self.state.insurance_active:
-            pass
-# signals.extend(self.evaluate_insurance_buy(data))
-# signals.extend(self.evaluate_skew_arbitrage(data))
+            signals.extend(self.evaluate_insurance_buy(data))
+        signals.extend(self.evaluate_skew_arbitrage(data))
         if self.state.insurance_active:
-            pass
-# signals.extend(self.evaluate_preemptive_take_profit(data))
+            signals.extend(self.evaluate_preemptive_take_profit(data))
         return tuple(signals)
 
     def evaluate(self, context: StrategyContext) -> Sequence[Signal]:

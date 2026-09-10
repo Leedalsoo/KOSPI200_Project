@@ -33,14 +33,14 @@ class StrategyPayload(Protocol):
 
 @dataclass(frozen=True)
 class StrategyInput:
-    common: CommonStrategyInput
-    payload: StrategyPayload
+    common: CommonStrategyInput | None = None
+    payload: StrategyPayload | None = None
 
 
 @dataclass(frozen=True)
 class StrategyContext:
-    market_state: MarketState
-    strategy_id: str
+    market_state: MarketState | None = None
+    strategy_id: str = ""
     input: StrategyInput | None = None
 
 

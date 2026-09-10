@@ -1,12 +1,12 @@
 import pytest
 
 from application.composition.virtual_contract_identity_adapter import (
-VirtualContractIdentityResolverAdapter,
+    VirtualContractIdentityResolverAdapter,
 )
 from contracts.virtual_contract_resolver import (
-VirtualContractMapping,
-VirtualContractResolutionError,
-VirtualContractResolver,
+    VirtualContractMapping,
+    VirtualContractResolutionError,
+    VirtualContractResolver,
 )
 from environments.high_speed.contract_identity import ReplayEvent, ScenarioEvent
 
@@ -32,7 +32,7 @@ def test_scenario_event_resolves_authoritative_identity():
     identity = object()
     adapter = make_adapter({"KR7001": identity})
     event = ScenarioEvent(1, "tick", {"price": 100}, "SCN-1")
-# assert adapter.resolve_event(event) is identity
+    assert adapter.resolve_event(event) is identity
 
 
 def test_replay_event_resolves_authoritative_identity():
@@ -41,7 +41,7 @@ def test_replay_event_resolves_authoritative_identity():
     identity = object()
     adapter = make_adapter({"KR7001": identity})
     event = ReplayEvent(1, datetime(2026, 1, 1), {"price": 100}, "SCN-1")
-# assert adapter.resolve_event(event) is identity
+    assert adapter.resolve_event(event) is identity
 
 
 @pytest.mark.parametrize("event", [
@@ -51,21 +51,18 @@ def test_replay_event_resolves_authoritative_identity():
 def test_missing_or_blank_key_fails_closed(event):
     adapter = make_adapter({"KR7001": object()})
     with pytest.raises(VirtualContractResolutionError, match="KEY_REQUIRED"):
-        pass
-adapter.resolve_event(event)
+        adapter.resolve_event(event)
 
 
 def test_unknown_mapping_fails_closed_through_adapter():
     adapter = make_adapter({"KR7001": object()})
     event = ScenarioEvent(1, "tick", {}, "UNKNOWN")
     with pytest.raises(VirtualContractResolutionError, match="MAPPING_NOT_FOUND"):
-        pass
-adapter.resolve_event(event)
+        adapter.resolve_event(event)
 
 
 def test_registry_miss_fails_closed_through_adapter():
     adapter = make_adapter({})
     event = ScenarioEvent(1, "tick", {}, "SCN-1")
     with pytest.raises(VirtualContractResolutionError, match="IDENTITY_NOT_FOUND"):
-        pass
-adapter.resolve_event(event)
+        adapter.resolve_event(event)

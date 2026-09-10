@@ -11,9 +11,7 @@ def delta_to_mini_futures_qty(net_delta: Decimal, contract_multiplier: Decimal =
     separately from the sign of the exposure by the owning strategy.
     """
     if contract_multiplier <= 0:
-        pass
         raise ValueError("CONTRACT_MULTIPLIER_MUST_BE_POSITIVE")
     if not net_delta.is_finite():
-        pass
         raise ValueError("NET_DELTA_MUST_BE_FINITE")
     return int((abs(net_delta) * contract_multiplier).to_integral_value(rounding=ROUND_CEILING))

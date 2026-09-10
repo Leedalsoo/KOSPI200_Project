@@ -12,10 +12,10 @@ class VirtualExecutionEngine(ExecutionProvider):
     """
 
     def __init__(
-# self,
-# position,
-# account,
-# *,
+        self,
+        position,
+        account,
+        *,
         authoritative_execute: Callable[[BrokerOrderCommand], ExecutionReport]
         | None = None,
     ):
@@ -26,7 +26,6 @@ class VirtualExecutionEngine(ExecutionProvider):
 
     def execute(self, order: BrokerOrderCommand) -> ExecutionReport:
         if self._authoritative_execute is not None:
-            pass
             report = self._authoritative_execute(order)
             self._reports[order.client_order_id] = report
             return report
@@ -64,8 +63,6 @@ class VirtualExecutionEngine(ExecutionProvider):
 
     def query_execution(self, execution_id: str) -> ExecutionReport | None:
         for report in self._reports.values():
-            pass
             if report.execution_id == execution_id:
-                pass
                 return report
         return None

@@ -36,12 +36,12 @@ def test_market_readiness_is_partial_only() -> None:
 
     readiness = provider.readiness()
 
-# assert readiness.market is True
-# assert readiness.history is False
-# assert readiness.account_pnl is False
-# assert readiness.greeks is False
-# assert readiness.attribution is False
-# assert readiness.is_complete is False
+    assert readiness.market is True
+    assert readiness.history is False
+    assert readiness.account_pnl is False
+    assert readiness.greeks is False
+    assert readiness.attribution is False
+    assert readiness.is_complete is False
 
 
 def test_kis_greeks_projection_connects_to_track4_market_seam() -> None:
@@ -55,24 +55,21 @@ def test_kis_greeks_projection_connects_to_track4_market_seam() -> None:
     assert provider.current_delta() == Decimal("0.52")
     assert provider.current_gamma() == Decimal("0.18")
     assert provider.active_vol() == Decimal("0.21")
-# assert provider.readiness().greeks is True
+    assert provider.readiness().greeks is True
 
 
 def test_missing_snapshot_fails_closed() -> None:
     provider = Track4MarketProjectionProvider(lambda: None)
 
-# assert provider.readiness().market is False
+    assert provider.readiness().market is False
     with pytest.raises(Track4InputSourceUnavailable):
-        pass
-# provider.current_price()
+        provider.current_price()
 
 
 def test_unsupported_sources_fail_closed() -> None:
     provider = Track4MarketProjectionProvider(lambda: snapshot())
 
     with pytest.raises(Track4InputSourceUnavailable):
-        pass
-# provider.current_delta()
+        provider.current_delta()
     with pytest.raises(Track4InputSourceUnavailable):
-        pass
-# provider.current_pnl()
+        provider.current_pnl()

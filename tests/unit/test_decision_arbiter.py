@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 from decimal import Decimal
 
-from .decision_arbiter import DecisionArbiter, STRATEGY_PRIORITY_MAP
+from core.decision.decision_arbiter import DecisionArbiter, STRATEGY_PRIORITY_MAP
 
 
 class AssetType(str, Enum):

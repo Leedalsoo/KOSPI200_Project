@@ -51,5 +51,4 @@ def test_incomplete_record_fails_closed(field: str, value: object, error: str) -
     values[field] = value
     record = ExternalAuthoritativeOptionIdentityRecord(**values)
     with pytest.raises(AuthoritativeOptionIdentityRecordError, match=error):
-        pass
-record.to_identity()
+        record.to_identity()

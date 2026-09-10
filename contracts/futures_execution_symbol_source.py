@@ -14,7 +14,7 @@ class KisFuturesExecutionSymbolSource:
     """Expose the selected KIS short product code without creating Standard identity."""
 
     def __init__(
-# self,
+        self,
         source: KisCurrentFuturesContractSource,
         target: FuturesTargetConfiguration,
     ) -> None:
@@ -28,6 +28,5 @@ class KisFuturesExecutionSymbolSource:
         )
         symbol = contract.shrn_iscd.strip()
         if not symbol:
-            pass
             raise FuturesExecutionSymbolSourceError("FUTURES_EXECUTION_SYMBOL_REQUIRED")
         return symbol

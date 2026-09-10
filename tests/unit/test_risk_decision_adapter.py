@@ -2,10 +2,10 @@ from dataclasses import dataclass
 from decimal import Decimal
 import pytest
 
-from option_program.core.oms.position_execution_policy import PositionExecutionDecision
-from option_program.core.oms.risk_decision_adapter import (
-RiskDecisionMappingError,
-apply_risk_decision,
+from core.oms.position_execution_policy import PositionExecutionDecision
+from core.oms.risk_decision_adapter import (
+    RiskDecisionMappingError,
+    apply_risk_decision,
 )
 
 
@@ -55,7 +55,6 @@ def test_reduce_uses_reduced_command_quantity():
 
 def test_reduce_rejects_quantity_provenance_mismatch():
     with pytest.raises(RiskDecisionMappingError, match="PROVENANCE"):
-        pass
         apply_risk_decision(
             base_decision(), RiskResult("REDUCE", True, 4, ReducedCommand(3))
         )
@@ -63,7 +62,6 @@ def test_reduce_rejects_quantity_provenance_mismatch():
 
 def test_deny_does_not_create_order_intent():
     with pytest.raises(RiskDecisionMappingError, match="LIMIT"):
-        pass
         apply_risk_decision(
             base_decision(), RiskResult("DENY", False, 0, rejection_reason="LIMIT")
         )

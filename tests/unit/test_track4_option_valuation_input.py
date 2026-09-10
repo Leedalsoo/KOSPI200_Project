@@ -4,8 +4,8 @@ from decimal import Decimal
 import pytest
 
 from contracts.track4_option_valuation_input import (
-OptionValuationInputInvalid,
-# Track4OptionValuationInput,
+    OptionValuationInputInvalid,
+    Track4OptionValuationInput,
 )
 
 def valid_input() -> Track4OptionValuationInput:
@@ -32,10 +32,8 @@ def test_valid_valuation_input_is_immutable_contract():
 
 def test_missing_iv_source_fails_closed():
     with pytest.raises(OptionValuationInputInvalid, match="iv_source"):
-        pass
         Track4OptionValuationInput(**{**valid_input().__dict__, "iv_source": ""})
 
 def test_invalid_valuation_numbers_fail_closed():
     with pytest.raises(OptionValuationInputInvalid, match="time_to_expiry_years"):
-        pass
         Track4OptionValuationInput(**{**valid_input().__dict__, "time_to_expiry_years": Decimal("0")})
