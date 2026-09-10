@@ -77,17 +77,13 @@ class MultiLegExecutionPlan:
 
     def __post_init__(self) -> None:
         if not self.group_id:
-            pass
             raise ValueError("group_id must be non-empty")
         if not self.legs:
-            pass
             raise ValueError("MultiLegExecutionPlan requires at least one leg")
         leg_ids = [leg.leg_id for leg in self.legs]
         if len(set(leg_ids)) != len(leg_ids):
-            pass
             raise ValueError("leg_id values must be unique within a plan")
         if any(leg.quantity <= 0 for leg in self.legs):
-            pass
             raise ValueError("leg quantity must be positive")
 
 
@@ -209,25 +205,6 @@ class ProviderHealth:
 
 
 __all__: Sequence[str] = (
-    "AccountSnapshot",
-    "BrokerOrderCommand",
-    "BrokerOrderResponse",
-    "CanonicalMarketTick",
-    "DataQuality",
-    "EnvironmentType",
-    "ExecutionReport",
-    "ExecutionLeg",
-    "MultiLegExecutionPlan",
-    "OrderAckEvent",
-    "MarketState",
-    "OrderIntent",
-    "OptionInstrumentIdentity",
-    "PositionSnapshot",
-    "ProviderHealth",
-)
-
-
-__all__ = (
     "AccountSnapshot",
     "BrokerOrderCommand",
     "BrokerOrderResponse",
