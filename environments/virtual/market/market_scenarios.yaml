@@ -1,0 +1,16 @@
+```yaml
+active_scenario: HIGH_VOLATILITY
+scenarios:
+  CALM:
+    base_volatility: 1.0
+    biweekly_shock_range: [4.0, 8.0]
+    gap_magnitude_percent: [0.1, 0.5]
+    shock_interval_days: 12
+    trend_drift_range: [-0.03, 0.03]
+  HIGH_VOLATILITY:
+    base_volatility: 2.85
+    biweekly_shock_range: [15.0, 25.0]
+    gap_magnitude_percent: [1.2, 2.5]
+    shock_interval_days: 3
+    trend_drift_range: [-0.35, 0.35]
+```

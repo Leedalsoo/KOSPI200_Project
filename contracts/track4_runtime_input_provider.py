@@ -1,0 +1,43 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+from decimal import Decimal
+from typing import Protocol, Sequence
+
+
+class Track4InputSourceUnavailable(RuntimeError):
+    pass
+
+
+class Track4InputTimestampMismatch(Track4InputSourceUnavailable):
+    pass
+
+
+@dataclass(frozen=True)
+class Track4RuntimeInputReadiness:
+    market: bool
+    history: bool
+    account_pnl: bool
+    greeks: bool
+    attribution: bool
+
+    @property
+    def is_complete(self) -> bool:
+        return all((self.market, self.history, self.account_pnl, self.greeks, self.attribution))
+
+
+class Track4RuntimeInputProvider(Protocol):
+    def readiness(self) -> Track4RuntimeInputReadiness: ...
+    def observed_at(self) -> datetime: ...
+    def current_price(self) -> Decimal: ...
+    def active_vol(self) -> Decimal: ...
+    def base_vol(self) -> Decimal: ...
+    def current_pnl(self) -> Decimal: ...
+    def current_equity(self) -> Decimal: ...
+    def price_history(self) -> Sequence[Decimal]: ...
+    def current_delta(self) -> Decimal: ...
+    def current_gamma(self) -> Decimal: ...
+    def premium_spent(self) -> Decimal: ...
+    def accumulated_gamma_profit(self) -> Decimal: ...
+    def theta_decay_cost(self) -> Decimal: ...

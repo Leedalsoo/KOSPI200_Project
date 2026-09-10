@@ -1,0 +1,47 @@
+```javascript
+option_project/
+  application/
+    runtime_controller/
+    environment_hub/
+    bootstrap/
+  core/
+    domain/
+    market/
+    sensor/
+    strategy/
+    signal/
+    decision/
+    risk/
+    position/
+    oms/
+    runtime/
+  contracts/
+    market_data/
+    clock/
+    broker/
+    account/
+    execution/
+    lifecycle/
+    environment/
+  environments/
+    virtual/
+    high_speed/
+    paper/
+    live/
+  infrastructure/
+    external_api/
+    persistence/
+    telemetry/
+    config/
+  interfaces/
+    control_tower/
+  support/
+    observability/
+    replay/
+  tests/
+    architecture/
+    unit/
+    integration/
+```
+
+Directory existence expresses responsibility, not a license to copy old folders.

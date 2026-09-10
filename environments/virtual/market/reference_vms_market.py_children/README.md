@@ -1,0 +1,1 @@
+Reference VSSF authoritative runtime의 최소 import closure를 OptionProject 내부 경계로 materialize한다. 기존 Standard↔Reference Adapter는 유지하며 Runtime 내부 compatibility DTO는 별도 보존한다. 본 단계 구현은 실제 Runtime lifecycle에 필요한 최소 public interface를 우선 이식한 것이다.
