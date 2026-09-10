@@ -1,1 +1,0 @@
-Notion 기반 Clean Build 진행 상태와 PASS/BLOCKED 기준을 기록한다.
