@@ -193,38 +193,44 @@ class ControlTowerUIAdapter:
                 margin_avail_val = None
                 realized_pnl_val = None
 
-                if account is not None and hasattr(account, "snapshot"):
-                    try:
-                        snap = account.snapshot()
-                        balances = getattr(snap, "balances", {})
-                        if "cash" in balances:
-                            cash_val = float(balances["cash"])
-                        if "margin_used" in balances:
-                            margin_used_val = float(balances["margin_used"])
-                        if "available_cash" in balances:
-                            margin_avail_val = float(balances["available_cash"])
-                        if "realized_pnl" in balances:
-                            realized_pnl_val = float(balances["realized_pnl"])
-                    except Exception:
-                        pass
+                if account is not None:
+                    if not hasattr(account, "snapshot"):
+                        raise RuntimeError("VIRTUAL_BROKER_ACCOUNT_SNAPSHOT_UNAVAILABLE")
+
+                    snap = account.snapshot()
+                    balances = getattr(snap, "balances", None)
+                    if not isinstance(balances, Mapping):
+                        raise RuntimeError("VIRTUAL_BROKER_ACCOUNT_BALANCES_UNAVAILABLE")
+
+                    if "cash" in balances:
+                        cash_val = float(balances["cash"])
+                    if "margin_used" in balances:
+                        margin_used_val = float(balances["margin_used"])
+                    if "available_cash" in balances:
+                        margin_avail_val = float(balances["available_cash"])
+                    if "realized_pnl" in balances:
+                        realized_pnl_val = float(balances["realized_pnl"])
 
                 positions_list: list[dict[str, Any]] = []
-                if position is not None and hasattr(position, "snapshot"):
-                    try:
-                        pos_snap = position.snapshot()
-                        pos_dict = getattr(pos_snap, "positions", {})
-                        for sym, qty in pos_dict.items():
-                            positions_list.append({
-                                "symbol": str(sym),
-                                "qty": int(qty),
-                            })
-                    except Exception:
-                        pass
+                if position is not None:
+                    if not hasattr(position, "snapshot"):
+                        raise RuntimeError("VIRTUAL_BROKER_POSITION_SNAPSHOT_UNAVAILABLE")
+
+                    pos_snap = position.snapshot()
+                    pos_dict = getattr(pos_snap, "positions", None)
+                    if not isinstance(pos_dict, Mapping):
+                        raise RuntimeError("VIRTUAL_BROKER_POSITION_DATA_UNAVAILABLE")
+
+                    for sym, qty in pos_dict.items():
+                        positions_list.append({
+                            "symbol": str(sym),
+                            "qty": int(qty),
+                        })
 
                 view = VirtualBrokerView(
                     broker_state="OPERATIONAL" if is_connected else "NOT_INITIALIZED",
                     connection_state="CONNECTED" if is_connected else "DISCONNECTED",
-                    account_number="VIRTUAL-ACCOUNT-01" if is_connected else "—",
+                    account_number="—",
                     cash_balance=cash_val,
                     margin_used=margin_used_val,
                     margin_available=margin_avail_val,
