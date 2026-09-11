@@ -33,9 +33,12 @@ def test_high_speed_test_view_defaults():
     view = HighSpeedTestView()
     assert view.tab_id == "high_speed"
     assert view.tab_name == "High-Speed Test"
-    assert view.speed_multiplier == 100.0
-    assert view.scenario_name == "SYNTHETIC_HIGH_SPEED"
+    assert view.connection_state == "DISCONNECTED"
+    assert view.runtime_state == "STOPPED"
+    assert view.speed_multiplier == 1.0
+    assert view.scenario_name == "—"
     assert view.progress_ratio == 0.0
+    assert view.cash_balance is None
     assert isinstance(view.positions, list)
 
 
@@ -43,17 +46,22 @@ def test_virtual_exchange_view_defaults():
     view = VirtualExchangeView()
     assert view.tab_id == "virtual_exchange"
     assert view.tab_name == "가상거래소"
-    assert view.market_state == "OPEN"
-    assert view.connection_state == "CONNECTED"
+    assert view.market_state == "STOPPED"
+    assert view.connection_state == "DISCONNECTED"
+    assert view.recent_ticks == []
+    assert view.underlying_index_price is None
 
 
 def test_virtual_broker_view_defaults():
     view = VirtualBrokerView()
     assert view.tab_id == "virtual_broker"
     assert view.tab_name == "가상증권사"
-    assert view.broker_state == "OPERATIONAL"
-    assert view.account_number.startswith("VIRTUAL")
-    assert view.cash_balance > 0
+    assert view.broker_state == "NOT_INITIALIZED"
+    assert view.connection_state == "DISCONNECTED"
+    assert view.account_number == "—"
+    assert view.cash_balance is None
+    assert view.active_orders == []
+    assert view.positions == []
 
 
 def test_paper_trading_view_enforces_fail_safe_disconnected_state():

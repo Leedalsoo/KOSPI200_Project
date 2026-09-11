@@ -1,6 +1,7 @@
 """Test Control Tower HTTP Server and Request Handler."""
 
 import io
+import json
 from http import HTTPStatus
 from unittest.mock import MagicMock
 
@@ -60,3 +61,22 @@ def test_control_tower_server_serves_index_html():
     assert b"200 OK" in response_bytes
     assert b"text/html" in response_bytes
     assert b"Project200 Control Tower" in response_bytes
+
+
+def test_control_tower_server_panic_halt_command_api():
+    body = json.dumps({"command": "PANIC_HALT"}).encode("utf-8")
+    request_data = (
+        b"POST /api/command HTTP/1.1\r\n"
+        b"Host: localhost\r\n"
+        b"Content-Type: application/json\r\n"
+        b"Content-Length: " + str(len(body)).encode("ascii") + b"\r\n\r\n" + body
+    )
+    sock = _MockSocket(request_data)
+    server = MagicMock()
+
+    handler = ControlTowerRequestHandler(sock, ("127.0.0.1", 12345), server)
+    response_bytes = sock._wfile.getvalue()
+
+    assert b"200 OK" in response_bytes
+    assert b"PANIC_HALT" in response_bytes
+    assert b"kill_switch_active" in response_bytes

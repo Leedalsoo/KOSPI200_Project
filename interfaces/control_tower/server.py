@@ -76,8 +76,9 @@ class ControlTowerRequestHandler(BaseHTTPRequestHandler):
             self._send_json({"success": True, "active_tab": tab_id})
         elif path == "/api/command":
             cmd = payload.get("command", "")
-            # Panic halt / Emergency commands are recorded safely
-            self._send_json({"success": True, "command": cmd, "message": f"Command {cmd} acknowledged"})
+            result = self.adapter.handle_command(cmd)
+            status_code = HTTPStatus.OK if result.get("success", False) else HTTPStatus.BAD_REQUEST
+            self._send_json(result, status_code)
         else:
             self.send_error(HTTPStatus.NOT_FOUND, "Endpoint not found")
 

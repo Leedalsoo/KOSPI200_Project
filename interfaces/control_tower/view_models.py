@@ -56,9 +56,9 @@ class HighSpeedTestView:
     tab_id: str = "high_speed"
     tab_name: str = "High-Speed Test"
     runtime_state: str = "STOPPED"
-    connection_state: str = "READY"
-    speed_multiplier: float = 100.0
-    scenario_name: str = "SYNTHETIC_HIGH_SPEED"
+    connection_state: str = "DISCONNECTED"
+    speed_multiplier: float = 1.0
+    scenario_name: str = "—"
     processed_ticks: int = 0
     total_ticks: int = 0
     progress_ratio: float = 0.0
@@ -67,7 +67,7 @@ class HighSpeedTestView:
     orders_submitted: int = 0
     orders_filled: int = 0
     total_pnl: float = 0.0
-    cash_balance: float = 100_000_000.0
+    cash_balance: float | None = None
     positions: list[dict[str, Any]] = field(default_factory=list)
     recent_events: list[dict[str, Any]] = field(default_factory=list)
     audit_logs: list[str] = field(default_factory=list)
@@ -82,13 +82,13 @@ class VirtualExchangeView:
     """
     tab_id: str = "virtual_exchange"
     tab_name: str = "가상거래소"
-    market_state: str = "OPEN"
-    connection_state: str = "CONNECTED"
+    market_state: str = "STOPPED"
+    connection_state: str = "DISCONNECTED"
     last_data_time: str | None = None
     instruments_count: int = 0
     recent_ticks: list[dict[str, Any]] = field(default_factory=list)
     market_depth: dict[str, Any] = field(default_factory=dict)
-    feed_latency_ms: float = 0.0
+    feed_latency_ms: float | None = None
     underlying_index_price: float | None = None
     volatility_index: float | None = None
     audit_logs: list[str] = field(default_factory=list)
@@ -103,17 +103,17 @@ class VirtualBrokerView:
     """
     tab_id: str = "virtual_broker"
     tab_name: str = "가상증권사"
-    broker_state: str = "OPERATIONAL"
-    connection_state: str = "CONNECTED"
-    account_number: str = "VIRTUAL-8801-01"
-    cash_balance: float = 100_000_000.0
-    margin_used: float = 0.0
-    margin_available: float = 100_000_000.0
+    broker_state: str = "NOT_INITIALIZED"
+    connection_state: str = "DISCONNECTED"
+    account_number: str = "—"
+    cash_balance: float | None = None
+    margin_used: float | None = None
+    margin_available: float | None = None
     active_orders: list[dict[str, Any]] = field(default_factory=list)
     recent_executions: list[dict[str, Any]] = field(default_factory=list)
     positions: list[dict[str, Any]] = field(default_factory=list)
-    realized_pnl: float = 0.0
-    unrealized_pnl: float = 0.0
+    realized_pnl: float | None = None
+    unrealized_pnl: float | None = None
     audit_logs: list[str] = field(default_factory=list)
 
 

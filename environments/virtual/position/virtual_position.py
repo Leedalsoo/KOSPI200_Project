@@ -73,9 +73,7 @@ from decimal import Decimal
 import pytest
 
 from contracts.types import DataQuality, ExecutionReport
-from environments.virtual.execution.execution_event_identity_adapter import (
-ExecutionEventIdentityAdapter,
-)
+# ExecutionEventIdentityAdapter is defined above in this module
 
 
 def report(execution_id="EXEC-001", client_order_id="ORD-001"):

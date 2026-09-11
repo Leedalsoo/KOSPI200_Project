@@ -82,7 +82,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from environments.virtual.clock.vms_clock_provider_adapter import VMSClockProvider
+# VMSClockProvider is defined above in this module
 
 
 class FakeVMSClock:
