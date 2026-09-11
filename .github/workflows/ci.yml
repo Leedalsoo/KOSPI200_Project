@@ -20,4 +20,4 @@ jobs:
           pip install pytest
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
       - name: Run tests
-        run: pytest tests/unit
+        run: pytest tests/unit tests/control_tower

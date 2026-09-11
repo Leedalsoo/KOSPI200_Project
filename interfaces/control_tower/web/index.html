@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Project200 Control Tower — 5개 환경 통합 대시보드</title>
+  <meta name="description" content="코스피200 옵션 다중 전략 자동매매 시스템의 5개 실행 환경(High-Speed Test, 가상거래소, 가상증권사, 모의투자, 실투자)을 총괄 모니터링 및 제어하는 표준 Control Tower UI입니다.">
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Global Header -->
+    <header class="global-header">
+      <div class="header-left">
+        <div class="brand-logo">
+          <span class="logo-accent">P200</span> CONTROL TOWER
+        </div>
+        <div class="environment-badge-wrapper">
+          <span class="badge-label">ACTIVE ENV</span>
+          <span id="active-env-badge" class="badge badge-active">가상거래소</span>
+        </div>
+      </div>
+
+      <div class="header-center">
+        <div class="system-clock-card">
+          <span class="clock-label">SYSTEM TIME</span>
+          <span id="system-time" class="clock-value">2026-09-11 00:00:00</span>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <div class="safety-indicator">
+          <span class="indicator-dot dot-safe"></span>
+          <span id="safety-text" class="safety-label">FAIL-SAFE ENGAGED</span>
+        </div>
+        <button id="btn-panic-halt" class="btn btn-panic" title="모든 주문 취소 및 긴급 정지">
+          <svg class="icon-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          PANIC HALT
+        </button>
+      </div>
+    </header>
+
+    <!-- 5 Environment Tabs Navigation -->
+    <nav class="tabs-nav" aria-label="Environment Navigation">
+      <button class="tab-btn" data-tab="high_speed" id="tab-high_speed">
+        <span class="tab-index">01</span>
+        <span class="tab-title">High-Speed Test</span>
+        <span class="tab-status-pill status-stopped">STOPPED</span>
+      </button>
+      <button class="tab-btn active" data-tab="virtual_exchange" id="tab-virtual_exchange">
+        <span class="tab-index">02</span>
+        <span class="tab-title">가상거래소</span>
+        <span class="tab-status-pill status-running">OPEN</span>
+      </button>
+      <button class="tab-btn" data-tab="virtual_broker" id="tab-virtual_broker">
+        <span class="tab-index">03</span>
+        <span class="tab-title">가상증권사</span>
+        <span class="tab-status-pill status-ready">OPERATIONAL</span>
+      </button>
+      <button class="tab-btn" data-tab="paper" id="tab-paper">
+        <span class="tab-index">04</span>
+        <span class="tab-title">모의투자</span>
+        <span class="tab-status-pill status-blocked">BLOCKED</span>
+      </button>
+      <button class="tab-btn" data-tab="live" id="tab-live">
+        <span class="tab-index">05</span>
+        <span class="tab-title">실투자</span>
+        <span class="tab-status-pill status-blocked">BLOCKED</span>
+      </button>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="dashboard-viewport">
+      <!-- 1. High-Speed Test Panel -->
+      <section id="panel-high_speed" class="env-panel">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h2>High-Speed Test Environment</h2>
+            <p class="panel-desc">초고속 가속 합성 데이터를 통해 Strategy, Risk, Decision, OMS 파이프라인 전체를 신속하게 전수 검증하는 정규 환경입니다.</p>
+          </div>
+          <div class="panel-actions">
+            <span class="param-badge">SPEED: 100x</span>
+            <span class="param-badge">SCENARIO: SYNTHETIC_HIGH_SPEED</span>
+          </div>
+        </div>
+
+        <div class="metric-grid">
+          <div class="metric-card">
+            <span class="metric-label">PROCESSED TICKS</span>
+            <span id="hs-ticks" class="metric-val mono">0 / 0</span>
+            <div class="progress-bar-bg"><div id="hs-progress" class="progress-bar-fill" style="width: 0%"></div></div>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">STRATEGY DECISIONS</span>
+            <span id="hs-decisions" class="metric-val mono">0</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">ORDERS (SUBMITTED / FILLED)</span>
+            <span id="hs-orders" class="metric-val mono">0 / 0</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">TOTAL PnL</span>
+            <span id="hs-pnl" class="metric-val mono pnl-neutral">₩ 0</span>
+          </div>
+        </div>
+
+        <div class="grid-two-col">
+          <div class="card">
+            <div class="card-header"><h3>Recent Strategy & Decision Flow</h3></div>
+            <div class="card-body">
+              <div id="hs-events-list" class="log-container mono">
+                <div class="log-entry log-info">[HIGH_SPEED] Engine idle. Ready to benchmark scenario.</div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>Virtual Portfolio / Positions</h3></div>
+            <div class="card-body">
+              <table class="data-table">
+                <thead>
+                  <tr><th>Symbol</th><th>Qty</th><th>Avg Price</th><th>Current</th><th>PnL</th></tr>
+                </thead>
+                <tbody id="hs-positions-tbody">
+                  <tr><td colspan="5" class="text-center text-muted">포지션 데이터 없음</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. Virtual Exchange Panel -->
+      <section id="panel-virtual_exchange" class="env-panel active">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h2>가상거래소 (Virtual Market)</h2>
+            <p class="panel-desc">KRX 시세 규격을 완벽히 미러링하여 실시간 틱, 호가 스프레드, 지수 피드를 송출하는 가상 거래소 환경입니다.</p>
+          </div>
+          <div class="panel-actions">
+            <span class="status-badge badge-green">FEED ACTIVE</span>
+            <span class="status-badge badge-neutral">LATENCY: 0.45 ms</span>
+          </div>
+        </div>
+
+        <div class="metric-grid">
+          <div class="metric-card">
+            <span class="metric-label">UNDERLYING KOSPI200</span>
+            <span id="vm-underlying" class="metric-val mono text-up">348.25</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">VOLATILITY (VKOSPI)</span>
+            <span id="vm-vkospi" class="metric-val mono">15.82 %</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">ACTIVE INSTRUMENTS</span>
+            <span id="vm-instruments" class="metric-val mono">120 개</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">FEED STATUS</span>
+            <span id="vm-feed-status" class="metric-val text-green">NORMAL BROADCAST</span>
+          </div>
+        </div>
+
+        <div class="grid-two-col">
+          <div class="card">
+            <div class="card-header"><h3>실시간 시세 흐름 (Option & Futures Ticks)</h3></div>
+            <div class="card-body">
+              <table class="data-table">
+                <thead>
+                  <tr><th>Code</th><th>Name</th><th>Price</th><th>Chg</th><th>Volume</th><th>Time</th></tr>
+                </thead>
+                <tbody id="vm-ticks-tbody">
+                  <!-- Injected via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>호가 깊이 및 시장 스프레드 (Order Book Depth)</h3></div>
+            <div class="card-body">
+              <div class="depth-container mono">
+                <div class="depth-ask">
+                  <div class="depth-row"><span class="price text-down">348.60</span><span class="qty">30</span></div>
+                  <div class="depth-row"><span class="price text-down">348.55</span><span class="qty">18</span></div>
+                </div>
+                <div class="depth-spread"><span>SPREAD: 0.10 pt</span></div>
+                <div class="depth-bid">
+                  <div class="depth-row"><span class="price text-up">348.45</span><span class="qty">12</span></div>
+                  <div class="depth-row"><span class="price text-up">348.40</span><span class="qty">25</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. Virtual Broker Panel -->
+      <section id="panel-virtual_broker" class="env-panel">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h2>가상증권사 (Virtual Broker)</h2>
+            <p class="panel-desc">한국투자증권(KIS) 주문/체결 API 응답 및 상태 전이 FSM을 정밀 모사한 가상 브로커 원장 시스템입니다.</p>
+          </div>
+          <div class="panel-actions">
+            <span class="param-badge">ACCOUNT: VIRTUAL-8801-01</span>
+            <span class="status-badge badge-green">BROKER OPERATIONAL</span>
+          </div>
+        </div>
+
+        <div class="metric-grid">
+          <div class="metric-card">
+            <span class="metric-label">예수금 잔고 (CASH)</span>
+            <span id="vb-cash" class="metric-val mono">₩ 98,450,000</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">사용 증거금 (MARGIN USED)</span>
+            <span id="vb-margin" class="metric-val mono">₩ 12,300,000</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">실현 손익 (REALIZED PnL)</span>
+            <span id="vb-realized" class="metric-val mono text-up">+₩ 350,000</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">평가 손익 (UNREALIZED PnL)</span>
+            <span id="vb-unrealized" class="metric-val mono text-up">+₩ 110,000</span>
+          </div>
+        </div>
+
+        <div class="grid-two-col">
+          <div class="card">
+            <div class="card-header"><h3>주문 접수 및 전이 상태 (Active Orders)</h3></div>
+            <div class="card-body">
+              <table class="data-table">
+                <thead>
+                  <tr><th>Order ID</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Price</th><th>State</th></tr>
+                </thead>
+                <tbody id="vb-orders-tbody">
+                  <!-- Injected via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>보유 포지션 및 헤지 상태 (Positions & Greeks)</h3></div>
+            <div class="card-body">
+              <table class="data-table">
+                <thead>
+                  <tr><th>Symbol</th><th>Name</th><th>Qty</th><th>Avg Price</th><th>Current</th><th>PnL</th></tr>
+                </thead>
+                <tbody id="vb-positions-tbody">
+                  <!-- Injected via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. Paper Trading Panel -->
+      <section id="panel-paper" class="env-panel">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h2>모의투자 (KIS Developers Paper Trading)</h2>
+            <p class="panel-desc">한국투자증권 공식 모의투자 REST/WebSocket API와의 실연동 환경입니다.</p>
+          </div>
+          <div class="panel-actions">
+            <span class="status-badge badge-blocked">API DISCONNECTED</span>
+            <span class="status-badge badge-blocked">BLOCKED</span>
+          </div>
+        </div>
+
+        <div class="blocked-callout">
+          <div class="callout-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+            </svg>
+          </div>
+          <div class="callout-content">
+            <h4>외부 실서버 미연결 상태 (DISCONNECTED / BLOCKED)</h4>
+            <p>프로젝트 절대 원칙 1·4번에 의거하여, 실제 KIS 모의투자 서버와 안전 인증망이 연결되기 전까지는 가짜 성공이나 가상 데이터를 표시하지 않습니다.</p>
+            <div class="blocked-details mono">
+              <span>Endpoint: https://openapivts.koreainvestment.com:29443</span>
+              <span>Reason: LIVE/PAPER 외부망 안전 분리 및 모의투자 자격 증명(AppKey/Secret) 미장전</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-two-col opacity-muted">
+          <div class="card">
+            <div class="card-header"><h3>모의투자 계좌 정보</h3></div>
+            <div class="card-body">
+              <p class="mono text-muted text-center py-4">연결 대기 중 (DISCONNECTED)</p>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>모의투자 체결 내역</h3></div>
+            <div class="card-body">
+              <p class="mono text-muted text-center py-4">연결 대기 중 (DISCONNECTED)</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. Live Trading Panel -->
+      <section id="panel-live" class="env-panel">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h2>실투자 (KIS Developers Live Trading)</h2>
+            <p class="panel-desc">한국투자증권 실계좌 실거래 환경입니다. 철저한 안전 장치 및 이중 승인 체계를 유지합니다.</p>
+          </div>
+          <div class="panel-actions">
+            <span class="status-badge badge-blocked">LIVE UNARMED</span>
+            <span class="status-badge badge-blocked">KILL SWITCH ACTIVE</span>
+          </div>
+        </div>
+
+        <div class="blocked-callout callout-danger">
+          <div class="callout-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+              <line x1="12" y1="9" x2="12" y2="13"></line>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+          </div>
+          <div class="callout-content">
+            <h4>실계좌 거래 완전 차단 상태 (FAIL-SAFE / BLOCKED)</h4>
+            <p>실제 자본 보호를 위하여 실계좌 승인(Live Approval) 및 명시적 무장(ARM)이 완료되기 전까지 모든 주문 및 통신은 차단(Fail-Closed)됩니다.</p>
+            <div class="blocked-details mono">
+              <span>Endpoint: https://openapi.koreainvestment.com:9443</span>
+              <span>Risk Status: CLOSED_FAIL_SAFE | Kill Switch: ENGAGED</span>
+              <span>Reason: 실계좌 거래 권한 미장전 및 외부 실계좌 연결 승인 보류</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-two-col opacity-muted">
+          <div class="card">
+            <div class="card-header"><h3>실계좌 증거금 및 리스크 상태</h3></div>
+            <div class="card-body">
+              <p class="mono text-muted text-center py-4">실계좌 차단 상태 (BLOCKED)</p>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>실계좌 미체결 및 체결 현황</h3></div>
+            <div class="card-body">
+              <p class="mono text-muted text-center py-4">실계좌 차단 상태 (BLOCKED)</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Bottom Audit & Event Log Dock -->
+    <footer class="audit-dock">
+      <div class="dock-header">
+        <span class="dock-title">AUDIT & EVENT STREAM</span>
+        <span id="dock-env-name" class="dock-env mono">가상거래소 (Virtual Market)</span>
+      </div>
+      <div id="audit-log-box" class="dock-body mono">
+        <div class="log-line text-muted">[BOOTSTRAP] Control Tower initialized. 5 environments registered.</div>
+        <div class="log-line text-info">[SECURITY] UI Data Interface isolation active. No internal Core objects exposed.</div>
+      </div>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
