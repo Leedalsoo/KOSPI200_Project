@@ -79,3 +79,92 @@ def create_live_runtime_bootstrap(*, runtime_transport=None, tick_entry=None, re
         recovery_service = getattr(execution, "recovery_service", None)
     router = StandardOrderRouter(order_state_machine=execution.settlement.order_state_machine, broker_adapter=execution.broker)
     return LiveRuntimeBootstrap(execution=execution, order_router=router, runtime_transport=runtime_transport, tick_entry=tick_entry, recovery_service=recovery_service)
+
+
+from decimal import Decimal
+from datetime import datetime
+from contracts.types import EnvironmentType
+from core.risk.risk_config import RiskConfig
+from core.risk.risk_engine import RiskEngine
+from environments.virtual.clock import VirtualClock
+from environments.virtual.market.virtual_market import VirtualMarketFeed, VirtualMarketConfig
+from environments.virtual.account.virtual_account import VirtualAccount
+from environments.virtual.position.virtual_position import VirtualPosition
+from environments.virtual.execution.virtual_execution import VirtualExecutionEngine
+from environments.virtual.broker.virtual_broker import VirtualBroker
+from environments.virtual.bundle import VirtualEnvironmentBundle
+from application.environment_hub.contracts import EnvironmentConfig, RuntimePolicy
+from application.environment_hub.factory import EnvironmentFactory
+from application.environment_hub.hub import EnvironmentHub
+from application.runtime_controller.controller import RuntimeController
+from interfaces.control_tower.ui_adapter import ControlTowerUIAdapter
+
+
+class DefaultMarginCalculator:
+    def calculate_order_margin(self, command: Any) -> float:
+        return 0.0
+
+
+@dataclass(frozen=True)
+class VirtualRuntimeBootstrap:
+    bundle: VirtualEnvironmentBundle
+    runtime_controller: RuntimeController
+    risk_engine: RiskEngine
+    ui_adapter: ControlTowerUIAdapter
+
+
+def create_virtual_runtime_bootstrap(
+    *,
+    initial_capital: float | Decimal = 100_000_000.0,
+    start_time: datetime | None = None,
+    initial_market_price: float | Decimal = 350.0,
+) -> VirtualRuntimeBootstrap:
+    """Production bootstrap assembling concrete Virtual Environment components."""
+    clock = VirtualClock(start=start_time or datetime(2026, 9, 11, 9, 0, 0))
+    market_config = VirtualMarketConfig(
+        initial_price=Decimal(str(initial_market_price)),
+        tick_interval_seconds=0.5,
+    )
+    market = VirtualMarketFeed(config=market_config, clock=clock)
+    account = VirtualAccount(cash=Decimal(str(initial_capital)), clock=clock)
+    position = VirtualPosition(instrument_id="KOSPI200_202609", clock=clock)
+    execution = VirtualExecutionEngine(position=position, account=account)
+    broker = VirtualBroker(execution_engine=execution)
+
+    bundle = VirtualEnvironmentBundle.create(
+        config=EnvironmentConfig(environment=EnvironmentType.VIRTUAL, name="virtual_production"),
+        policy=RuntimePolicy(),
+        market=market,
+        clock=clock,
+        broker=broker,
+        account=account,
+        position=position,
+        execution=execution,
+    )
+    bundle.initialize()
+    bundle.connect()
+
+    factory = EnvironmentFactory(virtual_builder=lambda c, p: bundle)
+    hub = EnvironmentHub(factory)
+    controller = RuntimeController(hub)
+    controller.start(
+        EnvironmentConfig(environment=EnvironmentType.VIRTUAL, name="virtual_production"),
+        RuntimePolicy(),
+    )
+
+    risk_engine = RiskEngine(
+        config=RiskConfig(),
+        margin_engine=DefaultMarginCalculator(),
+    )
+
+    adapter = ControlTowerUIAdapter(
+        runtime_controller=controller,
+        risk_engine=risk_engine,
+    )
+
+    return VirtualRuntimeBootstrap(
+        bundle=bundle,
+        runtime_controller=controller,
+        risk_engine=risk_engine,
+        ui_adapter=adapter,
+    )

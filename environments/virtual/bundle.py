@@ -48,10 +48,10 @@ class VirtualEnvironmentBundle(StandardEnvironmentBundle):
 
     @classmethod
     def create(
-# cls,
+        cls,
         config: Any,
         policy: Any,
-# *,
+        *,
         market: object,
         clock: object,
         broker: object,

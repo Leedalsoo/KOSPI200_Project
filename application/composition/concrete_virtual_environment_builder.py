@@ -10,9 +10,9 @@ from environments.virtual.account.vssf_account_snapshot_adapter import VSSFAccou
 from environments.virtual.position.vssf_position_aggregate_adapter import VSSFPositionAggregateAdapter
 from environments.virtual.execution.virtual_execution import VirtualExecutionEngine
 from environments.virtual.execution.vssf_execution_adapter import VSSFExecutionAdapter
-from environments.virtual.clock.vms_clock_provider_adapter import VMSClockProvider
-from environments.virtual.market.reference_vms_market.simulator_runtime import VirtualMarketSimulatorRuntime
-from environments.virtual.authoritative_vssf.firm_runtime import VirtualSecuritiesFirmRuntime
+from environments.virtual.clock import VMSClockProvider
+from environments.virtual.market.simulator_runtime import VirtualMarketSimulatorRuntime
+from environments.virtual.market.reference_vms_market import VirtualSecuritiesFirmRuntime
 
 class ReferenceVirtualAuthoritativeScopeFactory(VirtualAuthoritativeScopeFactory):
     def __init__(self, *, dependencies: VirtualCompositionDependencies) -> None:

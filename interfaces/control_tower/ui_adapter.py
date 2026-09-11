@@ -135,7 +135,7 @@ class ControlTowerUIAdapter:
                     runtime_state=runtime_state,
                     connection_state="CONNECTED",
                     speed_multiplier=speed,
-                    scenario_name=getattr(bundle, "scenario_name", "SYNTHETIC_HIGH_SPEED"),
+                    scenario_name=getattr(bundle, "scenario_name", "—"),
                     processed_ticks=getattr(bundle, "processed_ticks", 0),
                     total_ticks=getattr(bundle, "total_ticks", 0),
                     progress_ratio=getattr(bundle, "progress_ratio", 0.0),
