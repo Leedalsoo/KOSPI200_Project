@@ -44,15 +44,16 @@ class LiveExecutionRuntimeComposition:
     recovery_service: Any | None = None
 
     async def start_execution(self, hts_id: str) -> None:
-        pass
-# await self.execution_consumer.start(hts_id)
+        await self.execution_consumer.start(hts_id)
 
     async def receive_execution_once(self):
         return await self.execution_consumer.receive_once()
 
+    async def cancel_receive(self) -> None:
+        await self.execution_consumer.cancel_receive()
+
     async def close_execution(self) -> None:
-        pass
-# await self.execution_consumer.close()
+        await self.execution_consumer.close()
 
 
 def create_live_execution_runtime_composition(

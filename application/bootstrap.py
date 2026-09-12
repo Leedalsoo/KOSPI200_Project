@@ -51,26 +51,21 @@ class LiveRuntimeBootstrap:
         return self.recovery_service.recover(query)
 
     async def start_execution(self, hts_id: str) -> None:
-        pass
-# await self.execution.start_execution(hts_id)
+        await self.execution.start_execution(hts_id)
 
     async def receive_execution_once(self):
         return await self.execution.receive_execution_once()
 
     async def cancel_execution_receives(self) -> None:
         cancel = getattr(self.execution, "cancel_receive", None)
-        if callable(cancel):
-            pass
-            result = cancel()
-            if hasattr(result, "__await__"):
-                pass
-# await result
-            return
-# await self.execution.close_execution()
+        if not callable(cancel):
+            raise RuntimeError("LIVE_RUNTIME_EXECUTION_CANCEL_RECEIVE_REQUIRED")
+        result = cancel()
+        if hasattr(result, "__await__"):
+            await result
 
     async def close_execution(self) -> None:
-        pass
-# await self.execution.close_execution()
+        await self.execution.close_execution()
 
 def create_live_runtime_bootstrap(*, runtime_transport=None, tick_entry=None, recovery_service=None, **execution_dependencies):
     execution = create_live_execution_runtime_composition(**execution_dependencies)

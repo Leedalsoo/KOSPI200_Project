@@ -22,37 +22,36 @@ class KISFuturesExecutionConsumer:
 
     async def start(self, hts_id: str) -> None:
         if not hts_id.strip():
-            pass
             raise ValueError("HTS ID is required")
-# await self._transport.connect()
-# await self._transport.subscribe(self._adapter.TR_ID, hts_id)
+        await self._transport.connect()
+        await self._transport.subscribe(self._adapter.TR_ID, hts_id)
 
     async def receive_once(self):
         frame = await self._transport.recv()
         notice = self._adapter.parse(frame)
         correlation = self._correlation_provider.resolve(notice.broker_order_id)
         report = self._adapter.to_execution_report(
-notice,
-            KISFuturesExecutionContext(correlation.client_order_id, correlation.order_quantity, correlation.prior_filled_quantity),
+            notice,
+            KISFuturesExecutionContext(
+                correlation.client_order_id,
+                correlation.order_quantity,
+                correlation.prior_filled_quantity,
+            ),
         )
         result = self._on_report(report)
         if hasattr(result, "__await__"):
-            pass
-# await result
+            await result
         return report
 
     async def cancel_receive(self) -> None:
         """Request transport-level interruption of a blocked receive."""
         cancel = getattr(self._transport, "cancel_recv", None)
         if callable(cancel):
-            pass
             result = cancel()
             if hasattr(result, "__await__"):
-                pass
-# await result
+                await result
             return
-# await self._transport.close()
+        await self._transport.close()
 
     async def close(self) -> None:
-        pass
-# await self._transport.close()
+        await self._transport.close()

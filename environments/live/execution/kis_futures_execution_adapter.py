@@ -119,7 +119,7 @@ class KISFuturesExecutionNoticeAdapter:
         )
 
     def to_execution_report(
-# self,
+        self,
         notice: KISFuturesExecutionNotice,
         context: KISFuturesExecutionContext,
     ) -> ExecutionReport:
