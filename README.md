@@ -23,3 +23,5 @@ Control Tower UI → Runtime Controller → Environment Hub/Factory → Environm
 ```
 
 이 Notion OptionProject는 Clean Build Source-of-Design이며 각 페이지는 실제 프로젝트의 폴더 또는 파일에 대응한다.
+
+<!-- GitHub write/commit permission test -->
