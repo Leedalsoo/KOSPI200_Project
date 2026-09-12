@@ -123,7 +123,7 @@ class KISFuturesExecutionTransport:
             },
             "body": {"input": {"tr_id": tr_id, "tr_key": tr_key}},
         }
-# await self._socket.send(json.dumps(message))
+        await self._socket.send(json.dumps(message))
         self._subscription = requested
 
     @staticmethod
@@ -184,7 +184,7 @@ class KISFuturesExecutionTransport:
 
     async def cancel_recv(self) -> None:
         """Explicitly interrupt a blocked recv without inventing a domain action."""
-# await self.close()
+        await self.close()
 
     async def close(self) -> None:
         socket = self._socket
@@ -193,5 +193,4 @@ class KISFuturesExecutionTransport:
         self._subscription = None
         self._crypto.clear()
         if socket is not None:
-            pass
-# await socket.close()
+            await socket.close()

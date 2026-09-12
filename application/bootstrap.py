@@ -1,17 +1,20 @@
-# add to application/bootstrap.py
-# existing imports plus:
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
 
+from application.composition.live_execution_runtime_composition_factory import (
+    LiveExecutionRuntimeComposition,
+    create_live_execution_runtime_composition,
+)
 from application.composition.live_runtime_tick_entry import LiveRuntimeTickEntry
+from core.oms.order_router import StandardOrderRouter
 
 @dataclass(frozen=True)
 class LiveRuntimeBootstrap:
     execution: LiveExecutionRuntimeComposition
     order_router: StandardOrderRouter
-    runtime_transport: RuntimeTransportComposition | None = None
+    runtime_transport: Any | None = None
     tick_entry: LiveRuntimeTickEntry | None = None
     recovery_service: Any | None = None
 

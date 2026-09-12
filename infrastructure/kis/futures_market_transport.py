@@ -95,12 +95,10 @@ class KISFuturesMarketTransport:
         })
 
     async def subscribe(self, tr_id: str, symbol: str) -> None:
-        pass
-# await self._send_subscription("1", tr_id, symbol)
+        await self._send_subscription("1", tr_id, symbol)
 
     async def unsubscribe(self, tr_id: str, symbol: str) -> None:
-        pass
-# await self._send_subscription("2", tr_id, symbol)
+        await self._send_subscription("2", tr_id, symbol)
 
     async def _send_subscription(self, tr_type: str, tr_id: str, symbol: str) -> None:
         if not self._connected or self._socket is None:
@@ -110,7 +108,7 @@ class KISFuturesMarketTransport:
             pass
             raise FuturesMarketTransportError("tr_id and symbol are required")
         approval_key = self._approval.issue()
-# await self._socket.send(self._message(approval_key, tr_type, tr_id, symbol))
+        await self._socket.send(self._message(approval_key, tr_type, tr_id, symbol))
 
     async def recv(self) -> str:
         if not self._connected or self._socket is None:
@@ -124,5 +122,4 @@ class KISFuturesMarketTransport:
         self._socket = None
         self._connected = False
         if socket is not None:
-            pass
-# await socket.close()
+            await socket.close()

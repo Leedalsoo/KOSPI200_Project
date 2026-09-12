@@ -47,7 +47,7 @@ class KISDomesticFuturesOrderTransport:
         url = f"{base_url}{KIS_FUTURES_ORDER_PATH}"
         headers = self.auth.get_auth_headers(tr_id=tr_id)
         request = urllib.request.Request(
-# url,
+            url,
             data=json.dumps(payload).encode("utf-8"),
             headers=headers,
             method="POST",

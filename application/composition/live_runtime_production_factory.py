@@ -118,7 +118,7 @@ name
     bootstrap = create_live_runtime_bootstrap(
         runtime_transport=runtime_transport,
         tick_entry=tick_entry,
-# **execution_dependencies,
+        **execution_dependencies,
     )
 
     bundle_builder = build_live_bundle_from_components(

@@ -39,12 +39,12 @@ class LiveExecutionPositionBridge:
     """Settle an accepted execution exactly once into OMS and Live Position."""
 
     def __init__(
-# self,
-# *,
+        self,
+        *,
         order_state_machine: OrderStateMachine,
         position_fill_adapter: LivePositionFillAdapter,
-# execution_event_deduplicator,
-# position_aggregate,
+        execution_event_deduplicator,
+        position_aggregate,
     ) -> None:
         self._oms = order_state_machine
         self._fill_adapter = position_fill_adapter
