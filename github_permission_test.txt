@@ -1,1 +1,0 @@
-GitHub write/delete permission test.
