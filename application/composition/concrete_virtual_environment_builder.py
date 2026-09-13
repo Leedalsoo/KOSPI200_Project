@@ -25,7 +25,7 @@ class ReferenceVirtualAuthoritativeScopeFactory(VirtualAuthoritativeScopeFactory
         position = VSSFPositionAggregateAdapter(vssf.account)
         execution_adapter = VSSFExecutionAdapter(command_context=dependencies.vssf_command_context, vssf_runtime=vssf)
         execution = VirtualExecutionEngine(position=position, account=account, authoritative_execute=execution_adapter.execute)
-        return VirtualAuthoritativeScope(vssf_runtime=vssf, broker=VirtualBroker(execution), account=account, position=position, execution=execution)
+        return VirtualAuthoritativeScope(vssf_runtime=vssf, broker=VirtualBroker(execution, market_data_handler=vssf.process_market_data), account=account, position=position, execution=execution)
 
 class ConcreteVirtualEnvironmentBuilder:
     def __init__(self, *, dependencies: VirtualCompositionDependencies, scope_factory: VirtualAuthoritativeScopeFactory | None = None, vms_factory=VirtualMarketSimulatorRuntime) -> None:
