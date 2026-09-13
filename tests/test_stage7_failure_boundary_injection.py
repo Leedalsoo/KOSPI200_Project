@@ -298,3 +298,75 @@ def test_lifecycle_stop_delegates_receive_cancellation_and_drains():
         assert coordinator._stopping is False
 
     asyncio.run(_test())
+
+
+def test_kis_market_approval_missing_credentials_is_fail_closed():
+    from infrastructure.kis.auth import KISAuthManager
+    from infrastructure.kis.futures_market_transport import (
+        FuturesMarketTransportError,
+        KISWebSocketApprovalKeyProvider,
+    )
+    auth = KISAuthManager(app_key="", app_secret="", is_vts=True)
+    provider = KISWebSocketApprovalKeyProvider(auth)
+    with pytest.raises(FuturesMarketTransportError, match="credentials are required"):
+        provider.issue()
+
+
+def test_kis_market_subscribe_without_connection_is_rejected():
+    from infrastructure.kis.auth import KISAuthManager
+    from infrastructure.kis.futures_market_transport import (
+        FuturesMarketTransportError,
+        KISFuturesMarketTransport,
+    )
+    transport = KISFuturesMarketTransport(
+        KISAuthManager(app_key="k", app_secret="s", is_vts=True)
+    )
+    with pytest.raises(FuturesMarketTransportError, match="not connected"):
+        asyncio.run(transport.subscribe("H0IF0000", "SYMBOL"))
+
+
+def test_kis_market_recv_without_connection_is_rejected():
+    from infrastructure.kis.auth import KISAuthManager
+    from infrastructure.kis.futures_market_transport import (
+        FuturesMarketTransportError,
+        KISFuturesMarketTransport,
+    )
+    transport = KISFuturesMarketTransport(
+        KISAuthManager(app_key="k", app_secret="s", is_vts=True)
+    )
+    with pytest.raises(FuturesMarketTransportError, match="not connected"):
+        asyncio.run(transport.recv())
+
+
+def test_kis_instrument_master_rejects_non_https_source():
+    from infrastructure.kis.instrument_master_provider import (
+        KisFuturesInstrumentMasterProvider,
+        KisInstrumentMasterProviderError,
+    )
+    provider = KisFuturesInstrumentMasterProvider(source_url="http://invalid")
+    with pytest.raises(KisInstrumentMasterProviderError, match="HTTPS_SOURCE_REQUIRED"):
+        provider.refresh()
+
+
+def test_kis_instrument_master_empty_payload_is_rejected():
+    from infrastructure.kis.instrument_master_provider import (
+        KisFuturesInstrumentMasterProvider,
+        KisInstrumentMasterProviderError,
+    )
+    provider = KisFuturesInstrumentMasterProvider(
+        source_url="https://example.invalid/master",
+        downloader=lambda _: b"",
+    )
+    with pytest.raises(KisInstrumentMasterProviderError, match="EMPTY_PAYLOAD"):
+        provider.refresh()
+
+
+def test_kis_holiday_strict_mode_without_loaded_year_is_blocked():
+    from datetime import date
+    from infrastructure.kis.holiday_provider import (
+        KISHolidayProvider,
+        KISHolidayUnavailableError,
+    )
+    provider = KISHolidayProvider(strict_mode=True)
+    with pytest.raises(KISHolidayUnavailableError, match="holiday data unavailable"):
+        provider.is_holiday(date(2099, 1, 1))
