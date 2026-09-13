@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from datetime import datetime
 from types import SimpleNamespace
 
 import pytest
@@ -111,3 +112,104 @@ def test_strategy_evaluation_failure_is_captured_without_crashing_orchestrator()
     assert result.failures[0].stage == "evaluate"
     assert result.failures[0].error_type == "RuntimeError"
     assert result.failures[0].message == "INJECTED_STRATEGY_FAILURE"
+
+
+class ShutdownPolicy:
+    graceful_shutdown_timeout_seconds = 0.01
+    cancellation_drain_timeout_seconds = 0.01
+
+
+class HangingBootstrap(Bootstrap):
+    def __init__(self, events, *, cancel_is_noop=False):
+        super().__init__(events)
+        self.cancel_is_noop = cancel_is_noop
+        self.receive_started = asyncio.Event()
+
+    async def receive_execution_once(self):
+        self.receive_started.set()
+        await asyncio.Event().wait()
+
+    async def cancel_execution_receives(self):
+        self.events.append("receive.cancel")
+        if not self.cancel_is_noop:
+            return
+        await asyncio.sleep(0)
+
+
+def _started_coordinator(bootstrap, *, policy=None):
+    events = bootstrap.events
+    coordinator = LiveRuntimeLifecycleCoordinator(
+        controller=Controller(events),
+        bootstrap=bootstrap,
+    )
+    coordinator._started = True
+    coordinator._stopping = False
+    coordinator._policy = policy or ShutdownPolicy()
+    return coordinator
+
+
+def test_lifecycle_shutdown_cancellation_sets_technical_state():
+    async def _test():
+        events = []
+        bootstrap = HangingBootstrap(events)
+        coordinator = _started_coordinator(bootstrap)
+        receive_task = asyncio.create_task(coordinator.receive_execution_once())
+        await bootstrap.receive_started.wait()
+        stop_task = asyncio.create_task(coordinator.stop())
+        await asyncio.sleep(0)
+        stop_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await stop_task
+        assert coordinator.technical_state == "STOP_SHUTDOWN_CANCELLED"
+        assert coordinator._started is False
+        assert "controller.stop" not in events
+        receive_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await receive_task
+
+    asyncio.run(_test())
+
+
+def test_lifecycle_shutdown_drain_timeout_is_fail_closed():
+    async def _test():
+        events = []
+        bootstrap = HangingBootstrap(events, cancel_is_noop=True)
+        coordinator = _started_coordinator(bootstrap)
+        receive_task = asyncio.create_task(coordinator.receive_execution_once())
+        await bootstrap.receive_started.wait()
+        with pytest.raises(RuntimeError, match="LIVE_RUNTIME_SHUTDOWN_DRAIN_TIMEOUT"):
+            await coordinator.stop()
+        assert coordinator.technical_state == "STOP_TIMEOUT"
+        assert coordinator._started is False
+        assert coordinator._stopping is True
+        assert "controller.stop" not in events
+        receive_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await receive_task
+
+    asyncio.run(_test())
+
+
+def test_kis_transport_malformed_control_message_is_normalized():
+    from infrastructure.kis.auth import KISAuthManager
+    auth = KISAuthManager(app_key="k", app_secret="s", is_vts=True)
+    transport = KISFuturesExecutionTransport(auth)
+    with pytest.raises(FuturesExecutionTransportError, match="invalid KIS websocket control message"):
+        transport._normalize("{not-json")
+
+
+def test_kis_transport_payload_without_crypto_context_is_rejected():
+    from infrastructure.kis.auth import KISAuthManager
+    auth = KISAuthManager(app_key="k", app_secret="s", is_vts=True)
+    transport = KISFuturesExecutionTransport(auth)
+    with pytest.raises(FuturesExecutionTransportError, match="crypto context is not established"):
+        transport._normalize("1|H0IFCNI0|22|ENCODED_PAYLOAD")
+
+
+def test_kis_transport_decryption_failure_is_normalized():
+    from infrastructure.kis.auth import KISAuthManager
+    auth = KISAuthManager(app_key="k", app_secret="s", is_vts=True)
+    transport = KISFuturesExecutionTransport(auth)
+    transport._crypto["H0IFCNI0"] = ("0" * 16, "1" * 16)
+    with pytest.raises(FuturesExecutionTransportError, match="invalid KIS H0IFCNI0 encrypted payload"):
+        transport._normalize("1|H0IFCNI0|22|bm90LXZhbGlk")
