@@ -10,8 +10,12 @@ def position_manager_to_risk_input(source) -> RiskPositionInput:
         raise ValueError("RISK_POSITION_SOURCE_REQUIRED")
     positions = {}
     for instrument_id, position in snapshot.items():
-        side = str(getattr(position, "side", position.get("side", ""))).strip().upper()
-        qty = int(getattr(position, "qty", position.get("qty", 0)))
+        if hasattr(position, "side"):
+            side = str(position.side).strip().upper()
+            qty = int(position.qty)
+        else:
+            side = str(position.get("side", "")).strip().upper()
+            qty = int(position.get("qty", 0))
         if side not in {"BUY", "SELL"}:
             raise ValueError("RISK_POSITION_SIDE_REQUIRED")
         if qty < 0:
