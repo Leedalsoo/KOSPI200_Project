@@ -436,3 +436,35 @@ def test_lifecycle_dependency_bootstrap_identity_change_is_rejected():
     coordinator._bootstrap = Bootstrap(events)
     with pytest.raises(RuntimeError, match="BOOTSTRAP_IDENTITY_CHANGED"):
         asyncio.run(coordinator.receive_execution_once())
+
+
+def test_live_bundle_initialize_rejects_armed_policy():
+    from environments.live.bundle import LiveEnvironmentBundle
+    from environments.live.contracts import LiveApprovalState, LiveSafetyPolicy
+    policy = LiveSafetyPolicy(approval_state=LiveApprovalState.APPROVED)
+    bundle = LiveEnvironmentBundle(
+        market=object(), broker=object(), account=object(), position=object(),
+        reconciler=object(), recovery=object(), policy=policy,
+    )
+    with pytest.raises(RuntimeError, match="Live bundle must start disarmed"):
+        bundle.initialize()
+
+
+def test_live_bundle_start_rejects_disconnected_broker():
+    from environments.live.bundle import LiveEnvironmentBundle
+    from environments.live.contracts import LiveSafetyPolicy
+    class DisconnectedBroker:
+        connected = False
+    bundle = LiveEnvironmentBundle(
+        market=object(), broker=DisconnectedBroker(), account=object(), position=object(),
+        reconciler=object(), recovery=object(), policy=LiveSafetyPolicy(),
+    )
+    with pytest.raises(RuntimeError, match="Live bundle cannot start before broker connection"):
+        bundle.start()
+
+
+def test_paper_bundle_connect_rejects_unconfigured_adapters():
+    from environments.paper.bundle import PaperEnvironmentBundle
+    bundle = PaperEnvironmentBundle(config=object(), policy=object())
+    with pytest.raises(RuntimeError, match="Paper adapters are not configured"):
+        bundle.connect()
