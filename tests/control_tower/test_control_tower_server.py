@@ -77,6 +77,24 @@ def test_control_tower_server_panic_halt_command_api():
     handler = ControlTowerRequestHandler(sock, ("127.0.0.1", 12345), server)
     response_bytes = sock._wfile.getvalue()
 
-    assert b"200 OK" in response_bytes
+    assert b"503 Service Unavailable" in response_bytes
     assert b"PANIC_HALT" in response_bytes
-    assert b"kill_switch_active" in response_bytes
+    assert b"success" in response_bytes
+
+
+def test_control_tower_server_rejects_path_traversal():
+    request_data = b"GET /..%2F..%2FAGENTS.md HTTP/1.1\r\nHost: localhost\r\n\r\n"
+    sock = _MockSocket(request_data)
+    server = MagicMock()
+    ControlTowerRequestHandler(sock, ("127.0.0.1", 12345), server)
+    response_bytes = sock._wfile.getvalue()
+    assert b"404" in response_bytes
+
+
+def test_control_tower_server_rejects_invalid_active_tab():
+    body = json.dumps({"tab_id": "invalid"}).encode("utf-8")
+    request_data = (b"POST /api/active_tab HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: " + str(len(body)).encode("ascii") + b"\r\n\r\n" + body)
+    sock = _MockSocket(request_data)
+    server = MagicMock()
+    ControlTowerRequestHandler(sock, ("127.0.0.1", 12345), server)
+    assert b"400 Bad Request" in sock._wfile.getvalue()

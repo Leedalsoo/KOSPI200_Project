@@ -561,3 +561,59 @@ body {
 .log-line {
   padding: 1px 0;
 }
+
+
+/* Runtime/UI integrity and responsive behavior */
+.tab-btn:focus-visible, .btn:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+.btn:disabled { opacity: 0.55; cursor: wait; }
+.dot-danger { background-color: var(--accent-red); box-shadow: 0 0 8px var(--accent-red); }
+.log-warning { color: var(--accent-orange); }
+.log-error { color: var(--accent-red); }
+.empty-state { color: var(--text-muted); text-align: center; padding: 20px 10px; }
+.ui-error-message { margin-bottom: 16px; padding: 10px 12px; border: 1px solid rgba(239,68,68,.35); border-radius: var(--radius-md); color: var(--accent-red); background: rgba(239,68,68,.08); }
+.env-panel.is-loading { opacity: .72; }
+.state-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.state-grid > div { padding: 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: rgba(255,255,255,.02); }
+.state-grid span { display:block; color:var(--text-muted); font-size:11px; margin-bottom:4px; }
+.state-grid strong { font-family:var(--font-mono); font-size:12px; overflow-wrap:anywhere; }
+.data-table { min-width: 560px; }
+.card-body { overflow-x: auto; }
+
+@media (max-width: 1100px) {
+  .global-header { flex-wrap: wrap; gap: 10px; }
+  .header-center { order: 3; width: 100%; justify-content: flex-start; }
+  .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-two-col { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 760px) {
+  body { font-size: 13px; }
+  .global-header { position: static; padding: 10px 12px; }
+  .header-left, .header-right { width: 100%; justify-content: space-between; gap: 8px; }
+  .brand-logo { font-size: 14px; }
+  .system-clock-card { width: 100%; justify-content: space-between; }
+  .tabs-nav { grid-template-columns: 1fr 1fr; overflow: visible; }
+  .tab-btn { padding: 11px 12px; min-height: 78px; }
+  .tab-title { font-size: 12px; }
+  .dashboard-viewport { padding: 14px 10px; }
+  .panel-header { flex-direction: column; gap: 12px; }
+  .panel-title-group h2 { font-size: 18px; }
+  .panel-desc { font-size: 12px; }
+  .panel-actions { flex-wrap: wrap; width: 100%; }
+  .metric-grid { grid-template-columns: 1fr; gap: 10px; }
+  .metric-card { padding: 13px; }
+  .metric-val { font-size: 18px; }
+  .blocked-callout { flex-direction: column; padding: 14px; }
+  .state-grid { grid-template-columns: 1fr; }
+  .audit-dock { padding: 9px 12px; }
+  .dock-header { align-items: flex-start; gap: 8px; flex-direction: column; }
+  .btn-panic { min-height: 42px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

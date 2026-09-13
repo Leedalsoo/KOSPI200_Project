@@ -47,7 +47,8 @@ class ControlTowerUIAdapter:
         """Query real RiskEngine kill switch if injected."""
         if self._risk_engine is not None and hasattr(self._risk_engine, "is_kill_switch_active"):
             return bool(self._risk_engine.is_kill_switch_active())
-        return False
+        # UI boundary itself must fail closed when no authoritative RiskEngine is wired.
+        return True
 
     def _get_active_bundle(self):
         """Retrieve the currently active EnvironmentBundle from RuntimeController/Hub."""
@@ -254,36 +255,34 @@ class ControlTowerUIAdapter:
         """Execute real command against RiskEngine, RuntimeController, and Broker."""
         if command == "PANIC_HALT":
             halt_actions: list[str] = []
+            failures: list[str] = []
 
-            # 1. Trigger RiskEngine pre-trade Kill Switch
-            if self._risk_engine is not None and hasattr(self._risk_engine, "trigger_kill_switch"):
+            if self._risk_engine is None or not hasattr(self._risk_engine, "trigger_kill_switch"):
+                failures.append("RiskEngine unavailable")
+            else:
                 self._risk_engine.trigger_kill_switch(reason="UI_PANIC_HALT")
                 halt_actions.append("RiskEngine kill switch triggered")
-            else:
-                halt_actions.append("RiskEngine not injected (skipped)")
 
-            # 2. Halt RuntimeController execution
-            runtime_stopped = False
-            if self._runtime_controller is not None and hasattr(self._runtime_controller, "stop"):
+            if self._runtime_controller is None or not hasattr(self._runtime_controller, "stop"):
+                failures.append("RuntimeController unavailable")
+            else:
                 try:
                     self._runtime_controller.stop()
-                    runtime_stopped = True
                     halt_actions.append("RuntimeController stopped")
                 except Exception as exc:
-                    halt_actions.append(f"RuntimeController stop error: {exc}")
-            else:
-                halt_actions.append("RuntimeController not injected (skipped)")
+                    failures.append(f"RuntimeController stop error: {exc}")
 
-            # 3. Log audit event
-            log_entry = f"PANIC_HALT executed: {', '.join(halt_actions)}"
+            success = not failures and self._is_kill_switch_active() and self._get_runtime_state() == "STOPPED"
+            log_entry = f"PANIC_HALT {'completed' if success else 'blocked'}: {', '.join(halt_actions + failures)}"
             self._audit_logs.append(log_entry)
 
             return {
-                "success": True,
+                "success": success,
                 "command": "PANIC_HALT",
                 "kill_switch_active": self._is_kill_switch_active(),
                 "runtime_state": self._get_runtime_state(),
                 "actions": halt_actions,
+                "failures": failures,
                 "message": log_entry,
             }
 

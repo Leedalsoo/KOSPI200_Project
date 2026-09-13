@@ -27,14 +27,14 @@
       <div class="header-center">
         <div class="system-clock-card">
           <span class="clock-label">SYSTEM TIME</span>
-          <span id="system-time" class="clock-value">2026-09-11 00:00:00</span>
+          <span id="system-time" class="clock-value">—</span>
         </div>
       </div>
 
       <div class="header-right">
         <div class="safety-indicator">
-          <span class="indicator-dot dot-safe"></span>
-          <span id="safety-text" class="safety-label">FAIL-SAFE ENGAGED</span>
+          <span class="indicator-dot dot-danger"></span>
+          <span id="safety-text" class="safety-label">SAFETY STATUS UNKNOWN</span>
         </div>
         <button id="btn-panic-halt" class="btn btn-panic" title="모든 주문 취소 및 긴급 정지">
           <svg class="icon-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -57,12 +57,12 @@
       <button class="tab-btn active" data-tab="virtual_exchange" id="tab-virtual_exchange">
         <span class="tab-index">02</span>
         <span class="tab-title">가상거래소</span>
-        <span class="tab-status-pill status-running">OPEN</span>
+        <span class="tab-status-pill status-stopped">UNKNOWN</span>
       </button>
       <button class="tab-btn" data-tab="virtual_broker" id="tab-virtual_broker">
         <span class="tab-index">03</span>
         <span class="tab-title">가상증권사</span>
-        <span class="tab-status-pill status-ready">OPERATIONAL</span>
+        <span class="tab-status-pill status-stopped">UNKNOWN</span>
       </button>
       <button class="tab-btn" data-tab="paper" id="tab-paper">
         <span class="tab-index">04</span>
@@ -86,28 +86,28 @@
             <p class="panel-desc">초고속 가속 합성 데이터를 통해 Strategy, Risk, Decision, OMS 파이프라인 전체를 신속하게 전수 검증하는 정규 환경입니다.</p>
           </div>
           <div class="panel-actions">
-            <span class="param-badge">SPEED: 100x</span>
-            <span class="param-badge">SCENARIO: SYNTHETIC_HIGH_SPEED</span>
+            <span id="hs-speed" class="param-badge">SPEED: —</span>
+            <span id="hs-scenario" class="param-badge">SCENARIO: —</span>
           </div>
         </div>
 
         <div class="metric-grid">
           <div class="metric-card">
             <span class="metric-label">PROCESSED TICKS</span>
-            <span id="hs-ticks" class="metric-val mono">0 / 0</span>
+            <span id="hs-ticks" class="metric-val mono">—</span>
             <div class="progress-bar-bg"><div id="hs-progress" class="progress-bar-fill" style="width: 0%"></div></div>
           </div>
           <div class="metric-card">
             <span class="metric-label">STRATEGY DECISIONS</span>
-            <span id="hs-decisions" class="metric-val mono">0</span>
+            <span id="hs-decisions" class="metric-val mono">—</span>
           </div>
           <div class="metric-card">
             <span class="metric-label">ORDERS (SUBMITTED / FILLED)</span>
-            <span id="hs-orders" class="metric-val mono">0 / 0</span>
+            <span id="hs-orders" class="metric-val mono">—</span>
           </div>
           <div class="metric-card">
             <span class="metric-label">TOTAL PnL</span>
-            <span id="hs-pnl" class="metric-val mono pnl-neutral">₩ 0</span>
+            <span id="hs-pnl" class="metric-val mono pnl-neutral">—</span>
           </div>
         </div>
 
@@ -116,7 +116,7 @@
             <div class="card-header"><h3>Recent Strategy & Decision Flow</h3></div>
             <div class="card-body">
               <div id="hs-events-list" class="log-container mono">
-                <div class="log-entry log-info">[HIGH_SPEED] Engine idle. Ready to benchmark scenario.</div>
+                <div class="log-entry log-info">[HIGH_SPEED] 실제 실행 이벤트 없음</div>
               </div>
             </div>
           </div>
@@ -144,27 +144,27 @@
             <p class="panel-desc">KRX 시세 규격을 완벽히 미러링하여 실시간 틱, 호가 스프레드, 지수 피드를 송출하는 가상 거래소 환경입니다.</p>
           </div>
           <div class="panel-actions">
-            <span class="status-badge badge-green">FEED ACTIVE</span>
-            <span class="status-badge badge-neutral">LATENCY: 0.45 ms</span>
+            <span id="vm-feed-badge" class="status-badge badge-neutral">UNKNOWN</span>
+            <span id="vm-latency" class="status-badge badge-neutral">LATENCY: —</span>
           </div>
         </div>
 
         <div class="metric-grid">
           <div class="metric-card">
             <span class="metric-label">UNDERLYING KOSPI200</span>
-            <span id="vm-underlying" class="metric-val mono text-up">348.25</span>
+            <span id="vm-underlying" class="metric-val mono">—</span>
           </div>
           <div class="metric-card">
             <span class="metric-label">VOLATILITY (VKOSPI)</span>
-            <span id="vm-vkospi" class="metric-val mono">15.82 %</span>
+            <span id="vm-vkospi" class="metric-val mono">—</span>
           </div>
           <div class="metric-card">
             <span class="metric-label">ACTIVE INSTRUMENTS</span>
-            <span id="vm-instruments" class="metric-val mono">120 개</span>
+            <span id="vm-instruments" class="metric-val mono">—</span>
           </div>
           <div class="metric-card">
             <span class="metric-label">FEED STATUS</span>
-            <span id="vm-feed-status" class="metric-val text-green">NORMAL BROADCAST</span>
+            <span id="vm-feed-status" class="metric-val">—</span>
           </div>
         </div>
 
@@ -185,17 +185,7 @@
           <div class="card">
             <div class="card-header"><h3>호가 깊이 및 시장 스프레드 (Order Book Depth)</h3></div>
             <div class="card-body">
-              <div class="depth-container mono">
-                <div class="depth-ask">
-                  <div class="depth-row"><span class="price text-down">348.60</span><span class="qty">30</span></div>
-                  <div class="depth-row"><span class="price text-down">348.55</span><span class="qty">18</span></div>
-                </div>
-                <div class="depth-spread"><span>SPREAD: 0.10 pt</span></div>
-                <div class="depth-bid">
-                  <div class="depth-row"><span class="price text-up">348.45</span><span class="qty">12</span></div>
-                  <div class="depth-row"><span class="price text-up">348.40</span><span class="qty">25</span></div>
-                </div>
-              </div>
+              <div id="vm-depth" class="depth-container mono"><div class="empty-state">실제 호가 데이터 없음</div></div>
             </div>
           </div>
         </div>
@@ -209,7 +199,7 @@
             <p class="panel-desc">한국투자증권(KIS) 주문/체결 API 응답 및 상태 전이 FSM을 정밀 모사한 가상 브로커 원장 시스템입니다.</p>
           </div>
           <div class="panel-actions">
-            <span class="param-badge">ACCOUNT: VIRTUAL-8801-01</span>
+            <span id="vb-account" class="param-badge">ACCOUNT: —</span>
             <span class="status-badge badge-green">BROKER OPERATIONAL</span>
           </div>
         </div>
@@ -217,19 +207,19 @@
         <div class="metric-grid">
           <div class="metric-card">
             <span class="metric-label">예수금 잔고 (CASH)</span>
-            <span id="vb-cash" class="metric-val mono">₩ 98,450,000</span>
+            <span id="vb-cash" class="metric-val mono">—</span>
           </div>
           <div class="metric-card">
             <span class="metric-label">사용 증거금 (MARGIN USED)</span>
-            <span id="vb-margin" class="metric-val mono">₩ 12,300,000</span>
+            <span id="vb-margin" class="metric-val mono">—</span>
           </div>
           <div class="metric-card">
             <span class="metric-label">실현 손익 (REALIZED PnL)</span>
-            <span id="vb-realized" class="metric-val mono text-up">+₩ 350,000</span>
+            <span id="vb-realized" class="metric-val mono">—</span>
           </div>
           <div class="metric-card">
             <span class="metric-label">평가 손익 (UNREALIZED PnL)</span>
-            <span id="vb-unrealized" class="metric-val mono text-up">+₩ 110,000</span>
+            <span id="vb-unrealized" class="metric-val mono">—</span>
           </div>
         </div>
 
@@ -297,13 +287,13 @@
           <div class="card">
             <div class="card-header"><h3>모의투자 계좌 정보</h3></div>
             <div class="card-body">
-              <p class="mono text-muted text-center py-4">연결 대기 중 (DISCONNECTED)</p>
+              <div class="state-grid"><div><span>Connection</span><strong id="paper-connection">—</strong></div><div><span>Auth</span><strong id="paper-auth">—</strong></div><div><span>Risk</span><strong id="paper-risk">—</strong></div><div><span>Account</span><strong id="paper-account">—</strong></div></div>
             </div>
           </div>
           <div class="card">
             <div class="card-header"><h3>모의투자 체결 내역</h3></div>
             <div class="card-body">
-              <p class="mono text-muted text-center py-4">연결 대기 중 (DISCONNECTED)</p>
+              <p id="paper-reason" class="mono text-muted py-4">—</p>
             </div>
           </div>
         </div>
@@ -345,13 +335,13 @@
           <div class="card">
             <div class="card-header"><h3>실계좌 증거금 및 리스크 상태</h3></div>
             <div class="card-body">
-              <p class="mono text-muted text-center py-4">실계좌 차단 상태 (BLOCKED)</p>
+              <div class="state-grid"><div><span>Connection</span><strong id="live-connection">—</strong></div><div><span>Auth</span><strong id="live-auth">—</strong></div><div><span>Approval</span><strong id="live-approval">—</strong></div><div><span>Kill Switch</span><strong id="live-kill-switch">—</strong></div><div><span>Execution</span><strong id="live-execution">—</strong></div></div>
             </div>
           </div>
           <div class="card">
             <div class="card-header"><h3>실계좌 미체결 및 체결 현황</h3></div>
             <div class="card-body">
-              <p class="mono text-muted text-center py-4">실계좌 차단 상태 (BLOCKED)</p>
+              <p id="live-reason" class="mono text-muted py-4">—</p>
             </div>
           </div>
         </div>
