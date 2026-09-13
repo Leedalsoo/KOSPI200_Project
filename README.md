@@ -10,7 +10,7 @@ KOSPI200 옵션/선물을 대상으로 하나의 Standard Option Core를 중심�
 - 작업 연속성: Notion `질문과답변`
 - 현재 완료 단계: Control Tower UI 및 Runtime 경계 실제 검증 완료
 - 다음 계획 단계: 서킷브레이커/예외처리 정밀화
-- 기준 commit: `d3671ad39bc2f8188086a94c965aa493171e400a`
+- 기준 commit: `a82367c7b323d52ca022785520a9ea9562dfe26a`
 
 ## 핵심 원칙
 

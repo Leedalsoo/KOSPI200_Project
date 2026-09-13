@@ -3,7 +3,7 @@
 ## 현재 기준
 
 - Branch: `Project200`
-- 기준 commit: `d3671ad39bc2f8188086a94c965aa493171e400a`
+- 기준 commit: `a82367c7b323d52ca022785520a9ea9562dfe26a`
 - Notion 연속성 기준: `질문과답변` / No.440
 - Control Tower UI: 실제 테스트 및 HTTP E2E PASS
 - 전체 pytest: 438 passed (No.440 기준)
