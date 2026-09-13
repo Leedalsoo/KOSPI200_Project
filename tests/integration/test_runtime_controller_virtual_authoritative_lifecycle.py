@@ -8,57 +8,27 @@ from environments.virtual.execution.vssf_command_context_provider import Canonic
 
 
 def test_controller_lifecycle_uses_one_authoritative_vms_vssf_scope():
-    controller = create_virtual_runtime_controller(
-        contract_registry=object(),
-        scenario_configuration={"contract_mappings": []},
-        initial_capital=1_000_000_000.0,
-        vssf_command_context=CanonicalVSSFCommandContextProvider(),
-    )
+    controller = create_virtual_runtime_controller(contract_registry=object(), scenario_configuration={"contract_mappings": []}, initial_capital=1_000_000_000.0, vssf_command_context=CanonicalVSSFCommandContextProvider())
     config = EnvironmentConfig(environment=EnvironmentType.VIRTUAL, name="authoritative-lifecycle")
-    policy = RuntimePolicy()
-
-# controller.start(config, policy)
+    controller.start(config, RuntimePolicy())
     bundle = controller._hub.active
-# assert bundle is not None
+    assert bundle is not None
     assert controller.status().state == "RUNNING"
 
     reference_tick = next(bundle.market.generate_tick_stream(total_days=1, ticks_per_day=1))
     adapter = bundle.execution._authoritative_execute.__self__
     vssf = adapter.vssf_runtime
-
-# vssf.process_market_data(reference_tick)
+    vssf.process_market_data(reference_tick)
     standard_tick = VMSMarketTickProjectionAdapter("AUTH-LIFECYCLE-1").project(reference_tick)
     assert standard_tick.price == Decimal(str(reference_tick.last_price))
 
-    identity = OptionInstrumentIdentity(
-        instrument_id="AUTH-LIFECYCLE-1",
-        symbol="KOSPI200",
-        expiry="202609",
-        option_type="CALL",
-        strike=Decimal(str(reference_tick.strike_price)),
-    )
-    order = BrokerOrderCommand(
-        client_order_id="ORD-LIFECYCLE-1",
-        instrument_id=identity.instrument_id,
-        side="BUY",
-        quantity=2,
-        order_type="LIMIT",
-        instrument_identity=identity,
-        asset_type="OPTION",
-        requested_price=standard_tick.price,
-        track_id="TRACK-LIFECYCLE",
-        tag_id="TAG-LIFECYCLE",
-    )
-
+    identity = OptionInstrumentIdentity(instrument_id="AUTH-LIFECYCLE-1", symbol="KOSPI200", expiry="202609", option_type="CALL", strike=Decimal(str(reference_tick.strike_price)))
+    order = BrokerOrderCommand(client_order_id="ORD-LIFECYCLE-1", instrument_id=identity.instrument_id, side="BUY", quantity=2, order_type="LIMIT", instrument_identity=identity, asset_type="OPTION", requested_price=standard_tick.price, track_id="TRACK-LIFECYCLE", tag_id="TAG-LIFECYCLE")
     report = bundle.broker.submit(order)
-
-# assert report is not None
     assert report.client_order_id == order.client_order_id
     assert vssf.metrics["market_ticks"] == 1
     assert vssf.metrics["executions_issued"] == 1
     assert vssf.account.positions[identity.symbol]["side"] == "BUY"
     assert vssf.account.positions[identity.symbol]["qty"] == 2
-
-# controller.stop()
+    controller.stop()
     assert controller.status().state == "STOPPED"
-# assert controller.status().environment is None
