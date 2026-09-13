@@ -78,18 +78,13 @@ authoritative source로 삼는다. 여기 없는 세부사항은 임의로 채�
 
 ---
 
-## 3. 알려진 코드 결함 (재확인 필요)
+## 3. 현재 검증 상태와 잔여 확인 대상
 
-| 우선순위 | 위치 | 내용 |
-|---|---|---|
-| 최고 | 주문 FSM ↔ Panic Halt | 비상정지가 FSM 전이표에 없는 상태를 거쳐 주문 취소에 실패할 위험. 전이 결과를 확인해야 함. |
-| 높음 | Risk Gate | `allow_reduction`이 실행 엔진에서 항상 기본값(False)으로 호출되던 문제. |
-| 중간 | Signal Generator | 중복신호 제거(dedup)가 구현되어도 실제 파이프라인에서 호출되지 않을 가능성. |
-| 중간 | Signal Mediator | FUTURES 주문 식별키 충돌로 서로 다른 전략 주문이 충돌할 가능성. |
-| 중간 | Strategy files | 정의만 있고 실행 경로에서 호출되지 않는 죽은 코드가 존재할 가능성. |
-| 낮음 | Strategy files | 동일 로직의 async/sync 중복 구현이 존재할 가능성. |
-| 낮음 | Legacy orchestrator | 실제 실행 엔진이 참조하지 않는 고아 코드가 존재할 가능성. |
-
+- Control Tower UI 및 UI↔Runtime 경계는 No.440 기준 실제 실행 검증을 완료했다.
+- `PANIC_HALT`, Kill Switch, Live lifecycle start/stop/restart, HTTP 입력 경계는 현재 코드 기준 PASS 상태다.
+- Paper/Live의 실제 KIS 외부 시스템 검증은 인증정보와 실제 외부 연결이 필요하므로 별도 BLOCKED 조건으로 관리한다.
+- BrokerOrderCommand의 실제 production caller와 실시간 체결 이벤트 공급원은 실제 프로세스 연결 전까지 SOURCE BLOCKED로 취급한다.
+- 과거 Legacy/이관 후보를 임의로 복구하거나 새 경로에서 재사용하지 않는다. 실제 caller와 테스트 증거가 없으면 삭제 또는 BLOCKED로 판정한다.
 ---
 
 ## 4. SOURCE BLOCKED 항목
@@ -105,6 +100,10 @@ authoritative source로 삼는다. 여기 없는 세부사항은 임의로 채�
 ---
 
 ## 5. 작업 단계
+
+## 현재 실행 단계 기준점
+
+No.440에서 Control Tower UI 단계의 실제 검증을 완료했으며 기준 commit은 `d3671ad39bc2f8188086a94c965aa493171e400a`이다. 현재 다음 작업 기준은 7단계 서킷브레이커/예외처리 정밀화이며, 실제 장기 모의투자 관찰 근거가 없는 임의 구현은 금지한다.
 
 이전 단계가 **실제 실행 기준으로** 검증되기 전에는 다음 단계에 착수하지 않는다.
 
