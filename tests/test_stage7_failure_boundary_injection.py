@@ -213,3 +213,88 @@ def test_kis_transport_decryption_failure_is_normalized():
     transport._crypto["H0IFCNI0"] = ("0" * 16, "1" * 16)
     with pytest.raises(FuturesExecutionTransportError, match="invalid KIS H0IFCNI0 encrypted payload"):
         transport._normalize("1|H0IFCNI0|22|bm90LXZhbGlk")
+
+
+class FailingStopController(Controller):
+    def stop(self):
+        self.events.append("controller.stop")
+        raise RuntimeError("INJECTED_CONTROLLER_STOP_FAILURE")
+
+
+def test_lifecycle_controller_stop_failure_sets_technical_state():
+    async def _test():
+        events = []
+        bootstrap = Bootstrap(events)
+        coordinator = LiveRuntimeLifecycleCoordinator(
+            controller=FailingStopController(events),
+            bootstrap=bootstrap,
+        )
+        coordinator._started = True
+        coordinator._policy = ShutdownPolicy()
+        with pytest.raises(RuntimeError, match="INJECTED_CONTROLLER_STOP_FAILURE"):
+            await coordinator.stop()
+        assert events == ["execution.close", "controller.stop"]
+        assert coordinator.technical_state == "STOP_CONTROLLER_FAILED"
+        assert coordinator._started is False
+        assert coordinator._stopping is True
+
+    asyncio.run(_test())
+
+
+def test_lifecycle_transport_ownership_release_failure_sets_technical_state():
+    async def _test():
+        events = []
+        released = []
+        def fail_release():
+            released.append(True)
+            raise RuntimeError("INJECTED_OWNERSHIP_RELEASE_FAILURE")
+        coordinator = LiveRuntimeLifecycleCoordinator(
+            controller=Controller(events),
+            bootstrap=Bootstrap(events),
+            release_execution_transport_ownership=fail_release,
+        )
+        coordinator._started = True
+        coordinator._policy = ShutdownPolicy()
+        with pytest.raises(RuntimeError, match="INJECTED_OWNERSHIP_RELEASE_FAILURE"):
+            await coordinator.stop()
+        assert events == ["execution.close", "controller.stop"]
+        assert released == [True]
+        assert coordinator.technical_state == "TRANSPORT_OWNERSHIP_RELEASE_FAILED"
+        assert coordinator._started is False
+        assert coordinator._stopping is True
+
+    asyncio.run(_test())
+
+
+class DelegatingBootstrap(Bootstrap):
+    def __init__(self, events):
+        super().__init__(events)
+        self.release_receive = asyncio.Event()
+        self.cancel_called = False
+
+    async def receive_execution_once(self):
+        await self.release_receive.wait()
+        return "RECEIVE_DONE"
+
+    async def cancel_execution_receives(self):
+        self.events.append("receive.cancel")
+        self.cancel_called = True
+        self.release_receive.set()
+
+
+def test_lifecycle_stop_delegates_receive_cancellation_and_drains():
+    async def _test():
+        events = []
+        bootstrap = DelegatingBootstrap(events)
+        coordinator = _started_coordinator(bootstrap)
+        receive_task = asyncio.create_task(coordinator.receive_execution_once())
+        await asyncio.sleep(0)
+        await coordinator.stop()
+        assert await receive_task == "RECEIVE_DONE"
+        assert bootstrap.cancel_called is True
+        assert events == ["execution.close", "receive.cancel", "controller.stop"]
+        assert coordinator.technical_state is None
+        assert coordinator._started is False
+        assert coordinator._stopping is False
+
+    asyncio.run(_test())
