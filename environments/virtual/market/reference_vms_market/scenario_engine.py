@@ -15,7 +15,7 @@ class ScenarioAdjustment:
 
 class ScenarioEngine:
     def __init__(self, config_path: Optional[str] = None, seed: int = 42) -> None:
-        self.config_path = Path(config_path) if config_path else Path(__file__).with_name("market_scenarios.yaml")
+        self.config_path = Path(config_path or "config/market_scenarios.yaml")
         self.seed = seed
         self._rng = random.Random(seed)
         self._scenarios: Dict[str, Dict[str, Any]] = {}

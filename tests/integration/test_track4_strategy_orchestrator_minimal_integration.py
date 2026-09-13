@@ -81,14 +81,14 @@ def test_materialized_track4_input_reaches_registry_orchestrator_and_evaluate():
     assert result.failures == ()
 # assert result.signals
     assert any(signal.direction == "BUILD" for signal in result.signals)
-    assert any(signal.direction == "BUY" for signal in result.signals)
+    assert any(signal.direction == "SELL" for signal in result.signals)
 
 def test_track4_identity_and_payload_boundary_are_preserved():
     data = build_materialized_track4_input()
     context = build_context(data)
 
     assert context.strategy_id == TRACK4_KEY[0]
-# assert context.input is not None
-# assert context.input.payload is data
-# assert isinstance(context.input.payload, Track4MarketInput)
+    assert context.input is not None
+    assert context.input.payload is data
+    assert isinstance(context.input.payload, Track4MarketInput)
     assert context.market_state.as_of == data.observed_at

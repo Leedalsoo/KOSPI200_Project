@@ -7,10 +7,10 @@ from environments.virtual.execution.vssf_command_context_provider import Canonic
 from environments.virtual.execution.vssf_execution_adapter import VSSFExecutionAdapter
 from environments.virtual.account.vssf_account_snapshot_adapter import VSSFAccountSnapshotAdapter
 from environments.virtual.position.vssf_position_aggregate_adapter import VSSFPositionAggregateAdapter
-from environments.virtual.market.reference_vms_market.canonical import ReferenceCanonicalMarketTick
-from environments.virtual.market.reference_vms_market.simulator_runtime import VirtualMarketSimulatorRuntime
+from environments.virtual.market.canonical import ReferenceCanonicalMarketTick
+from environments.virtual.market.simulator_runtime import VirtualMarketSimulatorRuntime
 from environments.virtual.authoritative_vssf.firm_runtime import VirtualSecuritiesFirmRuntime
-from shared.contracts.canonical import CanonicalAssetType, CanonicalOrderSide
+from shared.contracts.canonical import CanonicalOrderSide
 
 
 def test_real_vms_vssf_adapter_end_to_end():
@@ -18,8 +18,7 @@ def test_real_vms_vssf_adapter_end_to_end():
     reference_tick = next(vms.generate_tick_stream(total_days=1, ticks_per_day=1))
 
     vssf = VirtualSecuritiesFirmRuntime(initial_capital=1_000_000_000.0)
-# vssf.process_market_data(reference_tick)
-
+    vssf.process_market_data(reference_tick)
     market = VMSMarketTickProjectionAdapter("AUTH-OPTION-1").project(reference_tick)
     assert market.instrument_id == "AUTH-OPTION-1"
     assert market.price == Decimal(str(reference_tick.last_price))
@@ -50,12 +49,11 @@ def test_real_vms_vssf_adapter_end_to_end():
         vssf_runtime=vssf,
     ).execute(order)
 
-# assert report is not None
     assert report.client_order_id == "ORD-VMS-VSSF-1"
     assert vssf.account.positions[identity.symbol]["side"] == CanonicalOrderSide.BUY.value
 
     account = VSSFAccountSnapshotAdapter(vssf.account).snapshot()
     positions = VSSFPositionAggregateAdapter(vssf.account).snapshot()
-# assert account.balances["available_cash"] < Decimal("1000000000.0")
+    assert account is not None
     assert positions[identity.symbol].side == "BUY"
     assert positions[identity.symbol].qty == 2

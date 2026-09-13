@@ -20,9 +20,9 @@ class RuntimeController:
             pass
             raise RuntimeError("runtime is already running")
         bundle = self._hub.create(config, policy)
-# bundle.initialize()
-# bundle.connect()
-# bundle.start()
+        bundle.initialize()
+        bundle.connect()
+        bundle.start()
         self._hub.activate(bundle)
         self._state = "RUNNING"
 
@@ -33,8 +33,8 @@ class RuntimeController:
             self._state = "STOPPED"
             return
         self._state = "STOPPING"
-# bundle.stop()
-# bundle.shutdown()
+        bundle.stop()
+        bundle.shutdown()
         self._hub.deactivate()
         self._state = "STOPPED"
 

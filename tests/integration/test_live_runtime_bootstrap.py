@@ -58,8 +58,7 @@ def test_startup_reconcile_fails_closed_without_recovery_service():
     )
 
     with pytest.raises(ValueError, match="LIVE_RUNTIME_RECOVERY_SERVICE_REQUIRED"):
-        pass
-# bootstrap.startup_reconcile(object())
+        bootstrap.startup_reconcile(object())
 
 
 def test_oms_ownership_mismatch_fails_closed():

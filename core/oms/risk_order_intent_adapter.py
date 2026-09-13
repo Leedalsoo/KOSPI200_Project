@@ -31,7 +31,7 @@ def build_order_intent_execution_input(
     if status == "DENY" or not risk_result.is_approved:
         pass
         raise RiskOrderIntentMappingError(
-# risk_result.rejection_reason or "ORDER_DENIED_BY_RISK"
+            risk_result.rejection_reason or "ORDER_DENIED_BY_RISK"
         )
 
     if status == "ALLOW":

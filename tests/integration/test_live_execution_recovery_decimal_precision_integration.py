@@ -5,9 +5,7 @@ def delta_price(cumulative, cumulative_average, prior_filled_quantity, prior_ave
     if prior_filled_quantity == 0:
         pass
         return cumulative_average
-    return (
-# cumulative_average * Decimal(cumulative)
-    ) / Decimal(cumulative - prior_filled_quantity)
+    return (cumulative_average * Decimal(cumulative) - prior_average_price * Decimal(prior_filled_quantity)) / Decimal(cumulative - prior_filled_quantity)
 
 
 def test_decimal_delta_price_is_exact_without_float_conversion():
@@ -44,12 +42,7 @@ def test_sequential_recovery_preserves_weighted_average_invariant():
     second_cumulative_avg = Decimal("101.60")
 
     first_price = delta_price(first_qty, first_avg, 0, Decimal("0"))
-    second_price = delta_price(
-# second_cumulative_qty,
-# second_cumulative_avg,
-# first_qty,
-# first_avg,
-    )
+    second_price = delta_price(second_cumulative_qty, second_cumulative_avg, first_qty, first_avg)
 
     assert first_price == Decimal("101.25")
     assert (first_price * first_qty + second_price * 3) / second_cumulative_qty == second_cumulative_avg

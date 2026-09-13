@@ -198,7 +198,7 @@ def test_decision_to_command_to_authoritative_risk_to_router_allow():
     router = FakeRouter()
     approved = DecisionArbiter().arbitrate([approved_signal()], account=None).approved_signals
     command = approved_signal_to_command(
-# approved[0],
+approved[0],
         context=DecisionCommandContext(client_order_id="ord-1"),
     )
 
@@ -222,6 +222,6 @@ def test_decision_to_command_requires_authoritative_client_order_id():
     with pytest.raises(ValueError, match="CLIENT_ORDER_ID_REQUIRED"):
         pass
         approved_signal_to_command(
-# approved[0],
+approved[0],
             context=DecisionCommandContext(client_order_id=""),
         )

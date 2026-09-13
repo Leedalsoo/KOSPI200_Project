@@ -32,7 +32,7 @@ class ProductionTradingCalendarTests(unittest.TestCase):
     def test_trading_days_between(self):
         self.assertEqual(
             self.calendar.trading_days_between(date(2026, 2, 27), date(2026, 3, 3)),
-# 1,
+1,
         )
 
 

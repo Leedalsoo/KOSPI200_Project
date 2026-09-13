@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 
@@ -31,11 +32,15 @@ class FakeTransport:
         self.connected = False
 
 
+class Notice(dict):
+    __getattr__ = dict.__getitem__
+
+
 class FakeExecutionAdapter:
     TR_ID = "H0IFCNI0"
 
     def parse(self, frame):
-        return frame
+        return Notice(frame)
 
     def to_execution_report(self, notice, context):
         return ExecutionReport(
@@ -93,13 +98,13 @@ def test_full_live_execution_composition():
     )
 
     response = composition.broker.submit(command)
-# assert response.accepted is True
-# oms.apply_ack(type("Ack", (), {"client_order_id": "C1", "accepted": True, "broker_order_id": "B1"})())
+    assert response.accepted is True
+    oms.apply_ack(type("Ack", (), {"client_order_id": "C1", "accepted": True, "broker_order_id": "B1"})())
 
     import asyncio
-# asyncio.run(composition.start_execution("HTS1"))
-# asyncio.run(composition.receive_execution_once())
-# asyncio.run(composition.receive_execution_once())
+    asyncio.run(composition.start_execution("HTS1"))
+    asyncio.run(composition.receive_execution_once())
+    asyncio.run(composition.receive_execution_once())
 
     assert transport.subscription == ("H0IFCNI0", "HTS1")
     assert oms.get("C1").filled_quantity == 1
@@ -178,7 +183,6 @@ def test_recovery_transport_and_adapter_must_be_paired():
 def test_oms_does_not_synthesize_missing_broker_command():
     oms = OrderStateMachine()
     oms.apply_intent(OrderIntent(client_order_id="C1", instrument_id="I1", side="BUY", quantity=1, intent_type="OPEN"))
-# oms.apply_ack(type("Ack", (), {"client_order_id": "C1", "accepted": True, "broker_order_id": "B1"})())
+    oms.apply_ack(type("Ack", (), {"client_order_id": "C1", "accepted": True, "broker_order_id": "B1"})())
     with pytest.raises(OrderStateTransitionError, match="BROKER_ORDER_COMMAND_NOT_REGISTERED"):
-        pass
-# oms.get_broker_order_command("B1")
+        oms.get_broker_order_command("B1")

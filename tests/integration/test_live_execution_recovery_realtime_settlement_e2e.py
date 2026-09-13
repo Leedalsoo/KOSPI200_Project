@@ -23,9 +23,9 @@ def _report(*, execution_id, quantity, remaining, status, price):
 def _scenario():
     oms = OrderStateMachine()
     command = BrokerOrderCommand("C1", "I1", "BUY", 5, "MARKET")
-# oms.apply_intent(OrderIntent("C1", "I1", "BUY", 5, "NEW"))
-# oms.apply_ack(OrderAckEvent("C1", True, "B1"))
-# oms.register_broker_order_command(command)
+    oms.apply_intent(OrderIntent("C1", "I1", "BUY", 5, "NEW"))
+    oms.apply_ack(OrderAckEvent("C1", True, "B1"))
+    oms.register_broker_order_command(command)
     position = LivePositionAggregate("I1")
     bridge = LiveExecutionPositionBridge(
         order_state_machine=oms,
@@ -48,12 +48,12 @@ def test_startup_recovery_then_realtime_execution_share_same_settlement_state():
         status="FILLED", price="360.0",
     )
 
-# bridge.settle(recovery_report)
+    bridge.settle(recovery_report)
     assert oms.get("C1").filled_quantity == 2
     assert position.snapshot().qty == 2
     assert position.snapshot().avg_price == Decimal("350.0")
 
-# bridge.settle(realtime_report)
+    bridge.settle(realtime_report)
     state = oms.get("C1")
     snapshot = position.snapshot()
     assert state.status == "FILLED"
@@ -69,9 +69,9 @@ def test_replay_at_lifecycle_boundary_does_not_duplicate_settlement():
         status="PARTIALLY_FILLED", price="350.0",
     )
 
-# bridge.settle(report)
+    bridge.settle(report)
     before = (oms.get("C1").filled_quantity, position.snapshot().qty, position.snapshot().avg_price)
-# bridge.settle(report)
+    bridge.settle(report)
     after = (oms.get("C1").filled_quantity, position.snapshot().qty, position.snapshot().avg_price)
 
     assert after == before

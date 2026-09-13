@@ -20,8 +20,8 @@ class RuntimeStrategyResultCollectionAdapter:
     """Assign local_sequence from StrategyRunResult.signals order at Runtime boundary."""
 
     def collect(
-# self,
-# *,
+        self,
+        *,
         tick_sequence: int,
         context: Any,
         result: Any,

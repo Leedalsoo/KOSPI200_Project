@@ -1,5 +1,6 @@
 """Standard Core pre-trade RiskEngine and RiskGate."""
 import dataclasses
+import copy
 import logging
 import time
 import uuid
@@ -24,6 +25,17 @@ class RiskOrderCommand(Protocol):
 
 class MarginCalculator(Protocol):
     def calculate_order_margin(self, command: RiskOrderCommand) -> float: ...
+
+def _replace_command_qty(command: RiskOrderCommand, qty: int) -> RiskOrderCommand:
+    if dataclasses.is_dataclass(command):
+        return dataclasses.replace(command, qty=qty)
+    cloned = copy.copy(command)
+    try:
+        setattr(cloned, "qty", qty)
+    except Exception as exc:
+        raise TypeError("RISK_REDUCED_COMMAND_NOT_MUTABLE") from exc
+    return cloned
+
 
 class RiskEngine:
     def __init__(self, config: Optional[RiskConfig] = None, margin_engine: Optional[MarginCalculator] = None, risk_sensor: Optional[RiskSensor] = None):
@@ -113,7 +125,7 @@ class RiskEngine:
             remaining_capacity = self.config.max_position_per_instrument - current_qty
             if allow_reduction and 0 < remaining_capacity < effective_cmd.qty:
                 pass
-                effective_cmd = dataclasses.replace(effective_cmd, qty=remaining_capacity)
+                effective_cmd = _replace_command_qty(effective_cmd, remaining_capacity)
             else:
                 pass
                 return RiskEvaluationResult(False, "DENY", original_qty, 0, f"EXCEEDED_INSTRUMENT_LIMIT: {expected['qty']} > {self.config.max_position_per_instrument}")
@@ -128,7 +140,7 @@ class RiskEngine:
             max_affordable_qty = int(free_margin / unit_margin) if unit_margin > 0 else 0
             if allow_reduction and 0 < max_affordable_qty < effective_cmd.qty:
                 pass
-                effective_cmd = dataclasses.replace(effective_cmd, qty=max_affordable_qty)
+                effective_cmd = _replace_command_qty(effective_cmd, max_affordable_qty)
                 required_margin = self._decimal(self.margin_engine.calculate_order_margin(effective_cmd))
                 estimated_ratio = (used_margin + required_margin) / total_balance if total_balance > 0 else Decimal("1")
             else:

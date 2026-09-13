@@ -159,6 +159,6 @@ class KISFuturesExecutionNoticeAdapter:
                 source_available=True,
                 reason="KIS H0IFCNI0 supplies execution time without calendar date",
             ),
-            group_id=context.group_id,
-            leg_id=context.leg_id,
+            group_id=getattr(context, "group_id", None),
+            leg_id=getattr(context, "leg_id", None),
         )

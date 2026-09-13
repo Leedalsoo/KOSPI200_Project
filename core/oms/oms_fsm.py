@@ -109,13 +109,13 @@ class OrderStateMachine:
                 raise OrderStateTransitionError("BROKER_ORDER_ID_ALREADY_CORRELATED")
             self._broker_to_client[broker_order_id] = client_order_id
         state = OrderState(
-# client_order_id,
-            "ACKED" if event.accepted else "REJECTED",
-# event.broker_order_id,
-# current.order_quantity,
-# current.filled_quantity,
-# current.broker_order_command,
-# current.average_execution_price,
+            client_order_id=client_order_id,
+            status="ACKED" if event.accepted else "REJECTED",
+            broker_order_id=event.broker_order_id,
+            order_quantity=current.order_quantity,
+            filled_quantity=current.filled_quantity,
+            broker_order_command=current.broker_order_command,
+            average_execution_price=current.average_execution_price,
         )
         self._states[client_order_id] = state
         return state
@@ -195,21 +195,24 @@ class OrderStateMachine:
                 average_execution_price = report.execution_price
             else:
                 pass
-                average_execution_price = (
-# average_execution_price * Decimal(current.filled_quantity)
-# + report.execution_price * Decimal(report.filled_quantity)
-                ) / Decimal(cumulative)
+                average_execution_price = (average_execution_price * Decimal(current.filled_quantity) + report.execution_price * Decimal(report.filled_quantity)) / Decimal(cumulative)
         state = OrderState(
-# client_order_id,
-# report.status,
-# report.broker_order_id or current.broker_order_id,
-# current.order_quantity,
-# cumulative,
-# current.broker_order_command,
-# average_execution_price,
+            client_order_id=client_order_id,
+            status=report.status,
+            broker_order_id=report.broker_order_id or current.broker_order_id,
+            order_quantity=current.order_quantity,
+            filled_quantity=cumulative,
+            broker_order_command=current.broker_order_command,
+            average_execution_price=average_execution_price,
         )
         self._states[client_order_id] = state
         return state
+
+    def command_for(self, client_order_id: str) -> BrokerOrderCommand:
+        state = self._states.get(str(client_order_id).strip())
+        if state is None or state.broker_order_command is None:
+            raise OrderStateTransitionError("BROKER_ORDER_COMMAND_NOT_REGISTERED")
+        return state.broker_order_command
 
     def get(self, client_order_id: str) -> OrderState | None:
         return self._states.get(client_order_id)

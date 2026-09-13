@@ -11,6 +11,7 @@ class CanonicalMarketTick:
     price: Decimal
     volume: Decimal | None = None
     source_sequence: int | None = None
+    seq_id: int | None = None
 
 
 @dataclass(frozen=True)

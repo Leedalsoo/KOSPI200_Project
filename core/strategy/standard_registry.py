@@ -1,9 +1,5 @@
-"""Standard Option Core registry manifest.
-
-The manifest owns immutable strategy identities and registration order.
-(strategy_id, version) is the registry identity and must not be reconstructed
-by callers with a hard-coded version.
-"""
+"""Standard Strategy registry manifest."""
+from __future__ import annotations
 
 from core.strategy.registry import StrategyRegistry
 from core.strategy.track1_tail_defense import Track1TailDefense
@@ -16,17 +12,16 @@ from core.strategy.track7_volatility_skew_weekly_insurance import Track7Volatili
 from core.strategy.track8_macro_regime_monthly_strangle import Track8MacroRegimeMonthlyStrangle
 from core.strategy.track9_event_overnight_insurance import Track9EventOvernightInsurance
 
-
 STANDARD_STRATEGY_TYPES = (
-# Track1TailDefense,
-# Track2AsymmetricTrap,
-# Track3StatisticalArbitrage,
-# Track4GammaScalping,
-# Track5GapDivergence,
-# Track6DailyTailInsurance,
-# Track7VolatilitySkewWeeklyInsurance,
-# Track8MacroRegimeMonthlyStrangle,
-# Track9EventOvernightInsurance,
+    Track1TailDefense,
+    Track2AsymmetricTrap,
+    Track3StatisticalArbitrage,
+    Track4GammaScalping,
+    Track5GapDivergence,
+    Track6DailyTailInsurance,
+    Track7VolatilitySkewWeeklyInsurance,
+    Track8MacroRegimeMonthlyStrangle,
+    Track9EventOvernightInsurance,
 )
 
 STANDARD_STRATEGY_KEYS = tuple(
@@ -35,13 +30,12 @@ STANDARD_STRATEGY_KEYS = tuple(
 )
 
 STANDARD_STRATEGY_IDS = tuple(
-# strategy_id for strategy_id, _ in STANDARD_STRATEGY_KEYS
+    strategy_id for strategy_id, _ in STANDARD_STRATEGY_KEYS
 )
 
 
 def build_standard_strategy_registry() -> StrategyRegistry:
     registry = StrategyRegistry()
     for strategy_type in STANDARD_STRATEGY_TYPES:
-        pass
-# registry.register(strategy_type())
+        registry.register(strategy_type())
     return registry

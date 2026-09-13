@@ -1,5 +1,6 @@
 # application/composition/live_runtime_tick_entry.py
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, is_dataclass, replace
+from copy import copy
 from typing import Any
 
 
@@ -27,14 +28,24 @@ class LiveRuntimeTickEntry:
             pass
             raise ValueError("RUNTIME_RISK_AUTHORITATIVE_STATE_REQUIRED")
 
-        call_context = replace(
-# risk_context,
-            account_snapshot=account,
-            position_source=positions,
-        )
+        if is_dataclass(risk_context):
+            try:
+                call_context = replace(
+                    risk_context,
+                    account_snapshot=account,
+                    position_source=positions,
+                )
+            except TypeError:
+                call_context = copy(risk_context)
+                call_context.account_snapshot = account
+                call_context.position_source = positions
+        else:
+            call_context = copy(risk_context)
+            call_context.account_snapshot = account
+            call_context.position_source = positions
         return tuple(
             self.route_authoritative(
-# command,
+                command,
                 risk_gate=self.risk_gate,
                 context=call_context,
             )

@@ -18,9 +18,9 @@ def _report(*, execution_id="E1", quantity=2, remaining=3, status="PARTIALLY_FIL
 def _bridge():
     oms = OrderStateMachine()
     command = BrokerOrderCommand("C1", "I1", "BUY", 5, "MARKET")
-# oms.apply_intent(OrderIntent("C1", "I1", "BUY", 5, "NEW"))
-# oms.apply_ack(OrderAckEvent("C1", True, "B1"))
-# oms.register_broker_order_command(command)
+    oms.apply_intent(OrderIntent("C1", "I1", "BUY", 5, "NEW"))
+    oms.apply_ack(OrderAckEvent("C1", True, "B1"))
+    oms.register_broker_order_command(command)
     aggregate = LivePositionAggregate("I1")
     dedup = ExecutionEventDeduplicator()
     bridge = LiveExecutionPositionBridge(
@@ -34,8 +34,8 @@ def _bridge():
 
 def test_canonical_execution_replay_is_settled_once_when_sources_share_identity():
     oms, aggregate, dedup, bridge = _bridge()
-# bridge.settle(_report())
-# bridge.settle(_report())
+    bridge.settle(_report())
+    bridge.settle(_report())
     state = oms.get("C1")
     assert state.status == "PARTIALLY_FILLED"
     assert state.filled_quantity == 2
@@ -46,8 +46,8 @@ def test_canonical_execution_replay_is_settled_once_when_sources_share_identity(
 
 def test_canonical_execution_replay_is_order_independent():
     oms, aggregate, dedup, bridge = _bridge()
-# bridge.settle(_report())
-# bridge.settle(_report())
+    bridge.settle(_report())
+    bridge.settle(_report())
     state = oms.get("C1")
     assert state.filled_quantity == 2
     assert aggregate.snapshot().qty == 2

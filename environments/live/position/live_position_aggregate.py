@@ -32,7 +32,12 @@ class LivePositionAggregate:
         if not isinstance(quantity, int) or quantity <= 0:
             pass
             raise ValueError("QUANTITY_INVALID")
-        if not isinstance(price, Decimal) or price <= 0:
+        if not isinstance(price, Decimal):
+            try:
+                price = Decimal(str(price))
+            except Exception as exc:
+                raise ValueError("PRICE_INVALID") from exc
+        if price <= 0:
             pass
             raise ValueError("PRICE_INVALID")
 

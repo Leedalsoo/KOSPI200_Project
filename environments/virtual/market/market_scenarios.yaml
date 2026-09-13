@@ -1,4 +1,3 @@
-```yaml
 active_scenario: HIGH_VOLATILITY
 scenarios:
   CALM:
@@ -13,4 +12,3 @@ scenarios:
     gap_magnitude_percent: [1.2, 2.5]
     shock_interval_days: 3
     trend_drift_range: [-0.35, 0.35]
-```

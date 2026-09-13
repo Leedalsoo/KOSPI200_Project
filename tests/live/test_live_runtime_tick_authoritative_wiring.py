@@ -25,7 +25,7 @@ class Context:
 def test_tick_entry_refreshes_authoritative_state_and_uses_actual_route_contract():
     seen = []
     def route(command, *, risk_gate, context):
-# seen.append((command, risk_gate, context.account_snapshot, context.position_source))
+        seen.append((command, risk_gate, context.account_snapshot, context.position_source))
         return "ALLOW"
 
     entry = LiveRuntimeTickEntry(

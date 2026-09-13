@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Optional, Protocol
 
 from shared.contracts.canonical import CanonicalAssetType, CanonicalOrderCommand
+from core.risk.risk_runtime_adapter import build_risk_runtime_inputs
 
 
 class OrderRouterLike(Protocol):
@@ -123,15 +124,18 @@ def route_from_authoritative_sources(
     sensor_snapshot: Any = None,
     allow_reduction: bool = False,
 ) -> ReferenceExecutionResult:
-    """Route from authoritative account/position sources — NOT YET IMPLEMENTED.
-
-    This function requires AccountSnapshot and build_risk_runtime_inputs which
-    are not yet available in the current migration phase. Raises on invocation.
-    """
-    raise NotImplementedError(
-        "route_from_authoritative_sources requires AccountSnapshot and "
-        "build_risk_runtime_inputs which are not yet migrated."
+    """Build Standard Risk inputs from authoritative sources, then route the result."""
+    adapted = CanonicalRiskCommandAdapter.from_command(command)
+    inputs = build_risk_runtime_inputs(adapted, account_snapshot, position_manager)
+    approved, _token, rejection_reason = risk_gate.admit_order(
+        inputs.command, inputs.account, inputs.positions, sensor_snapshot, allow_reduction=allow_reduction
     )
+    result = risk_gate.last_evaluation_result
+    if not approved or result is None:
+        return ReferenceExecutionResult(False, getattr(result, "decision", "DENY"), False, None, rejection_reason or getattr(result, "rejection_reason", None))
+    effective = result.reduced_command if result.decision == "REDUCE" and result.reduced_command is not None else inputs.command
+    order_router.register_and_route(effective)
+    return ReferenceExecutionResult(True, result.decision, True, effective)
 
 
 @dataclass(frozen=True)

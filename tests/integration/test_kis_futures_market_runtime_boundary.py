@@ -28,5 +28,4 @@ def test_kis_market_projection_does_not_fabricate_runtime_sequence():
 
     runtime = StandardOptionRuntime(strategy_seam=object())
     with pytest.raises(ValueError, match="RUNTIME_SOURCE_SEQUENCE_REQUIRED"):
-        pass
-# runtime.process_tick(tick, tick.observed_at)
+        runtime.process_tick(tick, tick.observed_at)

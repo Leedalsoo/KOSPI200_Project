@@ -67,17 +67,15 @@ class Router:
 
 def route_from_runtime_authoritative_sources(command, *, risk_gate, context):
     approved, token, rejection_reason = risk_gate.admit_order(
-# command,
-# context.account_snapshot,
-# context.position_source,
+        command,
+        context.account_snapshot,
+        context.position_source,
     )
     if not approved:
-        pass
         return {"routed": False, "decision": "DENY"}
     if token is None:
-        pass
         raise RuntimeError("RISK_APPROVAL_TOKEN_REQUIRED")
-# context.order_router.register_and_route(command, token)
+    context.order_router.register_and_route(command, token)
     return {"routed": True, "decision": "ALLOW"}
 
 
@@ -140,15 +138,15 @@ def test_one_shot_refreshes_authoritative_account_position_per_call():
     seen = []
 
     def account_provider():
-# seen.append(("account", account))
+        seen.append(("account", account))
         return account
 
     def position_provider():
-# seen.append(("position", positions))
+        seen.append(("position", positions))
         return positions
 
     def route(command, *, risk_gate, context):
-# seen.append(("risk_context", context.account_snapshot, context.position_source))
+        seen.append(("risk_context", context.account_snapshot, context.position_source))
         return {"routed": False, "decision": "DENY"}
 
     entry = LiveRuntimeTickEntry(

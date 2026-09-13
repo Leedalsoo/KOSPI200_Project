@@ -82,10 +82,9 @@ def test_deny_stops_later_legs():
     g = gate()
     calls = []
     def deny_factory(i):
-# calls.append(i.client_order_id)
+        calls.append(i.client_order_id)
         return Command(i.client_order_id, "t", 999 if i.client_order_id == "O2" else 1, 1.0, "BUY", "LEG")
     with pytest.raises(MultiLegRiskError, match="EXCEEDED_MAX_ORDER_QTY"):
-        pass
         admit_multi_leg_intents([intent("O1", "a"), intent("O2", "b"), intent("O3", "c")], risk_gate=g, account=account(), command_factory=deny_factory)
     assert calls == ["O1", "O2"]
 

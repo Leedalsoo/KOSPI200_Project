@@ -7,16 +7,11 @@ def delta_price(cumulative, cumulative_average, prior_filled_quantity, prior_ave
     if prior_filled_quantity == 0:
         pass
         return cumulative_average
-    return (
-# cumulative_average * Decimal(cumulative)
-    ) / Decimal(cumulative - prior_filled_quantity)
+    return (cumulative_average * Decimal(cumulative) - prior_average_price * Decimal(prior_filled_quantity)) / Decimal(cumulative - prior_filled_quantity)
 
 
 def weighted_average(prior_qty, prior_avg, fill_qty, fill_price):
-    return (
-# prior_avg * Decimal(prior_qty)
-# + fill_price * Decimal(fill_qty)
-    ) / Decimal(prior_qty + fill_qty)
+    return (prior_avg * Decimal(prior_qty) + fill_price * Decimal(fill_qty)) / Decimal(prior_qty + fill_qty)
 
 
 def test_recovery_realtime_oms_position_decimal_propagation():

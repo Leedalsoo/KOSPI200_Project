@@ -44,16 +44,16 @@ def test_kis_consumer_callback_reaches_live_market_provider_without_identity_syn
     )
 
     def on_observation(observation):
-# provider.publish(observation)
+        provider.publish(observation)
         return None
 
     consumer = KISIndexFuturesMarketConsumer(
-# transport,
+        transport,
         KISIndexFuturesMarketWebSocketAdapter(),
-# on_observation,
+        on_observation,
     )
 
-# asyncio.run(consumer.start("101S12"))
+    asyncio.run(consumer.start("101S12"))
     observation = asyncio.run(consumer.receive_once())
     state = provider.snapshot()
 

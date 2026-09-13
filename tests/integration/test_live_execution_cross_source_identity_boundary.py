@@ -48,10 +48,10 @@ notice,
     assert rest_report.execution_id != h0_report.execution_id
 
     dedup = ExecutionEventDeduplicator()
-# assert dedup.accept(rest_report) is True
-# assert dedup.accept(rest_report) is False
-# assert dedup.accept(h0_report) is True
-# assert dedup.accept(h0_report) is False
+    assert dedup.accept(rest_report) is True
+    assert dedup.accept(rest_report) is False
+    assert dedup.accept(h0_report) is True
+    assert dedup.accept(h0_report) is False
 
 
 def test_cross_source_identity_is_not_synthesized_from_shared_order_fields():
@@ -65,5 +65,5 @@ def test_cross_source_identity_is_not_synthesized_from_shared_order_fields():
 
     # Shared order/time/quantity/price fields do not authorize an identity merge.
     dedup = ExecutionEventDeduplicator()
-# assert dedup.accept(rest_report) is True
-# assert dedup.accept(h0_report) is True
+    assert dedup.accept(rest_report) is True
+    assert dedup.accept(h0_report) is True

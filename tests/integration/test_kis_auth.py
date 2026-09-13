@@ -47,7 +47,7 @@ class KISAuthManagerTests(unittest.TestCase):
     def test_expired_token_is_reissued(self):
         calls = []
         def urlopen(*_args, **_kwargs):
-# calls.append(1)
+            calls.append(1)
             return _Response({"access_token": "new-token", "expires_in": 3600})
 
         auth = KISAuthManager("key", "secret", cache_file_path=None, urlopen=urlopen)

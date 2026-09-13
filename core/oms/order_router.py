@@ -29,6 +29,7 @@ class StandardOrderRouter:
         if self._order_state_machine.get(command.client_order_id) is None:
             pass
             self._order_state_machine.apply_intent(command)
+        self._order_state_machine.register_broker_order_command(command)
 
         response = submit(command, **kwargs)
         if not isinstance(response, BrokerOrderResponse):

@@ -1,8 +1,11 @@
 from dataclasses import dataclass
+from typing import ClassVar
+from contracts.types import EnvironmentType
 from environments.live.contracts import LiveSafetyPolicy
 
 @dataclass
 class LiveEnvironmentBundle:
+    environment: ClassVar[EnvironmentType] = EnvironmentType.LIVE
     market: object
     broker: object
     account: object

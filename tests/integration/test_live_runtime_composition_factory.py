@@ -15,7 +15,7 @@ class FakeComponent: pass
 
 
 def _policy(): return RuntimePolicy()
-def _config(): return EnvironmentConfig(environment=EnvironmentType.LIVE)
+def _config(): return EnvironmentConfig(environment=EnvironmentType.LIVE, name="live")
 
 
 def test_live_runtime_controller_uses_explicit_live_builder():
