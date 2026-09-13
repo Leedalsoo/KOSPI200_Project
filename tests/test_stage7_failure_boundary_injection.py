@@ -370,3 +370,25 @@ def test_kis_holiday_strict_mode_without_loaded_year_is_blocked():
     provider = KISHolidayProvider(strict_mode=True)
     with pytest.raises(KISHolidayUnavailableError, match="holiday data unavailable"):
         provider.is_holiday(date(2099, 1, 1))
+
+
+def test_lifecycle_dependency_controller_identity_change_is_rejected():
+    events = []
+    coordinator = LiveRuntimeLifecycleCoordinator(
+        controller=Controller(events),
+        bootstrap=Bootstrap(events),
+    )
+    coordinator._controller = Controller(events)
+    with pytest.raises(RuntimeError, match="CONTROLLER_IDENTITY_CHANGED"):
+        coordinator.runtime_controller
+
+
+def test_lifecycle_dependency_bootstrap_identity_change_is_rejected():
+    events = []
+    coordinator = LiveRuntimeLifecycleCoordinator(
+        controller=Controller(events),
+        bootstrap=Bootstrap(events),
+    )
+    coordinator._bootstrap = Bootstrap(events)
+    with pytest.raises(RuntimeError, match="BOOTSTRAP_IDENTITY_CHANGED"):
+        asyncio.run(coordinator.receive_execution_once())
