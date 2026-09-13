@@ -63,6 +63,18 @@ class FailingStrategy:
     def reset(self): pass
 
 
+class StageFailingStrategy:
+    strategy_id = "T1"
+    version = "1"
+    def __init__(self, stage): self.stage = stage
+    def initialize(self, context):
+        if self.stage == "initialize": raise RuntimeError("INJECTED_INITIALIZE_FAILURE")
+    def on_market_state(self, context):
+        if self.stage == "on_market_state": raise RuntimeError("INJECTED_MARKET_STATE_FAILURE")
+    def evaluate(self, context): return ()
+    def reset(self): pass
+
+
 def test_risk_kill_switch_failure_boundary_denies_order():
     engine = RiskEngine(margin_engine=Margin())
     engine.trigger_kill_switch("INJECTED_PANIC")
@@ -112,6 +124,38 @@ def test_strategy_evaluation_failure_is_captured_without_crashing_orchestrator()
     assert result.failures[0].stage == "evaluate"
     assert result.failures[0].error_type == "RuntimeError"
     assert result.failures[0].message == "INJECTED_STRATEGY_FAILURE"
+
+
+def test_strategy_prepare_failure_is_captured_without_crashing_orchestrator():
+    class PrepareFailRegistry(StrategyRegistry):
+        def prepare(self, strategy_id, version, context):
+            raise RuntimeError("INJECTED_PREPARE_FAILURE")
+    registry = PrepareFailRegistry()
+    orchestrator = StrategyOrchestrator(registry, [("T1", "1")])
+    result = orchestrator.run({"T1": StrategyContext(strategy_id="T1")})
+    assert result.signals == ()
+    assert result.failures[0].stage == "prepare"
+    assert result.failures[0].message == "INJECTED_PREPARE_FAILURE"
+
+
+def test_strategy_initialize_failure_is_captured_without_crashing_orchestrator():
+    registry = StrategyRegistry()
+    registry.register(StageFailingStrategy("initialize"))
+    orchestrator = StrategyOrchestrator(registry, [("T1", "1")])
+    result = orchestrator.run({"T1": StrategyContext(strategy_id="T1")})
+    assert result.signals == ()
+    assert result.failures[0].stage == "initialize"
+    assert result.failures[0].message == "INJECTED_INITIALIZE_FAILURE"
+
+
+def test_strategy_on_market_state_failure_is_captured_without_crashing_orchestrator():
+    registry = StrategyRegistry()
+    registry.register(StageFailingStrategy("on_market_state"))
+    orchestrator = StrategyOrchestrator(registry, [("T1", "1")])
+    result = orchestrator.run({"T1": StrategyContext(strategy_id="T1")})
+    assert result.signals == ()
+    assert result.failures[0].stage == "on_market_state"
+    assert result.failures[0].message == "INJECTED_MARKET_STATE_FAILURE"
 
 
 class ShutdownPolicy:
