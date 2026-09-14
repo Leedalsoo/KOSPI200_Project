@@ -18,7 +18,6 @@ def test_controller_lifecycle_uses_one_authoritative_vms_vssf_scope():
     reference_tick = next(bundle.market.generate_tick_stream(total_days=1, ticks_per_day=1))
     adapter = bundle.execution._authoritative_execute.__self__
     vssf = adapter.vssf_runtime
-    vssf.process_market_data(reference_tick)
     standard_tick = VMSMarketTickProjectionAdapter("AUTH-LIFECYCLE-1").project(reference_tick)
     assert standard_tick.price == Decimal(str(reference_tick.last_price))
 

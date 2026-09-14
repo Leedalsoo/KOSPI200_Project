@@ -24,6 +24,12 @@ class VirtualMarketSimulatorRuntime:
         self.replay = HistoricalReplayEngine()
         self._price = 350.0
         self._initial_price = 350.0
+        self._subscribers = []
+
+    def subscribe(self, callback) -> None:
+        if not callable(callback):
+            raise TypeError("VMS_MARKET_SUBSCRIBER_REQUIRED")
+        self._subscribers.append(callback)
 
     def generate_tick_stream(self, *, total_days: int, ticks_per_day: int):
         if total_days <= 0 or ticks_per_day <= 0:
@@ -40,7 +46,7 @@ class VirtualMarketSimulatorRuntime:
                 self._price += adjustment.shock_delta
             last = round(self._price, 4)
             spread = 0.05
-            yield ReferenceCanonicalMarketTick(
+            tick = ReferenceCanonicalMarketTick(
                 timestamp=(start + interval * (seq - 1)).isoformat(),
                 underlying_price=last,
                 strike_price=round(last / 2.5) * 2.5,
@@ -53,3 +59,6 @@ class VirtualMarketSimulatorRuntime:
                 expiry="202609",
                 symbol="KOSPI200",
             )
+            for subscriber in tuple(self._subscribers):
+                subscriber(tick)
+            yield tick
