@@ -1,31 +1,26 @@
 # KOSPI200 Project200
 
-## 프로젝트 정의
+## 목적
+KOSPI200 선물·옵션 자동매매 시스템을 구축한다. Standard Core를 중심으로 High-Speed, Virtual, Paper, Live 환경을 교체·검증한다.
 
-KOSPI200 옵션/선물을 대상으로 하나의 Standard Option Core를 중심으로 High-Speed Test, Virtual Trading, Paper Trading, Live Trading 환경을 선택·조립·검증하는 자동매매 플랫폼이다.
+## 현재 개발 기준
+- 기본 검증 환경: Virtual Trading
+- 실행 흐름: Market Tick → Strategy → Orchestrator → Risk → OMS/Router → Broker → ExecutionReport → Position/PnL → Control Tower
+- Control Tower: 감독·운영 계층이며 정상 주문 생성의 주 경로가 아니다.
+- Real KIS 주문: 현재 실행하지 않으며 외부 인증·실주문 검증은 BLOCKED로 관리한다.
 
-## 현재 기준점
+## 저장소 구조
+- `contracts/` 표준 계약·DTO·port
+- `core/` 환경 독립 domain/strategy/risk/OMS
+- `application/` orchestration/composition
+- `environments/` 실행 환경 구현
+- `infrastructure/` KIS/KRX 등 외부 source adapter
+- `interfaces/` Control Tower/API/UI
+- `tests/` 실행 가능한 현재 회귀·통합 검증
 
-- 작업 기준: `AGENTS.md`
-- 작업 연속성: Notion `질문과답변`
-- 현재 완료 단계: Control Tower UI 및 Runtime 경계 실제 검증 완료
-- 다음 계획 단계: 서킷브레이커/예외처리 정밀화
-- 기준 commit: `a82367c7b323d52ca022785520a9ea9562dfe26a`
+## 작업 기준
+상세 작업 지침은 `AGENTS.md`를 따른다. Notion `질문과답변`은 작업 연속성 기록이다.
 
-## 핵심 원칙
+과거 단계별 Process 문서와 일회성 검증 파일은 저장소에서 유지하지 않는다.
 
-- Core는 실행환경을 알지 못한다.
-- 환경 교체는 Environment Bundle 교체다.
-- Mock/Synthetic 성공은 실제 외부 시스템 검증 성공으로 표현하지 않는다.
-- Legacy 경로는 실제 사용 증거 없이 신규 실행 경로로 복구하지 않는다.
-- 실제 외부 KIS 검증이 필요한 항목은 인증/연결 조건을 충족하기 전까지 BLOCKED로 관리한다.
-
-## 실행 구조
-
-```text
-Control Tower UI → Runtime Controller → Environment Hub/Factory → Environment Bundle → Standard Contracts → Standard Option Core
-```
-
-## 검증
-
-Windows 작업폴더에서 Python 실행은 `py`를 사용한다. 최종 변경은 실제 테스트 PASS 후 Git `Project200`에 반영하고 원격 HEAD를 재검증한다.
+Windows에서 Python 검증은 `py`를 사용한다.

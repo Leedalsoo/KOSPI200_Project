@@ -1,258 +1,128 @@
-# AGENTS.md — KOSPI200 옵션 자동매매 시스템 작업 지침
+# AGENTS.md — KOSPI200 Project200 작업 지침
 
-이 문서는 이 저장소에서 작업하는 모든 AI 에이전트가 작업을 시작하기 전에 반드시 읽어야 하는 최상위 지침이다.
-프로젝트의 원칙, 작업 연속성, 검증 및 Git 반영 규칙을 이 문서에 통합한다.
+## 1. 프로젝트 목적
 
----
+KOSPI200 선물·옵션을 대상으로 하는 **자동매매 시스템**을 구축한다.
+핵심은 사람이 주문 버튼을 누르는 UI가 아니라, 시장 데이터부터 전략·Risk·OMS·Broker·체결·포지션·PnL까지 이어지는 자동 실행 경로다.
 
-## 0. 프로젝트 개요
-
-코스피200 옵션/선물을 대상으로 하는 다중 전략 자동매매 시스템이다. 아래 4개의 실행
-환경(Environment)을 갈아끼울 수 있는 하나의 표준 코어(Standard Option Core)를
-목표로 재설계되었다:
-
-1. **High-Speed Test** — 초고속 합성 데이터로 로직만 빠르게 검증
-2. **Virtual Trading** — 1배속 실시간 가상시장 + 가상증권사
-3. **Paper Trading** — 실제 증권사(한국투자증권 KIS Developers)의 모의투자 API 사용
-4. **Live Trading** — 실제 증권사 실계좌 API 사용
-
-이 4개 환경은 Market Data, Clock, Broker, Account, Execution, Runtime Policy를
-포함한 "Environment Bundle" 전체를 교체하는 방식으로 전환되며, **Strategy와 Core는
-어떤 환경에서 실행되는지 알지 못한다** (특정 API를 직접 호출하지 않는다).
-
----
-
-## 1. 절대 원칙 (모든 작업에 예외 없이 적용)
-
-1. **가짜 성공을 성공으로 포장하지 않는다.** Mock/합성(synthetic) 데이터로 통과한
-   테스트를, 실제 외부 시스템(KIS API, 실제 거래소 데이터 등)에 대한 검증 성공인
-   것처럼 표현하지 않는다.
-2. **모르면 만들지 않는다.** 종목 식별자, 계약 필드, 외부 API 응답 형식 등 공식
-   근거가 없는 값은 임의로 추정/생성하지 말고, 코드에 `BLOCKED` 또는 `NotImplemented`로
-   명시하고 그 이유를 남긴다. "일단 그럴듯하게 채워 넣고 나중에 고친다"는 방식을 쓰지 않는다.
-3. **PASS 선언을 그대로 믿지 않는다.** 어떤 에이전트가 "완료/PASS"라고 보고해도,
-   실제 코드 변경분과 테스트 실행 로그(실행 명령, 결과, exit code)를 직접 대조해서
-   확인하기 전까지는 완료로 간주하지 않는다.
-4. **가상 환경의 데이터/계약은 실제 외부 시스템 규격을 그대로 따른다.**
-   - 가상증권사(Virtual Broker Adapter)는 실제 한국투자증권 KIS Developers API의
-     요청/응답 필드, TR ID 구조, 인증 방식을 그대로 미러링한다.
-   - 가상거래소(Virtual Market/시세 생성기)는 실제 한국거래소(KRX) 시세 API
-     응답 규격(필드명, 단위, 갱신주기)을 그대로 따른다.
-   - Virtual → Paper → Live 전환 시 Adapter 내부의 실제 인증/네트워크만 교체되고,
-     Core/Strategy/Contract 구조는 바뀌지 않아야 한다.
-5. **이전 단계가 실제 실행으로 검증되기 전까지 다음 단계로 넘어가지 않는다.**
-   설계/구조 논의만으로 "완료"라고 하지 않는다.
-6. **기능 검증이 끝나기 전에는 성능/가독성 리팩토링을 하지 않는다.**
-
----
-
-## 2. 확정된 사업 규칙 (Domain Definitions)
-
-아래는 프로젝트 소유자가 명시적으로 확정한 사업 규칙이다. 코드 구현 시 이 값을
-authoritative source로 삼는다. 여기 없는 세부사항은 임의로 채우지 말고 질문한다.
-
-### 2.1 Track1 — 테일 방어 가두리 전략
-- 헷지 진입 트리거: 매도 옵션 행사가 접근 90% 지점
-- 헷지 상품: **코스피200 미니선물** (정규선물의 1/5 배수, 1포인트당 5만원)
-- 헷지 수량: `ceil(매도 옵션 순델타 합계 × 5)`
-- 헷지 해제(청산) 조건: 1.5포인트 반전
-- 일일 최대 헷지 횟수: 20회
-- 사용 월물: 최근월물, 만기 D-1에 차근월물로 롤오버
-- 가두리 형성/순환/청산 전체 상태 전이는 재정의 진행 중이며 확정 전 임의 구현하지 않는다.
-
-### 2.2 Track4 — 감마 스캘핑
-- qty의 의미: 델타 익스포저(계약 수가 아니라 상쇄해야 할 순델타 크기)
-- side의 의미: 신규 방향성 베팅이 아니라 기존 옵션 포지션의 델타를 0으로 되돌리기 위한 반대매매
-- 재조정 트리거: 순델타 ±0.1 이탈 시
-- 헷지 상품/수량 산식: Track1과 동일
-- 공통 유틸 함수 `delta_to_mini_futures_qty()` 공유 가능성을 유지한다.
-
-### 2.3 종목 식별자 / 선물·옵션 종목코드 매핑
-- authoritative source: KIS Developers 공식 종목정보 마스터파일(`fo_idx_code_mts.mst` 등)
-- 공급처: KIS Developers API 문서의 종목 다운로드 섹션
-- 파일 인코딩: EUC-KR(한글 종목명 필드), 코드 필드는 ASCII
-- 필드 계약: 시장구분코드, 단축코드(shrn_iscd), 표준코드, 종목명/상품유형/만기,
-  옵션 구분, 행사가/기준가, 근월물 순번, 기초자산코드, 기초자산명
-- 이 마스터파일이 유일한 authoritative source다. 종목코드를 임의 조합/추정하지 않는다.
-- 정적 하드코딩 대신 주기적 갱신/캐시 정책을 갖는 `InstrumentMasterProvider` 어댑터를 사용한다.
-
----
-
-## 3. 현재 검증 상태와 잔여 확인 대상
-
-- Control Tower UI 및 UI↔Runtime 경계는 No.440 기준 실제 실행 검증을 완료했다.
-- `PANIC_HALT`, Kill Switch, Live lifecycle start/stop/restart, HTTP 입력 경계는 현재 코드 기준 PASS 상태다.
-- Paper/Live의 실제 KIS 외부 시스템 검증은 인증정보와 실제 외부 연결이 필요하므로 별도 BLOCKED 조건으로 관리한다.
-- BrokerOrderCommand의 실제 production caller와 실시간 체결 이벤트 공급원은 실제 프로세스 연결 전까지 SOURCE BLOCKED로 취급한다.
-- 과거 Legacy/이관 후보를 임의로 복구하거나 새 경로에서 재사용하지 않는다. 실제 caller와 테스트 증거가 없으면 삭제 또는 BLOCKED로 판정한다.
----
-
-## 4. SOURCE BLOCKED 항목
-
-아래 항목은 실제 프로세스가 살아있는 상태에서만 확정할 수 있다. 실제 caller/이벤트 공급자가 없는
-상태에서 임의 값을 만들어 채우지 않는다.
-
-1. **BrokerOrderCommand의 실제 production caller** — 신호→중재→리스크 게이트를 통과한 주문이
-   실제로 누구에 의해 최종 조립되어 브로커에 전달되는지 확인해야 한다.
-2. **체결 이벤트의 실제 공급원** — 실시간 웹소켓 체결통보와 REST 복구 조회 중 어떤 경로로,
-   어떤 공통 식별자로 들어오는지는 실제 연결이 있어야 확정할 수 있다.
-
----
-
-## 5. 작업 단계
-
-## 현재 실행 단계 기준점
-
-No.440에서 Control Tower UI 단계의 실제 검증을 완료했으며 기준 commit은 `a82367c7b323d52ca022785520a9ea9562dfe26a`이다. 현재 다음 작업 기준은 7단계 서킷브레이커/예외처리 정밀화이며, 실제 장기 모의투자 관찰 근거가 없는 임의 구현은 금지한다.
-
-이전 단계가 **실제 실행 기준으로** 검증되기 전에는 다음 단계에 착수하지 않는다.
-
-1. 통합 실행검증 — 종목 마스터, 미니선물 헷지, Virtual/High-Speed/Paper/Live Environment Bundle을
-   실제 실행 경로에 연결하고 최소 1개 전략의 신호→중재→리스크→주문→체결→포지션→PnL 전체 경로를 검증한다.
-2. 전략 보강 및 재작성 — 프로젝트 소유자의 실제 의도와 대조하여 부족한 부분을 확정 후 구현한다.
-3. 센서(Sensor) 계층 고도화
-4. 리스크(Risk) 계층 고도화 — Panic Halt FSM, REDUCE 연결 등을 실제 실행으로 재확인한다.
-5. 코드 효율화/정리 — 기능 검증 완료 후에만 죽은 코드와 중복 구현을 정리한다.
-6. UI/Control Tower 완성 — 위급상황 통제 탭을 포함한다.
-7. 서킷브레이커/예외처리 정밀화 — 실제 장기 모의투자 운영에서 관찰된 사례 기반으로만 진행한다.
-8. 외부 서버 배포 + 보안 — 접근제어, 키관리, 네트워크 보안을 포함한다.
-9. 이중화 및 자동복구 — 백업 서버와 자동 failover를 포함한다.
-10. 실거래(REAL) 소액 진입 — 명시적 ARM, 최소 주문규모, 점진적 확대를 적용한다.
-11. 다중 증권사 확장 — 최소 1개 증권사(KIS) 안정화 이후에만 착수한다.
-
----
-
-## 6. 전략 로직 정의/수정 방식
-
-전략 로직, 특히 진입/헷지/청산 조건을 수정할 때는 AI가 먼저 추상적인 상태 구조를 정하지 않는다.
-
-1. 프로젝트 소유자가 순서와 관계없이 자유롭게 요구사항을 제시하도록 한다.
-2. AI는 내용을 조건→숫자→행동이 명확한 구체적 시나리오로 재구성한다.
-3. 재구성 결과를 소유자에게 보여주고 틀린 부분을 확인한다.
-4. 애매한 지점을 숫자와 조건으로 확정한 뒤에만 코드로 옮긴다.
-
-애매한 부분을 AI가 임의로 채워 구현하지 않는다.
-
----
-
-## 7. 작업 연속성 및 Notion 기준 절차
-
-### 7.1 작업 시작 전 필수 확인
-1. **원격 Git Project200의 최상위 AGENTS.md 전체를 가장 먼저 읽는다.**
-2. 이 AGENTS.md를 저장소의 최상위 작업 기준으로 적용한다.
-3. 작업에 관련된 경우 Notion **질문과답변**을 단순 기록이 아니라 작업 연속성의 기준점으로 확인한다.
-4. 특정 Notion 페이지가 작업지시에서 지정되면 해당 페이지를 우선 읽고 현재 작업의 기준으로 삼는다.
-5. 질문과답변의 기존 기록은 대화의 영속성 및 AI의 기억 소실과 코드 작업 간 엉킴 방지를 위한 기준 자료로 취급한다.
-
-### 7.2 작업 처리 절차
-사용자의 질문/지시에 따라 작업 또는 검토가 필요한 경우 다음 절차를 따른다.
-1. 지정된 Notion 페이지가 있으면 먼저 읽는다. 없으면 현재 질문/지시를 기준으로 판단한다.
-2. 실제 코드 작업이 필요한 경우 필요한 수정 코드를 직접 작성한다.
-3. 작업 결과 또는 답변 요약은 Notion **질문과답변** 아래 `[No.xxx 답변내용요약]` 페이지로 기록한다.
-4. 기존 질문과답변 기록은 삭제하거나 덮어쓰지 않고 새로운 결과를 새 페이지로 연결한다.
-5. 이 기록은 이후 작업에서 현재 상태와 이전 판단을 연결하는 기준으로 사용한다.
-
-### 7.3 코드 검증 원칙
-1. 코드 작업은 반드시 실제 저장소의 현재 상태를 기준으로 수행한다.
-2. 필요하면 Git에서 임시 Python workspace를 구성하여 관련 코드와 테스트를 함께 실행한다.
-3. 임시 workspace는 검증 목적으로만 사용하며, 결과를 실제 코드의 근거 없이 추정하지 않는다.
-4. 테스트 결과는 실행 명령, 결과, exit code를 직접 확인하여 보고한다.
-5. 실제 외부 시스템과 연결되지 않은 mock/synthetic 검증은 실제 외부 시스템 검증 성공으로 표현하지 않는다.
-6. 알 수 없는 값이나 확인되지 않은 외부 계약은 `BLOCKED` 또는 `NotImplemented`로 명시한다.
-
-### 7.4 작업 실행 표준
-
-모든 실제 코드 작업은 다음 순서를 기본 기준으로 한다.
-
-① 작업폴더와 원격 Git의 실제 코드를 직접 확인한다.
-↓
-② 문제가 있는 파일과 함수를 정확히 특정한다.
-↓
-③ 필요한 수정 코드를 직접 작성한다.
-↓
-④ 작업폴더에 수정 코드를 적용하고 변경 내용을 기록한다.
-↓
-⑤ Remote Desktop Commander를 사용하여 실제 실행 테스트를 수행한다.
-   Python을 실행할 때는 반드시 `py`를 사용한다. 예: `py --version`, `py script.py`
-↓
-⑥ 실제 실행 결과를 근거로 PASS / FAIL / BLOCKED를 독립적으로 판정한다.
-↓
-⑦ 검증 결과가 PASS이고 변경사항이 확정된 경우 Git에 commit/push한 뒤 원격 Git의 변경 상태를 다시 확인한다.
-↓
-⑧ 원격 Git verify 결과와 테스트 결과를 확인하고 Notion 질문과답변 아래 `[No.xxx 답변내용요약]` 페이지에 기록한다.
-
-AI 또는 다른 도구가 보고한 PASS를 그대로 신뢰하지 않는다. 실제 코드, 실제 실행 로그,
-exit code, 실제 원격 Git 상태를 직접 대조한다.
-
-### 7.5 Git commit / push 필수 조건
-1. 실제 변경사항이 존재하는지 `git status` 및 `git diff`로 먼저 확인한다.
-2. 임시 파일, 캐시, secrets, `.env` 등의 민감정보가 commit에 포함되지 않았는지 확인한다.
-3. 실제 변경사항이 없으면 빈 commit을 만들지 않는다.
-4. 테스트가 FAIL, BLOCKED 또는 검증 결과가 불확실하면 commit/push하지 않는다.
-5. push가 실패하면 성공한 것처럼 보고하지 않고 실제 원인을 명시한다.
-6. push가 성공하면 원격 `Project200`의 HEAD가 방금 push한 commit을 가리키는지 확인한다.
-7. 최종 보고에는 변경 파일, 테스트 명령/결과/exit code, 검증 상태, commit SHA, push 결과,
-   원격 HEAD를 포함한다.
-
-
-## 8. Virtual Exchange ↔ Virtual Broker ↔ Project200 폐쇄 루프 기준
-
-Virtual Trading을 단순 Mock/합성 데이터 테스트가 아니라, 실제 거래 구조를 통제된 환경에서 재현하는 기준 환경으로 취급한다.
-
-### 8.1 역할과 데이터 흐름
-
-1. **Virtual Exchange(가상거래소)**
-   - 시장가격, 호가, 체결, 시장상태 등 거래소 측 시장 이벤트를 생성한다.
-   - 생성한 시장 데이터를 Virtual Broker에 전달한다.
-   - 주문 자체를 Project200과 직접 주고받는 계층으로 취급하지 않는다.
-
-2. **Virtual Broker(가상증권사)**
-   - Virtual Exchange의 시장 데이터를 수신한다.
-   - 실제 증권사 역할을 모사하여 Project200에 필요한 옵션 시장 데이터와 계좌 관련 정보를 제공한다.
-   - Project200의 주문을 접수하고 필요한 검증/처리를 수행한 뒤 Virtual Exchange의 주문·체결 계층과 연결한다.
-   - 체결 결과를 다시 수신하여 계좌, 포지션, 잔고/PnL 등 브로커 측 상태를 갱신하고 Project200에 실행 결과를 전달한다.
-
-3. **Project200**
-   - Virtual Broker가 제공하는 옵션 시장 데이터와 계좌/포지션/체결 정보를 소비한다.
-   - 전략 판단, Risk 판단 및 주문 생성을 수행한다.
-   - 주문은 Virtual Broker로 전달하고, 체결/실행 결과를 다시 Virtual Broker로부터 받아 내부 포지션/PnL/Risk 상태에 반영한다.
-   - Virtual Exchange의 내부 구현이나 직접 인터페이스에 의존하지 않는다.
-
-### 8.2 필수 폐쇄 루프
-
-검증 대상의 기본 흐름은 다음과 같다.
+표준 실행 흐름은 다음과 같다.
 
 ```text
-Virtual Exchange
-    ↓ 시장 데이터
-Virtual Broker
-    ↓ 옵션 데이터 / 계좌·포지션 정보
-Project200
-    ↓ 주문
-Virtual Broker
-    ↓ 주문 전달
-Virtual Exchange
-    ↓ 체결 결과
-Virtual Broker
-    ↓ 실행 결과 / 포지션 / PnL
-Project200
+Market Tick
+→ Strategy Input
+→ Strategy
+→ Orchestrator
+→ Signal / Execution Intent
+→ Risk
+→ OMS / Order Router
+→ Broker
+→ Execution Report
+→ Position / Margin / PnL
+→ Control Tower projection
 ```
 
-### 8.3 Paper/Live 전환 경계
+Control Tower는 감독·운영 계층이다.
+정상 주문을 직접 만드는 주 경로가 아니며 start/stop/restart, kill switch, panic halt, 상태·체결·포지션·PnL 확인을 담당한다.
 
-Virtual 환경에서 위 폐쇄 루프가 실제 실행으로 검증된 이후에 Paper Trading으로 전환한다.
+## 2. 환경 원칙
 
-- Virtual Exchange는 통제된 시장 생성/체결 환경이다.
-- Virtual Broker는 실제 증권사의 역할과 인터페이스 경계를 검증하기 위한 계층이다.
-- Paper Trading에서는 Virtual Broker의 내부 시장/체결 구현을 KIS Developers 모의투자 외부 연동으로 대체한다.
-- Live Trading에서는 동일한 Core/Strategy 계약을 유지한 채 실제 KIS 외부 시스템 경계로 전환한다.
-- KIS Paper/Live의 외부 동작은 사전에 완전히 통제하거나 보장할 수 없으므로, 외부 시스템의 결과와 Project200 내부 완성도 판정을 동일시하지 않는다.
+동일한 Standard Core를 다음 Environment Bundle로 교체·검증할 수 있어야 한다.
 
-### 8.4 검증 원칙
+1. High-Speed Test
+2. Virtual Trading
+3. Paper Trading
+4. Live Trading
 
-- Virtual Exchange가 생성한 데이터를 Project200에 직접 주입하여 전체 시스템이 정상이라고 판정하지 않는다.
-- Virtual Broker를 거치지 않은 직접 연결은 실제 증권사 경계 검증으로 간주하지 않는다.
-- 시장 데이터 → 주문 → 체결 → 실행 결과 → 포지션/PnL/Risk 갱신의 전체 폐쇄 루프가 실제 실행으로 확인되어야 한다.
-- 폐쇄 루프가 검증되기 전에는 고속/장기 실행을 시스템 완성도의 근거로 사용하지 않는다.
-- 이 기준은 기존 7-A~7-C failure boundary 검증을 대체하지 않으며, failure boundary 검증과 end-to-end 거래 폐쇄 루프 검증을 별개의 검증축으로 관리한다.
-- 구체적인 구현 방식, 데이터 필드, 체결 규칙 및 상태 전이는 실제 코드와 공식 외부 계약을 확인한 뒤에만 확정한다. 확인되지 않은 세부사항은 임의로 구현하지 않는다.
+현재 개발·통합 검증의 기본 환경은 **Virtual Trading**이다.
+Paper/Live의 외부 KIS 연결과 실제 주문은 별도 안전 조건을 충족하기 전까지 실행하지 않는다.
+
+## 3. 사실성·권위 소스 원칙
+
+- Mock/Synthetic 데이터로 실제 검증을 했다고 주장하지 않는다.
+- 종목 identity, 계약 만기, strike, option type, broker symbol, contract multiplier 등은 authoritative source 없이 추정하지 않는다.
+- 실제 source가 없으면 명시적으로 `BLOCKED`, `UNAVAILABLE`, `NotImplemented`로 표현한다.
+- fill price를 quote/mark의 임의 대체값으로 사용하지 않는다.
+- 전략 입력은 실제 Virtual Runtime source에서 공급하고 fixture fallback을 숨겨 사용하지 않는다.
+- 각 leg의 `strategy_id → group_id → leg_id → client_order_id → execution_id` provenance를 보존한다.
+
+## 4. Multi-Leg 원칙
+
+Multi-leg 전략은 `MultiLegExecutionPlan → ExecutionLeg → OrderIntent → Risk → OMS/Router → Broker → ExecutionReport`의 표준 경로를 사용한다.
+
+2-leg 또는 4-leg 그룹을 검증할 때 다음을 각각 확인한다.
+
+- 모든 leg가 동일한 group_id를 가진다.
+- leg_id와 client_order_id가 중복되지 않는다.
+- 실제 leg별 instrument identity와 quote를 사용한다.
+- Risk 승인과 주문 provenance가 leg별로 보존된다.
+- 체결 후 Position은 VSSF의 권위 있는 상태를 반영한다.
+- Group PnL은 검증된 leg PnL의 합으로 계산한다.
+
+## 5. 검증 원칙
+
+AI나 이전 작업 기록의 PASS 선언만으로 완료를 인정하지 않는다.
+실제 작업 폴더에서 명령, 출력, exit code를 직접 확인한다.
+
+기본 검증 순서는 다음과 같다.
+
+```text
+영향 범위 확인
+→ focused pytest
+→ 필요한 실제 Virtual E2E 실행
+→ py -m pytest -q
+→ git diff --check
+→ project200_gate
+→ git status
+```
+
+검증 결과는 `PASS / FAIL / BLOCKED`로 구분한다.
+FAIL 또는 BLOCKED를 PASS처럼 표현하지 않는다.
+
+## 6. 코드 구조 원칙
+
+- `contracts/`: 표준 계약·DTO·port
+- `core/`: domain, strategy, risk, OMS의 환경 독립 규칙
+- `application/`: orchestration과 composition
+- `environments/`: Virtual/Paper/Live/High-Speed 구현
+- `infrastructure/`: 외부 KIS·KRX 등의 adapter/source
+- `interfaces/`: Control Tower 및 외부 API/UI 경계
+- `tests/`: 현재 코드에 대한 실행 가능한 회귀·통합 검증
+
+Legacy 구현을 새 경로에 다시 연결하지 않는다.
+기능 보존이 필요하면 현재 표준 경계에 맞게 명시적으로 이관한다.
+
+## 7. 문서·파일 관리
+
+Notion `질문과답변`이 작업 연속성의 기록이며, 작업 폴더에는 현재 구현과 유지에 필요한 문서만 둔다.
+과거 단계별 작업 기록, 임시 검증 문서, 중복 테스트 설명서는 Notion 기록으로 보존하고 저장소에서는 제거한다.
+
+다음은 저장소에 두지 않는다.
+- `Process/` 단계별 작업 기록
+- `.pytest_cache/` 등 실행 캐시
+- 일회성 verification runner
+- 실행 로그 및 생성된 검증 JSON
+- 폐기된 Legacy UI
+
+`.env`와 credential은 절대로 commit하지 않는다.
+KIS master 원본처럼 현재 source로 사용되는 외부 자료는 코드에서 실제 참조 여부를 확인한 후 별도로 관리한다.
+
+## 8. Git 규칙
+
+작업 전후 `git status`와 변경 파일을 확인한다.
+민감정보·캐시·임시파일을 commit하지 않는다.
+
+테스트가 PASS하고 변경 범위가 의도한 상태일 때만 commit/push한다.
+원격 기준 브랜치는 `Project200`이며, push 후 반드시 원격 HEAD가 해당 commit SHA를 가리키는지 확인한다.
+
+## 9. Notion 기록 규칙
+
+의미 있는 구현·정리·검증 작업은 Notion `질문과답변` 아래 `[No.xxx 답변내용요약]` 페이지에 기록한다.
+기록에는 목적, 실제 변경 내용, 검증 명령과 결과, exit code, Git commit SHA, push 상태, 남은 BLOCKED 사항을 포함한다.
+
+## 10. 현재 방향
+
+현재 우선순위는 Virtual 자동매매 폐쇄루프의 사실성을 높이는 것이다.
+특히 9개 Strategy Runtime Input의 authoritative source와 Multi-Leg의 instrument identity, option quote, contract multiplier, grouped Position/PnL, Control Tower provenance를 순서대로 완성·검증한다.
+
+Real KIS 주문은 실행하지 않는다.
+Virtual에서 충분한 실제 실행 증거를 확보한 뒤에만 다음 환경으로 이동한다.
