@@ -12,7 +12,7 @@ from environments.virtual.execution.virtual_execution import VirtualExecutionEng
 from environments.virtual.execution.vssf_execution_adapter import VSSFExecutionAdapter
 from environments.virtual.clock import VMSClockProvider
 from environments.virtual.market.simulator_runtime import VirtualMarketSimulatorRuntime
-from environments.virtual.market.reference_vms_market import VirtualSecuritiesFirmRuntime
+from environments.virtual.authoritative_vssf.firm_runtime import VirtualSecuritiesFirmRuntime
 
 class ReferenceVirtualAuthoritativeScopeFactory(VirtualAuthoritativeScopeFactory):
     def __init__(self, *, dependencies: VirtualCompositionDependencies) -> None:
