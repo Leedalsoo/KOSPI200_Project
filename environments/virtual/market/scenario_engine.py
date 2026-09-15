@@ -1,4 +1,4 @@
-import random
+﻿import random
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -57,5 +57,10 @@ class ScenarioEngine:
             gap_pct = self._rng.uniform(float(gap_range[0]), float(gap_range[1])) / 100.0 * direction
         return ScenarioAdjustment(max(0.01, float(cfg.get("base_volatility", 1.0))), drift, gap_pct, shock_delta)
 
+    def active_config(self) -> Dict[str, Any]:
+        """Return the active runtime scenario configuration for downstream providers."""
+        return dict(self._scenarios[self._active_name])
+
     def state(self) -> Dict[str, Any]:
         return {"active_scenario": self._active_name, "available_scenarios": list(self._scenarios)}
+

@@ -1,4 +1,4 @@
-"""Runtime Strategy to Decision Adapter."""
+﻿"""Runtime Strategy to Decision Adapter."""
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable
@@ -24,6 +24,8 @@ class RuntimeStrategyToDecisionAdapter:
         seen_signal_ids: set[str] = set()
         for evaluation in evaluations:
             signal = evaluation.result
+            if getattr(signal, "execution_proposal", None) is None:
+                continue
             track_id = str(getattr(evaluation.context, "strategy_id", "") or "").strip()
             if not track_id:
                 raise ValueError("RUNTIME_TRACK_ID_REQUIRED")
@@ -35,3 +37,4 @@ class RuntimeStrategyToDecisionAdapter:
             canonical_signals.append(signal_to_canonical(signal, RuntimeSignalContext(signal_id=signal_id, track_id=track_id, price=price, timestamp=timestamp), instrument_identity=identity))
         arbitration = self._arbiter.arbitrate(canonical_signals, account)
         return RuntimeDecisionResult(canonical_signals=tuple(canonical_signals), arbitration=arbitration)
+

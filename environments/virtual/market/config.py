@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+﻿from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 
@@ -12,6 +12,8 @@ class VirtualBrokerConfig:
     gap_pct: float = 0.0
     base_spread: float = 0.05
     latency_ms: int = 50
+    futures_basis_points: float = 0.0
+    option_quote_qty: int = 100
 
     def to_dict(self) -> Dict[str, Any]:
         return self.__dict__.copy()
@@ -23,3 +25,4 @@ class VirtualBrokerControlInterface:
 
     def get_config(self) -> Dict[str, Any]:
         return self.config.to_dict()
+

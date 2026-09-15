@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "control-tower://api/environment/virtual_broker/order",
+  "title": "Control Tower Virtual Broker Order API",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["side", "order_type", "quantity"],
+  "properties": {
+    "side": {"const": "BUY"},
+    "order_type": {"const": "LIMIT"},
+    "quantity": {"const": 1},
+    "client_order_id": {"type": "string", "minLength": 1}
+  },
+  "responses": {
+    "200": {
+      "type": "object",
+      "required": ["success", "environment", "execution_report"],
+      "properties": {
+        "success": {"const": true},
+        "environment": {"const": "virtual"},
+        "execution_report": {"type": "object", "required": ["execution_id", "client_order_id", "status", "filled_quantity", "execution_price"]}
+      }
+    },
+    "400": {
+      "type": "object",
+      "required": ["success", "error"],
+      "properties": {"success": {"const": false}, "error": {"type": "object", "required": ["code", "message"]}}
+    },
+    "503": {
+      "type": "object",
+      "required": ["success", "error"],
+      "properties": {"success": {"const": false}, "error": {"type": "object", "required": ["code", "message"]}}
+    }
+  }
+}

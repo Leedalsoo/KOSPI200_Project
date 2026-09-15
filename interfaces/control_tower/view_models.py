@@ -114,6 +114,7 @@ class VirtualBrokerView:
     positions: list[dict[str, Any]] = field(default_factory=list)
     realized_pnl: float | None = None
     unrealized_pnl: float | None = None
+    multi_leg_groups: list[dict[str, Any]] = field(default_factory=list)
     audit_logs: list[str] = field(default_factory=list)
 
 

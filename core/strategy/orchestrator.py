@@ -1,10 +1,10 @@
-"""Environment-neutral lifecycle orchestrator for registered strategies."""
+﻿"""Environment-neutral lifecycle orchestrator for registered strategies."""
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Sequence, Tuple
 
-from core.strategy.contracts import Signal, StrategyContext
+from core.strategy.contracts import Signal, StrategyContext, UnavailableStrategyPayload
 from core.strategy.registry import StrategyRegistry
 
 
@@ -83,6 +83,16 @@ class StrategyOrchestrator:
                     StrategyRunFailure(
                         strategy_id, version, "context",
                         "KeyError", "strategy context not supplied",
+                    )
+                )
+                continue
+
+            payload = getattr(getattr(context, "input", None), "payload", None)
+            if isinstance(payload, UnavailableStrategyPayload):
+                failures.append(
+                    StrategyRunFailure(
+                        strategy_id, version, "input", "UnavailableData",
+                        payload.reason,
                     )
                 )
                 continue
@@ -346,3 +356,5 @@ class RuntimeDecisionCommandAdapter:
             )
 
         return tuple(commands)
+
+

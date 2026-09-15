@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
@@ -109,16 +109,41 @@ class VirtualRuntimeBootstrap:
     runtime_controller: RuntimeController
     risk_engine: RiskEngine
     ui_adapter: ControlTowerUIAdapter
+    automated_loop: Any | None = None
 
 
 def create_virtual_runtime_bootstrap(
     *,
-    initial_capital: float | Decimal = 100_000_000.0,
+    initial_capital: float | Decimal = 250_000_000.0,
     start_time: datetime | None = None,
     initial_market_price: float | Decimal = 350.0,
 ) -> VirtualRuntimeBootstrap:
-    raise RuntimeError(
-        "AUTHORITATIVE_VIRTUAL_RUNTIME_BOOTSTRAP_REQUIRED: "
-        "synthetic capital, market price, fixed timestamp, instrument id, "
-        "and zero-margin defaults are prohibited"
+    """Create the authoritative VMS/VSSF-backed Virtual Runtime composition."""
+    from application.composition.concrete_virtual_environment_builder import ConcreteVirtualEnvironmentBuilder
+    from application.composition.virtual_composition_dependencies import VirtualCompositionDependencies
+    from environments.virtual.execution.vssf_command_context_provider import CanonicalVSSFCommandContextProvider
+
+    if start_time is not None or Decimal(str(initial_market_price)) != Decimal("350.0"):
+        raise ValueError("VIRTUAL_RUNTIME_MARKET_CONFIGURATION_IS_RUNTIME_OWNED")
+    dependencies = VirtualCompositionDependencies(
+        contract_registry=None,
+        contract_mappings={},
+        initial_capital=float(initial_capital),
+        vssf_command_context=CanonicalVSSFCommandContextProvider(),
     )
+    config = EnvironmentConfig(environment=EnvironmentType.VIRTUAL, name="control_tower_virtual")
+    policy = RuntimePolicy()
+    bundle = ConcreteVirtualEnvironmentBuilder(dependencies=dependencies).build(config, policy)
+    controller = RuntimeController(EnvironmentHub(EnvironmentFactory(virtual_builder=lambda _c, _p: bundle)))
+    controller.start(config, policy)
+    vssf = bundle.execution._authoritative_execute.__self__.vssf_runtime
+    risk_engine = RiskEngine(config=RiskConfig(), margin_engine=vssf.margin_engine)
+    from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
+    multi_leg_bridge = VirtualMultiLegExecutionBridge(bundle=bundle, risk_config=RiskConfig())
+    adapter = ControlTowerUIAdapter(runtime_controller=controller, multi_leg_bridge=multi_leg_bridge)
+    bootstrap = VirtualRuntimeBootstrap(bundle=bundle, runtime_controller=controller, risk_engine=risk_engine, ui_adapter=adapter)
+    from application.composition.automated_virtual_runtime_factory import attach_standard_automated_loop
+    loop = attach_standard_automated_loop(bootstrap)
+    return VirtualRuntimeBootstrap(bundle=bundle, runtime_controller=controller, risk_engine=risk_engine, ui_adapter=adapter, automated_loop=loop)
+
+

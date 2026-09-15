@@ -1,0 +1,110 @@
+﻿"""Authoritative derived-data providers for the Virtual Market runtime."""
+from __future__ import annotations
+from dataclasses import dataclass
+from datetime import datetime
+from decimal import Decimal
+from math import erf, exp, log, sqrt
+from typing import Any
+
+@dataclass(frozen=True)
+class RuntimeDataStatus:
+    available: bool
+    fresh: bool
+    source: str
+    reason: str | None = None
+
+@dataclass(frozen=True)
+class VirtualRuntimeData:
+    as_of: datetime
+    price: Decimal
+    prices: tuple[Decimal, ...]
+    open_price: Decimal
+    high_price: Decimal
+    low_price: Decimal
+    previous_close: Decimal
+    active_vol: Decimal | None
+    base_vol: Decimal | None
+    option_iv: Decimal | None
+    put_iv: Decimal | None
+    option_delta: Decimal | None
+    option_gamma: Decimal | None
+    macro_regime: str | None
+    event_upcoming: bool | None
+    status: dict[str, RuntimeDataStatus]
+
+class VirtualRuntimeDataProvider:
+    """Derive only from VMS observations; unavailable sources remain explicit."""
+    def __init__(self, market: Any, *, history_size: int = 50) -> None:
+        self.market = market
+        self.history_size = history_size
+
+    @staticmethod
+    def _norm_cdf(x: float) -> float:
+        return 0.5 * (1.0 + erf(x / sqrt(2.0)))
+
+    @classmethod
+    def _implied_vol(cls, spot: Decimal, strike: Decimal, premium: Decimal,
+                     expiry: str, observed_at: datetime) -> Decimal | None:
+        try:
+            exp_dt = datetime.strptime(expiry, "%Y%m")
+            exp_dt = exp_dt.replace(day=1)
+            t = max(1.0 / 365.0, (exp_dt - observed_at).total_seconds() / 31536000.0)
+            s, k, p = float(spot), float(strike), float(premium)
+            if s <= 0 or k <= 0 or p <= 0:
+                return None
+            intrinsic = max(0.0, s - k)
+            if p <= intrinsic:
+                return None
+            lo, hi = 1e-4, 5.0
+            for _ in range(80):
+                sigma = (lo + hi) / 2.0
+                d1 = (log(s / k) + 0.5 * sigma * sigma * t) / (sigma * sqrt(t))
+                d2 = d1 - sigma * sqrt(t)
+                value = s * cls._norm_cdf(d1) - k * cls._norm_cdf(d2)
+                if value > p:
+                    hi = sigma
+                else:
+                    lo = sigma
+            return Decimal(str(round((lo + hi) / 2.0, 8)))
+        except (ValueError, OverflowError, ZeroDivisionError):
+            return None
+
+    def snapshot(self, tick: Any) -> VirtualRuntimeData:
+        observed_at = datetime.fromisoformat(tick.timestamp)
+        recent = tuple(self.market.recent_ticks[-self.history_size:])
+        prices = tuple(Decimal(str(x.last_price)) for x in recent) or (Decimal(str(tick.last_price)),)
+        price = Decimal(str(tick.last_price))
+        high = max(prices)
+        low = min(prices)
+        open_price = prices[0]
+        previous_close = prices[-2] if len(prices) >= 2 else prices[0]
+        returns = tuple(abs(prices[i] / prices[i - 1] - 1) for i in range(1, len(prices)) if prices[i - 1])
+        active_vol = (sum(returns, Decimal("0")) / Decimal(len(returns))) if returns else None
+        base_vol = active_vol
+        mid = (Decimal(str(tick.bid_price)) + Decimal(str(tick.ask_price))) / Decimal("2")
+        iv = self._implied_vol(price, Decimal(str(tick.strike_price)), mid, tick.expiry, observed_at)
+        put_quote = self.market.option_quotes.get(("PUT", float(tick.strike_price), tick.expiry))
+        put_iv = Decimal(str(put_quote["iv"])) if put_quote is not None else None
+        delta = gamma = None
+        if iv is not None:
+            s, k, sigma = float(price), float(tick.strike_price), float(iv)
+            t = max(1.0 / 365.0, (datetime.strptime(tick.expiry, "%Y%m") - observed_at.replace(day=1)).total_seconds() / 31536000.0)
+            d1 = (log(s / k) + 0.5 * sigma * sigma * t) / (sigma * sqrt(t))
+            delta = Decimal(str(round(self._norm_cdf(d1), 8)))
+            gamma = Decimal(str(round(exp(-0.5 * d1 * d1) / sqrt(2 * 3.141592653589793) / (s * sigma * sqrt(t)), 8)))
+        scenario = self.market.scenario.active_config()
+        base_volatility = float(scenario.get("base_volatility", 1.0))
+        macro_regime = "HIGH_VOL" if base_volatility >= 2.0 else "NORMAL"
+        shock_interval = max(1, int(scenario.get("shock_interval_days", 999999)))
+        event_upcoming = (tick.seq_id % shock_interval) == 0
+        status = {
+            "tick": RuntimeDataStatus(True, True, "VMS.recent_ticks"),
+            "ohlc_history": RuntimeDataStatus(len(prices) >= 1, True, "VMS.recent_ticks"),
+            "iv_greeks": RuntimeDataStatus(iv is not None and put_iv is not None, iv is not None and put_iv is not None, "VMS.option_quotes", "OPTION_CHAIN_UNAVAILABLE" if iv is None or put_iv is None else None),
+            "macro": RuntimeDataStatus(True, True, "VMS.scenario.active_config"),
+            "event": RuntimeDataStatus(True, True, "VMS.scenario.shock_schedule"),
+        }
+        return VirtualRuntimeData(observed_at, price, prices, open_price, high, low, previous_close,
+                                  active_vol, base_vol, iv, put_iv, delta, gamma, macro_regime, event_upcoming, status)
+
+
