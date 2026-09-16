@@ -22,14 +22,16 @@ from core.strategy.track7_volatility_skew_weekly_insurance import Track7MarketIn
 from core.strategy.track8_macro_regime_monthly_strangle import Track8MarketInput
 from core.strategy.track9_event_overnight_insurance import Track9MarketInput
 from contracts.option_expiry_source import OptionExpirySource
+from contracts.option_orderbook_source import OptionOrderBookSource
 
 
 class StandardRuntimeInputProvider:
     """Build standard inputs from observable VMS/VSSF sources only."""
 
-    def __init__(self, market: Any, *, option_expiry_source: OptionExpirySource | None = None) -> None:
+    def __init__(self, market: Any, *, option_expiry_source: OptionExpirySource | None = None, option_orderbook_source: OptionOrderBookSource | None = None) -> None:
         self.data = VirtualRuntimeDataProvider(
-            market, option_expiry_source=option_expiry_source
+            market, option_expiry_source=option_expiry_source,
+            option_orderbook_source=option_orderbook_source,
         )
 
     @staticmethod
@@ -98,7 +100,8 @@ class StandardRuntimeInputProvider:
             )
         else:
             contexts["track2_asymmetric_trap"] = self._unavailable(
-                "track2_asymmetric_trap", ("volume_profile_poc", "option_orderbook_quantities"),
+                "track2_asymmetric_trap",
+                ("volume_profile_poc", "option_orderbook_quantities"),
                 "TRACK2_ORDERBOOK_OR_POC_SOURCE_UNAVAILABLE",
             )
 

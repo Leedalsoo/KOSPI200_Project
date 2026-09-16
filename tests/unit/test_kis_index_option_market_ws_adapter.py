@@ -33,7 +33,7 @@ def test_trade_frame_adapts_option_last_bid_ask_and_volume() -> None:
 
 
 def test_quote_frame_adapts_option_bid_ask() -> None:
-    values = ["201S11305", "101531", "3.35", "3.40", "3.45", "3.50", "3.55", "3.25"]
+    values = ["201S11305", "101531"] + [str(3.35 + i * 0.05) for i in range(5)] + [str(3.25 - i * 0.05) for i in range(5)] + ["1"] * 20
 
     observation = KISIndexOptionMarketWebSocketAdapter().adapt(
         _frame("H0IOASP0", values)
@@ -42,6 +42,9 @@ def test_quote_frame_adapts_option_bid_ask() -> None:
     assert observation.last_price is None
     assert observation.ask_price == Decimal("3.35")
     assert observation.bid_price == Decimal("3.25")
+    assert observation.order_book is not None
+    assert observation.order_book.ask_quantities == (Decimal("1"),) * 5
+    assert observation.order_book.bid_quantities == (Decimal("1"),) * 5
 
 
 def test_rejects_wrong_tr_id() -> None:

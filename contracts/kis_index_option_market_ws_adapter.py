@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
+from contracts.option_orderbook_source import OptionOrderBookLevel, OptionOrderBookSnapshot
+
 
 class KISIndexOptionMarketWebSocketAdapterInvalid(ValueError):
     """Raised when a KIS index-option market frame cannot be adapted safely."""
@@ -17,6 +19,7 @@ class KisIndexOptionMarketObservation:
     bid_price: Decimal | None
     volume: Decimal | None
     source: str
+    order_book: OptionOrderBookSnapshot | None = None
 
 
 _H0IOCNT0 = "H0IOCNT0"
@@ -35,6 +38,10 @@ _QUOTE_SYMBOL = 0
 _QUOTE_TIME = 1
 _QUOTE_ASK1 = 2
 _QUOTE_BID1 = 7
+_QUOTE_ASK_LEVELS = tuple(range(2, 7))
+_QUOTE_BID_LEVELS = tuple(range(7, 12))
+_QUOTE_ASK_QTY = tuple(range(22, 27))
+_QUOTE_BID_QTY = tuple(range(27, 32))
 
 
 def _decode_fields(frame: str, expected_tr_id: str) -> list[str]:
@@ -131,12 +138,38 @@ class KISIndexOptionMarketWebSocketAdapter:
             raise KISIndexOptionMarketWebSocketAdapterInvalid(
                 "KIS option short code is missing"
             )
+        ask_levels = tuple(
+            OptionOrderBookLevel(
+                _decimal(values[p], f"option ask price {i + 1}"),
+                _decimal(values[q], f"option ask quantity {i + 1}"),
+            )
+            for i, (p, q) in enumerate(zip(_QUOTE_ASK_LEVELS, _QUOTE_ASK_QTY))
+        )
+        bid_levels = tuple(
+            OptionOrderBookLevel(
+                _decimal(values[p], f"option bid price {i + 1}"),
+                _decimal(values[q], f"option bid quantity {i + 1}"),
+            )
+            for i, (p, q) in enumerate(zip(_QUOTE_BID_LEVELS, _QUOTE_BID_QTY))
+        )
+        order_book = OptionOrderBookSnapshot(
+            symbol=symbol,
+            observed_hour=values[_QUOTE_TIME].strip(),
+            ask_levels=ask_levels,
+            bid_levels=bid_levels,
+            source=source,
+        )
+        if not order_book.is_complete():
+            raise KISIndexOptionMarketWebSocketAdapterInvalid(
+                "KIS H0IOASP0 order-book quantities are incomplete"
+            )
         return KisIndexOptionMarketObservation(
             shrn_iscd=symbol,
             observed_hour=values[_QUOTE_TIME].strip(),
             last_price=None,
-            ask_price=_decimal(values[_QUOTE_ASK1], "option ask price"),
-            bid_price=_decimal(values[_QUOTE_BID1], "option bid price"),
+            ask_price=ask_levels[0].price,
+            bid_price=bid_levels[0].price,
             volume=None,
             source=source,
+            order_book=order_book,
         )

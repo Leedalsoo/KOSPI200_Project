@@ -6,6 +6,8 @@ from decimal import Decimal
 from math import erf, exp, log, sqrt
 from typing import Any
 
+from contracts.option_orderbook_source import OptionOrderBookSource
+
 @dataclass(frozen=True)
 class RuntimeDataStatus:
     available: bool
@@ -33,13 +35,16 @@ class VirtualRuntimeData:
     status: dict[str, RuntimeDataStatus]
     option_expiry: date | None = None
     days_to_expiry: int | None = None
+    option_bid_qtys: tuple[Decimal, ...] | None = None
+    option_ask_qtys: tuple[Decimal, ...] | None = None
 
 class VirtualRuntimeDataProvider:
     """Derive only from VMS observations and injected authoritative sources."""
-    def __init__(self, market: Any, *, history_size: int = 50, option_expiry_source: Any | None = None) -> None:
+    def __init__(self, market: Any, *, history_size: int = 50, option_expiry_source: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None) -> None:
         self.market = market
         self.history_size = history_size
         self.option_expiry_source = option_expiry_source
+        self.option_orderbook_source = option_orderbook_source
 
     @staticmethod
     def _norm_cdf(x: float) -> float:
@@ -108,6 +113,23 @@ class VirtualRuntimeDataProvider:
             if option_expiry is not None:
                 days_to_expiry = (option_expiry - observed_at.date()).days
                 expiry_status = RuntimeDataStatus(True, True, "KIS.OptionMaster.expiry")
+        option_bid_qtys = None
+        option_ask_qtys = None
+        orderbook_status = RuntimeDataStatus(
+            False, False, "OptionOrderBookSource", "OPTION_ORDERBOOK_SOURCE_UNAVAILABLE"
+        )
+        symbol = getattr(tick, "symbol", None)
+        if self.option_orderbook_source is not None and symbol:
+            order_book = self.option_orderbook_source.get_order_book(symbol)
+            if order_book is not None and order_book.symbol == symbol and order_book.is_complete():
+                option_bid_qtys = order_book.bid_quantities
+                option_ask_qtys = order_book.ask_quantities
+                orderbook_status = RuntimeDataStatus(True, True, order_book.source)
+            elif order_book is not None:
+                orderbook_status = RuntimeDataStatus(
+                    False, False, order_book.source, "OPTION_ORDERBOOK_IDENTITY_OR_DEPTH_MISMATCH"
+                )
+
         status = {
             "tick": RuntimeDataStatus(True, True, "VMS.recent_ticks"),
             "ohlc_history": RuntimeDataStatus(len(prices) >= 1, True, "VMS.recent_ticks"),
@@ -115,11 +137,12 @@ class VirtualRuntimeDataProvider:
             "macro": RuntimeDataStatus(True, True, "VMS.scenario.active_config"),
             "event": RuntimeDataStatus(True, True, "VMS.scenario.shock_schedule"),
             "option_expiry": expiry_status,
+            "option_orderbook": orderbook_status,
         }
         return VirtualRuntimeData(
             observed_at, price, prices, open_price, high, low, previous_close,
             active_vol, base_vol, iv, put_iv, delta, gamma, macro_regime,
-            event_upcoming, status, option_expiry, days_to_expiry
+            event_upcoming, status, option_expiry, days_to_expiry, option_bid_qtys, option_ask_qtys
         )
 
 
