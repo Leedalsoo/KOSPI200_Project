@@ -37,4 +37,4 @@ class ConcreteVirtualEnvironmentBuilder:
         scope = self._scope_factory.create(config, policy)
         vms = self._vms_factory()
         vms.subscribe(scope.broker.process_market_data)
-        return VirtualEnvironmentBundle.create(config=config, policy=policy, market=vms, clock=VMSClockProvider(vms.clock), broker=scope.broker, account=scope.account, position=scope.position, execution=scope.execution)
+        return VirtualEnvironmentBundle.create(config=config, policy=policy, market=vms, clock=VMSClockProvider(vms.clock), broker=scope.broker, account=scope.account, position=scope.position, execution=scope.execution, option_master=self._dependencies.option_master)

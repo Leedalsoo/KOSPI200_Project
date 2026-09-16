@@ -125,8 +125,11 @@ def create_virtual_runtime_bootstrap(
 
     if start_time is not None or Decimal(str(initial_market_price)) != Decimal("350.0"):
         raise ValueError("VIRTUAL_RUNTIME_MARKET_CONFIGURATION_IS_RUNTIME_OWNED")
+    from application.composition.option_master_factory import create_production_option_master
+    option_master = create_production_option_master()
     dependencies = VirtualCompositionDependencies(
         contract_registry=None,
+        option_master=option_master,
         contract_mappings={},
         initial_capital=float(initial_capital),
         vssf_command_context=CanonicalVSSFCommandContextProvider(),
@@ -139,7 +142,7 @@ def create_virtual_runtime_bootstrap(
     vssf = bundle.execution._authoritative_execute.__self__.vssf_runtime
     risk_engine = RiskEngine(config=RiskConfig(), margin_engine=vssf.margin_engine)
     from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
-    multi_leg_bridge = VirtualMultiLegExecutionBridge(bundle=bundle, risk_config=RiskConfig())
+    multi_leg_bridge = VirtualMultiLegExecutionBridge(bundle=bundle, option_master=bundle.option_master, risk_config=RiskConfig())
     adapter = ControlTowerUIAdapter(runtime_controller=controller, multi_leg_bridge=multi_leg_bridge)
     bootstrap = VirtualRuntimeBootstrap(bundle=bundle, runtime_controller=controller, risk_engine=risk_engine, ui_adapter=adapter)
     from application.composition.automated_virtual_runtime_factory import attach_standard_automated_loop

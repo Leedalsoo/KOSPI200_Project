@@ -17,6 +17,7 @@ class VirtualEnvironmentBundle(StandardEnvironmentBundle):
     account: object
     position: object
     execution: object
+    option_master: object | None = None
     environment: EnvironmentType = EnvironmentType.VIRTUAL
     connected: bool = False
     running: bool = False
@@ -58,6 +59,7 @@ class VirtualEnvironmentBundle(StandardEnvironmentBundle):
         account: object,
         position: object,
         execution: object,
+        option_master: object,
     ) -> "VirtualEnvironmentBundle":
         if config.environment is not EnvironmentType.VIRTUAL:
             pass
@@ -73,4 +75,5 @@ class VirtualEnvironmentBundle(StandardEnvironmentBundle):
             account=account,
             position=position,
             execution=execution,
+            option_master=option_master,
         )

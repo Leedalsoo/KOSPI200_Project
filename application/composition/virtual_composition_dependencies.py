@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
+from core.option.option_master import IOptionContractMaster
+
 from contracts.virtual_contract_resolver import (
 OptionContractIdentityRegistry,
 VirtualContractMapping,
@@ -20,6 +22,7 @@ class VirtualCompositionDependencies:
     vssf_command_context: Any
     scenario_source: Any | None = None
     replay_source: Any | None = None
+    option_master: IOptionContractMaster | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.initial_capital, (int, float)) or self.initial_capital <= 0:
