@@ -23,15 +23,17 @@ from core.strategy.track8_macro_regime_monthly_strangle import Track8MarketInput
 from core.strategy.track9_event_overnight_insurance import Track9MarketInput
 from contracts.option_expiry_source import OptionExpirySource
 from contracts.option_orderbook_source import OptionOrderBookSource
+from contracts.volume_profile_source import VolumeProfileSource
 
 
 class StandardRuntimeInputProvider:
     """Build standard inputs from observable VMS/VSSF sources only."""
 
-    def __init__(self, market: Any, *, option_expiry_source: OptionExpirySource | None = None, option_orderbook_source: OptionOrderBookSource | None = None) -> None:
+    def __init__(self, market: Any, *, option_expiry_source: OptionExpirySource | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None) -> None:
         self.data = VirtualRuntimeDataProvider(
             market, option_expiry_source=option_expiry_source,
             option_orderbook_source=option_orderbook_source,
+            volume_profile_source=volume_profile_source,
         )
 
     @staticmethod
@@ -99,11 +101,21 @@ class StandardRuntimeInputProvider:
                 "track2_asymmetric_trap", ("option_iv_chain",), "OPTION_CHAIN_UNAVAILABLE"
             )
         else:
-            contexts["track2_asymmetric_trap"] = self._unavailable(
-                "track2_asymmetric_trap",
-                ("volume_profile_poc", "option_orderbook_quantities"),
-                "TRACK2_ORDERBOOK_OR_POC_SOURCE_UNAVAILABLE",
-            )
+            if d.poc_price is None:
+                contexts["track2_asymmetric_trap"] = self._unavailable(
+                    "track2_asymmetric_trap", ("volume_profile_poc",),
+                    "VOLUME_PROFILE_POC_UNAVAILABLE",
+                )
+            elif d.option_bid_qtys is None or d.option_ask_qtys is None:
+                contexts["track2_asymmetric_trap"] = self._unavailable(
+                    "track2_asymmetric_trap", ("option_orderbook_quantities",),
+                    "OPTION_ORDERBOOK_QUANTITIES_UNAVAILABLE",
+                )
+            else:
+                contexts["track2_asymmetric_trap"] = self._unavailable(
+                    "track2_asymmetric_trap", ("basis",),
+                    "TRACK2_BASIS_SOURCE_UNAVAILABLE",
+                )
 
         # Track3 must not receive fabricated stability, normalization, fee,
         # premium, or option-leg attribution values.
