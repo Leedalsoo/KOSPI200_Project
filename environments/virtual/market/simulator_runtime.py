@@ -81,6 +81,22 @@ class VirtualMarketSimulatorRuntime:
             raise TypeError("VMS_MARKET_SUBSCRIBER_REQUIRED")
         self._subscribers.append(callback)
 
+    def publish_authoritative_option_quote(self, key, quote) -> None:
+        """Publish an externally authoritative option quote without synthetic fallback."""
+        if not isinstance(key, tuple) or len(key) != 3:
+            raise ValueError("OPTION_QUOTE_KEY_REQUIRED")
+        if not isinstance(quote, dict):
+            raise ValueError("OPTION_QUOTE_REQUIRED")
+        bid = quote.get("bid")
+        ask = quote.get("ask")
+        if bid is None or ask is None or float(bid) <= 0 or float(ask) <= 0:
+            raise ValueError("OPTION_QUOTE_BID_ASK_REQUIRED")
+        if float(ask) < float(bid):
+            raise ValueError("OPTION_QUOTE_CROSSED")
+        multiplier = quote.get("contract_multiplier")
+        if multiplier is None or float(multiplier) <= 0:
+            raise ValueError("OPTION_CONTRACT_MULTIPLIER_REQUIRED")
+        self._option_quotes[key] = dict(quote)
     def generate_tick_stream(self, *, total_days: int, ticks_per_day: int):
         if total_days <= 0 or ticks_per_day <= 0:
             return
