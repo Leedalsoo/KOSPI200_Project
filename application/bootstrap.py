@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
@@ -118,57 +118,29 @@ class VirtualRuntimeBootstrap:
 
 
 def create_virtual_runtime_bootstrap(
-    *,
-    initial_capital: float | Decimal = 250_000_000.0,
+    *, initial_capital: float | Decimal = 250_000_000.0,
     start_time: datetime | None = None,
     initial_market_price: float | Decimal = 350.0,
 ) -> VirtualRuntimeBootstrap:
-    """Create the authoritative VMS/VSSF-backed Virtual Runtime composition."""
-    from application.composition.concrete_virtual_environment_builder import ConcreteVirtualEnvironmentBuilder
-    from application.composition.virtual_composition_dependencies import VirtualCompositionDependencies
-    from environments.virtual.execution.vssf_command_context_provider import CanonicalVSSFCommandContextProvider
-
+    """Create a Virtual runtime and configure the isolated Run/Scenario lifecycle."""
+    from application.composition.option_master_factory import create_production_option_master
+    from application.run_hub.virtual_session_factory import create_virtual_run_session
+    from application.run_hub.contracts import RunContextFactory
+    from application.run_hub.hub import RunScenarioHub
+    from uuid import uuid4
     if start_time is not None or Decimal(str(initial_market_price)) != Decimal("350.0"):
         raise ValueError("VIRTUAL_RUNTIME_MARKET_CONFIGURATION_IS_RUNTIME_OWNED")
-    from application.composition.option_master_factory import create_production_option_master
     option_master = create_production_option_master()
-    dependencies = VirtualCompositionDependencies(
-        contract_registry=None,
-        option_master=option_master,
-        contract_mappings={},
-        initial_capital=float(initial_capital),
-        vssf_command_context=CanonicalVSSFCommandContextProvider(),
-    )
-    config = EnvironmentConfig(environment=EnvironmentType.VIRTUAL, name="control_tower_virtual")
-    policy = RuntimePolicy()
-    bundle = ConcreteVirtualEnvironmentBuilder(dependencies=dependencies).build(config, policy)
-    controller = RuntimeController(EnvironmentHub(EnvironmentFactory(virtual_builder=lambda _c, _p: bundle)))
-    controller.start(config, policy)
-    vssf = bundle.execution._authoritative_execute.__self__.vssf_runtime
-    risk_engine = RiskEngine(config=RiskConfig(), margin_engine=vssf.margin_engine)
-    from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
-    multi_leg_bridge = VirtualMultiLegExecutionBridge(bundle=bundle, option_master=bundle.option_master, risk_config=RiskConfig())
-    bundle.broker_api.attach_group_read_model(
-        snapshot_reader=multi_leg_bridge.position_groups.snapshot,
-        reports_reader=multi_leg_bridge.group_reports,
-        group_ids_reader=lambda: tuple(multi_leg_bridge.position_groups.all().keys()),
-    )
-    adapter = ControlTowerUIAdapter(runtime_controller=controller, broker_api=bundle.broker_api)
-    bootstrap = VirtualRuntimeBootstrap(bundle=bundle, runtime_controller=controller, risk_engine=risk_engine, ui_adapter=adapter)
-    from application.composition.automated_virtual_runtime_factory import attach_standard_automated_loop
-    loop = attach_standard_automated_loop(bootstrap)
-    from application.runtime_hub.hub import RuntimeHub
-    strategy_hub = getattr(loop, "strategy_hub", None)
-    runtime_hub = RuntimeHub(loop)
-    from application.run_hub.contracts import RunContextFactory
-    from application.control_tower_hub import ControlTowerHub
-    from uuid import uuid4
-    run_context = RunContextFactory().create(run_id=str(uuid4()), environment="virtual", strategy_keys=tuple(strategy_hub.strategy_keys) if strategy_hub is not None else ())
-    control_tower_hub = ControlTowerHub(runtime_controller=controller, ui_adapter=adapter, strategy_hub=strategy_hub, run_context=run_context)
-    from application.run_hub.hub import RunScenarioHub, RunSession
     run_hub = RunScenarioHub()
-    run_hub.adopt(RunSession(context=run_context, runtime_controller=controller, bundle=bundle, strategy_hub=strategy_hub, runtime_hub=runtime_hub, ui_adapter=adapter, control_tower_hub=control_tower_hub))
-    return VirtualRuntimeBootstrap(bundle=bundle, runtime_controller=controller, risk_engine=risk_engine, ui_adapter=adapter, automated_loop=loop, strategy_hub=strategy_hub, runtime_hub=runtime_hub, run_context=run_context, control_tower_hub=control_tower_hub, run_hub=run_hub)
-
-
-\r\n
+    run_hub.configure(lambda run_context: create_virtual_run_session(run_context, option_master))
+    context = RunContextFactory().create(run_id=str(uuid4()), environment="virtual", initial_capital=float(initial_capital))
+    session = create_virtual_run_session(context, option_master)
+    run_hub.adopt(session)
+    session.control_tower_hub.attach_run_hub(run_hub)
+    return VirtualRuntimeBootstrap(
+        bundle=session.bundle, runtime_controller=session.runtime_controller,
+        risk_engine=RiskEngine(config=RiskConfig(), margin_engine=session.bundle.execution._authoritative_execute.__self__.vssf_runtime.margin_engine),
+        ui_adapter=session.ui_adapter, automated_loop=session.runtime_hub.loop,
+        strategy_hub=session.strategy_hub, runtime_hub=session.runtime_hub,
+        run_context=context, control_tower_hub=session.control_tower_hub, run_hub=run_hub,
+    )

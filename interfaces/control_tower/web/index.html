@@ -76,6 +76,20 @@
       </button>
     </nav>
 
+    <section class="control-panel card">
+      <div class="card-header"><h3>Strategy / Scenario / Run Control</h3></div>
+      <div class="card-body control-grid">
+        <label>Strategy <select id="strategy-select"></select></label>
+        <label>Scenario <select id="scenario-select"></select></label>
+        <label>Run ID <input id="run-id" placeholder="RUN-001"></label>
+        <button id="run-create" class="btn">RUN 생성</button>
+        <button id="run-start" class="btn">START</button>
+        <button id="run-stop" class="btn">STOP</button>
+        <button id="run-replay" class="btn">REPLAY NEXT</button>
+        <span id="run-status" class="mono">RUN: —</span>
+      </div>
+    </section>
+
     <!-- Main Content Area -->
     <main class="dashboard-viewport">
       <!-- 1. High-Speed Test Panel -->

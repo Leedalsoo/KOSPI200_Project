@@ -8,9 +8,10 @@ from infrastructure.kis.track2_option_iv_source import KISTrack2OptionIVSource
 from application.strategy_hub.hub import StrategyHub
 from core.strategy.standard_registry import STANDARD_STRATEGY_KEYS, build_standard_strategy_registry
 
-def attach_standard_automated_loop(bootstrap):
+def attach_standard_automated_loop(bootstrap, *, strategy_keys=None):
     """Attach all nine Standard strategies to the RuntimeController-owned VMS."""
-    strategy_hub = StrategyHub(build_standard_strategy_registry(), STANDARD_STRATEGY_KEYS)
+    selected_keys = tuple(strategy_keys) if strategy_keys else STANDARD_STRATEGY_KEYS
+    strategy_hub = StrategyHub(build_standard_strategy_registry(), selected_keys)
     expiry_source = KisOptionMasterExpirySource(bootstrap.bundle.option_master)
     track2_option_iv_source = KISTrack2OptionIVSource(bootstrap.bundle.option_master)
     provider = StandardRuntimeInputProvider(

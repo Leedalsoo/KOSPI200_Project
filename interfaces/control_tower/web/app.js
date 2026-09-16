@@ -16,6 +16,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const panicHaltBtn = document.getElementById("btn-panic-halt");
   const dockEnvName = document.getElementById("dock-env-name");
   const auditLogBox = document.getElementById("audit-log-box");
+  const strategySelect = document.getElementById("strategy-select");
+  const scenarioSelect = document.getElementById("scenario-select");
+  const runIdInput = document.getElementById("run-id");
+  const runStatus = document.getElementById("run-status");
+  const runCreateBtn = document.getElementById("run-create");
+  const runStartBtn = document.getElementById("run-start");
+  const runStopBtn = document.getElementById("run-stop");
+  const runReplayBtn = document.getElementById("run-replay");
 
   const tabNames = {
     high_speed: "High-Speed Test",
@@ -70,6 +78,37 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     return data;
   }
+
+  async function refreshRunControls() {
+    try {
+      const [strategies, scenarios, run] = await Promise.all([
+        apiFetch("/api/strategies"), apiFetch("/api/scenarios"), apiFetch("/api/run")
+      ]);
+      if (strategySelect && !strategySelect.options.length) {
+        (strategies.strategies || []).forEach((x) => {
+          const o=document.createElement("option"); o.value=`${x.strategy_id}:${x.version}`; o.textContent=`${x.strategy_id} v${x.version}`; strategySelect.appendChild(o);
+        });
+      }
+      if (scenarioSelect && !scenarioSelect.options.length) {
+        (scenarios.available_scenarios || []).forEach((x) => { const o=document.createElement("option"); o.value=x; o.textContent=x; scenarioSelect.appendChild(o); });
+      }
+      if (runStatus) runStatus.textContent = `RUN: ${run.run_id || "—"} / ${run.runtime_state || "STOPPED"}`;
+    } catch (error) { addAuditLog(`[RUN] control read failed: ${error.message}`, "error"); }
+  }
+
+  async function runAction(action) {
+    try { const data=await apiFetch("/api/run/action", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action})}); addAuditLog(`[RUN] ${action} completed`); refreshRunControls(); return data; }
+    catch(error) { addAuditLog(`[RUN] ${action} failed: ${error.message}`, "error"); alert(error.message); }
+  }
+  runCreateBtn?.addEventListener("click", async () => {
+    const key=(strategySelect?.value || "").split(":");
+    if (!runIdInput?.value.trim() || key.length !== 2) return alert("Run ID와 Strategy를 선택하세요.");
+    try { await apiFetch("/api/run", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({run_id:runIdInput.value.trim(),environment:"virtual",scenario:scenarioSelect?.value || null,strategy_keys:[[key[0],key[1]]]})}); refreshRunControls(); }
+    catch(error) { alert(`RUN 생성 실패: ${error.message}`); }
+  });
+  runStartBtn?.addEventListener("click", () => runAction("START"));
+  runStopBtn?.addEventListener("click", () => runAction("STOP"));
+  runReplayBtn?.addEventListener("click", () => runAction("REPLAY"));
 
   tabButtons.forEach((btn) => {
     btn.addEventListener("click", () => switchTab(btn.dataset.tab));
@@ -283,5 +322,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   fetchSummary();
   fetchTabDetail(currentTab);
+  refreshRunControls();
   setInterval(poll, pollIntervalMs);
 });

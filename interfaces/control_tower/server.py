@@ -50,6 +50,15 @@ class ControlTowerRequestHandler(BaseHTTPRequestHandler):
         if path == "/api/status":
             self._send_json(self.tower.status())
             return
+        if path == "/api/strategies":
+            self._send_json(self.tower.strategy_read_model())
+            return
+        if path == "/api/scenarios":
+            self._send_json(self.tower.scenario_read_model())
+            return
+        if path == "/api/run":
+            self._send_json(self.tower.run_read_model())
+            return
         if path.startswith("/api/environment/"):
             tab_id = path.removeprefix("/api/environment/").strip("/")
             detail = self.tower.environment(tab_id)
@@ -88,6 +97,19 @@ class ControlTowerRequestHandler(BaseHTTPRequestHandler):
 
         if path == "/api/environment/virtual_broker/order":
             self._submit_virtual_order(payload)
+            return
+        if path == "/api/run" and payload.get("action") is None:
+            try:
+                self._send_json({"success": True, "run": self.tower.create_run(payload)})
+            except Exception as exc:
+                self._send_json({"success": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        if path == "/api/run/action":
+            try:
+                result = self.tower.run_action(str(payload.get("action", "")))
+                self._send_json({"success": True, "run": result})
+            except Exception as exc:
+                self._send_json({"success": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
         if path == "/api/active_tab":
             tab_id = payload.get("tab_id", "")
