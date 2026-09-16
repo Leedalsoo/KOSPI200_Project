@@ -24,16 +24,18 @@ from core.strategy.track9_event_overnight_insurance import Track9MarketInput
 from contracts.option_expiry_source import OptionExpirySource
 from contracts.option_orderbook_source import OptionOrderBookSource
 from contracts.volume_profile_source import VolumeProfileSource
+from contracts.basis_source import BasisSource
 
 
 class StandardRuntimeInputProvider:
     """Build standard inputs from observable VMS/VSSF sources only."""
 
-    def __init__(self, market: Any, *, option_expiry_source: OptionExpirySource | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None) -> None:
+    def __init__(self, market: Any, *, option_expiry_source: OptionExpirySource | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None) -> None:
         self.data = VirtualRuntimeDataProvider(
             market, option_expiry_source=option_expiry_source,
             option_orderbook_source=option_orderbook_source,
             volume_profile_source=volume_profile_source,
+            basis_source=basis_source,
         )
 
     @staticmethod
@@ -111,10 +113,15 @@ class StandardRuntimeInputProvider:
                     "track2_asymmetric_trap", ("option_orderbook_quantities",),
                     "OPTION_ORDERBOOK_QUANTITIES_UNAVAILABLE",
                 )
-            else:
+            elif d.basis is None:
                 contexts["track2_asymmetric_trap"] = self._unavailable(
                     "track2_asymmetric_trap", ("basis",),
                     "TRACK2_BASIS_SOURCE_UNAVAILABLE",
+                )
+            else:
+                contexts["track2_asymmetric_trap"] = self._unavailable(
+                    "track2_asymmetric_trap", ("bbw_window", "volume_window"),
+                    "TRACK2_BBW_VOLUME_SOURCE_UNAVAILABLE",
                 )
 
         # Track3 must not receive fabricated stability, normalization, fee,

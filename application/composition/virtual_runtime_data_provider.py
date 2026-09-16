@@ -8,6 +8,7 @@ from typing import Any
 
 from contracts.option_orderbook_source import OptionOrderBookSource
 from contracts.volume_profile_source import VolumeProfileSource
+from contracts.basis_source import BasisSource
 
 @dataclass(frozen=True)
 class RuntimeDataStatus:
@@ -39,15 +40,17 @@ class VirtualRuntimeData:
     option_bid_qtys: tuple[Decimal, ...] | None = None
     option_ask_qtys: tuple[Decimal, ...] | None = None
     poc_price: Decimal | None = None
+    basis: Decimal | None = None
 
 class VirtualRuntimeDataProvider:
     """Derive only from VMS observations and injected authoritative sources."""
-    def __init__(self, market: Any, *, history_size: int = 50, option_expiry_source: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None) -> None:
+    def __init__(self, market: Any, *, history_size: int = 50, option_expiry_source: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None) -> None:
         self.market = market
         self.history_size = history_size
         self.option_expiry_source = option_expiry_source
         self.option_orderbook_source = option_orderbook_source
         self.volume_profile_source = volume_profile_source
+        self.basis_source = basis_source
 
     @staticmethod
     def _norm_cdf(x: float) -> float:
@@ -123,6 +126,16 @@ class VirtualRuntimeDataProvider:
         )
         symbol = getattr(tick, "symbol", None)
         poc_price = None
+        basis = None
+        basis_status = RuntimeDataStatus(
+            False, False, "BasisSource", "BASIS_SOURCE_UNAVAILABLE"
+        )
+        if self.basis_source is not None and symbol:
+            basis = self.basis_source.get_basis(symbol)
+            if basis is not None:
+                basis_status = RuntimeDataStatus(
+                    True, True, "KIS:futures-minus-spot"
+                )
         poc_status = RuntimeDataStatus(
             False, False, "VolumeProfileSource", "VOLUME_PROFILE_SOURCE_UNAVAILABLE"
         )
@@ -152,11 +165,12 @@ class VirtualRuntimeDataProvider:
             "option_expiry": expiry_status,
             "option_orderbook": orderbook_status,
             "volume_profile_poc": poc_status,
+            "basis": basis_status,
         }
         return VirtualRuntimeData(
             observed_at, price, prices, open_price, high, low, previous_close,
             active_vol, base_vol, iv, put_iv, delta, gamma, macro_regime,
-            event_upcoming, status, option_expiry, days_to_expiry, option_bid_qtys, option_ask_qtys, poc_price
+            event_upcoming, status, option_expiry, days_to_expiry, option_bid_qtys, option_ask_qtys, poc_price, basis
         )
 
 
