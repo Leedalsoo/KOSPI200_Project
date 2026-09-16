@@ -72,7 +72,7 @@ class VirtualMarketSimulatorRuntime:
                 quotes[(option_type, strike, tick.expiry)] = {
                     "bid": max(0.01, mid - 0.05), "ask": mid + 0.05, "last": mid,
                     "iv": vol, "bid_qty": self.config.option_quote_qty,
-                    "ask_qty": self.config.option_quote_qty, "timestamp": tick.timestamp,
+                    "ask_qty": self.config.option_quote_qty, "contract_multiplier": 250000.0, "timestamp": tick.timestamp,
                 }
         self._option_quotes = quotes
 

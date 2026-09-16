@@ -292,6 +292,13 @@ class IOptionContractMaster(ABC):
     ) -> Optional[KisOptionContractIdentity]:
         return None
 
+    def find_contract_identity(
+        self, expiry: str, option_type: str, strike: Decimal
+    ) -> Optional[KisOptionContractIdentity]:
+        """Resolve one option contract by its economic identity."""
+        return None
+
+
     def register_contract_identity(
         self, identity: KisOptionContractIdentity
     ) -> None:
@@ -325,6 +332,21 @@ class _IdentityOptionContractMaster(IOptionContractMaster):
         return self._contract_identities.get(
             shrn_iscd.strip()
         ) if shrn_iscd else None
+
+    def find_contract_identity(
+        self, expiry: str, option_type: str, strike: Decimal
+    ) -> Optional[KisOptionContractIdentity]:
+        target_expiry = str(expiry).replace("-", "")[:6]
+        target_type = str(option_type).upper()
+        target_strike = Decimal(str(strike))
+        for identity in self._contract_identities.values():
+            if (
+                identity.expiry.replace("-", "")[:6] == target_expiry
+                and identity.option_type == target_type
+                and identity.strike == target_strike
+            ):
+                return identity
+        return None
 
     def register_contract_identity(
         self, identity: KisOptionContractIdentity

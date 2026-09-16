@@ -11,7 +11,7 @@ class VirtualSecuritiesFirmRuntime:
         self.account=PaperTradingAccount(initial_capital); self.execution_engine=ExecutionEngine(); self.order_book=OrderBook(); self.reconciliation_engine=AuthoritativeReconciliationEngine(initial_capital); self.settlement_engine=SettlementEngine(self.account); self.recovery_engine=StateRecoveryEngine(self.account); self.margin_engine=self.account.margin_engine; self.metrics={'market_ticks':0,'order_commands':0,'executions_issued':0,'settlement_runs':0}
     @property
     def orderbook(self): return self.order_book
-    def process_market_data(self,tick): self.metrics['market_ticks']+=1; self.order_book.update_bid_ask(tick.bid_price,tick.ask_price); self.account.update_tick_price(tick.underlying_price)
+    def process_market_data(self,tick): self.metrics['market_ticks']+=1; self.order_book.update_bid_ask(tick.bid_price,tick.ask_price, instrument_id=getattr(tick, 'instrument_id', None)); self.account.update_tick_price(tick.underlying_price)
     def process_order(self,command):
         self.metrics['order_commands']+=1
         if self.account.free_margin < self.margin_engine.calculate_order_margin(command): return None
