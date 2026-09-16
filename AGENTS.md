@@ -156,3 +156,44 @@ KIS Live WebSocket
 ```
 
 모든 검증은 이 AGENTS.md의 원칙에 따라 실제 작업 폴더의 명령·출력·exit code를 기준으로 판정한다.
+
+## 12. 거래소 → 증권사 → Broker API → Option Program 구조 기준
+
+프로젝트의 핵심 데이터 경계는 거래소와 Option Program을 직접 연결하는 구조가 아니다.
+실제 환경은 다음 관계를 기준으로 한다.
+
+```text
+KRX 실제 거래소
+→ KIS 실제 증권사
+→ KIS API
+→ Option Program
+```
+
+Virtual 환경은 이를 동일한 개념으로 모사한다.
+
+```text
+Virtual Exchange (KRX-like)
+→ Virtual Broker (KIS-like)
+→ Virtual Broker API
+→ Option Program
+```
+
+Virtual Exchange는 KRX와 유사한 시장 데이터·체결·호가 구조를 제공한다.
+Virtual Broker는 Virtual Exchange 데이터를 수신하고 계좌·증거금·주문·체결·포지션·PnL 등 증권사 데이터를 결합하여 KIS-like API로 제공한다.
+
+Option Program은 특정 거래소나 증권사의 내부 구현을 직접 알지 않으며 Standard Broker API만 사용한다.
+KIS, KIS VTS, KIS Live 또는 다른 증권사를 연결할 때는 해당 증권사 API Adapter 계층을 교체하는 것을 기본 원칙으로 한다.
+
+따라서 다음 구조를 잘못된 직접 연결로 간주한다.
+
+```text
+Exchange → Standard Exchange Port → Option Program
+Exchange → Option Program
+```
+
+목표 구조는 항상 거래소 데이터가 증권사 계층으로 들어간 뒤 증권사 API를 통해 Option Program으로 공급되는 것이다.
+
+No.474에서 검증된 `POST /api/environment/virtual_broker/order`는 이 Broker API 경계의 기반으로 유지한다.
+No.495/496의 KIS VTS 검증 결과처럼 VTS와 Live의 외부 데이터 지원 범위는 실제 증거에 따라 `PASS / BLOCKED`로 구분한다.
+
+Real KIS 주문은 계속 실행하지 않는다. 실제 Live market-data frame 수신 전에는 Live E2E PASS를 선언하지 않는다.
