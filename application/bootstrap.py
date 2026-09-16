@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
@@ -143,7 +143,12 @@ def create_virtual_runtime_bootstrap(
     risk_engine = RiskEngine(config=RiskConfig(), margin_engine=vssf.margin_engine)
     from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
     multi_leg_bridge = VirtualMultiLegExecutionBridge(bundle=bundle, option_master=bundle.option_master, risk_config=RiskConfig())
-    adapter = ControlTowerUIAdapter(runtime_controller=controller, multi_leg_bridge=multi_leg_bridge)
+    bundle.broker_api.attach_group_read_model(
+        snapshot_reader=multi_leg_bridge.position_groups.snapshot,
+        reports_reader=multi_leg_bridge.group_reports,
+        group_ids_reader=lambda: tuple(multi_leg_bridge.position_groups.all().keys()),
+    )
+    adapter = ControlTowerUIAdapter(runtime_controller=controller, broker_api=bundle.broker_api)
     bootstrap = VirtualRuntimeBootstrap(bundle=bundle, runtime_controller=controller, risk_engine=risk_engine, ui_adapter=adapter)
     from application.composition.automated_virtual_runtime_factory import attach_standard_automated_loop
     loop = attach_standard_automated_loop(bootstrap)

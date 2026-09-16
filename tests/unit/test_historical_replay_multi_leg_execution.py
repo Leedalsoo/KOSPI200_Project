@@ -269,9 +269,20 @@ def test_four_leg_historical_replay_risk_provenance_broker_api_and_control_tower
     assert all(record.result.is_approved for record in risk_records)
     assert all(record.result.token is not None for record in risk_records)
 
+    bundle.broker_api.attach_group_read_model(
+        snapshot_reader=bridge.position_groups.snapshot,
+        reports_reader=bridge.group_reports,
+        group_ids_reader=lambda: tuple(bridge.position_groups.all().keys()),
+    )
+
     snapshot = bridge.position_groups.snapshot(plan.group_id)
     assert snapshot is not None and snapshot.complete is True
     assert snapshot.total_pnl == -87500.0
+    group_snapshot = bundle.broker_api.get_group_position_snapshot(plan.group_id)
+    assert group_snapshot.strategy_id == plan.strategy_id
+    assert group_snapshot.complete is True
+    assert group_snapshot.total_pnl == -87500.0
+    assert len(bundle.broker_api.get_group_reports(plan.group_id)) == 4
     position_snapshot = bundle.broker_api.get_position_snapshot()
     assert position_snapshot
     margin = bundle.broker_api.get_margin_state()
@@ -286,7 +297,7 @@ def test_four_leg_historical_replay_risk_provenance_broker_api_and_control_tower
             return type("Status", (), {"state": "RUNNING"})()
 
     from interfaces.control_tower.ui_adapter import ControlTowerUIAdapter
-    adapter = ControlTowerUIAdapter(Controller(), multi_leg_bridge=bridge)
+    adapter = ControlTowerUIAdapter(Controller(), broker_api=bundle.broker_api)
     broker_view = adapter.get_tab_detail("virtual_broker")
     groups = broker_view["multi_leg_groups"]
     assert len(groups) == 1

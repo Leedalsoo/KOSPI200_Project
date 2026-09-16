@@ -1,7 +1,7 @@
-﻿"""KIS-like Standard Broker API facade for the Virtual environment."""
+"""KIS-like Standard Broker API facade for the Virtual environment."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 from contracts.types import BrokerOrderCommand, ExecutionReport
 from environments.virtual.broker.virtual_broker import VirtualBroker
@@ -13,6 +13,21 @@ class VirtualBrokerApi:
     def __init__(self, broker: VirtualBroker, account: Any):
         self._broker = broker
         self._account = account
+        self._group_snapshot_reader: Callable[[str], Any] | None = None
+        self._group_reports_reader: Callable[[str], tuple[ExecutionReport, ...]] | None = None
+        self._group_ids_reader: Callable[[], tuple[str, ...]] | None = None
+
+    def attach_group_read_model(self, *, snapshot_reader, reports_reader=None, group_ids_reader=None) -> None:
+        """Attach the authoritative Multi-Leg group read model at the Broker API boundary."""
+        if not callable(snapshot_reader):
+            raise ValueError("VIRTUAL_BROKER_GROUP_SNAPSHOT_READER_REQUIRED")
+        if reports_reader is not None and not callable(reports_reader):
+            raise ValueError("VIRTUAL_BROKER_GROUP_REPORTS_READER_INVALID")
+        if group_ids_reader is not None and not callable(group_ids_reader):
+            raise ValueError("VIRTUAL_BROKER_GROUP_IDS_READER_INVALID")
+        self._group_snapshot_reader = snapshot_reader
+        self._group_reports_reader = reports_reader
+        self._group_ids_reader = group_ids_reader
 
     def get_market_snapshot(self) -> dict:
         return self._broker.get_market_snapshot()
@@ -38,6 +53,24 @@ class VirtualBrokerApi:
         if not hasattr(balances, "get"):
             raise RuntimeError("VIRTUAL_BROKER_ACCOUNT_BALANCES_UNAVAILABLE")
         return {"margin_used": balances.get("margin_used"), "available_cash": balances.get("available_cash")}
+
+    def get_group_ids(self) -> tuple[str, ...]:
+        if self._group_ids_reader is None:
+            raise RuntimeError("VIRTUAL_BROKER_GROUP_IDS_READ_MODEL_UNAVAILABLE")
+        return tuple(self._group_ids_reader())
+
+    def get_group_position_snapshot(self, group_id: str) -> Any:
+        if self._group_snapshot_reader is None:
+            raise RuntimeError("VIRTUAL_BROKER_GROUP_POSITION_READ_MODEL_UNAVAILABLE")
+        snapshot = self._group_snapshot_reader(str(group_id))
+        if snapshot is None:
+            raise KeyError(str(group_id))
+        return snapshot
+
+    def get_group_reports(self, group_id: str) -> tuple[ExecutionReport, ...]:
+        if self._group_reports_reader is None:
+            raise RuntimeError("VIRTUAL_BROKER_GROUP_REPORT_READ_MODEL_UNAVAILABLE")
+        return tuple(self._group_reports_reader(str(group_id)))
 
     def get_pnl_state(self) -> dict:
         snapshot = self.get_account_snapshot()

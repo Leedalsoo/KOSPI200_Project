@@ -31,11 +31,13 @@ class ControlTowerUIAdapter:
         risk_engine=None,
         lifecycle_coordinator=None,
         multi_leg_bridge=None,
+        broker_api=None,
     ):
         self._runtime_controller = runtime_controller
         self._risk_engine = risk_engine
         self._lifecycle_coordinator = lifecycle_coordinator
         self._multi_leg_bridge = multi_leg_bridge
+        self._broker_api = broker_api
         self._active_tab = TabEnvironmentId.VIRTUAL_EXCHANGE.value
         self._audit_logs: list[str] = ["Control Tower UI Adapter initialized"]
 
@@ -270,21 +272,22 @@ class ControlTowerUIAdapter:
                         })
 
                 multi_leg_groups: list[dict[str, Any]] = []
-                multi_leg = self._multi_leg_bridge
-                if multi_leg is not None:
-                    for group_id, reports in multi_leg.groups.items():
-                        strategy_id = next(iter(multi_leg.provenance.values()), {}).get("strategy_id") if multi_leg.provenance else None
-                        snap = multi_leg.position_groups.snapshot(group_id)
+                broker_api = self._broker_api
+                if broker_api is not None:
+                    group_ids = list(broker_api.get_group_ids())
+                    for group_id in group_ids:
+                        snap = broker_api.get_group_position_snapshot(group_id)
+                        reports = broker_api.get_group_reports(group_id)
                         multi_leg_groups.append({
-                            "strategy_id": strategy_id,
-                            "group_id": group_id,
-                            "complete": bool(snap.complete) if snap else False,
-                            "total_pnl": float(snap.total_pnl) if snap else None,
+                            "strategy_id": snap.strategy_id,
+                            "group_id": snap.group_id,
+                            "complete": bool(snap.complete),
+                            "total_pnl": float(snap.total_pnl),
                             "legs": [
                                 {"leg_id": r.leg_id, "execution_id": r.execution_id,
                                  "client_order_id": r.client_order_id, "status": r.status,
                                  "filled_quantity": r.filled_quantity, "execution_price": float(r.execution_price) if r.execution_price is not None else None,
-                                 "group_id": r.group_id, "strategy_id": multi_leg.provenance.get(r.execution_id, {}).get("strategy_id")}
+                                 "group_id": r.group_id}
                                 for r in reports
                             ],
                         })
