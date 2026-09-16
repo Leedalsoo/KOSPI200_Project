@@ -45,7 +45,7 @@ class KISWebSocketApprovalKeyProvider:
             raise FuturesMarketTransportError("KIS credentials are required for websocket approval key")
         payload = {"grant_type": "client_credentials", "appkey": self._auth.app_key, "secretkey": self._auth.app_secret}
         request = Request(
-# f"{self._auth.base_url.rstrip('/')}{self._approval_path}",
+            f"{self._auth.base_url.rstrip('/')}{self._approval_path}",
             data=json.dumps(payload).encode("utf-8"),
             headers={"content-type": "application/json"},
             method="POST",
