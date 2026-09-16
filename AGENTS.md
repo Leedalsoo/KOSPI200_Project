@@ -227,3 +227,131 @@ Replay/Scenario/Synthetic 결과를 실제 KRX 데이터와 혼동하지 않도�
 옵션 시장 데이터 축적 대상에는 최소한 timestamp, instrument identity, expiry, strike, call/put, bid/ask/last, bid/ask quantity, trade volume, sequence/event identity, underlying linkage, contract multiplier 및 source/provenance를 포함할 수 있도록 확장한다. 단, KRX의 실제 필드 의미와 값은 authoritative KRX source가 확보된 뒤 adapter에서 매핑하며 임의 추정하지 않는다.
 
 현재 구현 단계는 **Phase 1 기반 구축**이다. `HistoricalMarketStore`와 `HistoricalReplayEngine.from_store()`를 제공하지만 실제 KRX 수집 연결은 아직 구현/검증하지 않았다.
+
+## 14. Strategy / Runtime / Control Tower / Scenario-Test Hub 삽입 기준
+
+현재 구조를 전면 재작성하지 않고, 이미 존재하는 seam을 안정적인 Hub 경계로 승격한다.
+
+### 14.1 Strategy Hub
+
+`core/strategy/registry.py`의 `StrategyRegistry`와 `core/strategy/orchestrator.py`의 `StrategyOrchestrator`가 현재 Strategy seam이다. 9개 전략은 `core/strategy/standard_registry.py`의 `STANDARD_STRATEGY_TYPES`에서 등록된다.
+
+향후 Hub는 다음 책임만 가진다.
+
+```text
+StrategyHub
+├─ Strategy Registry
+├─ Strategy Config
+├─ Strategy Version
+├─ Enable/Disable
+├─ Strategy Context 공급
+└─ Strategy Adapter
+   ├─ Track1
+   ├─ Track2
+   ├─ …
+   └─ Track9
+```
+
+각 전략은 `StrategyContext`를 입력으로 받고 `Signal`/Execution Proposal을 출력한다. 전략 내부에서 KIS, VirtualBroker, Control Tower, Scenario Store를 직접 호출하지 않는다. 한 전략의 구현·버전·파라미터 교체는 `strategy_id + version` 등록/설정만 변경하고 다른 전략의 코드·계약·실행 경로를 변경하지 않는 것을 목표로 한다.
+
+### 14.2 Runtime Hub
+
+현재 실제 Strategy → Decision → Risk → OMS/Router → Virtual Broker 연결 seam은 `application/composition/automated_virtual_trading_loop.py`이다. 이 파일의 `context_builder`, `StrategyOrchestrator`, `RuntimeStrategyResultCollectionAdapter`, `RuntimeStrategyToDecisionAdapter`, `RuntimeDecisionCommandAdapter`, Risk/Router 연결을 Runtime Hub의 내부 구성요소로 본다.
+
+Runtime Hub가 tick/run context를 소유하고 Strategy Hub에는 `StrategyContext`만 전달한다. Strategy가 Runtime 내부 객체를 참조하지 않도록 한다.
+
+### 14.3 Environment Hub
+
+`application/environment_hub/hub.py`의 `EnvironmentHub`는 이미 Environment Bundle 생성/활성화 seam을 제공한다. `EnvironmentConfig`와 `RuntimePolicy`를 통해 Virtual/Paper/Live/High-Speed 환경을 교체할 수 있게 유지한다.
+
+단, 현재 `EnvironmentHub`는 동시에 하나의 active environment만 허용하므로 반복 가능한 테스트 실행을 위한 `RunContext`와는 분리한다. Environment lifecycle과 Test Run lifecycle을 동일 객체로 합치지 않는다.
+
+### 14.4 Scenario / Test Hub
+
+현재 Virtual Market에는 `HistoricalReplayEngine`, `ScenarioEngine`, `load_historical_store()` 및 `replay_next()` seam이 존재하고, High-Speed에는 `DeterministicScenario` seam이 존재한다. 이를 Scenario/Test Hub가 선택·초기화·실행하도록 승격한다.
+
+목표는 다음과 같다.
+
+```text
+TestControlHub
+├─ Scenario / Historical Replay selection
+├─ Environment selection
+├─ Run ID
+├─ initial capital / account profile
+├─ strategy selection + version + parameters
+├─ clock / replay speed
+└─ reset / teardown
+```
+
+반복 테스트는 매 실행마다 독립된 `Run ID`와 새 Environment Bundle/VSSF account/position/execution state를 사용한다. 이전 실행의 주문·체결·포지션·PnL·strategy state를 다음 실행에 재사용하지 않는다. Replay cursor, scenario state, clock, account, position, execution ledger도 run 종료 시 폐기하거나 명시적으로 새 인스턴스로 생성한다.
+
+### 14.5 Control Tower UI Hub
+
+`interfaces/control_tower/server.py`와 `interfaces/control_tower/ui_adapter.py`가 현재 UI/API seam이다. UI는 Strategy/Core 내부 객체를 직접 호출하지 않고 Control Tower API/read model을 통해 상태를 조회한다는 원칙을 유지한다.
+
+현재 UI adapter가 RuntimeController의 `_hub` 같은 private field를 읽는 부분과, server의 고정 Virtual test order/identity처럼 운영 데이터와 테스트 동작이 섞인 부분은 후속 정리 대상이다. 최종 Hub 구조에서는 Control Tower가 `Runtime Hub`, `Environment Hub`, `Strategy Hub`, `TestControl Hub`의 공개 계약만 사용해야 한다.
+
+권장 UI 구조:
+
+```text
+Control Tower UI
+├─ Environment Hub
+├─ Strategy Hub
+├─ Test / Scenario Hub
+├─ Runtime status
+├─ Risk / OMS status
+├─ Broker / Execution
+└─ Position / Margin / PnL
+```
+
+### 14.6 Hub 경계의 변경 불변 규칙
+
+- Strategy 교체가 Runtime/Broker/UI 코드를 수정하게 만들지 않는다.
+- Environment 교체가 Strategy 구현을 수정하게 만들지 않는다.
+- Scenario 교체가 Strategy 구현을 수정하게 만들지 않는다.
+- UI 변경이 Strategy/Core 실행 경로를 수정하게 만들지 않는다.
+- Hub 간 통신은 공개 `contracts/` 또는 명시된 application port를 사용하고 private attribute 의존을 새로 만들지 않는다.
+- 실제 authoritative source가 없는 값은 Hub에서 임의 생성하지 않고 `UNAVAILABLE/BLOCKED`를 전달한다.
+- Control Tower의 정상 주문 생성은 계속 주 실행 경로가 아니다.
+
+### 14.7 현재 코드에 대한 정확한 삽입 위치
+
+```text
+[Control Tower UI/API]
+        │
+        ▼
+[Control Tower Hub / Read Model]
+        │
+        ├──────────────► [Environment Hub]
+        │                       │
+        │                       ▼
+        │                 [Environment Bundle]
+        │
+        ├──────────────► [TestControl / Scenario Hub]
+        │                       │
+        │                       ▼
+        │                 [RunContext]
+        │
+        └──────────────► [Runtime Hub]
+                                │
+                                ▼
+                         [Strategy Hub]
+                                │
+                 ┌──────────────┼──────────────┐
+                 ▼              ▼              ▼
+                T1             T2            … T9
+                 │              │              │
+                 └──────────────┼──────────────┘
+                                ▼
+                         Decision → Risk
+                                ▼
+                         OMS / Order Router
+                                ▼
+                              Broker
+                                ▼
+                       Execution / Position
+                                ▼
+                            PnL / Read Model
+```
+
+이 설계는 현재 `StrategyRegistry → StrategyOrchestrator`, `AutomatedVirtualTradingLoop`, `EnvironmentHub`, `VirtualMarketSimulatorRuntime`, `HistoricalReplayEngine/ScenarioEngine`, `ControlTowerUIAdapter/server`라는 실제 seam을 기준으로 한다. 다음 구현 단계에서는 먼저 공개 Hub contract와 RunContext를 추가하고, 기존 객체를 그 contract 뒤로 이동한 뒤 테스트를 추가한다. 한 번에 9개 전략 구현 자체를 수정하지 않는다.
