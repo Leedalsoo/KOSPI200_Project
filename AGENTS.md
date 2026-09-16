@@ -126,3 +126,33 @@ KIS master 원본처럼 현재 source로 사용되는 외부 자료는 코드에
 
 Real KIS 주문은 실행하지 않는다.
 Virtual에서 충분한 실제 실행 증거를 확보한 뒤에만 다음 환경으로 이동한다.
+
+## 11. 최신 검증 상태 및 Live 시장데이터 경계
+
+2026-09-16 기준 최신 검증 결과를 다음과 같이 적용한다.
+
+- Contract-level `Option Quote → OrderBook → Virtual Execution` 경로는 실제 코드와 테스트로 검증된 상태다.
+- Virtual Multi-Leg 실행은 authoritative Option Master의 계약 identity와 계약별 `bid/ask/last`를 사용한다.
+- BUY는 해당 계약의 Ask, SELL은 해당 계약의 Bid를 사용한다.
+- Position/PnL mark도 동일 계약의 `last`를 사용하며 KOSPI200 기초자산 가격으로 대체하지 않는다.
+- KIS 시장데이터는 `infrastructure/kis/futures_market_transport.py`의 WebSocket 경계를 통해 수신한다.
+- KIS index-option realtime 거래/체결 TR은 `H0IOCNT0`, 호가 TR은 `H0IOASP0`를 사용한다.
+- VTS에서는 `H0IOASP0` 실시간 옵션호가가 지원되지 않으므로 VTS WebSocket 연결 성공만으로 실제 호가 수신을 PASS 처리하지 않는다.
+- Live 시장데이터를 실제로 검증하려면 Live 자격증명과 실제 market-data frame 수신 증거가 모두 필요하다.
+- 현재 `.env`의 일반 KIS credential은 VTS 용도로 확인되었으며 Live credential로 간주하지 않는다.
+- Live credential이 없는 상태에서는 `Live market data → Option Quote`를 `BLOCKED`로 판정한다.
+- Real KIS 주문 API는 계속 금지한다. 시장데이터 수신 검증과 Virtual Execution은 주문 없이 수행한다.
+- 실제 Live frame 수신 전에는 Live E2E `PASS`를 선언하지 않는다.
+
+현재 우선 진행 경로는 다음과 같다.
+
+```text
+KIS Live WebSocket
+→ authoritative Option Master identity mapping
+→ contract-level Option Quote
+→ contract-level OrderBook
+→ Virtual Execution
+→ Position / PnL
+```
+
+모든 검증은 이 AGENTS.md의 원칙에 따라 실제 작업 폴더의 명령·출력·exit code를 기준으로 판정한다.
