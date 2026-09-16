@@ -102,3 +102,43 @@ def test_composition_fails_closed_without_session():
         assert "OPTION_SYMBOL_REQUIRED" in str(exc)
     else:
         raise AssertionError("expected fail-closed validation")
+
+
+def test_option_linkage_rejects_stale_underlying(tmp_path):
+    option = option_trade_frame().replace("101530123", "101535123")
+    option_transport = FakeTransport([option])
+    underlying_transport = FakeTransport([futures_trade_frame()])
+    state = KISUnderlyingMarketState()
+    store = HistoricalMarketStore(tmp_path / "events.jsonl")
+    recorder = KISOptionHistoricalRecorder(store, FakeMaster())
+    capture = KISOptionHistoricalCapture(option_transport, recorder, underlying_state=state)
+    composition = KISHistoricalMarketCapture(
+        capture, underlying_transport, underlying_state=state,
+        max_underlying_age_seconds=2.0,
+    )
+    composition.start_session("2026-09-16", option_symbol="201S11305", underlying_symbol="101V6000")
+    asyncio.run(composition.capture_underlying_once())
+    try:
+        asyncio.run(composition.capture_option_once())
+    except ValueError as exc:
+        assert "AUTHORITATIVE_UNDERLYING_STALE" in str(exc)
+    else:
+        raise AssertionError("expected stale underlying rejection")
+
+
+def test_option_linkage_accepts_underlying_within_age_window(tmp_path):
+    option = option_trade_frame().replace("101530123", "101530900")
+    option_transport = FakeTransport([option])
+    underlying_transport = FakeTransport([futures_trade_frame()])
+    state = KISUnderlyingMarketState()
+    store = HistoricalMarketStore(tmp_path / "events.jsonl")
+    recorder = KISOptionHistoricalRecorder(store, FakeMaster())
+    capture = KISOptionHistoricalCapture(option_transport, recorder, underlying_state=state)
+    composition = KISHistoricalMarketCapture(
+        capture, underlying_transport, underlying_state=state,
+        max_underlying_age_seconds=2.0,
+    )
+    composition.start_session("2026-09-16", option_symbol="201S11305", underlying_symbol="101V6000")
+    asyncio.run(composition.capture_underlying_once())
+    result = asyncio.run(composition.capture_option_once())
+    assert result.shrn_iscd == "201S11305"
