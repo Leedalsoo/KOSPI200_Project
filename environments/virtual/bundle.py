@@ -17,6 +17,7 @@ class VirtualEnvironmentBundle(StandardEnvironmentBundle):
     account: object
     position: object
     execution: object
+    broker_api: object | None = None
     option_master: object | None = None
     environment: EnvironmentType = EnvironmentType.VIRTUAL
     connected: bool = False
@@ -59,7 +60,8 @@ class VirtualEnvironmentBundle(StandardEnvironmentBundle):
         account: object,
         position: object,
         execution: object,
-        option_master: object,
+        broker_api: object | None = None,
+        option_master: object | None = None,
     ) -> "VirtualEnvironmentBundle":
         if config.environment is not EnvironmentType.VIRTUAL:
             pass
@@ -72,6 +74,7 @@ class VirtualEnvironmentBundle(StandardEnvironmentBundle):
             market=market,
             clock=clock,
             broker=broker,
+            broker_api=broker_api,
             account=account,
             position=position,
             execution=execution,

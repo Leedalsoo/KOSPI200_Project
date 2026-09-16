@@ -158,7 +158,7 @@ class ControlTowerRequestHandler(BaseHTTPRequestHandler):
             tag_id="CONTROL_TOWER",
         )
         try:
-            report = _virtual_bootstrap.bundle.broker.submit(command)
+            report = _virtual_bootstrap.bundle.broker_api.submit_order(command)
         except Exception as exc:
             self._send_json({"success": False, "error": {"code": "VIRTUAL_ORDER_SUBMIT_FAILED", "message": "Virtual Broker order submission failed.", "detail": str(exc)}}, HTTPStatus.SERVICE_UNAVAILABLE)
             return
