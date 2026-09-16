@@ -25,17 +25,19 @@ from contracts.option_expiry_source import OptionExpirySource
 from contracts.option_orderbook_source import OptionOrderBookSource
 from contracts.volume_profile_source import VolumeProfileSource
 from contracts.basis_source import BasisSource
+from contracts.track2_market_metrics_source import Track2MarketMetricsSource
 
 
 class StandardRuntimeInputProvider:
     """Build standard inputs from observable VMS/VSSF sources only."""
 
-    def __init__(self, market: Any, *, option_expiry_source: OptionExpirySource | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None) -> None:
+    def __init__(self, market: Any, *, option_expiry_source: OptionExpirySource | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None) -> None:
         self.data = VirtualRuntimeDataProvider(
             market, option_expiry_source=option_expiry_source,
             option_orderbook_source=option_orderbook_source,
             volume_profile_source=volume_profile_source,
             basis_source=basis_source,
+            track2_metrics_source=track2_metrics_source,
         )
 
     @staticmethod
@@ -118,10 +120,28 @@ class StandardRuntimeInputProvider:
                     "track2_asymmetric_trap", ("basis",),
                     "TRACK2_BASIS_SOURCE_UNAVAILABLE",
                 )
-            else:
+            elif d.bbw_window is None or d.volume_window is None:
                 contexts["track2_asymmetric_trap"] = self._unavailable(
                     "track2_asymmetric_trap", ("bbw_window", "volume_window"),
                     "TRACK2_BBW_VOLUME_SOURCE_UNAVAILABLE",
+                )
+            elif d.active_vol is None or d.base_vol is None:
+                contexts["track2_asymmetric_trap"] = self._unavailable(
+                    "track2_asymmetric_trap", ("active_vol", "base_vol"),
+                    "TRACK2_VOLATILITY_SOURCE_UNAVAILABLE",
+                )
+            else:
+                contexts["track2_asymmetric_trap"] = StrategyContext(
+                    market_state, "track2_asymmetric_trap", StrategyInput(
+                        common, Track2MarketInputs(
+                            bbw_window=tuple(float(x) for x in d.bbw_window),
+                            volume_window=tuple(float(x) for x in d.volume_window),
+                            basis=d.basis, put_iv=d.put_iv, call_iv=d.option_iv,
+                            poc_price=d.poc_price, bid_qtys=d.option_bid_qtys,
+                            ask_qtys=d.option_ask_qtys, active_vol=float(d.active_vol),
+                            base_vol=float(d.base_vol),
+                        )
+                    )
                 )
 
         # Track3 must not receive fabricated stability, normalization, fee,

@@ -12,6 +12,7 @@ class KISVolumeProfileSource:
     def __init__(self) -> None:
         self._last_cumulative: dict[str, Decimal] = {}
         self._profile: dict[str, dict[Decimal, Decimal]] = defaultdict(dict)
+        self._latest_symbol: str | None = None
 
     def update(self, observation: KisIndexFuturesMarketObservation) -> None:
         if observation.source != "KIS:H0IFCNT0":
@@ -32,11 +33,15 @@ class KISVolumeProfileSource:
         self._last_cumulative[symbol] = cumulative
         if delta <= 0:
             return
+        self._latest_symbol = symbol
         profile = self._profile.setdefault(symbol, {})
         profile[observation.price] = profile.get(observation.price, Decimal("0")) + delta
 
     def get_poc(self, symbol: str) -> Decimal | None:
-        profile = self._profile.get(str(symbol).strip())
+        key = str(symbol).strip()
+        if key == "KOSPI200" and key not in self._profile and self._latest_symbol is not None:
+            key = self._latest_symbol
+        profile = self._profile.get(key)
         if not profile:
             return None
         return max(profile.items(), key=lambda item: (item[1], item[0]))[0]

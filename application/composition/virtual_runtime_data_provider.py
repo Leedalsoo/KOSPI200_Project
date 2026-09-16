@@ -9,6 +9,7 @@ from typing import Any
 from contracts.option_orderbook_source import OptionOrderBookSource
 from contracts.volume_profile_source import VolumeProfileSource
 from contracts.basis_source import BasisSource
+from contracts.track2_market_metrics_source import Track2MarketMetricsSource
 
 @dataclass(frozen=True)
 class RuntimeDataStatus:
@@ -41,16 +42,19 @@ class VirtualRuntimeData:
     option_ask_qtys: tuple[Decimal, ...] | None = None
     poc_price: Decimal | None = None
     basis: Decimal | None = None
+    bbw_window: tuple[Decimal, ...] | None = None
+    volume_window: tuple[Decimal, ...] | None = None
 
 class VirtualRuntimeDataProvider:
     """Derive only from VMS observations and injected authoritative sources."""
-    def __init__(self, market: Any, *, history_size: int = 50, option_expiry_source: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None) -> None:
+    def __init__(self, market: Any, *, history_size: int = 50, option_expiry_source: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None) -> None:
         self.market = market
         self.history_size = history_size
         self.option_expiry_source = option_expiry_source
         self.option_orderbook_source = option_orderbook_source
         self.volume_profile_source = volume_profile_source
         self.basis_source = basis_source
+        self.track2_metrics_source = track2_metrics_source
 
     @staticmethod
     def _norm_cdf(x: float) -> float:
@@ -125,22 +129,37 @@ class VirtualRuntimeDataProvider:
             False, False, "OptionOrderBookSource", "OPTION_ORDERBOOK_SOURCE_UNAVAILABLE"
         )
         symbol = getattr(tick, "symbol", None)
+        underlying_key = getattr(tick, "underlying_symbol", None) or "KOSPI200"
         poc_price = None
         basis = None
+        bbw_window = None
+        volume_window = None
+        metrics_active_vol = None
+        metrics_base_vol = None
+        metrics_status = RuntimeDataStatus(False, False, "Track2MarketMetricsSource", "TRACK2_BBW_VOLUME_SOURCE_UNAVAILABLE")
         basis_status = RuntimeDataStatus(
             False, False, "BasisSource", "BASIS_SOURCE_UNAVAILABLE"
         )
         if self.basis_source is not None and symbol:
-            basis = self.basis_source.get_basis(symbol)
+            basis = self.basis_source.get_basis(underlying_key)
             if basis is not None:
                 basis_status = RuntimeDataStatus(
                     True, True, "KIS:futures-minus-spot"
                 )
+        if self.track2_metrics_source is not None and symbol:
+            metrics = self.track2_metrics_source.get_metrics(underlying_key)
+            if metrics is not None:
+                bbw_window = metrics.bbw_window
+                volume_window = metrics.volume_window
+                metrics_active_vol = metrics.active_vol
+                metrics_base_vol = metrics.base_vol
+                metrics_status = RuntimeDataStatus(True, True, "KIS:H0IFCNT0:Track2Metrics")
+
         poc_status = RuntimeDataStatus(
             False, False, "VolumeProfileSource", "VOLUME_PROFILE_SOURCE_UNAVAILABLE"
         )
         if self.volume_profile_source is not None and symbol:
-            poc_price = self.volume_profile_source.get_poc(symbol)
+            poc_price = self.volume_profile_source.get_poc(underlying_key)
             if poc_price is not None:
                 poc_status = RuntimeDataStatus(
                     True, True, "KIS:H0IFCNT0:volume_profile"
@@ -166,11 +185,18 @@ class VirtualRuntimeDataProvider:
             "option_orderbook": orderbook_status,
             "volume_profile_poc": poc_status,
             "basis": basis_status,
+            "track2_bbw_volume": metrics_status,
         }
         return VirtualRuntimeData(
-            observed_at, price, prices, open_price, high, low, previous_close,
-            active_vol, base_vol, iv, put_iv, delta, gamma, macro_regime,
-            event_upcoming, status, option_expiry, days_to_expiry, option_bid_qtys, option_ask_qtys, poc_price, basis
+            as_of=observed_at, price=price, prices=prices, open_price=open_price,
+            high_price=high, low_price=low, previous_close=previous_close,
+            active_vol=metrics_active_vol if metrics_active_vol is not None else active_vol,
+            base_vol=metrics_base_vol if metrics_base_vol is not None else base_vol,
+            option_iv=iv, put_iv=put_iv, option_delta=delta, option_gamma=gamma,
+            macro_regime=macro_regime, event_upcoming=event_upcoming, status=status,
+            option_expiry=option_expiry, days_to_expiry=days_to_expiry,
+            option_bid_qtys=option_bid_qtys, option_ask_qtys=option_ask_qtys,
+            poc_price=poc_price, basis=basis, bbw_window=bbw_window, volume_window=volume_window,
         )
 
 
