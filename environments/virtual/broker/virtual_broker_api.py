@@ -23,6 +23,28 @@ class VirtualBrokerApi:
     def get_account_snapshot(self) -> Any:
         return self._account.snapshot() if hasattr(self._account, "snapshot") else self._account
 
+    def get_position_snapshot(self) -> Any:
+        position = getattr(self._broker.execution_engine, "position", None)
+        if position is None:
+            raise RuntimeError("VIRTUAL_BROKER_POSITION_SNAPSHOT_UNAVAILABLE")
+        snapshot = getattr(position, "snapshot", None)
+        if not callable(snapshot):
+            raise RuntimeError("VIRTUAL_BROKER_POSITION_SNAPSHOT_UNAVAILABLE")
+        return snapshot()
+
+    def get_margin_state(self) -> dict:
+        snapshot = self.get_account_snapshot()
+        balances = getattr(snapshot, "balances", None)
+        if not hasattr(balances, "get"):
+            raise RuntimeError("VIRTUAL_BROKER_ACCOUNT_BALANCES_UNAVAILABLE")
+        return {"margin_used": balances.get("margin_used"), "available_cash": balances.get("available_cash")}
+
+    def get_pnl_state(self) -> dict:
+        snapshot = self.get_account_snapshot()
+        balances = getattr(snapshot, "balances", None)
+        if not hasattr(balances, "get"):
+            raise RuntimeError("VIRTUAL_BROKER_ACCOUNT_BALANCES_UNAVAILABLE")
+        return {"realized_pnl": balances.get("realized_pnl"), "unrealized_pnl": balances.get("unrealized_pnl")}
     def submit_order(self, command: BrokerOrderCommand) -> ExecutionReport:
         return self._broker.submit(command)
 

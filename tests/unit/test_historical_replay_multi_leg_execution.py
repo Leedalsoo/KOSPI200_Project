@@ -199,3 +199,90 @@ def test_two_leg_historical_replay_preserves_group_identity_and_pnl(tmp_path):
         assert provenance["strategy_id"] == plan.strategy_id
         assert provenance["group_id"] == plan.group_id
         assert provenance["leg_id"] in {"call", "put"}
+
+
+def test_four_leg_historical_replay_risk_provenance_broker_api_and_control_tower(tmp_path):
+    bundle = _bundle(tmp_path)
+    master = bundle.option_master
+    master.register_contract_identity(KisOptionContractIdentity(
+        shrn_iscd="201S11307", stnd_iscd="KR4101S11307", expiry="2026-10-15",
+        option_type="CALL", strike=Decimal("500"), info_type="5",
+        contract_multiplier=Decimal("250000"),
+    ))
+    master.register_contract_identity(KisOptionContractIdentity(
+        shrn_iscd="201S11308", stnd_iscd="KR4101S11308", expiry="2026-10-15",
+        option_type="PUT", strike=Decimal("500"), info_type="5",
+        contract_multiplier=Decimal("250000"),
+    ))
+    store = HistoricalMarketStore(tmp_path / "four-leg-events.jsonl")
+    events = (
+        ("CALL", 510.0, "201S11305", 3.20, 3.30, 3.25, 20),
+        ("PUT", 510.0, "201S11306", 2.70, 2.80, 2.80, 21),
+        ("CALL", 500.0, "201S11307", 4.20, 4.30, 4.20, 22),
+        ("PUT", 500.0, "201S11308", 3.70, 3.80, 3.80, 23),
+    )
+    for idx, (option_type, strike, symbol, bid, ask, last, seq) in enumerate(events):
+        store.append(ReferenceCanonicalMarketTick(
+            timestamp=f"2026-10-15T10:00:00.{123 + idx:03d}",
+            underlying_price=512.5, strike_price=strike, option_type=option_type,
+            contract_multiplier=250000.0, bid_price=bid, ask_price=ask,
+            last_price=last, volume=100, seq_id=seq, expiry="202610", symbol=symbol,
+        ), source="KIS:H0IOCNT0")
+    bundle.market.load_historical_store(store, source="KIS:H0IOCNT0")
+    for _ in events:
+        assert bundle.market.replay_next() is not None
+
+    for option_type, strike, *_ in events:
+        quote = bundle.broker_api.get_option_quote(
+            option_type=option_type, strike=strike, expiry="202610"
+        )
+        assert quote["contract_multiplier"] == 250000.0
+
+    bridge = VirtualMultiLegExecutionBridge(bundle=bundle, option_master=master)
+    plan = MultiLegExecutionPlan(
+        group_id="HIST-4LEG-G1", strategy_id="HIST-4LEG-S1",
+        purpose="HISTORICAL_REPLAY_4LEG",
+        legs=(
+            ExecutionLeg("call510", "BUY", 1, "CALL", Decimal("510")),
+            ExecutionLeg("put510", "SELL", 1, "PUT", Decimal("510")),
+            ExecutionLeg("call500", "BUY", 1, "CALL", Decimal("500")),
+            ExecutionLeg("put500", "SELL", 1, "PUT", Decimal("500")),
+        ),
+    )
+    result = bridge.execute(plan)
+    assert (result.planned_legs, result.approved_legs, result.routed_legs, result.filled_legs) == (4, 4, 4, 4)
+    assert result.group_complete is True
+    assert len(result.reports) == 4
+    assert len({r.client_order_id for r in result.reports}) == 4
+    assert len({r.execution_id for r in result.reports}) == 4
+    assert {r.leg_id for r in result.reports} == {"call510", "put510", "call500", "put500"}
+    assert all(r.group_id == plan.group_id for r in result.reports)
+    assert all(bridge.provenance[r.execution_id]["strategy_id"] == plan.strategy_id for r in result.reports)
+    assert all(bridge.provenance[r.execution_id]["group_id"] == plan.group_id for r in result.reports)
+
+    snapshot = bridge.position_groups.snapshot(plan.group_id)
+    assert snapshot is not None and snapshot.complete is True
+    assert snapshot.total_pnl == -87500.0
+    position_snapshot = bundle.broker_api.get_position_snapshot()
+    assert position_snapshot
+    margin = bundle.broker_api.get_margin_state()
+    pnl = bundle.broker_api.get_pnl_state()
+    assert margin["margin_used"] is not None and margin["margin_used"] > 0
+    assert margin["available_cash"] is not None
+    assert pnl["unrealized_pnl"] is not None
+
+    class Controller:
+        _hub = type("Hub", (), {"active": bundle})()
+        def status(self):
+            return type("Status", (), {"state": "RUNNING"})()
+
+    from interfaces.control_tower.ui_adapter import ControlTowerUIAdapter
+    adapter = ControlTowerUIAdapter(Controller(), multi_leg_bridge=bridge)
+    broker_view = adapter.get_tab_detail("virtual_broker")
+    groups = broker_view["multi_leg_groups"]
+    assert len(groups) == 1
+    assert groups[0]["group_id"] == plan.group_id
+    assert groups[0]["strategy_id"] == plan.strategy_id
+    assert groups[0]["complete"] is True
+    assert groups[0]["total_pnl"] == -87500.0
+    assert len(groups[0]["legs"]) == 4
