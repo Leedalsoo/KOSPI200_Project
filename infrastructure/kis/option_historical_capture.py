@@ -1,0 +1,80 @@
+from __future__ import annotations
+
+from datetime import date
+from typing import Protocol
+
+from contracts.kis_index_option_market_ws_adapter import (
+    KISIndexOptionMarketWebSocketAdapter,
+    KisIndexOptionMarketObservation,
+)
+from infrastructure.kis.option_historical_recorder import KISOptionHistoricalRecorder
+
+
+class OptionMarketWebSocketTransport(Protocol):
+    async def connect(self) -> None: ...
+    async def subscribe(self, tr_id: str, symbol: str) -> None: ...
+    async def recv(self) -> str: ...
+    async def close(self) -> None: ...
+
+
+class KISOptionHistoricalCapture:
+    """Connect a KIS option WebSocket transport to the historical recorder.
+
+    This class owns the observation callback boundary only. It does not create
+    contract identity, market values, or synthetic fallback data.
+    """
+
+    def __init__(
+        self,
+        transport: OptionMarketWebSocketTransport,
+        recorder: KISOptionHistoricalRecorder,
+        *,
+        adapter: KISIndexOptionMarketWebSocketAdapter | None = None,
+    ) -> None:
+        self._transport = transport
+        self._recorder = recorder
+        self._adapter = adapter or KISIndexOptionMarketWebSocketAdapter()
+        self._sequence = 0
+        self._session_date: date | None = None
+
+    @property
+    def sequence(self) -> int:
+        return self._sequence
+
+    def start_session(self, session_date: str | date) -> None:
+        self._session_date = (
+            session_date
+            if isinstance(session_date, date)
+            else date.fromisoformat(str(session_date).replace("/", "-"))
+        )
+        self._sequence = 0
+
+    async def connect_and_subscribe(self, symbol: str) -> None:
+        if self._session_date is None:
+            raise ValueError("HISTORICAL_CAPTURE_SESSION_DATE_REQUIRED")
+        clean_symbol = str(symbol).strip()
+        if not clean_symbol:
+            raise ValueError("HISTORICAL_CAPTURE_SYMBOL_REQUIRED")
+        await self._transport.connect()
+        await self._transport.subscribe(self._adapter.TRADE_TR_ID, clean_symbol)
+        await self._transport.subscribe(self._adapter.QUOTE_TR_ID, clean_symbol)
+
+    def observe(self, frame: str) -> KisIndexOptionMarketObservation:
+        if self._session_date is None:
+            raise ValueError("HISTORICAL_CAPTURE_SESSION_DATE_REQUIRED")
+        observation = self._adapter.adapt(frame)
+        self._sequence += 1
+        self._recorder.record(
+            observation,
+            session_date=self._session_date,
+            seq_id=self._sequence,
+            source=observation.source,
+        )
+        return observation
+
+    async def capture_one(self) -> KisIndexOptionMarketObservation:
+        frame = await self._transport.recv()
+        return self.observe(frame)
+
+    async def close(self) -> None:
+        await self._transport.close()
