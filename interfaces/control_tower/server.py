@@ -5,6 +5,7 @@ The server fails closed for unsupported commands and unsafe paths.
 """
 
 import json
+import os
 from dataclasses import asdict, is_dataclass
 import mimetypes
 from decimal import Decimal
@@ -100,6 +101,9 @@ class ControlTowerRequestHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/run" and payload.get("action") is None:
             try:
+                replay_store = os.environ.get("PROJECT200_HISTORICAL_STORE", "").strip()
+                if replay_store and not payload.get("historical_store_path"):
+                    payload["historical_store_path"] = replay_store
                 self._send_json({"success": True, "run": self.tower.create_run(payload)})
             except Exception as exc:
                 self._send_json({"success": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)

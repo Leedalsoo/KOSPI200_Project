@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict, is_dataclass
 from typing import Any
 
 
@@ -34,10 +35,36 @@ class ControlTowerHub:
     def run_read_model(self) -> dict[str, Any]:
         session = getattr(self._run_hub, "active", None) if self._run_hub else None
         context = getattr(session, "context", self._run_context) if session else self._run_context
-        return {"active": session is not None, "run_id": getattr(context, "run_id", None),
-                "environment": getattr(context, "environment", None), "scenario": getattr(context, "scenario", None),
-                "historical_source": getattr(context, "historical_source", None),
-                "runtime_state": getattr(self._runtime_controller.status(), "state", "STOPPED")}
+        result = {"active": session is not None, "run_id": getattr(context, "run_id", None),
+                  "environment": getattr(context, "environment", None), "scenario": getattr(context, "scenario", None),
+                  "historical_source": getattr(context, "historical_source", None),
+                  "historical_store_path": getattr(context, "historical_store_path", None),
+                  "runtime_state": getattr(self._runtime_controller.status(), "state", "STOPPED")}
+        if session is not None:
+            market = session.bundle.market
+            tick = getattr(market, "last_tick", None)
+            result["last_replay_tick"] = None if tick is None else {
+                "timestamp": tick.timestamp, "seq_id": tick.seq_id, "symbol": tick.symbol, "expiry": tick.expiry,
+                "strike": tick.strike_price, "option_type": tick.option_type,
+                "bid": tick.bid_price, "ask": tick.ask_price, "last": tick.last_price
+            }
+            broker_api = getattr(session.bundle, "broker_api", None)
+            if broker_api is not None:
+                for name, method in (("account", "get_account_snapshot"), ("position", "get_position_snapshot"), ("margin", "get_margin_state"), ("pnl", "get_pnl_state")):
+                    try:
+                        value = getattr(broker_api, method)()
+                        if name == "account" and hasattr(value, "balances"):
+                            result[name] = {"as_of": value.as_of.isoformat() if value.as_of else None, "balances": {k: str(v) for k, v in value.balances.items()}, "freshness": str(value.freshness)}
+                        else:
+                            result[name] = asdict(value) if is_dataclass(value) else value
+                    except Exception as exc:
+                        result[name] = {"status": "UNAVAILABLE", "reason": str(exc)}
+                try:
+                    group_ids = broker_api.get_group_ids()
+                    result["execution_reports"] = [asdict(x) if is_dataclass(x) else x for x in broker_api.get_group_reports(next(iter(group_ids), ""))] if group_ids else []
+                except Exception:
+                    result["execution_reports"] = []
+        return result
 
     def scenario_read_model(self) -> dict[str, Any]:
         session = getattr(self._run_hub, "active", None) if self._run_hub else None
@@ -50,7 +77,7 @@ class ControlTowerHub:
         if self._run_hub.active is not None: self._run_hub.close()
         context = self._run_hub.start(
             run_id=str(payload.get("run_id", "")).strip(), environment=str(payload.get("environment", "virtual")),
-            scenario=payload.get("scenario"), historical_source=payload.get("historical_source"),
+            scenario=payload.get("scenario"), historical_source=payload.get("historical_source"), historical_store_path=payload.get("historical_store_path"),
             strategy_keys=tuple(tuple(x) for x in payload.get("strategy_keys", ())),
             initial_capital=payload.get("initial_capital"), replay_speed=payload.get("replay_speed"),
         ).context
@@ -73,7 +100,11 @@ class ControlTowerHub:
         if action == "REPLAY":
             market = session.bundle.market
             tick = market.replay_next()
-            return {**self.run_read_model(), "replay_tick": None if tick is None else str(tick.timestamp)}
+            return {**self.run_read_model(), "replay_tick": None if tick is None else {
+                "timestamp": tick.timestamp, "seq_id": tick.seq_id, "symbol": tick.symbol, "expiry": tick.expiry,
+                "strike": tick.strike_price, "option_type": tick.option_type,
+                "bid": tick.bid_price, "ask": tick.ask_price, "last": tick.last_price
+            }}
         raise ValueError(f"UNSUPPORTED_RUN_ACTION:{action}")
 
     @property

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 from application.composition.automated_virtual_runtime_factory import attach_standard_automated_loop
@@ -46,6 +47,11 @@ def create_virtual_run_session(context: RunContext, option_master: Any) -> RunSe
     bundle = environment_hub.active
     if bundle is None:
         raise RuntimeError("VIRTUAL_RUN_ENVIRONMENT_NOT_ACTIVE")
+    if context.historical_store_path:
+        historical_path = Path(context.historical_store_path)
+        if historical_path.is_file():
+            from environments.virtual.market.historical_market_store import HistoricalMarketStore
+            bundle.market.load_historical_store(HistoricalMarketStore(historical_path))
     if context.scenario:
         scenario_engine = getattr(bundle.market, "scenario_engine", None)
         if scenario_engine is not None:

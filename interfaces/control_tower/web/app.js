@@ -93,6 +93,8 @@ document.addEventListener("DOMContentLoaded", () => {
         (scenarios.available_scenarios || []).forEach((x) => { const o=document.createElement("option"); o.value=x; o.textContent=x; scenarioSelect.appendChild(o); });
       }
       if (runStatus) runStatus.textContent = `RUN: ${run.run_id || "—"} / ${run.runtime_state || "STOPPED"}`;
+      const readModel = document.getElementById("run-read-model");
+      if (readModel) readModel.textContent = JSON.stringify({run_id: run.run_id, runtime_state: run.runtime_state, historical_source: run.historical_source, last_replay_tick: run.last_replay_tick, account: run.account, position: run.position, margin: run.margin, pnl: run.pnl, execution_reports: run.execution_reports}, null, 2);
     } catch (error) { addAuditLog(`[RUN] control read failed: ${error.message}`, "error"); }
   }
 
