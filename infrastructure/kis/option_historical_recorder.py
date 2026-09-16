@@ -43,13 +43,20 @@ class KISOptionHistoricalRecorder:
         seq_id: int,
         source: str = "KIS_INDEX_OPTION_WS",
         underlying_price: Decimal | float | None = None,
+        underlying_state: object | None = None,
     ) -> ReferenceCanonicalMarketTick:
         identity = self._identity_lookup.get_contract_identity(observation.shrn_iscd)
         if identity is None or identity.option_type is None or identity.strike is None:
             raise ValueError("AUTHORITATIVE_OPTION_IDENTITY_REQUIRED")
+        underlying = underlying_state
+        if underlying_price is not None and underlying is None:
+            raise ValueError("AUTHORITATIVE_UNDERLYING_STATE_REQUIRED")
         tick = ReferenceCanonicalMarketTick(
             timestamp=self._timestamp(session_date, observation.observed_hour),
             underlying_price=float(underlying_price) if underlying_price is not None else None,
+            underlying_symbol=underlying.symbol if underlying is not None else "",
+            underlying_observed_hour=underlying.observed_hour if underlying is not None else "",
+            underlying_source=underlying.source if underlying is not None else "",
             strike_price=float(identity.strike),
             option_type=identity.option_type,
             bid_price=float(observation.bid_price or 0),

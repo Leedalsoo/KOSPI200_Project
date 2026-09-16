@@ -110,3 +110,6 @@ def test_capture_attaches_latest_authoritative_underlying_price(tmp_path) -> Non
 
     tick = store.load_ticks(source="KIS:H0IOCNT0")[0]
     assert tick.underlying_price == 512.50
+    assert tick.underlying_symbol == "101V6000"
+    assert tick.underlying_observed_hour == "101529"
+    assert tick.underlying_source == "KIS:H0IFCNT0"

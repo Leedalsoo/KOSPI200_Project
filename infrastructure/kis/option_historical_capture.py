@@ -78,6 +78,7 @@ class KISOptionHistoricalCapture:
             seq_id=self._sequence,
             source=observation.source,
             underlying_price=underlying_price,
+            underlying_state=(self._underlying_state.state if self._underlying_state is not None else None),
         )
         return observation
 

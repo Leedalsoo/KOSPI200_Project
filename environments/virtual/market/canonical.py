@@ -5,6 +5,9 @@ from dataclasses import dataclass
 class ReferenceCanonicalMarketTick:
     timestamp: str
     underlying_price: float | None = None
+    underlying_symbol: str = ""
+    underlying_observed_hour: str = ""
+    underlying_source: str = ""
     strike_price: float = 0.0
     option_type: str = "CALL"
     bid_price: float = 0.0
