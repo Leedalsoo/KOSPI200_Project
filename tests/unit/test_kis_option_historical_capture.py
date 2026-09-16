@@ -6,7 +6,9 @@ from contracts.kis_index_option_market_ws_adapter import KisIndexOptionMarketObs
 from core.option.option_master import KisOptionContractIdentity
 from infrastructure.kis.option_historical_capture import KISOptionHistoricalCapture
 from infrastructure.kis.option_historical_recorder import KISOptionHistoricalRecorder
+from infrastructure.kis.underlying_market_state import KISUnderlyingMarketState
 from environments.virtual.market.historical_market_store import HistoricalMarketStore
+from contracts.kis_index_futures_market_ws_adapter import KisIndexFuturesMarketObservation
 
 
 class FakeTransport:
@@ -88,3 +90,23 @@ def test_capture_requires_session_before_observing() -> None:
 
     with pytest.raises(ValueError, match="SESSION_DATE_REQUIRED"):
         capture.observe(_trade_frame())
+
+
+def test_capture_attaches_latest_authoritative_underlying_price(tmp_path) -> None:
+    store = HistoricalMarketStore(tmp_path / "events.jsonl")
+    recorder = KISOptionHistoricalRecorder(store, FakeMaster())
+    underlying = KISUnderlyingMarketState()
+    underlying.update(KisIndexFuturesMarketObservation(
+        shrn_iscd="101V6000", observed_hour="101529",
+        price=Decimal("512.50"), volume=Decimal("10"),
+        ask_price=Decimal("512.55"), bid_price=Decimal("512.45"),
+        source="KIS:H0IFCNT0",
+    ))
+    capture = KISOptionHistoricalCapture(
+        FakeTransport(), recorder, underlying_state=underlying
+    )
+    capture.start_session("2026-09-16")
+    capture.observe(_trade_frame())
+
+    tick = store.load_ticks(source="KIS:H0IOCNT0")[0]
+    assert tick.underlying_price == 512.50

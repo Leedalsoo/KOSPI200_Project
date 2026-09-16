@@ -8,6 +8,7 @@ from contracts.kis_index_option_market_ws_adapter import (
     KisIndexOptionMarketObservation,
 )
 from infrastructure.kis.option_historical_recorder import KISOptionHistoricalRecorder
+from infrastructure.kis.underlying_market_state import KISUnderlyingMarketState
 
 
 class OptionMarketWebSocketTransport(Protocol):
@@ -29,11 +30,13 @@ class KISOptionHistoricalCapture:
         transport: OptionMarketWebSocketTransport,
         recorder: KISOptionHistoricalRecorder,
         *,
+        underlying_state: KISUnderlyingMarketState | None = None,
         adapter: KISIndexOptionMarketWebSocketAdapter | None = None,
     ) -> None:
         self._transport = transport
         self._recorder = recorder
         self._adapter = adapter or KISIndexOptionMarketWebSocketAdapter()
+        self._underlying_state = underlying_state
         self._sequence = 0
         self._session_date: date | None = None
 
@@ -64,11 +67,17 @@ class KISOptionHistoricalCapture:
             raise ValueError("HISTORICAL_CAPTURE_SESSION_DATE_REQUIRED")
         observation = self._adapter.adapt(frame)
         self._sequence += 1
+        underlying_price = (
+            self._underlying_state.price_for(required=False)
+            if self._underlying_state is not None
+            else None
+        )
         self._recorder.record(
             observation,
             session_date=self._session_date,
             seq_id=self._sequence,
             source=observation.source,
+            underlying_price=underlying_price,
         )
         return observation
 
