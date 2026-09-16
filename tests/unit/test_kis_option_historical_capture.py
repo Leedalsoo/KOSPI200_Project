@@ -81,6 +81,8 @@ def test_capture_assigns_monotonic_session_sequence_and_records(tmp_path) -> Non
     assert capture.sequence == 2
     ticks = store.load_ticks(source="KIS:H0IOCNT0")
     assert [tick.seq_id for tick in ticks] == [1, 2]
+    assert [tick.option_observed_hour for tick in ticks] == ["101530123", "101530123"]
+    assert [tick.option_source for tick in ticks] == ["KIS:H0IOCNT0", "KIS:H0IOCNT0"]
 
 
 def test_capture_requires_session_before_observing() -> None:

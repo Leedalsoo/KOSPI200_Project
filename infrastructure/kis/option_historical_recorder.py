@@ -44,6 +44,7 @@ class KISOptionHistoricalRecorder:
         source: str = "KIS_INDEX_OPTION_WS",
         underlying_price: Decimal | float | None = None,
         underlying_state: object | None = None,
+        underlying_sequence: int = 0,
     ) -> ReferenceCanonicalMarketTick:
         identity = self._identity_lookup.get_contract_identity(observation.shrn_iscd)
         if identity is None or identity.option_type is None or identity.strike is None:
@@ -66,6 +67,9 @@ class KISOptionHistoricalRecorder:
             seq_id=seq_id,
             expiry=identity.expiry,
             symbol=identity.shrn_iscd,
+            option_observed_hour=observation.observed_hour,
+            option_source=observation.source,
+            underlying_sequence=underlying_sequence,
         )
         self._store.append(tick, source=source)
         return tick

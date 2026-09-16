@@ -89,6 +89,9 @@ def test_underlying_event_updates_state_before_option_event(tmp_path):
     assert tick.underlying_symbol == "101V6000"
     assert tick.underlying_observed_hour == "101529"
     assert tick.underlying_source == "KIS:H0IFCNT0"
+    assert tick.option_observed_hour == "101530123"
+    assert tick.option_source == "KIS:H0IOCNT0"
+    assert tick.underlying_sequence == 1
     assert option.shrn_iscd == "201S11305"
 
 

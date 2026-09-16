@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from collections.abc import Callable
 from typing import Protocol
 
 from contracts.kis_index_option_market_ws_adapter import (
@@ -62,10 +63,18 @@ class KISOptionHistoricalCapture:
         await self._transport.subscribe(self._adapter.TRADE_TR_ID, clean_symbol)
         await self._transport.subscribe(self._adapter.QUOTE_TR_ID, clean_symbol)
 
-    def observe(self, frame: str) -> KisIndexOptionMarketObservation:
+    def observe(
+        self,
+        frame: str,
+        *,
+        underlying_sequence: int = 0,
+        validator: Callable[[KisIndexOptionMarketObservation], None] | None = None,
+    ) -> KisIndexOptionMarketObservation:
         if self._session_date is None:
             raise ValueError("HISTORICAL_CAPTURE_SESSION_DATE_REQUIRED")
         observation = self._adapter.adapt(frame)
+        if validator is not None:
+            validator(observation)
         self._sequence += 1
         underlying_price = (
             self._underlying_state.price_for(required=False)
@@ -79,12 +88,22 @@ class KISOptionHistoricalCapture:
             source=observation.source,
             underlying_price=underlying_price,
             underlying_state=(self._underlying_state.state if self._underlying_state is not None else None),
+            underlying_sequence=underlying_sequence,
         )
         return observation
 
-    async def capture_one(self) -> KisIndexOptionMarketObservation:
+    async def capture_one(
+        self,
+        *,
+        underlying_sequence: int = 0,
+        validator: Callable[[KisIndexOptionMarketObservation], None] | None = None,
+    ) -> KisIndexOptionMarketObservation:
         frame = await self._transport.recv()
-        return self.observe(frame)
+        return self.observe(
+            frame,
+            underlying_sequence=underlying_sequence,
+            validator=validator,
+        )
 
     async def close(self) -> None:
         await self._transport.close()

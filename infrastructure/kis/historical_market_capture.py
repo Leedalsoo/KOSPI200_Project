@@ -107,10 +107,12 @@ class KISHistoricalMarketCapture:
     async def capture_option_once(self):
         if self._session is None:
             raise ValueError("HISTORICAL_CAPTURE_SESSION_DATE_REQUIRED")
-        frame = await self._option_capture._transport.recv()
-        observation = self._option_capture._adapter.adapt(frame)
-        self._require_temporally_valid_underlying(observation.observed_hour)
-        return self._option_capture.observe(frame)
+        return await self._option_capture.capture_one(
+            underlying_sequence=self._underlying_sequence,
+            validator=lambda observation: self._require_temporally_valid_underlying(
+                observation.observed_hour
+            ),
+        )
 
     async def close(self) -> None:
         await self._option_capture.close()

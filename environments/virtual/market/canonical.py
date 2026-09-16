@@ -17,3 +17,6 @@ class ReferenceCanonicalMarketTick:
     seq_id: int = 0
     expiry: str = ""
     symbol: str = ""
+    option_observed_hour: str = ""
+    option_source: str = ""
+    underlying_sequence: int = 0
