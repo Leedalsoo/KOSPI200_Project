@@ -38,6 +38,7 @@ def test_records_kis_observation_with_authoritative_identity(tmp_path):
         option_type="CALL",
         strike=Decimal("510"),
         info_type="5",
+        contract_multiplier=Decimal("250000"),
     )
     store = HistoricalMarketStore(tmp_path / "market.jsonl")
     recorder = KISOptionHistoricalRecorder(store, _Master(identity))
@@ -48,6 +49,7 @@ def test_records_kis_observation_with_authoritative_identity(tmp_path):
     assert tick.expiry == "202610"
     assert tick.strike_price == 510.0
     assert tick.option_type == "CALL"
+    assert tick.contract_multiplier == 250000.0
     assert store.load_ticks(source="KIS_INDEX_OPTION_WS")[0] == tick
 
 

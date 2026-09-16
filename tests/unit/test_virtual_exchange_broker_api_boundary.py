@@ -1,4 +1,4 @@
-﻿from datetime import datetime
+from datetime import datetime
 
 from environments.virtual.broker.virtual_broker import VirtualBroker
 from environments.virtual.broker.virtual_broker_api import VirtualBrokerApi
@@ -26,7 +26,9 @@ def test_virtual_exchange_feeds_virtual_broker_and_broker_api():
     snapshot = api.get_market_snapshot()
     assert snapshot["source"] == "VirtualBroker"
     assert snapshot["tick"] is ticks[0]
-    assert api.get_option_quote(option_type="CALL", strike=350.0, expiry="202609") is not None
+    quote = api.get_option_quote(option_type="CALL", strike=350.0, expiry="202609")
+    assert quote is not None
+    assert quote["contract_multiplier"] == 250000.0
 
 
 def test_virtual_broker_requires_exchange_market_data_before_api_snapshot():

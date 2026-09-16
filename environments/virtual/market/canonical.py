@@ -10,6 +10,7 @@ class ReferenceCanonicalMarketTick:
     underlying_source: str = ""
     strike_price: float = 0.0
     option_type: str = "CALL"
+    contract_multiplier: float | None = None
     bid_price: float = 0.0
     ask_price: float = 0.0
     last_price: float = 0.0

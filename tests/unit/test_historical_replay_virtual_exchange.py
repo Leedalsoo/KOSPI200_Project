@@ -22,6 +22,7 @@ def test_historical_replay_publishes_through_virtual_exchange(tmp_path):
             underlying_price=512.5,
             strike_price=510.0,
             option_type="CALL",
+            contract_multiplier=250000.0,
             bid_price=3.20,
             ask_price=3.30,
             last_price=3.25,
@@ -53,6 +54,7 @@ def test_replayed_market_data_reaches_virtual_broker_and_api_boundary(tmp_path):
         underlying_price=512.5,
         strike_price=510.0,
         option_type="CALL",
+        contract_multiplier=250000.0,
         bid_price=3.20,
         ask_price=3.30,
         last_price=3.25,
@@ -81,4 +83,10 @@ def test_replayed_market_data_reaches_virtual_broker_and_api_boundary(tmp_path):
     assert replayed == tick
     assert received == [tick]
     assert snapshot["tick"] == tick
-    assert quote == {"bid": 3.20, "ask": 3.30, "last": 3.25, "timestamp": tick.timestamp}
+    assert quote == {
+        "bid": 3.20,
+        "ask": 3.30,
+        "last": 3.25,
+        "timestamp": tick.timestamp,
+        "contract_multiplier": 250000.0,
+    }

@@ -42,6 +42,7 @@ class KisOptionContractIdentity:
     option_type: Optional[str]
     strike: Optional[Decimal]
     info_type: Optional[str] = None
+    contract_multiplier: Optional[Decimal] = None
 
 
 @dataclass(frozen=True)
@@ -49,6 +50,8 @@ class KisOptionMasterParseResult:
     legacy_contracts: Dict[str, str]
     identities: Dict[str, KisOptionContractIdentity]
 
+
+KIS_KOSPI200_OPTION_CONTRACT_MULTIPLIER = Decimal("250000")
 
 KIS_INFO_TYPE_TO_OPTION_TYPE = {
     "5": "CALL", "D": "CALL", "L": "CALL",
@@ -171,6 +174,11 @@ def parse_kis_fo_idx_mst_result(
             option_type=KIS_INFO_TYPE_TO_OPTION_TYPE.get(prod_type),
             strike=strike,
             info_type=prod_type or None,
+            contract_multiplier=(
+                KIS_KOSPI200_OPTION_CONTRACT_MULTIPLIER
+                if prod_type in KIS_INFO_TYPE_TO_OPTION_TYPE
+                else None
+            ),
         )
         existing = identities.get(symbol)
         if existing is not None and existing != identity:

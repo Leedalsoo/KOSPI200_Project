@@ -60,6 +60,11 @@ class KISOptionHistoricalRecorder:
             underlying_source=underlying.source if underlying is not None else "",
             strike_price=float(identity.strike),
             option_type=identity.option_type,
+            contract_multiplier=(
+                float(identity.contract_multiplier)
+                if identity.contract_multiplier is not None
+                else None
+            ),
             bid_price=float(observation.bid_price or 0),
             ask_price=float(observation.ask_price or 0),
             last_price=float(observation.last_price or 0),

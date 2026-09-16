@@ -64,6 +64,7 @@ class VirtualMarketSimulatorRuntime:
                 "ask": tick.ask_price,
                 "last": tick.last_price,
                 "timestamp": tick.timestamp,
+                "contract_multiplier": tick.contract_multiplier,
             }
             self._option_quotes[(tick.option_type.upper(), float(tick.strike_price), tick.expiry)] = quote
         for subscriber in tuple(self._subscribers):
