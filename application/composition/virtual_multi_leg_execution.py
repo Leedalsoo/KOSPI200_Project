@@ -66,8 +66,19 @@ class VirtualMultiLegExecutionBridge:
             raise ValueError("MULTI_LEG_OPTION_IDENTITY_REQUIRED")
         if self.option_master is None:
             raise ValueError("MULTI_LEG_OPTION_MASTER_REQUIRED")
+        option_quotes = getattr(self.bundle.market, "option_quotes", {})
+        matching_expiries = sorted({
+            str(expiry).replace("-", "")[:6]
+            for key in option_quotes
+            if isinstance(key, tuple) and len(key) == 3
+            and str(key[0]).upper() == str(leg.option_type).upper()
+            and float(key[1]) == float(leg.strike)
+            for expiry in (key[2],)
+        })
+        if len(matching_expiries) != 1:
+            raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_EXPIRY_REQUIRED")
         identity = self.option_master.find_contract_identity(
-            "202609", leg.option_type, Decimal(str(leg.strike))
+            matching_expiries[0], leg.option_type, Decimal(str(leg.strike))
         )
         if identity is None or not identity.shrn_iscd:
             raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_IDENTITY_NOT_FOUND")
@@ -96,6 +107,12 @@ class VirtualMultiLegExecutionBridge:
             quote = option_quotes.get(quote_key)
             if quote is None:
                 raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_QUOTE_NOT_FOUND")
+            authoritative = self.option_master.get_contract_identity(identity.instrument_id)
+            if authoritative is None or authoritative.contract_multiplier is None:
+                raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_MULTIPLIER_REQUIRED")
+            quote_multiplier = quote.get("contract_multiplier")
+            if quote_multiplier is None or Decimal(str(quote_multiplier)) != authoritative.contract_multiplier:
+                raise ValueError("MULTI_LEG_OPTION_CONTRACT_MULTIPLIER_MISMATCH")
             bid = Decimal(str(quote.get("bid", "0")))
             ask = Decimal(str(quote.get("ask", "0")))
             execution_reference = ask if leg.side == "BUY" else bid
