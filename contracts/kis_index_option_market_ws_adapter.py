@@ -19,6 +19,7 @@ class KisIndexOptionMarketObservation:
     bid_price: Decimal | None
     volume: Decimal | None
     source: str
+    implied_volatility: Decimal | None = None
     order_book: OptionOrderBookSnapshot | None = None
 
 
@@ -122,6 +123,7 @@ class KISIndexOptionMarketWebSocketAdapter:
             bid_price=_decimal(values[_TRADE_BID1], "option bid price"),
             volume=_decimal(values[_TRADE_VOLUME], "option volume"),
             source=source,
+            implied_volatility=(_decimal(values[33], "option implied volatility") if len(values) > 33 and values[33].strip() else None),
         )
 
     def _adapt_quote(

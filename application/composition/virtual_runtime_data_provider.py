@@ -10,6 +10,7 @@ from contracts.option_orderbook_source import OptionOrderBookSource
 from contracts.volume_profile_source import VolumeProfileSource
 from contracts.basis_source import BasisSource
 from contracts.track2_market_metrics_source import Track2MarketMetricsSource
+from contracts.track2_option_iv_source import Track2OptionIVSource
 
 @dataclass(frozen=True)
 class RuntimeDataStatus:
@@ -47,7 +48,7 @@ class VirtualRuntimeData:
 
 class VirtualRuntimeDataProvider:
     """Derive only from VMS observations and injected authoritative sources."""
-    def __init__(self, market: Any, *, history_size: int = 50, option_expiry_source: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None) -> None:
+    def __init__(self, market: Any, *, history_size: int = 50, option_expiry_source: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None) -> None:
         self.market = market
         self.history_size = history_size
         self.option_expiry_source = option_expiry_source
@@ -55,6 +56,7 @@ class VirtualRuntimeDataProvider:
         self.volume_profile_source = volume_profile_source
         self.basis_source = basis_source
         self.track2_metrics_source = track2_metrics_source
+        self.track2_option_iv_source = track2_option_iv_source
 
     @staticmethod
     def _norm_cdf(x: float) -> float:
@@ -99,10 +101,18 @@ class VirtualRuntimeDataProvider:
         returns = tuple(abs(prices[i] / prices[i - 1] - 1) for i in range(1, len(prices)) if prices[i - 1])
         active_vol = (sum(returns, Decimal("0")) / Decimal(len(returns))) if returns else None
         base_vol = active_vol
-        mid = (Decimal(str(tick.bid_price)) + Decimal(str(tick.ask_price))) / Decimal("2")
-        iv = self._implied_vol(price, Decimal(str(tick.strike_price)), mid, tick.expiry, observed_at)
-        put_quote = self.market.option_quotes.get(("PUT", float(tick.strike_price), tick.expiry))
-        put_iv = Decimal(str(put_quote["iv"])) if put_quote is not None else None
+        strike = Decimal(str(tick.strike_price))
+        iv = None
+        put_iv = None
+        if self.track2_option_iv_source is not None:
+            current_type = str(getattr(tick, "option_type", "CALL")).upper()
+            current_iv = self.track2_option_iv_source.get_iv(expiry=tick.expiry, option_type=current_type, strike=strike)
+            opposite_type = "PUT" if current_type == "CALL" else "CALL"
+            opposite_iv = self.track2_option_iv_source.get_iv(expiry=tick.expiry, option_type=opposite_type, strike=strike)
+            if current_type == "CALL":
+                iv, put_iv = current_iv, opposite_iv
+            else:
+                put_iv, iv = current_iv, opposite_iv
         delta = gamma = None
         if iv is not None:
             s, k, sigma = float(price), float(tick.strike_price), float(iv)

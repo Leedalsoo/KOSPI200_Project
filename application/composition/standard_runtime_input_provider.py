@@ -26,18 +26,20 @@ from contracts.option_orderbook_source import OptionOrderBookSource
 from contracts.volume_profile_source import VolumeProfileSource
 from contracts.basis_source import BasisSource
 from contracts.track2_market_metrics_source import Track2MarketMetricsSource
+from contracts.track2_option_iv_source import Track2OptionIVSource
 
 
 class StandardRuntimeInputProvider:
     """Build standard inputs from observable VMS/VSSF sources only."""
 
-    def __init__(self, market: Any, *, option_expiry_source: OptionExpirySource | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None) -> None:
+    def __init__(self, market: Any, *, option_expiry_source: OptionExpirySource | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None) -> None:
         self.data = VirtualRuntimeDataProvider(
             market, option_expiry_source=option_expiry_source,
             option_orderbook_source=option_orderbook_source,
             volume_profile_source=volume_profile_source,
             basis_source=basis_source,
             track2_metrics_source=track2_metrics_source,
+            track2_option_iv_source=track2_option_iv_source,
         )
 
     @staticmethod

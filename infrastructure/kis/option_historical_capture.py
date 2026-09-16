@@ -11,6 +11,7 @@ from contracts.kis_index_option_market_ws_adapter import (
 from infrastructure.kis.option_historical_recorder import KISOptionHistoricalRecorder
 from infrastructure.kis.underlying_market_state import KISUnderlyingMarketState
 from infrastructure.kis.option_orderbook_source import KISOptionOrderBookSource
+from infrastructure.kis.track2_option_iv_observation_sink import KISTrack2OptionIVObservationSink
 
 
 class OptionMarketWebSocketTransport(Protocol):
@@ -35,12 +36,14 @@ class KISOptionHistoricalCapture:
         underlying_state: KISUnderlyingMarketState | None = None,
         adapter: KISIndexOptionMarketWebSocketAdapter | None = None,
         orderbook_source: KISOptionOrderBookSource | None = None,
+        track2_option_iv_sink: KISTrack2OptionIVObservationSink | None = None,
     ) -> None:
         self._transport = transport
         self._recorder = recorder
         self._adapter = adapter or KISIndexOptionMarketWebSocketAdapter()
         self._underlying_state = underlying_state
         self._orderbook_source = orderbook_source
+        self._track2_option_iv_sink = track2_option_iv_sink
         self._sequence = 0
         self._session_date: date | None = None
 
@@ -78,6 +81,8 @@ class KISOptionHistoricalCapture:
         observation = self._adapter.adapt(frame)
         if validator is not None:
             validator(observation)
+        if self._track2_option_iv_sink is not None:
+            self._track2_option_iv_sink.update(observation, session_date=self._session_date)
         if self._orderbook_source is not None and observation.order_book is not None:
             self._orderbook_source.update(observation)
         self._sequence += 1
