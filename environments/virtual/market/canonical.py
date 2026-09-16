@@ -4,7 +4,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class ReferenceCanonicalMarketTick:
     timestamp: str
-    underlying_price: float
+    underlying_price: float | None = None
     strike_price: float = 0.0
     option_type: str = "CALL"
     bid_price: float = 0.0
