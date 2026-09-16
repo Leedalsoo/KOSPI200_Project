@@ -24,6 +24,17 @@ def _bundle(tmp_path):
             contract_multiplier=Decimal("250000"),
         )
     )
+    master.register_contract_identity(
+        KisOptionContractIdentity(
+            shrn_iscd="201S11306",
+            stnd_iscd="KR4101S11306",
+            expiry="2026-10-15",
+            option_type="PUT",
+            strike=Decimal("510"),
+            info_type="5",
+            contract_multiplier=Decimal("250000"),
+        )
+    )
     deps = VirtualCompositionDependencies(
         contract_registry=None,
         contract_mappings={},
@@ -123,3 +134,68 @@ def test_historical_replay_rejects_multiplier_mismatch(tmp_path):
     import pytest
     with pytest.raises(ValueError, match="MULTI_LEG_OPTION_CONTRACT_MULTIPLIER_MISMATCH"):
         bridge.execute(plan)
+
+
+def test_two_leg_historical_replay_preserves_group_identity_and_pnl(tmp_path):
+    bundle = _bundle(tmp_path)
+    store = HistoricalMarketStore(tmp_path / "two-leg-events.jsonl")
+    store.append(
+        ReferenceCanonicalMarketTick(
+            timestamp="2026-10-15T10:00:00.123",
+            underlying_price=512.5, strike_price=510.0, option_type="CALL",
+            contract_multiplier=250000.0, bid_price=3.20, ask_price=3.30,
+            last_price=3.25, volume=120, seq_id=10, expiry="202610",
+            symbol="201S11305",
+        ), source="KIS:H0IOCNT0"
+    )
+    store.append(
+        ReferenceCanonicalMarketTick(
+            timestamp="2026-10-15T10:00:00.456",
+            underlying_price=512.5, strike_price=510.0, option_type="PUT",
+            contract_multiplier=250000.0, bid_price=2.70, ask_price=2.80,
+            last_price=2.80, volume=100, seq_id=11, expiry="202610",
+            symbol="201S11306",
+        ), source="KIS:H0IOCNT0"
+    )
+    bundle.market.load_historical_store(store, source="KIS:H0IOCNT0")
+    assert bundle.market.replay_next() is not None
+    assert bundle.market.replay_next() is not None
+
+    assert bundle.broker_api.get_option_quote(
+        option_type="CALL", strike=510.0, expiry="202610"
+    )["contract_multiplier"] == 250000.0
+    assert bundle.broker_api.get_option_quote(
+        option_type="PUT", strike=510.0, expiry="202610"
+    )["contract_multiplier"] == 250000.0
+
+    bridge = VirtualMultiLegExecutionBridge(bundle=bundle, option_master=bundle.option_master)
+    plan = MultiLegExecutionPlan(
+        group_id="HIST-2LEG-G1", strategy_id="HIST-2LEG-S1",
+        purpose="HISTORICAL_REPLAY_2LEG",
+        legs=(
+            ExecutionLeg("call", "BUY", 1, "CALL", Decimal("510")),
+            ExecutionLeg("put", "SELL", 1, "PUT", Decimal("510")),
+        ),
+    )
+    result = bridge.execute(plan)
+
+    assert result.group_id == plan.group_id
+    assert result.strategy_id == plan.strategy_id
+    assert result.planned_legs == 2
+    assert result.approved_legs == 2
+    assert result.routed_legs == 2
+    assert result.filled_legs == 2
+    assert result.group_complete is True
+    assert {report.leg_id for report in result.reports} == {"call", "put"}
+    assert {report.execution_price for report in result.reports} == {3.30, 2.70}
+
+    snapshot = bridge.position_groups.snapshot(plan.group_id)
+    assert snapshot is not None
+    assert snapshot.complete is True
+    assert snapshot.total_pnl == -37500.0
+    assert [leg.leg_id for leg in snapshot.legs] == ["call", "put"]
+    for report in result.reports:
+        provenance = bridge.provenance[report.execution_id]
+        assert provenance["strategy_id"] == plan.strategy_id
+        assert provenance["group_id"] == plan.group_id
+        assert provenance["leg_id"] in {"call", "put"}
