@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
@@ -114,6 +114,7 @@ class VirtualRuntimeBootstrap:
     runtime_hub: Any | None = None
     run_context: Any | None = None
     control_tower_hub: Any | None = None
+    run_hub: Any | None = None
 
 
 def create_virtual_runtime_bootstrap(
@@ -164,4 +165,10 @@ def create_virtual_runtime_bootstrap(
     from uuid import uuid4
     run_context = RunContextFactory().create(run_id=str(uuid4()), environment="virtual", strategy_keys=tuple(strategy_hub.strategy_keys) if strategy_hub is not None else ())
     control_tower_hub = ControlTowerHub(runtime_controller=controller, ui_adapter=adapter, strategy_hub=strategy_hub, run_context=run_context)
-    return VirtualRuntimeBootstrap(bundle=bundle, runtime_controller=controller, risk_engine=risk_engine, ui_adapter=adapter, automated_loop=loop, strategy_hub=strategy_hub, runtime_hub=runtime_hub, run_context=run_context, control_tower_hub=control_tower_hub)
+    from application.run_hub.hub import RunScenarioHub, RunSession
+    run_hub = RunScenarioHub()
+    run_hub.adopt(RunSession(context=run_context, runtime_controller=controller, bundle=bundle, strategy_hub=strategy_hub, runtime_hub=runtime_hub, ui_adapter=adapter, control_tower_hub=control_tower_hub))
+    return VirtualRuntimeBootstrap(bundle=bundle, runtime_controller=controller, risk_engine=risk_engine, ui_adapter=adapter, automated_loop=loop, strategy_hub=strategy_hub, runtime_hub=runtime_hub, run_context=run_context, control_tower_hub=control_tower_hub, run_hub=run_hub)
+
+
+\r\n
