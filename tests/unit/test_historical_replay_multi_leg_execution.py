@@ -260,6 +260,15 @@ def test_four_leg_historical_replay_risk_provenance_broker_api_and_control_tower
     assert all(bridge.provenance[r.execution_id]["strategy_id"] == plan.strategy_id for r in result.reports)
     assert all(bridge.provenance[r.execution_id]["group_id"] == plan.group_id for r in result.reports)
 
+    risk_records = bridge.risk_approvals(plan.group_id)
+    assert len(risk_records) == 4
+    assert {record.leg_id for record in risk_records} == {'call510', 'put510', 'call500', 'put500'}
+    assert {record.client_order_id for record in risk_records} == {r.client_order_id for r in result.reports}
+    assert all(record.strategy_id == plan.strategy_id for record in risk_records)
+    assert all(record.group_id == plan.group_id for record in risk_records)
+    assert all(record.result.is_approved for record in risk_records)
+    assert all(record.result.token is not None for record in risk_records)
+
     snapshot = bridge.position_groups.snapshot(plan.group_id)
     assert snapshot is not None and snapshot.complete is True
     assert snapshot.total_pnl == -87500.0

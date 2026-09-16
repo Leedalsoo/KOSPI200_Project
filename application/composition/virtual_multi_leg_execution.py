@@ -12,6 +12,7 @@ from core.oms.position_group import PositionGroup, PositionGroupLeg, PositionGro
 from core.oms.order_router import StandardOrderRouter
 from core.risk.risk_config import RiskConfig
 from core.risk.risk_engine import RiskEngine, RiskGate
+from core.risk.risk_approval_read_model import RiskApprovalReadModel, RiskApprovalRecord
 from application.composition.runtime_authoritative_risk_router_adapter import (
     RiskRouterContext, route_from_runtime_authoritative_sources,
 )
@@ -56,6 +57,7 @@ class VirtualMultiLegExecutionBridge:
         self.router = StandardOrderRouter(order_state_machine=self.fsm, broker_adapter=self.ack)
         vssf = bundle.execution._authoritative_execute.__self__.vssf_runtime
         self.risk_gate = RiskGate(RiskEngine(risk_config or RiskConfig(), margin_engine=vssf.margin_engine))
+        self.risk_approval_read_model = RiskApprovalReadModel()
         self.command_context = CanonicalVSSFCommandContextProvider()
         self.groups: dict[str, list[ExecutionReport]] = {}
         self.position_groups = PositionGroupRegistry()
@@ -147,6 +149,14 @@ class VirtualMultiLegExecutionBridge:
                     broker_command=broker_command,
                 ),
             )
+            risk_evaluation = self.risk_gate.last_evaluation_result
+            if risk_evaluation is None:
+                raise RuntimeError("MULTI_LEG_RISK_RESULT_UNAVAILABLE")
+            self.risk_approval_read_model.record(
+                RiskApprovalRecord(
+                    plan.strategy_id, plan.group_id, leg.leg_id, client_order_id, risk_evaluation
+                )
+            )
             if not result.routed:
                 continue
             approved += 1
@@ -231,3 +241,6 @@ class VirtualMultiLegExecutionBridge:
 
     def group_reports(self, group_id: str) -> tuple[ExecutionReport, ...]:
         return tuple(self.groups.get(group_id, ()))
+
+    def risk_approvals(self, group_id: str) -> tuple[RiskApprovalRecord, ...]:
+        return self.risk_approval_read_model.for_group(group_id)
