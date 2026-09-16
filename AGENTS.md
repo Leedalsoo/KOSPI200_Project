@@ -197,3 +197,33 @@ No.474에서 검증된 `POST /api/environment/virtual_broker/order`는 이 Broke
 No.495/496의 KIS VTS 검증 결과처럼 VTS와 Live의 외부 데이터 지원 범위는 실제 증거에 따라 `PASS / BLOCKED`로 구분한다.
 
 Real KIS 주문은 계속 실행하지 않는다. 실제 Live market-data frame 수신 전에는 Live E2E PASS를 선언하지 않는다.
+
+
+## 13. KRX 형태 Historical Data 축적 → Virtual Exchange 생성 기준
+
+Virtual 시장데이터의 사실성을 높이기 위해 실제 KRX 형태의 시장 이벤트를 장기간 축적하고, 그 축적 데이터를 Virtual Exchange의 입력으로 사용할 수 있는 구조를 우선 구축한다.
+
+목표 경계는 변경하지 않는다.
+
+```text
+KRX 데이터 수집/정규화
+→ Historical Market Store
+→ Virtual Exchange
+→ Virtual Broker
+→ Virtual Broker API
+→ Option Program
+```
+
+Historical Market Store는 canonical market event를 append-only로 보존하고 `source`를 반드시 명시한다. 실제 KRX 데이터가 아직 연결되지 않은 상태에서는 KRX 데이터가 수집되었다고 간주하지 않으며, `KRX_CAPTURE` 같은 source 라벨을 테스트에서만 사용한다.
+
+Virtual Exchange의 데이터 생성 방식은 다음 3단계로 발전시킨다.
+
+1. **Replay**: 축적된 실제/검증된 historical event를 시간순으로 재생한다.
+2. **Scenario**: historical 특성에 기반한 변동성·갭·충격·유동성 조건을 시나리오로 재현한다.
+3. **Synthetic**: 축적된 historical 특성에서 모델을 추출하여 새로운 virtual market event를 생성한다.
+
+Replay/Scenario/Synthetic 결과를 실제 KRX 데이터와 혼동하지 않도록 provenance와 source를 유지한다. Option Program은 이 내부 데이터 저장소를 직접 읽지 않고 기존 `Virtual Exchange → Virtual Broker → Virtual Broker API` 경계를 통해서만 시장 상태를 받는다.
+
+옵션 시장 데이터 축적 대상에는 최소한 timestamp, instrument identity, expiry, strike, call/put, bid/ask/last, bid/ask quantity, trade volume, sequence/event identity, underlying linkage, contract multiplier 및 source/provenance를 포함할 수 있도록 확장한다. 단, KRX의 실제 필드 의미와 값은 authoritative KRX source가 확보된 뒤 adapter에서 매핑하며 임의 추정하지 않는다.
+
+현재 구현 단계는 **Phase 1 기반 구축**이다. `HistoricalMarketStore`와 `HistoricalReplayEngine.from_store()`를 제공하지만 실제 KRX 수집 연결은 아직 구현/검증하지 않았다.
