@@ -21,13 +21,16 @@ from core.strategy.track6_daily_tail_insurance import Track6MarketInput
 from core.strategy.track7_volatility_skew_weekly_insurance import Track7MarketInput
 from core.strategy.track8_macro_regime_monthly_strangle import Track8MarketInput
 from core.strategy.track9_event_overnight_insurance import Track9MarketInput
+from contracts.option_expiry_source import OptionExpirySource
 
 
 class StandardRuntimeInputProvider:
     """Build standard inputs from observable VMS/VSSF sources only."""
 
-    def __init__(self, market: Any) -> None:
-        self.data = VirtualRuntimeDataProvider(market)
+    def __init__(self, market: Any, *, option_expiry_source: OptionExpirySource | None = None) -> None:
+        self.data = VirtualRuntimeDataProvider(
+            market, option_expiry_source=option_expiry_source
+        )
 
     @staticmethod
     def _unavailable(strategy_id: str, sources: tuple[str, ...], reason: str) -> StrategyContext:
@@ -79,12 +82,12 @@ class StandardRuntimeInputProvider:
         common = self._common(d, account)
         contexts: dict[str, StrategyContext] = {}
 
-        # Track1: expiry/momentum/coverage/net-delta sources are not present in
-        # the standard VMS projection. Do not manufacture them.
+        # Track1 now receives exact expiry from the Option Master source. The
+        # remaining momentum/coverage/position-Greeks sources are still absent.
         contexts["TRACK1_TAIL_DEFENSE"] = self._unavailable(
             "TRACK1_TAIL_DEFENSE",
-            ("option_expiry", "momentum", "position_coverage", "option_position_greeks"),
-            "TRACK1_REQUIRED_AUTHORITATIVE_SOURCES_UNAVAILABLE",
+            ("momentum", "position_coverage", "option_position_greeks"),
+            "TRACK1_REMAINING_AUTHORITATIVE_SOURCES_UNAVAILABLE",
         )
 
         # Track2: IV may exist in the option chain, but POC and order-book
@@ -161,7 +164,7 @@ class StandardRuntimeInputProvider:
         # guard also require broker/risk read models.
         contexts["track8_macro_regime_monthly_strangle"] = self._unavailable(
             "track8_macro_regime_monthly_strangle",
-            ("authoritative_expiry", "fee_ledger", "margin_read_model", "risk_guard"),
+            ("fee_ledger", "margin_read_model", "risk_guard"),
             "TRACK8_REQUIRED_AUTHORITATIVE_SOURCES_UNAVAILABLE",
         )
 

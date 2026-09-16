@@ -1,7 +1,7 @@
 ﻿"""Authoritative derived-data providers for the Virtual Market runtime."""
 from __future__ import annotations
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from math import erf, exp, log, sqrt
 from typing import Any
@@ -31,12 +31,15 @@ class VirtualRuntimeData:
     macro_regime: str | None
     event_upcoming: bool | None
     status: dict[str, RuntimeDataStatus]
+    option_expiry: date | None = None
+    days_to_expiry: int | None = None
 
 class VirtualRuntimeDataProvider:
-    """Derive only from VMS observations; unavailable sources remain explicit."""
-    def __init__(self, market: Any, *, history_size: int = 50) -> None:
+    """Derive only from VMS observations and injected authoritative sources."""
+    def __init__(self, market: Any, *, history_size: int = 50, option_expiry_source: Any | None = None) -> None:
         self.market = market
         self.history_size = history_size
+        self.option_expiry_source = option_expiry_source
 
     @staticmethod
     def _norm_cdf(x: float) -> float:
@@ -97,14 +100,26 @@ class VirtualRuntimeDataProvider:
         macro_regime = "HIGH_VOL" if base_volatility >= 2.0 else "NORMAL"
         shock_interval = max(1, int(scenario.get("shock_interval_days", 999999)))
         event_upcoming = (tick.seq_id % shock_interval) == 0
+        option_expiry = None
+        days_to_expiry = None
+        expiry_status = RuntimeDataStatus(False, False, "OptionExpirySource", "OPTION_EXPIRY_SOURCE_UNAVAILABLE")
+        if self.option_expiry_source is not None and getattr(tick, "symbol", None):
+            option_expiry = self.option_expiry_source.resolve_expiry(tick.symbol)
+            if option_expiry is not None:
+                days_to_expiry = (option_expiry - observed_at.date()).days
+                expiry_status = RuntimeDataStatus(True, True, "KIS.OptionMaster.expiry")
         status = {
             "tick": RuntimeDataStatus(True, True, "VMS.recent_ticks"),
             "ohlc_history": RuntimeDataStatus(len(prices) >= 1, True, "VMS.recent_ticks"),
             "iv_greeks": RuntimeDataStatus(iv is not None and put_iv is not None, iv is not None and put_iv is not None, "VMS.option_quotes", "OPTION_CHAIN_UNAVAILABLE" if iv is None or put_iv is None else None),
             "macro": RuntimeDataStatus(True, True, "VMS.scenario.active_config"),
             "event": RuntimeDataStatus(True, True, "VMS.scenario.shock_schedule"),
+            "option_expiry": expiry_status,
         }
-        return VirtualRuntimeData(observed_at, price, prices, open_price, high, low, previous_close,
-                                  active_vol, base_vol, iv, put_iv, delta, gamma, macro_regime, event_upcoming, status)
+        return VirtualRuntimeData(
+            observed_at, price, prices, open_price, high, low, previous_close,
+            active_vol, base_vol, iv, put_iv, delta, gamma, macro_regime,
+            event_upcoming, status, option_expiry, days_to_expiry
+        )
 
 

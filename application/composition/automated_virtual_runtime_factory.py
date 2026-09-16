@@ -2,6 +2,7 @@
 from __future__ import annotations
 from application.composition.automated_virtual_trading_loop import AutomatedVirtualTradingLoop
 from application.composition.standard_runtime_input_provider import StandardRuntimeInputProvider
+from application.composition.option_expiry_source import KisOptionMasterExpirySource
 from contracts.types import OptionInstrumentIdentity
 from core.strategy.orchestrator import StrategyOrchestrator
 from core.strategy.standard_registry import STANDARD_STRATEGY_KEYS, build_standard_strategy_registry
@@ -9,7 +10,10 @@ from core.strategy.standard_registry import STANDARD_STRATEGY_KEYS, build_standa
 def attach_standard_automated_loop(bootstrap):
     """Attach all nine Standard strategies to the RuntimeController-owned VMS."""
     orchestrator = StrategyOrchestrator(build_standard_strategy_registry(), STANDARD_STRATEGY_KEYS)
-    provider = StandardRuntimeInputProvider(bootstrap.bundle.market)
+    expiry_source = KisOptionMasterExpirySource(bootstrap.bundle.option_master)
+    provider = StandardRuntimeInputProvider(
+        bootstrap.bundle.market, option_expiry_source=expiry_source
+    )
     def identity(evaluation):
         proposal = evaluation.result.execution_proposal
         if proposal is None:
