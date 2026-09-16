@@ -44,6 +44,32 @@ class VirtualMarketSimulatorRuntime:
     def futures_price(self):
         return self._futures_price
 
+    def load_historical_store(self, store, *, source: str | None = None) -> None:
+        """Load canonical historical events for Virtual Exchange replay."""
+        self.replay.load_store(store, source=source)
+
+    def replay_next(self):
+        """Publish one historical event through the Virtual Exchange subscriber boundary."""
+        tick = self.replay.next_tick()
+        if tick is None:
+            return None
+        self.last_tick = tick
+        self._recent_ticks.append(tick)
+        if tick.underlying_price is not None:
+            self._price = tick.underlying_price
+            self._futures_price = self._price + self.config.futures_basis_points
+        if tick.symbol and tick.option_type and tick.expiry and tick.bid_price > 0 and tick.ask_price > 0:
+            quote = {
+                "bid": tick.bid_price,
+                "ask": tick.ask_price,
+                "last": tick.last_price,
+                "timestamp": tick.timestamp,
+            }
+            self._option_quotes[(tick.option_type.upper(), float(tick.strike_price), tick.expiry)] = quote
+        for subscriber in tuple(self._subscribers):
+            subscriber(tick)
+        return tick
+
     @staticmethod
     def _norm_cdf(x: float) -> float:
         return 0.5 * (1.0 + erf(x / sqrt(2.0)))
