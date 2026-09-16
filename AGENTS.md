@@ -355,3 +355,17 @@ Control Tower UI
 ```
 
 이 설계는 현재 `StrategyRegistry → StrategyOrchestrator`, `AutomatedVirtualTradingLoop`, `EnvironmentHub`, `VirtualMarketSimulatorRuntime`, `HistoricalReplayEngine/ScenarioEngine`, `ControlTowerUIAdapter/server`라는 실제 seam을 기준으로 한다. 다음 구현 단계에서는 먼저 공개 Hub contract와 RunContext를 추가하고, 기존 객체를 그 contract 뒤로 이동한 뒤 테스트를 추가한다. 한 번에 9개 전략 구현 자체를 수정하지 않는다.
+
+## 15. Hub backend boundaries implemented
+
+The Hub boundary defined in section 14 is now implemented for the Virtual runtime.
+
+- `application/strategy_hub/`: `StrategyHubPort` and `StrategyHub` own the registry/orchestrator seam and expose strategy selection/lifecycle without exposing individual strategy implementations to Runtime.
+- `application/runtime_hub/`: `RuntimeHub` owns the Runtime loop boundary and does not expose Strategy Registry internals.
+- `application/run_hub/`: `RunContext` and `RunContextFactory` define per-run identity/config so repeated runs can receive independent run IDs.
+- `application/control_tower_hub.py`: `ControlTowerHub` is the UI/API facade over Runtime status, environment detail, and operational commands.
+- `RuntimeController.environment_hub` is the public Environment lifecycle seam; Control Tower UI projection no longer reads `_hub` directly.
+- `AutomatedVirtualTradingLoop` consumes `StrategyHubPort`; the standard composition creates the nine-strategy `StrategyHub` and injects it.
+- Control Tower HTTP status/environment/command routes use `ControlTowerHub`. The existing adapter command implementation remains behind that facade.
+
+Verification requirement remains unchanged: application tests must pass in the exact Desktop working folder with `py`; Live KIS evidence is independent and remains BLOCKED when Live credentials or frames are unavailable.

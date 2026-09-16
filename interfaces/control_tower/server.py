@@ -22,6 +22,7 @@ next(_virtual_bootstrap.bundle.market.generate_tick_stream(total_days=1, ticks_p
 
 class ControlTowerRequestHandler(BaseHTTPRequestHandler):
     """HTTP request handler for the Control Tower UI."""
+    tower = _virtual_bootstrap.control_tower_hub
     adapter = _virtual_bootstrap.ui_adapter
     web_dir = Path(__file__).resolve().parent / "web"
 
@@ -47,11 +48,11 @@ class ControlTowerRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
         if path == "/api/status":
-            self._send_json(self.adapter.get_summary())
+            self._send_json(self.tower.status())
             return
         if path.startswith("/api/environment/"):
             tab_id = path.removeprefix("/api/environment/").strip("/")
-            detail = self.adapter.get_tab_detail(tab_id)
+            detail = self.tower.environment(tab_id)
             self._send_json(detail, HTTPStatus.OK if "error" not in detail else HTTPStatus.NOT_FOUND)
             return
         file_path = self._safe_static_path(path)
@@ -97,8 +98,9 @@ class ControlTowerRequestHandler(BaseHTTPRequestHandler):
             self.adapter.set_active_tab(tab_id)
             self._send_json({"success": True, "active_tab": tab_id})
             return
+        # The ControlTowerHub delegates the established adapter.handle_command seam.
         if path == "/api/command":
-            result = self.adapter.handle_command(payload.get("command", ""))
+            result = self.tower.command(payload.get("command", ""))
             status_code = HTTPStatus.OK if result.get("success") else HTTPStatus.SERVICE_UNAVAILABLE
             self._send_json(result, status_code)
             return

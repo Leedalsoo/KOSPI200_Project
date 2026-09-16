@@ -7,7 +7,7 @@ from contracts.types import OptionInstrumentIdentity
 from core.domain.market_models import MarketState
 from core.strategy.contracts import CommonStrategyInput, StrategyContext, StrategyInput
 from core.strategy.standard_registry import build_standard_strategy_registry
-from core.strategy.orchestrator import StrategyOrchestrator
+from application.strategy_hub.hub import StrategyHub
 from core.strategy.track1_tail_defense import Track1Input
 from interfaces.control_tower.ui_adapter import ControlTowerUIAdapter
 
@@ -16,7 +16,7 @@ def test_market_tick_to_strategy_orchestrator_oms_virtual_execution_and_control_
     bootstrap = create_virtual_runtime_bootstrap(initial_capital=250_000_000.0)
     bundle = bootstrap.bundle
     registry = build_standard_strategy_registry()
-    orchestrator = StrategyOrchestrator(registry, (("TRACK1_TAIL_DEFENSE", "1.1.0"),))
+    strategy_hub = StrategyHub(registry, (("TRACK1_TAIL_DEFENSE", "1.1.0"),))
 
     def contexts(tick, market_state):
         as_of = datetime.fromisoformat(tick.timestamp)
@@ -37,7 +37,7 @@ def test_market_tick_to_strategy_orchestrator_oms_virtual_execution_and_control_
         )
 
     loop = AutomatedVirtualTradingLoop(
-        bundle=bundle, strategy_orchestrator=orchestrator,
+        bundle=bundle, strategy_hub=strategy_hub,
         context_builder=contexts, identity_provider=identity,
     )
     bundle.market.subscribe(loop.on_tick)
@@ -61,7 +61,7 @@ def test_market_tick_to_strategy_orchestrator_oms_virtual_execution_and_control_
 
     class Hub: active = bundle
     class Controller:
-        _hub = Hub()
+        environment_hub = Hub()
         def status(self): return type("Status", (), {"state": "RUNNING"})()
 
     view = ControlTowerUIAdapter(runtime_controller=Controller(), risk_engine=bootstrap.risk_engine).get_tab_detail("virtual_broker")

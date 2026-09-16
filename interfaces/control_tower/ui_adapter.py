@@ -56,8 +56,8 @@ class ControlTowerUIAdapter:
 
     def _get_active_bundle(self):
         """Retrieve the currently active EnvironmentBundle from RuntimeController/Hub."""
-        if self._runtime_controller is not None and hasattr(self._runtime_controller, "_hub"):
-            return self._runtime_controller._hub.active
+        if self._runtime_controller is not None and hasattr(self._runtime_controller, "environment_hub"):
+            return self._runtime_controller.environment_hub.active
         return None
 
     def _get_runtime_state(self) -> str:

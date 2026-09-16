@@ -146,7 +146,7 @@ def test_actual_strategy_orchestrator_to_virtual_broker_position_pnl_control_tow
 
     class Hub: active = bundle
     class Controller:
-        _hub = Hub()
+        environment_hub = Hub()
         def status(self): return type("Status", (), {"state": "RUNNING"})()
 
     tower = ControlTowerUIAdapter(runtime_controller=Controller(), risk_engine=risk_gate.engine)

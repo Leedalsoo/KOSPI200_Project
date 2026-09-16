@@ -292,7 +292,7 @@ def test_four_leg_historical_replay_risk_provenance_broker_api_and_control_tower
     assert pnl["unrealized_pnl"] is not None
 
     class Controller:
-        _hub = type("Hub", (), {"active": bundle})()
+        environment_hub = type("Hub", (), {"active": bundle})()
         def status(self):
             return type("Status", (), {"state": "RUNNING"})()
 

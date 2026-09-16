@@ -38,6 +38,11 @@ class RuntimeController:
         self._hub.deactivate()
         self._state = "STOPPED"
 
+    @property
+    def environment_hub(self) -> EnvironmentHub:
+        """Public lifecycle boundary for application/UI adapters."""
+        return self._hub
+
     def status(self) -> RuntimeStatus:
         bundle = self._hub.active
         return RuntimeStatus(

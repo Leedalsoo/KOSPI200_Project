@@ -28,7 +28,7 @@ def test_control_tower_projects_real_virtual_ticks_and_execution():
     bundle.execution.account._account_source.update_tick_price(tick.underlying_price)
 
     class Controller:
-        _hub = type("Hub", (), {"active": bundle})()
+        environment_hub = type("Hub", (), {"active": bundle})()
         def status(self): return type("Status", (), {"state": "RUNNING"})()
 
     adapter = ControlTowerUIAdapter(Controller())

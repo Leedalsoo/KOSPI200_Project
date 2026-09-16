@@ -19,7 +19,8 @@ from core.oms.order_router import StandardOrderRouter
 from core.risk.risk_engine import RiskEngine, RiskGate
 from core.risk.risk_config import RiskConfig
 from core.strategy.contracts import StrategyContext
-from core.strategy.orchestrator import StrategyOrchestrator
+from application.strategy_hub.contracts import StrategyHubPort
+from application.strategy_hub.hub import StrategyHub
 from core.domain.market_models import MarketState
 from interfaces.control_tower.ui_adapter import ControlTowerUIAdapter
 
@@ -53,12 +54,12 @@ class _VirtualBrokerAckAdapter:
 class AutomatedVirtualTradingLoop:
     """Connect real Virtual Market ticks to registered Strategy execution."""
 
-    def __init__(self, *, bundle, strategy_orchestrator: StrategyOrchestrator,
+    def __init__(self, *, bundle, strategy_hub: StrategyHubPort,
                  context_builder: Callable[[object, MarketState], dict[str, StrategyContext]],
                  identity_provider: Callable[[object], OptionInstrumentIdentity],
                  risk_config: RiskConfig | None = None) -> None:
         self.bundle = bundle
-        self.strategy_orchestrator = strategy_orchestrator
+        self.strategy_hub = strategy_hub
         self.context_builder = context_builder
         self.identity_provider = identity_provider
         self.strategy_results = RuntimeStrategyResultCollectionAdapter()
@@ -86,7 +87,7 @@ class AutomatedVirtualTradingLoop:
             quality={},
         )
         contexts = self.context_builder(tick, state)
-        strategy_result = self.strategy_orchestrator.run(contexts)
+        strategy_result = self.strategy_hub.run(contexts)
         evaluations = self.strategy_results.collect(
             tick_sequence=tick.seq_id, context=next(iter(contexts.values())), result=strategy_result
         )
