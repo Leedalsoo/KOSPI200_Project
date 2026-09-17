@@ -1,118 +1,59 @@
 from __future__ import annotations
-
-from dataclasses import dataclass
+from dataclasses import replace
 from datetime import datetime
-from decimal import Decimal
-
-from contracts.position_provenance import (
-    PositionLotCloseEvent,
-    PositionLotProvenance,
-    PositionRole,
-)
-from contracts.types import BrokerOrderCommand, ExecutionReport
-
-
-@dataclass(frozen=True)
-class PositionLotApplyResult:
-    execution_id: str
-    opened_lots: tuple[PositionLotProvenance, ...]
-    close_events: tuple[PositionLotCloseEvent, ...]
-    idempotent: bool = False
-
+from typing import Iterable
+from contracts.position_provenance import PositionLotCloseEvent, PositionLotProvenance
 
 class VirtualPositionLotStore:
-    """Authoritative Virtual open-lot provenance with FIFO close/reversal rules."""
-
+    """Authoritative execution-created position lots with immutable provenance."""
     def __init__(self) -> None:
-        self._open: dict[str, list[PositionLotProvenance]] = {}
-        self._history: list[PositionLotProvenance | PositionLotCloseEvent] = []
-        self._applied: dict[str, tuple[object, ...]] = {}
+        self._lots: dict[str, PositionLotProvenance] = {}
+        self._history: list[PositionLotProvenance] = []
+        self._close_events: list[PositionLotCloseEvent] = []
+        self._executions: dict[str, tuple] = {}
 
-    @staticmethod
-    def _fingerprint(command: BrokerOrderCommand, report: ExecutionReport, run_id: str, role: PositionRole) -> tuple[object, ...]:
-        identity = command.instrument_identity
-        return (
-            run_id, command.client_order_id, command.instrument_id, command.side,
-            report.execution_id, report.filled_quantity, report.execution_price,
-            report.execution_timestamp, identity, role,
-        )
-
-    @staticmethod
-    def _validate(command: BrokerOrderCommand, report: ExecutionReport, run_id: str, role: PositionRole) -> None:
-        if not run_id.strip() or not command.strategy_id or not command.group_id or not command.leg_id:
-            raise ValueError("POSITION_PROVENANCE_REQUIRED")
-        if not report.execution_id or not report.execution_timestamp:
-            raise ValueError("POSITION_PROVENANCE_EXECUTION_REQUIRED")
-        if command.client_order_id != report.client_order_id:
-            raise ValueError("POSITION_PROVENANCE_CLIENT_ORDER_ID_MISMATCH")
-        if command.side not in {"BUY", "SELL"} or report.filled_quantity <= 0:
-            raise ValueError("POSITION_PROVENANCE_FILL_INVALID")
-        identity = command.instrument_identity
-        if identity is None or identity.instrument_id != command.instrument_id:
-            raise ValueError("POSITION_PROVENANCE_IDENTITY_INVALID")
-        if identity.contract_multiplier is None or identity.contract_multiplier <= 0 or not identity.identity_source:
-            raise ValueError("POSITION_PROVENANCE_IDENTITY_REQUIRED")
-        if not isinstance(role, PositionRole):
-            raise ValueError("POSITION_PROVENANCE_ROLE_REQUIRED")
-
-    def apply(self, command: BrokerOrderCommand, report: ExecutionReport, *, run_id: str, position_role: PositionRole) -> PositionLotApplyResult:
-        self._validate(command, report, run_id, position_role)
-        execution_id = report.execution_id
-        fingerprint = self._fingerprint(command, report, run_id, position_role)
-        prior = self._applied.get(execution_id)
+    def apply_execution(self, lot: PositionLotProvenance) -> None:
+        lot.validate()
+        fingerprint = (lot.instrument_id, lot.side, lot.opened_quantity,
+                       lot.execution_timestamp, lot.strategy_id, lot.group_id,
+                       lot.leg_id, lot.client_order_id, lot.position_role)
+        prior = self._executions.get(lot.execution_id)
         if prior is not None:
             if prior != fingerprint:
                 raise ValueError("POSITION_PROVENANCE_DUPLICATE_CONFLICT")
-            return PositionLotApplyResult(execution_id, (), (), True)
-
-        identity = command.instrument_identity
-        assert identity is not None and identity.contract_multiplier is not None and identity.identity_source
-        quantity = report.filled_quantity
-        close_events: list[PositionLotCloseEvent] = []
-        lots = self._open.setdefault(command.instrument_id, [])
-        opposite = "SELL" if command.side == "BUY" else "BUY"
-        remaining = quantity
-        for index, lot in enumerate(list(lots)):
-            if remaining == 0:
+            return
+        self._executions[lot.execution_id] = fingerprint
+        opposite = "SELL" if lot.side == "BUY" else "BUY"
+        remaining = lot.remaining_quantity
+        for key, current in self._ordered_open_lots(lot.instrument_id, opposite):
+            if remaining <= 0:
                 break
-            if lot.side != opposite or lot.remaining_quantity == 0:
-                continue
-            consumed = min(remaining, lot.remaining_quantity)
-            lots[index] = PositionLotProvenance(
-                **{**lot.__dict__, "remaining_quantity": lot.remaining_quantity - consumed}
-            )
-            close_events.append(PositionLotCloseEvent(execution_id, lot.execution_id, consumed, report.execution_timestamp))
+            consumed = min(remaining, current.remaining_quantity)
+            self._lots[key] = replace(current, remaining_quantity=current.remaining_quantity - consumed)
+            self._close_events.append(PositionLotCloseEvent(lot.execution_id, current.execution_id, consumed, lot.execution_timestamp))
             remaining -= consumed
-
-        self._open[command.instrument_id] = [lot for lot in lots if lot.remaining_quantity > 0]
-        opened: list[PositionLotProvenance] = []
         if remaining > 0:
-            lot = PositionLotProvenance(
-                run_id=run_id, instrument_id=command.instrument_id,
-                strategy_id=command.strategy_id, group_id=command.group_id,
-                leg_id=command.leg_id, client_order_id=command.client_order_id,
-                execution_id=execution_id, side=command.side,
-                opened_quantity=remaining, remaining_quantity=remaining,
-                execution_timestamp=report.execution_timestamp,
-                instrument_identity=identity,
-                contract_multiplier=identity.contract_multiplier,
-                identity_source=identity.identity_source,
-                position_role=position_role,
-            )
-            lot.validate()
-            self._open.setdefault(command.instrument_id, []).append(lot)
-            opened.append(lot)
-            self._history.append(lot)
-        self._history.extend(close_events)
-        self._applied[execution_id] = fingerprint
-        return PositionLotApplyResult(execution_id, tuple(opened), tuple(close_events))
+            opened = replace(lot, opened_quantity=remaining, remaining_quantity=remaining)
+            self._lots[lot.execution_id] = opened
+            self._history.append(opened)
 
-    def open_lots(self, instrument_id: str | None = None) -> tuple[PositionLotProvenance, ...]:
-        if instrument_id is None:
-            lots = [lot for group in self._open.values() for lot in group]
-        else:
-            lots = list(self._open.get(instrument_id, ()))
-        return tuple(sorted(lots, key=lambda lot: (lot.execution_timestamp, lot.execution_id)))
+    def apply_open(self, lot: PositionLotProvenance) -> None:
+        self.apply_execution(lot)
 
-    def history(self) -> tuple[PositionLotProvenance | PositionLotCloseEvent, ...]:
+    def apply_close(self, execution_id: str, instrument_id: str, side: str, quantity: int, execution_timestamp: datetime) -> None:
+        raise NotImplementedError("POSITION_LOT_CLOSE_REQUIRES_EXECUTION_PROVENANCE")
+
+    def _ordered_open_lots(self, instrument_id: str, side: str) -> Iterable[tuple[str, PositionLotProvenance]]:
+        return sorted(((k, v) for k, v in self._lots.items() if v.instrument_id == instrument_id and v.side == side and v.remaining_quantity > 0), key=lambda item: (item[1].execution_timestamp, item[1].execution_id))
+
+    def open_lots(self) -> tuple[PositionLotProvenance, ...]:
+        return tuple(sorted((lot for lot in self._lots.values() if lot.remaining_quantity > 0), key=lambda x: (x.instrument_id, x.execution_timestamp, x.execution_id)))
+
+    def lots_for_role(self, role) -> tuple[PositionLotProvenance, ...]:
+        return tuple(lot for lot in self.open_lots() if lot.position_role == role)
+
+    def close_events(self) -> tuple[PositionLotCloseEvent, ...]:
+        return tuple(self._close_events)
+
+    def history(self) -> tuple[PositionLotProvenance, ...]:
         return tuple(self._history)
