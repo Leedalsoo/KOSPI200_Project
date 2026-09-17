@@ -39,6 +39,9 @@ def test_control_tower_projects_real_virtual_ticks_and_execution():
     assert exchange["market_depth"]["asks"][0]["price"] == tick.ask_price
     assert broker["recent_executions"] == []
     assert broker["positions"][0]["avg_price"] == raw_report.executed_price
-    assert broker["positions"][0]["current_price"] == tick.underlying_price
+    assert broker["positions"][0]["current_price"] == tick.last_price
+    assert broker["positions"][0]["contract_multiplier"] == 250000.0
+    assert broker["positions"][0]["pnl"] is not None
+    assert "250000.0" not in __import__("pathlib").Path("interfaces/control_tower/ui_adapter.py").read_text(encoding="utf-8")
     assert broker["unrealized_pnl"] is not None
     bundle.stop()

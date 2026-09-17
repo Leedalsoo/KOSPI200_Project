@@ -9,6 +9,7 @@ from core.option.option_master import InMemoryOptionContractMaster, KisOptionCon
 from environments.virtual.execution.vssf_command_context_provider import CanonicalVSSFCommandContextProvider
 from environments.virtual.market.canonical import ReferenceCanonicalMarketTick
 from environments.virtual.market.historical_market_store import HistoricalMarketStore
+from interfaces.control_tower.ui_adapter import ControlTowerUIAdapter
 
 
 def _bundle(tmp_path):
@@ -194,6 +195,30 @@ def test_two_leg_historical_replay_preserves_group_identity_and_pnl(tmp_path):
     assert snapshot.complete is True
     assert snapshot.total_pnl == -37500.0
     assert [leg.leg_id for leg in snapshot.legs] == ["call", "put"]
+    assert all(leg.instrument_id in {"201S11305", "201S11306"} for leg in snapshot.legs)
+    assert all(leg.contract_multiplier == Decimal("250000") for leg in snapshot.legs)
+    assert all(leg.identity_source == "OPTION_MASTER" for leg in snapshot.legs)
+
+    bundle.broker_api.attach_group_read_model(
+        snapshot_reader=bridge.position_groups.snapshot,
+        reports_reader=bridge.group_reports,
+        group_ids_reader=lambda: tuple(bridge.position_groups.all().keys()),
+    )
+    class Controller:
+        environment_hub = type("Hub", (), {"active": bundle})()
+        def status(self): return type("Status", (), {"state": "RUNNING"})()
+    broker_view = ControlTowerUIAdapter(Controller(), broker_api=bundle.broker_api).get_tab_detail("virtual_broker")
+    ui_group = broker_view["multi_leg_groups"][0]
+    assert len(ui_group["legs"]) == 2
+    for ui_leg in ui_group["legs"]:
+        assert ui_leg["instrument_id"] in {"201S11305", "201S11306"}
+        assert ui_leg["contract_multiplier"] == 250000.0
+        assert ui_leg["identity_source"] == "OPTION_MASTER"
+        assert ui_leg["avg_price"] is not None
+        assert ui_leg["current_price"] is not None
+        assert ui_leg["pnl"] is not None
+        assert ui_leg["execution_id"] is not None
+        assert ui_leg["client_order_id"] is not None
     for report in result.reports:
         provenance = bridge.provenance[report.execution_id]
         assert provenance["strategy_id"] == plan.strategy_id
@@ -306,3 +331,13 @@ def test_four_leg_historical_replay_risk_provenance_broker_api_and_control_tower
     assert groups[0]["complete"] is True
     assert groups[0]["total_pnl"] == -87500.0
     assert len(groups[0]["legs"]) == 4
+    assert {leg["leg_id"] for leg in groups[0]["legs"]} == {"call510", "put510", "call500", "put500"}
+    assert {leg["instrument_id"] for leg in groups[0]["legs"]} == {"201S11305", "201S11306", "201S11307", "201S11308"}
+    assert all(leg["contract_multiplier"] == 250000.0 for leg in groups[0]["legs"])
+    assert all(leg["identity_source"] == "OPTION_MASTER" for leg in groups[0]["legs"])
+    assert all(leg["avg_price"] is not None and leg["current_price"] is not None for leg in groups[0]["legs"])
+    assert all(leg["pnl"] is not None for leg in groups[0]["legs"])
+    assert all(leg["execution_id"] is not None for leg in groups[0]["legs"])
+    assert all(leg["client_order_id"] is not None for leg in groups[0]["legs"])
+    assert all(leg["filled_quantity"] == 1 for leg in groups[0]["legs"])
+    assert all(leg["execution_price"] is not None for leg in groups[0]["legs"])

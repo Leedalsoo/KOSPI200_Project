@@ -239,11 +239,56 @@ class ControlTowerUIAdapter:
                         unrealized_pnl_val = float(balances["unrealized_pnl"])
 
                 positions_list: list[dict[str, Any]] = []
-                current_price = None
+                authoritative_leg_by_instrument: dict[str, Any] = {}
+                multi_leg_groups: list[dict[str, Any]] = []
+                broker_api = self._broker_api
+                if broker_api is not None:
+                    for group_id in list(broker_api.get_group_ids()):
+                        snap = broker_api.get_group_position_snapshot(group_id)
+                        reports = broker_api.get_group_reports(group_id)
+                        report_by_leg = {r.leg_id: r for r in reports if r.leg_id}
+                        for leg in snap.legs:
+                            authoritative_leg_by_instrument[leg.instrument_id] = leg
+                        multi_leg_groups.append({
+                            "strategy_id": snap.strategy_id,
+                            "group_id": snap.group_id,
+                            "complete": bool(snap.complete),
+                            "total_pnl": float(snap.total_pnl),
+                            "legs": [
+                                {
+                                    "leg_id": leg.leg_id,
+                                    "group_id": leg.group_id,
+                                    "instrument_id": leg.instrument_id,
+                                    "quantity": leg.quantity,
+                                    "contract_multiplier": float(leg.contract_multiplier),
+                                    "identity_source": leg.identity_source,
+                                    "avg_price": float(leg.avg_price),
+                                    "current_price": float(leg.current_price),
+                                    "pnl": float(leg.pnl),
+                                    "execution_id": report_by_leg.get(leg.leg_id).execution_id if report_by_leg.get(leg.leg_id) else None,
+                                    "client_order_id": report_by_leg.get(leg.leg_id).client_order_id if report_by_leg.get(leg.leg_id) else None,
+                                    "status": report_by_leg.get(leg.leg_id).status if report_by_leg.get(leg.leg_id) else None,
+                                    "filled_quantity": report_by_leg.get(leg.leg_id).filled_quantity if report_by_leg.get(leg.leg_id) else leg.quantity,
+                                    "execution_price": float(report_by_leg.get(leg.leg_id).execution_price) if report_by_leg.get(leg.leg_id) and report_by_leg.get(leg.leg_id).execution_price is not None else None,
+                                }
+                                for leg in snap.legs
+                            ],
+                        })
                 market = getattr(bundle, "market", None)
                 last_tick = getattr(market, "last_tick", None) if market is not None else None
-                if last_tick is not None:
-                    current_price = float(getattr(last_tick, "underlying_price", getattr(last_tick, "price", 0)))
+                authoritative_market_price = (
+                    float(getattr(last_tick, "last_price", getattr(last_tick, "price", None)))
+                    if last_tick is not None and getattr(last_tick, "last_price", getattr(last_tick, "price", None)) is not None
+                    else None
+                )
+                option_master = getattr(bundle, "option_master", None)
+                master_identity = None
+                if option_master is not None and last_tick is not None and hasattr(option_master, "find_contract_identity"):
+                    option_type = getattr(last_tick, "option_type", None)
+                    strike = getattr(last_tick, "strike_price", None)
+                    expiry = getattr(last_tick, "expiry", None)
+                    if option_type and strike is not None and expiry:
+                        master_identity = option_master.find_contract_identity(expiry, option_type, Decimal(str(strike)))
                 if position is not None:
                     if not hasattr(position, "snapshot"):
                         raise RuntimeError("VIRTUAL_BROKER_POSITION_SNAPSHOT_UNAVAILABLE")
@@ -257,39 +302,37 @@ class ControlTowerUIAdapter:
                         qty_val = int(getattr(pos, "qty", pos if isinstance(pos, (int, float, Decimal)) else 0))
                         avg_price = getattr(pos, "avg_price", getattr(position, "average_price", None))
                         avg_val = float(avg_price) if avg_price is not None else None
-                        pnl_val = None
-                        if current_price is not None and avg_val is not None:
+                        authoritative_leg = authoritative_leg_by_instrument.get(str(sym))
+                        multiplier = (
+                            float(authoritative_leg.contract_multiplier)
+                            if authoritative_leg is not None
+                            else getattr(pos, "contract_multiplier", None)
+                        )
+                        if multiplier is None and master_identity is not None:
+                            multiplier = float(master_identity.contract_multiplier) if master_identity.contract_multiplier is not None else None
+                        current_val = (
+                            float(authoritative_leg.current_price)
+                            if authoritative_leg is not None
+                            else authoritative_market_price
+                        )
+                        pnl_val = float(authoritative_leg.pnl) if authoritative_leg is not None else None
+                        if pnl_val is None and avg_val is not None and current_val is not None and multiplier is not None:
                             side = str(getattr(pos, "side", ""))
                             direction = 1.0 if side == "BUY" else -1.0 if side == "SELL" else 0.0
-                            pnl_val = (current_price - avg_val) * qty_val * direction * 250000.0
+                            pnl_val = (current_val - avg_val) * qty_val * direction * float(multiplier)
                         positions_list.append({
                             "symbol": str(sym),
                             "qty": qty_val,
                             "side": getattr(pos, "side", None),
-                            "avg_price": avg_val,
-                            "current_price": current_price,
+                            "avg_price": float(authoritative_leg.avg_price) if authoritative_leg is not None else avg_val,
+                            "current_price": current_val,
                             "pnl": pnl_val,
-                        })
-
-                multi_leg_groups: list[dict[str, Any]] = []
-                broker_api = self._broker_api
-                if broker_api is not None:
-                    group_ids = list(broker_api.get_group_ids())
-                    for group_id in group_ids:
-                        snap = broker_api.get_group_position_snapshot(group_id)
-                        reports = broker_api.get_group_reports(group_id)
-                        multi_leg_groups.append({
-                            "strategy_id": snap.strategy_id,
-                            "group_id": snap.group_id,
-                            "complete": bool(snap.complete),
-                            "total_pnl": float(snap.total_pnl),
-                            "legs": [
-                                {"leg_id": r.leg_id, "execution_id": r.execution_id,
-                                 "client_order_id": r.client_order_id, "status": r.status,
-                                 "filled_quantity": r.filled_quantity, "execution_price": float(r.execution_price) if r.execution_price is not None else None,
-                                 "group_id": r.group_id}
-                                for r in reports
-                            ],
+                            "contract_multiplier": multiplier,
+                            "identity_source": (
+                                authoritative_leg.identity_source
+                                if authoritative_leg is not None
+                                else getattr(pos, "identity_source", None) or ("OPTION_MASTER" if master_identity is not None else None)
+                            ),
                         })
 
                 recent_executions: list[dict[str, Any]] = []

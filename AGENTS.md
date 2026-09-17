@@ -112,6 +112,7 @@ KIS master 원본처럼 현재 source로 사용되는 외부 자료는 코드에
 민감정보·캐시·임시파일을 commit하지 않는다.
 
 테스트가 PASS하고 변경 범위가 의도한 상태일 때만 commit/push한다.
+`project200_gate`의 다른 모든 항목이 PASS이고 `runtime_evidence_probe`만 Live credential 미완비로 BLOCKED인 경우는 예외로 commit/push를 허용한다. 이 경우도 Gate 전체 판정은 FAIL로 기록하고, PASS로 표현하지 않는다.
 원격 기준 브랜치는 `Project200`이며, push 후 반드시 원격 HEAD가 해당 commit SHA를 가리키는지 확인한다.
 
 ## 9. Notion 기록 규칙
