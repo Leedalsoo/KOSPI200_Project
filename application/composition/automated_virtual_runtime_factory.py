@@ -18,11 +18,26 @@ def attach_standard_automated_loop(bootstrap, *, strategy_keys=None):
         bootstrap.bundle.market, option_expiry_source=expiry_source,
         track2_option_iv_source=track2_option_iv_source
     )
-    def identity(evaluation):
+    def identity(evaluation, tick):
         proposal = evaluation.result.execution_proposal
         if proposal is None:
             return None
-        return OptionInstrumentIdentity(instrument_id="KOSPI200", symbol="KOSPI200", expiry="202609", option_type=proposal.option_type, strike=proposal.strike)
+        if tick is None or not tick.expiry or not proposal.option_type or proposal.strike is None:
+            raise ValueError("VIRTUAL_AUTHORITATIVE_OPTION_IDENTITY_INPUT_REQUIRED")
+        identity = bootstrap.bundle.option_master.find_contract_identity(
+            tick.expiry, proposal.option_type, proposal.strike
+        )
+        if identity is None or not identity.shrn_iscd:
+            raise ValueError("VIRTUAL_AUTHORITATIVE_OPTION_IDENTITY_NOT_FOUND")
+        if identity.contract_multiplier is None:
+            raise ValueError("VIRTUAL_AUTHORITATIVE_OPTION_MULTIPLIER_REQUIRED")
+        return OptionInstrumentIdentity(
+            instrument_id=identity.shrn_iscd,
+            symbol=identity.shrn_iscd,
+            expiry=identity.expiry.replace("-", "")[:6],
+            option_type=identity.option_type,
+            strike=identity.strike,
+        )
     loop = AutomatedVirtualTradingLoop(
         bundle=bootstrap.bundle, strategy_hub=strategy_hub,
         context_builder=lambda tick, state: provider.build(tick, state, bootstrap.bundle.account),

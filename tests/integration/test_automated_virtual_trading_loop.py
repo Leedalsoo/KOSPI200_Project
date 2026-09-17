@@ -29,7 +29,7 @@ def test_market_tick_to_strategy_orchestrator_oms_virtual_execution_and_control_
             ),
         )}
 
-    def identity(evaluation):
+    def identity(evaluation, tick):
         proposal = evaluation.result.execution_proposal
         return OptionInstrumentIdentity(
             instrument_id="KOSPI200", symbol="KOSPI200", expiry="202609",

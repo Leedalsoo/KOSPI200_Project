@@ -8,7 +8,7 @@ from core.decision.decision_arbiter import ArbitrationResult, DecisionArbiter
 from core.strategy.canonical_signal_adapter import RuntimeSignalContext, signal_to_canonical
 from shared.contracts.canonical import CanonicalStrategySignal
 
-InstrumentIdentityProvider = Callable[[RuntimeStrategyEvaluation], OptionInstrumentIdentity | None]
+InstrumentIdentityProvider = Callable[[RuntimeStrategyEvaluation, Any], OptionInstrumentIdentity | None]
 
 @dataclass(frozen=True)
 class RuntimeDecisionResult:
@@ -19,7 +19,7 @@ class RuntimeStrategyToDecisionAdapter:
     def __init__(self, arbiter: DecisionArbiter) -> None:
         self._arbiter = arbiter
 
-    def arbitrate(self, evaluations: Iterable[RuntimeStrategyEvaluation], *, price: float, timestamp: str, account: Any, instrument_identity_provider: InstrumentIdentityProvider | None = None) -> RuntimeDecisionResult:
+    def arbitrate(self, evaluations: Iterable[RuntimeStrategyEvaluation], *, price: float, timestamp: str, account: Any, instrument_identity_provider: InstrumentIdentityProvider | None = None, market_tick: Any | None = None) -> RuntimeDecisionResult:
         canonical_signals: list[CanonicalStrategySignal] = []
         seen_signal_ids: set[str] = set()
         for evaluation in evaluations:
@@ -33,7 +33,7 @@ class RuntimeStrategyToDecisionAdapter:
             if signal_id in seen_signal_ids:
                 raise ValueError("RUNTIME_DUPLICATE_SIGNAL_ID")
             seen_signal_ids.add(signal_id)
-            identity = instrument_identity_provider(evaluation) if instrument_identity_provider is not None else None
+            identity = instrument_identity_provider(evaluation, market_tick) if instrument_identity_provider is not None else None
             canonical_signals.append(signal_to_canonical(signal, RuntimeSignalContext(signal_id=signal_id, track_id=track_id, price=price, timestamp=timestamp), instrument_identity=identity))
         arbitration = self._arbiter.arbitrate(canonical_signals, account)
         return RuntimeDecisionResult(canonical_signals=tuple(canonical_signals), arbitration=arbitration)

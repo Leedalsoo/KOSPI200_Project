@@ -74,7 +74,8 @@ def test_actual_strategy_orchestrator_to_virtual_broker_position_pnl_control_tow
         price=tick.ask_price,
         timestamp=tick.timestamp,
         account=bundle.account.snapshot(),
-        instrument_identity_provider=lambda ev: OptionInstrumentIdentity(
+        market_tick=tick,
+        instrument_identity_provider=lambda ev, tick: OptionInstrumentIdentity(
             instrument_id="KOSPI200", symbol="KOSPI200", expiry=tick.expiry,
             option_type=ev.result.execution_proposal.option_type,
             strike=ev.result.execution_proposal.strike,

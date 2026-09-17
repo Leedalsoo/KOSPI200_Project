@@ -95,6 +95,7 @@ class AutomatedVirtualTradingLoop:
             evaluations, price=tick.ask_price, timestamp=tick.timestamp,
             account=self.bundle.account.snapshot(),
             instrument_identity_provider=self.identity_provider,
+            market_tick=tick,
         )
         approved = tuple(decision.arbitration.approved_signals[:1])
         commands = self.decision_to_command.build_commands(evaluations, approved)
@@ -111,7 +112,7 @@ class AutomatedVirtualTradingLoop:
                 quantity=canonical.qty,
                 order_type="LIMIT",
                 broker_symbol=canonical.symbol or "KOSPI200",
-                instrument_identity=(self.identity_provider(next(e for e in evaluations if e.runtime_context.client_order_id(canonical.track_id) == canonical.client_order_id)) if canonical.asset_type.value == "OPTION" else None),
+                instrument_identity=(self.identity_provider(next(e for e in evaluations if e.runtime_context.client_order_id(canonical.track_id) == canonical.client_order_id), tick) if canonical.asset_type.value == "OPTION" else None),
                 asset_type=canonical.asset_type.value,
                 requested_price=Decimal(str(tick.ask_price)),
                 strategy_id=canonical.track_id,
