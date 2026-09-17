@@ -4,10 +4,11 @@ from application.bootstrap import create_virtual_runtime_bootstrap
 from application.run_hub.hub import RunScenarioHub, RunSession
 from contracts.types import BrokerOrderCommand, OptionInstrumentIdentity
 from environments.virtual.execution.vssf_command_context_provider import CanonicalVSSFCommandContextProvider
+from tests.support import build_test_option_master
 
 
 def _session_factory(context):
-    bootstrap = create_virtual_runtime_bootstrap(initial_capital=context.initial_capital or 250_000_000.0)
+    bootstrap = create_virtual_runtime_bootstrap(initial_capital=context.initial_capital or 250_000_000.0, option_master=build_test_option_master())
     return RunSession(
         context=context,
         runtime_controller=bootstrap.runtime_controller,

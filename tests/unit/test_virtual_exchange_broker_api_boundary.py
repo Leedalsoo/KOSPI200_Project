@@ -3,6 +3,7 @@ from datetime import datetime
 from environments.virtual.broker.virtual_broker import VirtualBroker
 from environments.virtual.broker.virtual_broker_api import VirtualBrokerApi
 from environments.virtual.market.simulator_runtime import VirtualMarketSimulatorRuntime
+from tests.support import build_test_option_master
 
 
 class FakeExecution:
@@ -15,7 +16,7 @@ class FakeExecution:
 
 
 def test_virtual_exchange_feeds_virtual_broker_and_broker_api():
-    exchange = VirtualMarketSimulatorRuntime()
+    exchange = VirtualMarketSimulatorRuntime(option_master=build_test_option_master())
     broker = VirtualBroker(FakeExecution(), market_data_handler=lambda tick: None)
     api = VirtualBrokerApi(broker, account=object())
 

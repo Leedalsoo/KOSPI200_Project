@@ -5,10 +5,11 @@ from application.composition.option_expiry_source import KisOptionMasterExpirySo
 from application.composition.virtual_runtime_data_provider import VirtualRuntimeDataProvider
 from core.option.option_master import InMemoryOptionContractMaster, KisOptionContractIdentity
 from environments.virtual.market.simulator_runtime import VirtualMarketSimulatorRuntime
+from tests.support import build_test_option_master
 
 
 def test_runtime_provider_consumes_master_expiry_without_yyyy_mm_derivation():
-    market = VirtualMarketSimulatorRuntime()
+    market = VirtualMarketSimulatorRuntime(option_master=build_test_option_master())
     ticks = list(market.generate_tick_stream(total_days=1, ticks_per_day=1))
     tick = ticks[-1]
     master = InMemoryOptionContractMaster()

@@ -33,7 +33,7 @@ class ConcreteVirtualEnvironmentBuilder:
         self._vms_factory = vms_factory
     def build(self, config: Any, policy: Any) -> VirtualEnvironmentBundle:
         scope = self._scope_factory.create(config, policy)
-        vms = self._vms_factory()
+        vms = self._vms_factory(option_master=self._dependencies.option_master)
         vms.subscribe(lambda tick: scope.broker.process_market_data(tick, option_quotes=vms.option_quotes))
         broker_api = VirtualBrokerApi(scope.broker, scope.account)
         return VirtualEnvironmentBundle.create(config=config, policy=policy, market=vms, clock=VMSClockProvider(vms.clock), broker=scope.broker, broker_api=broker_api, account=scope.account, position=scope.position, execution=scope.execution, option_master=self._dependencies.option_master)

@@ -4,7 +4,10 @@ from __future__ import annotations
 from collections import deque
 from datetime import datetime, timedelta
 from math import erf, exp, log, sqrt
+from decimal import Decimal
 from typing import Optional
+
+from core.option.option_master import IOptionContractMaster
 
 from environments.virtual.market.canonical import ReferenceCanonicalMarketTick
 from environments.virtual.market.config import VirtualBrokerConfig, VirtualBrokerControlInterface
@@ -17,8 +20,9 @@ from environments.virtual.market.scenario_engine import ScenarioEngine
 class VirtualMarketSimulatorRuntime:
     _SPEED_TO_REPLAY = {"SLOW": 1, "NORMAL": 300, "FAST": 1000}
 
-    def __init__(self, config: Optional[VirtualBrokerConfig] = None, *, scenario_config_path: str | None = None) -> None:
+    def __init__(self, config: Optional[VirtualBrokerConfig] = None, *, scenario_config_path: str | None = None, option_master: IOptionContractMaster | None = None) -> None:
         self.config = config or VirtualBrokerConfig()
+        self.option_master = option_master
         self.control = VirtualBrokerControlInterface(config=self.config)
         self.clock = VMSClockController()
         self.state_mgr = VMSStateManager()
@@ -92,14 +96,21 @@ class VirtualMarketSimulatorRuntime:
         vol = max(0.05, 0.20 * float(volatility_multiplier) * self.config.volatility_scale)
         atm = round(tick.underlying_price / 2.5) * 2.5
         quotes = {}
+        if self.option_master is None:
+            raise ValueError("VIRTUAL_AUTHORITATIVE_OPTION_MULTIPLIER_SOURCE_REQUIRED")
         for option_type in ("CALL", "PUT"):
             for offset in (-15.0, 0.0, 15.0):
                 strike = atm + offset
+                identity = self.option_master.find_contract_identity(tick.expiry, option_type, Decimal(str(strike)))
+                if identity is None or identity.contract_multiplier is None:
+                    raise ValueError("VIRTUAL_AUTHORITATIVE_OPTION_MULTIPLIER_REQUIRED")
                 mid = self._option_mid(tick.underlying_price, strike, t, vol, option_type)
                 quotes[(option_type, strike, tick.expiry)] = {
                     "bid": max(0.01, mid - 0.05), "ask": mid + 0.05, "last": mid,
                     "iv": vol, "bid_qty": self.config.option_quote_qty,
-                    "ask_qty": self.config.option_quote_qty, "contract_multiplier": 250000.0, "timestamp": tick.timestamp,
+                    "ask_qty": self.config.option_quote_qty,
+                    "contract_multiplier": identity.contract_multiplier,
+                    "shrn_iscd": identity.shrn_iscd, "timestamp": tick.timestamp,
                 }
         self._option_quotes = quotes
 
@@ -139,10 +150,17 @@ class VirtualMarketSimulatorRuntime:
                 self._price += adjustment.shock_delta
             last = round(self._price, 4)
             spread = 0.05
+            strike_price = round(last / 2.5) * 2.5
+            if self.option_master is None:
+                raise ValueError("VIRTUAL_AUTHORITATIVE_OPTION_MULTIPLIER_SOURCE_REQUIRED")
+            identity = self.option_master.find_contract_identity("202609", "CALL", Decimal(str(strike_price)))
+            if identity is None or identity.contract_multiplier is None:
+                raise ValueError("VIRTUAL_AUTHORITATIVE_OPTION_MULTIPLIER_REQUIRED")
             tick = ReferenceCanonicalMarketTick(
                 timestamp=(start + interval * (seq - 1)).isoformat(),
-                underlying_price=last, strike_price=round(last / 2.5) * 2.5,
-                option_type="CALL", bid_price=max(0.01, last - spread),
+                underlying_price=last, strike_price=strike_price,
+                option_type="CALL", contract_multiplier=identity.contract_multiplier,
+                bid_price=max(0.01, last - spread),
                 ask_price=last + spread, last_price=last, volume=1000,
                 seq_id=seq, expiry="202609", symbol="KOSPI200",
             )

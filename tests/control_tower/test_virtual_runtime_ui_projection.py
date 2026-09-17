@@ -3,6 +3,7 @@ from decimal import Decimal
 from contracts.types import BrokerOrderCommand, OptionInstrumentIdentity
 from interfaces.control_tower.ui_adapter import ControlTowerUIAdapter
 from environments.virtual.execution.vssf_command_context_provider import CanonicalVSSFCommandContextProvider
+from tests.support import build_test_option_master
 
 
 def _bundle_with_runtime():
@@ -10,7 +11,7 @@ def _bundle_with_runtime():
     from application.composition.virtual_composition_dependencies import VirtualCompositionDependencies
     from application.environment_hub.contracts import EnvironmentConfig, RuntimePolicy
     from contracts.types import EnvironmentType
-    deps = VirtualCompositionDependencies(contract_registry=None, contract_mappings={}, initial_capital=250_000_000.0, vssf_command_context=CanonicalVSSFCommandContextProvider())
+    deps = VirtualCompositionDependencies(contract_registry=None, contract_mappings={}, initial_capital=250_000_000.0, vssf_command_context=CanonicalVSSFCommandContextProvider(), option_master=build_test_option_master())
     bundle = ConcreteVirtualEnvironmentBuilder(dependencies=deps).build(EnvironmentConfig(EnvironmentType.VIRTUAL, "test"), RuntimePolicy())
     bundle.connect(); bundle.start(); return bundle
 

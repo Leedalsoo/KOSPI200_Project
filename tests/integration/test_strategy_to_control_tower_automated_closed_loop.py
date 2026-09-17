@@ -18,6 +18,7 @@ from core.strategy.standard_registry import build_standard_strategy_registry
 from core.strategy.track1_tail_defense import Track1Input
 from core.domain.market_models import MarketState
 from interfaces.control_tower.ui_adapter import ControlTowerUIAdapter
+from tests.support import build_test_option_master
 
 
 class BrokerAckAdapter:
@@ -37,7 +38,7 @@ class BrokerAckAdapter:
 
 def test_actual_strategy_orchestrator_to_virtual_broker_position_pnl_control_tower_loop():
     # Authoritative Virtual Runtime composition: VMS -> VSSF -> Broker/Execution.
-    bootstrap = create_virtual_runtime_bootstrap(initial_capital=250_000_000.0)
+    bootstrap = create_virtual_runtime_bootstrap(initial_capital=250_000_000.0, option_master=build_test_option_master())
     bundle = bootstrap.bundle
     tick = next(bundle.market.generate_tick_stream(total_days=1, ticks_per_day=1))
     as_of = datetime.fromisoformat(tick.timestamp)

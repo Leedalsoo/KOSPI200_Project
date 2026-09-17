@@ -11,10 +11,11 @@ from environments.virtual.market.canonical import ReferenceCanonicalMarketTick
 from environments.virtual.market.simulator_runtime import VirtualMarketSimulatorRuntime
 from environments.virtual.authoritative_vssf.firm_runtime import VirtualSecuritiesFirmRuntime
 from shared.contracts.canonical import CanonicalOrderSide
+from tests.support import build_test_option_master
 
 
 def test_real_vms_vssf_adapter_end_to_end():
-    vms = VirtualMarketSimulatorRuntime()
+    vms = VirtualMarketSimulatorRuntime(option_master=build_test_option_master())
     reference_tick = next(vms.generate_tick_stream(total_days=1, ticks_per_day=1))
 
     vssf = VirtualSecuritiesFirmRuntime(initial_capital=1_000_000_000.0)
