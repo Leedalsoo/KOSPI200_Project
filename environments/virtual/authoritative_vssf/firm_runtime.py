@@ -24,6 +24,8 @@ class VirtualSecuritiesFirmRuntime:
         self.clock = clock
         self._market_time: datetime | None = None
         self._submitted_at: dict[str, datetime] = {}
+        self._lifecycle_results: dict[str, VSSFOrderResult] = {}
+        self.timeout_source = None
         self.metrics = {"market_ticks": 0, "order_commands": 0, "executions_issued": 0, "settlement_runs": 0}
 
     @property
@@ -32,6 +34,9 @@ class VirtualSecuritiesFirmRuntime:
 
     def attach_clock(self, clock: ClockProvider) -> None:
         self.clock = clock
+
+    def attach_timeout_source(self, source) -> None:
+        self.timeout_source = source
 
     def _now(self) -> datetime:
         if self.clock is not None:
@@ -56,7 +61,9 @@ class VirtualSecuritiesFirmRuntime:
         if price <= 0:
             self.order_book.add_pending_order(command)
             self._submitted_at[command.client_order_id] = now
-            return VSSFOrderResult(
+            if self.timeout_source is not None:
+                self.timeout_source.observe_submission(command.client_order_id, command.track_id, now)
+            result = VSSFOrderResult(
                 client_order_id=command.client_order_id,
                 status="NEW",
                 submitted_at=now.isoformat(), observed_at=now.isoformat(),
@@ -64,6 +71,8 @@ class VirtualSecuritiesFirmRuntime:
                 asset_type=command.asset_type, side=command.side,
                 symbol=getattr(command, "symbol", "KOSPI200"),
             )
+            self._lifecycle_results[command.client_order_id] = result
+            return result
         return self._execute(command, price, now)
 
     def process_pending_orders(self):
@@ -79,6 +88,16 @@ class VirtualSecuritiesFirmRuntime:
         self.account.apply_execution(rep)
         self.account.update_tick_price(price)
         self.metrics["executions_issued"] += 1
+        if self.timeout_source is not None:
+            self.timeout_source.observe(command.client_order_id, now, "FILLED")
+        self._lifecycle_results[command.client_order_id] = VSSFOrderResult(
+            client_order_id=command.client_order_id, status="FILLED",
+            submitted_at=submitted_at.isoformat(), observed_at=now.isoformat(),
+            remaining_qty=0, exec_id=rep.exec_id, executed_qty=int(rep.executed_qty),
+            executed_price=float(rep.executed_price), track_id=command.track_id,
+            asset_type=command.asset_type, side=command.side,
+            symbol=getattr(command, "symbol", "KOSPI200"),
+        )
         return rep
 
     def query_order(self, client_order_id):
@@ -95,6 +114,9 @@ class VirtualSecuritiesFirmRuntime:
                 asset_type=pending.asset_type, side=pending.side,
                 symbol=getattr(pending, "symbol", "KOSPI200"),
             )
+        lifecycle = self._lifecycle_results.get(client_order_id)
+        if lifecycle is not None and lifecycle.status in {"FILLED", "CANCELLED", "REJECTED"}:
+            return lifecycle
         for rep in reversed(self.execution_engine.reports):
             if rep.client_order_id == client_order_id:
                 return rep
@@ -106,13 +128,29 @@ class VirtualSecuritiesFirmRuntime:
         submitted_at = self._submitted_at.get(client_order_id)
         if command is None or submitted_at is None:
             return None
-        return VSSFOrderResult(
+        if self.timeout_source is not None:
+            self.timeout_source.observe(client_order_id, now, "CANCELLED")
+        result = VSSFOrderResult(
             client_order_id=client_order_id, status="CANCELLED",
             submitted_at=submitted_at.isoformat(), observed_at=now.isoformat(),
             remaining_qty=int(command.qty), track_id=command.track_id,
             asset_type=command.asset_type, side=command.side,
             symbol=getattr(command, "symbol", "KOSPI200"),
         )
+        self._lifecycle_results[client_order_id] = result
+        return result
+
+    def process_timeouts(self):
+        if self.timeout_source is None:
+            raise RuntimeError("TRACK7_ORDER_TIMEOUT_SOURCE_REQUIRED")
+        timed_out = []
+        now = self._now()
+        for command in tuple(self.order_book.pending_orders()):
+            if self.timeout_source.is_timed_out(command.client_order_id, now, "NEW"):
+                result = self.cancel_order(command.client_order_id)
+                if result is not None:
+                    timed_out.append(result)
+        return tuple(timed_out)
 
     def run_settlement(self, final_settlement_price=None):
         self.metrics["settlement_runs"] += 1

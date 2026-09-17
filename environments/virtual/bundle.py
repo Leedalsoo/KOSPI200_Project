@@ -19,6 +19,7 @@ class VirtualEnvironmentBundle(StandardEnvironmentBundle):
     execution: object
     broker_api: object | None = None
     option_master: object | None = None
+    track7_order_timeout_source: object | None = None
     environment: EnvironmentType = EnvironmentType.VIRTUAL
     connected: bool = False
     running: bool = False
@@ -61,6 +62,7 @@ class VirtualEnvironmentBundle(StandardEnvironmentBundle):
         execution: object,
         broker_api: object | None = None,
         option_master: object | None = None,
+        track7_order_timeout_source: object | None = None,
     ) -> "VirtualEnvironmentBundle":
         if config.environment is not EnvironmentType.VIRTUAL:
             raise ValueError(
@@ -77,4 +79,5 @@ class VirtualEnvironmentBundle(StandardEnvironmentBundle):
             position=position,
             execution=execution,
             option_master=option_master,
+            track7_order_timeout_source=track7_order_timeout_source,
         )

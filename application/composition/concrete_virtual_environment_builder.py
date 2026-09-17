@@ -13,6 +13,9 @@ from environments.virtual.execution.vssf_execution_adapter import VSSFExecutionA
 from environments.virtual.clock import VMSClockProvider
 from environments.virtual.market.simulator_runtime import VirtualMarketSimulatorRuntime
 from environments.virtual.authoritative_vssf.firm_runtime import VirtualSecuritiesFirmRuntime
+from application.composition.track7_order_timeout_source import Track7OrderTimeoutRuntimeSource
+from contracts.track7_order_timeout import Track7OrderTimeoutPolicy
+from decimal import Decimal
 
 
 class ReferenceVirtualAuthoritativeScopeFactory(VirtualAuthoritativeScopeFactory):
@@ -47,12 +50,22 @@ class ConcreteVirtualEnvironmentBuilder:
     def build(self, config: Any, policy: Any) -> VirtualEnvironmentBundle:
         scope = self._scope_factory.create(config, policy)
         vms = self._vms_factory(option_master=self._dependencies.option_master)
-        scope.vssf_runtime.attach_clock(VMSClockProvider(vms.clock))
+        runtime_clock = VMSClockProvider(vms.clock)
+        scope.vssf_runtime.attach_clock(runtime_clock)
+        timeout_source = None
+        timeout_seconds = getattr(policy, "track7_order_timeout_seconds", None)
+        if timeout_seconds is not None:
+            timeout_source = Track7OrderTimeoutRuntimeSource(
+                runtime_clock,
+                Track7OrderTimeoutPolicy(Decimal(str(timeout_seconds)), "TRACK7-RUNTIME-POLICY"),
+            )
+            scope.vssf_runtime.attach_timeout_source(timeout_source)
         vms.subscribe(lambda tick: scope.broker.process_market_data(tick, option_quotes=vms.option_quotes))
         broker_api = VirtualBrokerApi(scope.broker, scope.account)
         return VirtualEnvironmentBundle.create(
-            config=config, policy=policy, market=vms, clock=VMSClockProvider(vms.clock),
+            config=config, policy=policy, market=vms, clock=runtime_clock,
             broker=scope.broker, broker_api=broker_api, account=scope.account,
             position=scope.position, execution=scope.execution,
             option_master=self._dependencies.option_master,
+            track7_order_timeout_source=timeout_source,
         )

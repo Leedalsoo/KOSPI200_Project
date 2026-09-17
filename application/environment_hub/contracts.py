@@ -19,6 +19,7 @@ class RuntimePolicy:
     # explicitly overridden by environment-specific composition.
     graceful_shutdown_timeout_seconds: float = 10.0
     cancellation_drain_timeout_seconds: float = 5.0
+    track7_order_timeout_seconds: float | None = None
 
 
 class EnvironmentBundle(EnvironmentLifecycle, Protocol):

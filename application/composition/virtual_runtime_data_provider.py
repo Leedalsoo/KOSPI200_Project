@@ -53,13 +53,15 @@ class VirtualRuntimeData:
     is_new_week_start: bool | None = None
     is_expiry_day: bool | None = None
     is_week_end: bool | None = None
+    order_timeout: bool | None = None
 
 class VirtualRuntimeDataProvider:
     """Derive only from VMS observations and injected authoritative sources."""
-    def __init__(self, market: Any, *, history_size: int = 50, option_expiry_source: Any | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None) -> None:
+    def __init__(self, market: Any, *, history_size: int = 50, option_expiry_source: Any | None = None, track7_order_timeout_source: Any | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None) -> None:
         self.market = market
         self.history_size = history_size
         self.option_expiry_source = option_expiry_source
+        self.track7_order_timeout_source = track7_order_timeout_source
         self.trading_calendar = Track7CalendarSource(trading_calendar, option_master) if trading_calendar is not None else None
         self.option_orderbook_source = option_orderbook_source
         self.volume_profile_source = volume_profile_source
@@ -162,6 +164,11 @@ class VirtualRuntimeDataProvider:
         days_to_expiry = None
         expiry_status = RuntimeDataStatus(False, False, "OptionExpirySource", "OPTION_EXPIRY_SOURCE_UNAVAILABLE")
         calendar_flags = (None, None, None)
+        order_timeout = None
+        if self.track7_order_timeout_source is not None:
+            order_timeout = self.track7_order_timeout_source.is_strategy_timed_out(
+                "TRACK7", observed_at
+            )
         calendar_status = RuntimeDataStatus(False, False, "TradingCalendar", "TRACK7_TRADING_CALENDAR_UNAVAILABLE")
         if self.option_expiry_source is not None and getattr(tick, "symbol", None):
             option_expiry = self.option_expiry_source.resolve_expiry(tick.symbol)
@@ -264,6 +271,7 @@ class VirtualRuntimeDataProvider:
             poc_price=poc_price, basis=basis, bbw_window=bbw_window, volume_window=volume_window,
             ma_1m=ma_1m, ma_3m=ma_3m, ma_5m=ma_5m, ma_10m=ma_10m,
             is_new_week_start=calendar_flags[0], is_expiry_day=calendar_flags[1], is_week_end=calendar_flags[2],
+            order_timeout=order_timeout,
         )
 
 

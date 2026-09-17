@@ -33,9 +33,10 @@ from contracts.track2_option_iv_source import Track2OptionIVSource
 class StandardRuntimeInputProvider:
     """Build standard inputs from observable VMS/VSSF sources only."""
 
-    def __init__(self, market: Any, *, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None) -> None:
+    def __init__(self, market: Any, *, track7_order_timeout_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None) -> None:
+        self.track7_order_timeout_source = track7_order_timeout_source
         self.data = VirtualRuntimeDataProvider(
-            market, option_expiry_source=option_expiry_source, trading_calendar=trading_calendar, option_master=option_master,
+            market, option_expiry_source=option_expiry_source, track7_order_timeout_source=track7_order_timeout_source, trading_calendar=trading_calendar, option_master=option_master,
             option_orderbook_source=option_orderbook_source,
             volume_profile_source=volume_profile_source,
             basis_source=basis_source,
@@ -204,12 +205,28 @@ class StandardRuntimeInputProvider:
             track7_missing_sources.append("moving_average")
         if not all(value is not None for value in (d.is_new_week_start, d.is_expiry_day, d.is_week_end)):
             track7_missing_sources.append("expiry_calendar")
-        track7_missing_sources.extend(("order_timeout", "support_resistance"))
-        contexts["track7_volatility_skew_weekly_insurance"] = self._unavailable(
-            "track7_volatility_skew_weekly_insurance",
-            tuple(track7_missing_sources),
-            "TRACK7_REQUIRED_AUTHORITATIVE_SOURCES_UNAVAILABLE",
-        )
+        if d.order_timeout is None:
+            track7_missing_sources.append("order_timeout")
+        track7_missing_sources.append("support_resistance")
+        if "support_resistance" not in track7_missing_sources and not track7_missing_sources:
+            contexts["track7_volatility_skew_weekly_insurance"] = StrategyContext(
+                market_state, "track7_volatility_skew_weekly_insurance", StrategyInput(
+                    common, Track7MarketInput(
+                        "track7_volatility_skew_weekly_insurance", d.price, common.budget,
+                        d.as_of.date().isoformat(), bool(d.is_new_week_start), d.active_vol,
+                        call_iv=d.option_iv, put_iv=d.put_iv, skew_limit_timeout=False,
+                        ma_1m=d.ma_1m, ma_3m=d.ma_3m, ma_5m=d.ma_5m, ma_10m=d.ma_10m,
+                        time_str=d.as_of.strftime("%H:%M:%S"),
+                        is_expiry_day=bool(d.is_expiry_day), is_week_end=bool(d.is_week_end),
+                    )
+                )
+            )
+        else:
+            contexts["track7_volatility_skew_weekly_insurance"] = self._unavailable(
+                "track7_volatility_skew_weekly_insurance",
+                tuple(track7_missing_sources),
+                "TRACK7_REQUIRED_AUTHORITATIVE_SOURCES_UNAVAILABLE",
+            )
 
         # Track8: DTE cannot be derived from YYYYMM alone. Fees, margin and risk
         # guard also require broker/risk read models.

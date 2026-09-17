@@ -17,6 +17,7 @@ class Track7OrderTimeoutRuntimeSource:
         self._clock = clock
         self._policy = policy
         self._submissions: dict[str, tuple[str, datetime]] = {}
+        self._statuses: dict[str, str] = {}
 
     @property
     def policy(self) -> Track7OrderTimeoutPolicy:
@@ -26,6 +27,7 @@ class Track7OrderTimeoutRuntimeSource:
         if not client_order_id or not strategy_id:
             raise ValueError("TRACK7_ORDER_LIFECYCLE_ID_REQUIRED")
         self._submissions[client_order_id] = (strategy_id, submitted_at)
+        self._statuses[client_order_id] = "NEW"
 
     def observe(self, client_order_id: str, observed_at: datetime, status: str) -> Track7OrderLifecycleObservation:
         try:
@@ -34,6 +36,7 @@ class Track7OrderTimeoutRuntimeSource:
             raise KeyError("TRACK7_ORDER_LIFECYCLE_SUBMISSION_UNAVAILABLE") from exc
         if observed_at < submitted_at:
             raise ValueError("TRACK7_ORDER_LIFECYCLE_TIME_ORDER_INVALID")
+        self._statuses[client_order_id] = status.upper()
         return Track7OrderLifecycleObservation(
             client_order_id=client_order_id,
             strategy_id=strategy_id,
@@ -49,6 +52,17 @@ class Track7OrderTimeoutRuntimeSource:
             return False
         elapsed = Decimal(str((observation.observed_at - observation.submitted_at).total_seconds()))
         return elapsed >= self._policy.timeout_seconds
+
+    def is_strategy_timed_out(self, strategy_id: str, observed_at: datetime) -> bool:
+        for client_order_id, (registered_strategy, _submitted_at) in self._submissions.items():
+            if registered_strategy != strategy_id:
+                continue
+            status = self._statuses.get(client_order_id, "NEW")
+            if status.upper() in {"FILLED", "CANCELLED", "REJECTED"}:
+                continue
+            if self.is_timed_out(client_order_id, observed_at, status):
+                return True
+        return False
 
     def current_time(self) -> datetime:
         return self._clock.now()
