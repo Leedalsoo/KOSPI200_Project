@@ -1,4 +1,4 @@
-﻿from datetime import date
+from datetime import date
 from decimal import Decimal
 
 from application.composition.track7_calendar_source import Track7CalendarSource
@@ -45,7 +45,7 @@ def test_virtual_runtime_projects_option_master_expiry_and_calendar_flags():
         market, option_expiry_source=expiry_source, trading_calendar=calendar, option_master=master
     ).snapshot(tick)
     assert data.status["track7_calendar"].available is True
-    assert data.status["track7_calendar"].source == "KIS.TradingCalendar"
+    assert data.status["track7_calendar"].source == "ProductionTradingCalendar"
     assert data.is_new_week_start is True
     assert data.is_expiry_day is False
     assert data.is_week_end is False

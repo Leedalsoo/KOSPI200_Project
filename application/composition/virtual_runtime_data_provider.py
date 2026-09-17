@@ -176,10 +176,10 @@ class VirtualRuntimeDataProvider:
         if self.trading_calendar is not None:
             try:
                 calendar_flags = self.trading_calendar.flags(observed_at.date(), option_expiry)
-                calendar_status = RuntimeDataStatus(True, True, "KIS.TradingCalendar")
+                calendar_status = RuntimeDataStatus(True, True, "ProductionTradingCalendar")
             except (ValueError, TypeError):
                 calendar_flags = (None, None, None)
-                calendar_status = RuntimeDataStatus(False, False, "KIS.TradingCalendar", "TRACK7_TRADING_CALENDAR_UNAVAILABLE")
+                calendar_status = RuntimeDataStatus(False, False, "ProductionTradingCalendar", "TRACK7_TRADING_CALENDAR_UNAVAILABLE")
         option_bid_qtys = None
         option_ask_qtys = None
         orderbook_status = RuntimeDataStatus(
