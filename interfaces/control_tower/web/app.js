@@ -3,7 +3,8 @@
  * Backend DTO를 단일 데이터 원천으로 사용하며, 가짜 상태/시장값을 생성하지 않는다.
  */
 document.addEventListener("DOMContentLoaded", () => {
-  let currentTab = "virtual_exchange";
+  const storedTab = localStorage.getItem("p200:lastTab");
+  let currentTab = storedTab && document.querySelector(`.tab-btn[data-tab="${storedTab}"]`) ? storedTab : "virtual_exchange";
   let pollInFlight = false;
   const pollIntervalMs = 2000;
 
@@ -24,6 +25,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const runStartBtn = document.getElementById("run-start");
   const runStopBtn = document.getElementById("run-stop");
   const runReplayBtn = document.getElementById("run-replay");
+  const runControlPanel = document.getElementById("run-control-panel");
+  const runControlScope = document.getElementById("run-control-scope");
 
   const tabNames = {
     high_speed: "High-Speed Test",
@@ -114,11 +117,27 @@ document.addEventListener("DOMContentLoaded", () => {
 
   tabButtons.forEach((btn) => {
     btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+    btn.addEventListener("dragstart", (event) => { event.dataTransfer.setData("text/plain", btn.dataset.tab); });
+    btn.addEventListener("dragover", (event) => event.preventDefault());
+    btn.addEventListener("drop", (event) => {
+      event.preventDefault();
+      const sourceId = event.dataTransfer.getData("text/plain");
+      const source = document.querySelector(`.tab-btn[data-tab="${sourceId}"]`);
+      if (source && source !== btn) {
+        btn.parentNode.insertBefore(source, btn);
+        localStorage.setItem("p200:tabOrder", JSON.stringify([...document.querySelectorAll(".tab-btn")].map((x) => x.dataset.tab)));
+      }
+    });
   });
 
   function switchTab(tabId) {
     if (!tabNames[tabId]) return;
     currentTab = tabId;
+    localStorage.setItem("p200:lastTab", tabId);
+    tabButtons.forEach((btn) => btn.setAttribute("aria-selected", String(btn.dataset.tab === tabId)));
+    const virtualOnly = tabId === "virtual_exchange" || tabId === "virtual_broker";
+    runControlPanel?.classList.toggle("is-hidden", !virtualOnly);
+    if (runControlScope) runControlScope.textContent = virtualOnly ? "VIRTUAL 전용" : "현재 탭에서는 비활성";
     tabButtons.forEach((btn) => btn.classList.toggle("active", btn.dataset.tab === tabId));
     panels.forEach((panel) => panel.classList.toggle("active", panel.id === `panel-${tabId}`));
     if (activeEnvBadge) activeEnvBadge.textContent = tabNames[tabId];
@@ -308,11 +327,10 @@ document.addEventListener("DOMContentLoaded", () => {
     line.className = `log-line log-${level}`;
     line.textContent = `[${new Date().toLocaleTimeString("ko-KR")}] ${message}`;
     auditLogBox.appendChild(line);
-    while (auditLogBox.children.length > 8) auditLogBox.removeChild(auditLogBox.firstChild);
   }
 
   async function poll() {
-    if (pollInFlight) return;
+    if (pollInFlight || document.visibilityState !== "visible") return;
     pollInFlight = true;
     try {
       await fetchSummary();
@@ -322,6 +340,14 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  let savedOrder = null;
+  try { savedOrder = JSON.parse(localStorage.getItem("p200:tabOrder") || "null"); } catch (_) { savedOrder = null; }
+  if (Array.isArray(savedOrder)) {
+    const nav = document.querySelector(".tabs-nav");
+    const buttons = new Map([...tabButtons].map((btn) => [btn.dataset.tab, btn]));
+    savedOrder.forEach((tabId) => { const btn = buttons.get(tabId); if (btn) nav?.appendChild(btn); });
+  }
+  switchTab(currentTab);
   fetchSummary();
   fetchTabDetail(currentTab);
   refreshRunControls();
