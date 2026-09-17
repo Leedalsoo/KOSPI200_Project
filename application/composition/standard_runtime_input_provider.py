@@ -193,11 +193,17 @@ class StandardRuntimeInputProvider:
                                       d.as_of.strftime("%H:%M:%S")))
             )
 
-        # Track7 requires more than IV: timeout, support/resistance and expiry
-        # calendar must come from dedicated authoritative providers.
+        # Track7 may consume CALL/PUT IV already projected from the injected
+        # authoritative Track2/KIS IV source. Do not report IV as missing when
+        # both observations are actually available; the remaining dedicated
+        # sources still keep the whole Track7 payload fail-closed.
+        track7_missing_sources: list[str] = []
+        if d.option_iv is None or d.put_iv is None:
+            track7_missing_sources.append("option_iv_chain")
+        track7_missing_sources.extend(("order_timeout", "support_resistance", "expiry_calendar"))
         contexts["track7_volatility_skew_weekly_insurance"] = self._unavailable(
             "track7_volatility_skew_weekly_insurance",
-            ("option_iv_chain", "order_timeout", "support_resistance", "expiry_calendar"),
+            tuple(track7_missing_sources),
             "TRACK7_REQUIRED_AUTHORITATIVE_SOURCES_UNAVAILABLE",
         )
 
