@@ -14,26 +14,45 @@ from environments.virtual.clock import VMSClockProvider
 from environments.virtual.market.simulator_runtime import VirtualMarketSimulatorRuntime
 from environments.virtual.authoritative_vssf.firm_runtime import VirtualSecuritiesFirmRuntime
 
+
 class ReferenceVirtualAuthoritativeScopeFactory(VirtualAuthoritativeScopeFactory):
     def __init__(self, *, dependencies: VirtualCompositionDependencies) -> None:
         self._dependencies = dependencies
+
     def create(self, config: Any, policy: Any) -> VirtualAuthoritativeScope:
         dependencies = self._dependencies
         vssf = VirtualSecuritiesFirmRuntime(initial_capital=float(dependencies.initial_capital))
         account = VSSFAccountSnapshotAdapter(vssf.account)
         position = VSSFPositionAggregateAdapter(vssf.account)
         execution_adapter = VSSFExecutionAdapter(command_context=dependencies.vssf_command_context, vssf_runtime=vssf)
-        execution = VirtualExecutionEngine(position=position, account=account, authoritative_execute=execution_adapter.execute)
-        return VirtualAuthoritativeScope(vssf_runtime=vssf, broker=VirtualBroker(execution, market_data_handler=vssf.process_market_data), account=account, position=position, execution=execution)
+        execution = VirtualExecutionEngine(
+            position=position, account=account,
+            authoritative_execute=execution_adapter.execute,
+            authoritative_query=execution_adapter.query,
+            authoritative_cancel=execution_adapter.cancel,
+        )
+        return VirtualAuthoritativeScope(
+            vssf_runtime=vssf,
+            broker=VirtualBroker(execution, market_data_handler=vssf.process_market_data),
+            account=account, position=position, execution=execution,
+        )
+
 
 class ConcreteVirtualEnvironmentBuilder:
     def __init__(self, *, dependencies: VirtualCompositionDependencies, scope_factory: VirtualAuthoritativeScopeFactory | None = None, vms_factory=VirtualMarketSimulatorRuntime) -> None:
         self._dependencies = dependencies
         self._scope_factory = scope_factory or ReferenceVirtualAuthoritativeScopeFactory(dependencies=dependencies)
         self._vms_factory = vms_factory
+
     def build(self, config: Any, policy: Any) -> VirtualEnvironmentBundle:
         scope = self._scope_factory.create(config, policy)
         vms = self._vms_factory(option_master=self._dependencies.option_master)
+        scope.vssf_runtime.attach_clock(VMSClockProvider(vms.clock))
         vms.subscribe(lambda tick: scope.broker.process_market_data(tick, option_quotes=vms.option_quotes))
         broker_api = VirtualBrokerApi(scope.broker, scope.account)
-        return VirtualEnvironmentBundle.create(config=config, policy=policy, market=vms, clock=VMSClockProvider(vms.clock), broker=scope.broker, broker_api=broker_api, account=scope.account, position=scope.position, execution=scope.execution, option_master=self._dependencies.option_master)
+        return VirtualEnvironmentBundle.create(
+            config=config, policy=policy, market=vms, clock=VMSClockProvider(vms.clock),
+            broker=scope.broker, broker_api=broker_api, account=scope.account,
+            position=scope.position, execution=scope.execution,
+            option_master=self._dependencies.option_master,
+        )
