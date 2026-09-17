@@ -37,6 +37,8 @@ def attach_standard_automated_loop(bootstrap, *, strategy_keys=None):
             expiry=identity.expiry.replace("-", "")[:6],
             option_type=identity.option_type,
             strike=identity.strike,
+            contract_multiplier=identity.contract_multiplier,
+            identity_source="OPTION_MASTER",
         )
     loop = AutomatedVirtualTradingLoop(
         bundle=bootstrap.bundle, strategy_hub=strategy_hub,

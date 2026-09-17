@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from dataclasses import dataclass
+from decimal import Decimal
 from enum import Enum
 from typing import Mapping
 
@@ -15,6 +17,8 @@ class PositionGroupLeg:
     instrument_id: str
     side: str
     quantity: int
+    contract_multiplier: Decimal
+    identity_source: str
     status: LegStatus = LegStatus.PENDING
 
 @dataclass(frozen=True)
@@ -39,7 +43,10 @@ class PositionGroup:
 class PositionGroupLegPnL:
     leg_id: str
     group_id: str
+    instrument_id: str
     quantity: int
+    contract_multiplier: Decimal
+    identity_source: str
     avg_price: float
     current_price: float
     pnl: float

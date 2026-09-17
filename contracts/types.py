@@ -45,6 +45,8 @@ class OptionInstrumentIdentity:
     expiry: str | None = None
     option_type: str | None = None
     strike: Decimal | None = None
+    contract_multiplier: Decimal | None = None
+    identity_source: str | None = None
 
 
 @dataclass(frozen=True)

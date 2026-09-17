@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Mapping, Protocol
 
 
@@ -9,6 +10,8 @@ class PositionAggregate:
     side: str
     qty: int
     avg_price: float | None = None
+    contract_multiplier: Decimal | None = None
+    identity_source: str | None = None
 
 
 class PositionAggregateSource(Protocol):

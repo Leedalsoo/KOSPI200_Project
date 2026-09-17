@@ -62,6 +62,7 @@ class VirtualMultiLegExecutionBridge:
         self.groups: dict[str, list[ExecutionReport]] = {}
         self.position_groups = PositionGroupRegistry()
         self.provenance: dict[str, dict[str, str]] = {}
+        self.leg_positions: dict[str, Any] = {}
 
     def identity_for_leg(self, plan: MultiLegExecutionPlan, leg) -> OptionInstrumentIdentity:
         if leg.option_type not in {"CALL", "PUT"} or leg.strike is None:
@@ -90,6 +91,8 @@ class VirtualMultiLegExecutionBridge:
             expiry=identity.expiry.replace("-", "")[:6],
             option_type=identity.option_type,
             strike=identity.strike,
+            contract_multiplier=identity.contract_multiplier,
+            identity_source="OPTION_MASTER",
         )
 
     def execute(self, plan: MultiLegExecutionPlan, *, price: Decimal | None = None) -> MultiLegExecutionResult:
@@ -177,12 +180,21 @@ class VirtualMultiLegExecutionBridge:
                 leg_id=leg.leg_id,
             )
             reports.append(report)
+            from environments.virtual.position.virtual_position_aggregate import VirtualPositionAggregate
+            from environments.virtual.position.virtual_position_fill_adapter import VirtualPositionFillAdapter
+            leg_position = self.leg_positions.get(identity.instrument_id)
+            if leg_position is None:
+                leg_position = VirtualPositionAggregate(instrument_id=identity.instrument_id)
+                self.leg_positions[identity.instrument_id] = leg_position
+            VirtualPositionFillAdapter(leg_position).apply(broker_command, report)
             self.provenance[report.execution_id or client_order_id] = {
                 "strategy_id": plan.strategy_id, "group_id": plan.group_id,
                 "leg_id": leg.leg_id, "execution_id": report.execution_id or "",
                 "instrument_id": identity.instrument_id, "symbol": identity.symbol,
                 "expiry": identity.expiry or "", "option_type": identity.option_type or "",
                 "strike": str(identity.strike),
+                "contract_multiplier": str(identity.contract_multiplier),
+                "identity_source": identity.identity_source or "",
             }
             if report.status == "FILLED":
                 filled += report.filled_quantity
@@ -193,6 +205,8 @@ class VirtualMultiLegExecutionBridge:
                 leg_id=leg.leg_id, group_id=plan.group_id,
                 instrument_id=self.identity_for_leg(plan, leg).instrument_id,
                 side=leg.side, quantity=leg.quantity,
+                contract_multiplier=self.identity_for_leg(plan, leg).contract_multiplier,
+                identity_source=self.identity_for_leg(plan, leg).identity_source or "",
                 status=LegStatus.FILLED if any(r.leg_id == leg.leg_id and r.status == "FILLED" for r in reports) else LegStatus.REJECTED,
             ) for leg in plan.legs
         )
@@ -214,15 +228,22 @@ class VirtualMultiLegExecutionBridge:
             if quote is None or quote.get("last") is None:
                 raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_MARK_NOT_FOUND")
             current = float(quote["last"])
-            multiplier = Decimal(str(quote.get("contract_multiplier", "0")))
-            if multiplier <= 0:
-                raise ValueError("MULTI_LEG_OPTION_CONTRACT_MULTIPLIER_REQUIRED")
+            position_state = self.leg_positions.get(identity.instrument_id)
+            if position_state is None:
+                raise ValueError("MULTI_LEG_POSITION_STATE_REQUIRED")
+            position_snapshot = position_state.snapshot().get(identity.instrument_id)
+            if position_snapshot is None or position_snapshot.contract_multiplier is None:
+                raise ValueError("MULTI_LEG_POSITION_CONTRACT_MULTIPLIER_REQUIRED")
+            multiplier = position_snapshot.contract_multiplier
+            if position_snapshot.identity_source != identity.identity_source:
+                raise ValueError("MULTI_LEG_POSITION_IDENTITY_PROVENANCE_MISMATCH")
             pnl = (
                 Decimal(str(current)) - Decimal(str(rep.execution_price))
             ) * Decimal(str(rep.filled_quantity)) * Decimal(str(direction)) * multiplier
             pnl_legs.append(
                 PositionGroupLegPnL(
-                    leg.leg_id, plan.group_id, rep.filled_quantity,
+                    leg.leg_id, plan.group_id, identity.instrument_id, rep.filled_quantity,
+                    multiplier, identity.identity_source or "",
                     float(rep.execution_price), current, float(pnl)
                 )
             )

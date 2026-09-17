@@ -24,9 +24,16 @@ class VirtualPositionFillAdapter:
         if report.execution_price is None:
             pass
             raise ValueError("POSITION_FILL_PRICE_REQUIRED")
+        identity = command.instrument_identity
+        if identity is None or identity.contract_multiplier is None:
+            raise ValueError("POSITION_FILL_CONTRACT_MULTIPLIER_REQUIRED")
+        if not identity.identity_source:
+            raise ValueError("POSITION_FILL_IDENTITY_SOURCE_REQUIRED")
 
         self.position.apply_fill(
             side=command.side,
             quantity=report.filled_quantity,
             price=float(report.execution_price),
+            contract_multiplier=identity.contract_multiplier,
+            identity_source=identity.identity_source,
         )
