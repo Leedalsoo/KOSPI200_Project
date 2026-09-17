@@ -1,12 +1,15 @@
 """Authoritative composition for automated Virtual strategy execution."""
 from __future__ import annotations
+
 from application.composition.automated_virtual_trading_loop import AutomatedVirtualTradingLoop
 from application.composition.standard_runtime_input_provider import StandardRuntimeInputProvider
 from application.composition.option_expiry_source import KisOptionMasterExpirySource
+from application.composition.virtual_track3_runtime_input_source import VirtualTrack3RuntimeInputSource
 from contracts.types import OptionInstrumentIdentity
 from infrastructure.kis.track2_option_iv_source import KISTrack2OptionIVSource
 from application.strategy_hub.hub import StrategyHub
 from core.strategy.standard_registry import STANDARD_STRATEGY_KEYS, build_standard_strategy_registry
+
 
 def attach_standard_automated_loop(bootstrap, *, strategy_keys=None):
     """Attach all nine Standard strategies to the RuntimeController-owned VMS."""
@@ -14,10 +17,20 @@ def attach_standard_automated_loop(bootstrap, *, strategy_keys=None):
     strategy_hub = StrategyHub(build_standard_strategy_registry(), selected_keys)
     expiry_source = KisOptionMasterExpirySource(bootstrap.bundle.option_master)
     track2_option_iv_source = KISTrack2OptionIVSource(bootstrap.bundle.option_master)
-    provider = StandardRuntimeInputProvider(
-        bootstrap.bundle.market, option_expiry_source=expiry_source,
-        track2_option_iv_source=track2_option_iv_source
+    vssf_runtime = bootstrap.bundle.execution._authoritative_execute.__self__.vssf_runtime
+    track3_source = VirtualTrack3RuntimeInputSource(
+        bootstrap.bundle.market,
+        bootstrap.bundle.account,
+        vssf_runtime,
+        bootstrap.bundle.option_master,
     )
+    provider = StandardRuntimeInputProvider(
+        bootstrap.bundle.market,
+        option_expiry_source=expiry_source,
+        track2_option_iv_source=track2_option_iv_source,
+        track3_runtime_input_source=track3_source,
+    )
+
     def identity(evaluation, tick):
         proposal = evaluation.result.execution_proposal
         if proposal is None:
@@ -40,8 +53,10 @@ def attach_standard_automated_loop(bootstrap, *, strategy_keys=None):
             contract_multiplier=identity.contract_multiplier,
             identity_source="OPTION_MASTER",
         )
+
     loop = AutomatedVirtualTradingLoop(
-        bundle=bootstrap.bundle, strategy_hub=strategy_hub,
+        bundle=bootstrap.bundle,
+        strategy_hub=strategy_hub,
         context_builder=lambda tick, state: provider.build(tick, state, bootstrap.bundle.account),
         identity_provider=identity,
     )
