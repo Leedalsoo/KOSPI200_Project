@@ -200,6 +200,8 @@ class StandardRuntimeInputProvider:
         track7_missing_sources: list[str] = []
         if d.option_iv is None or d.put_iv is None:
             track7_missing_sources.append("option_iv_chain")
+        if not all(value is not None for value in (d.ma_1m, d.ma_3m, d.ma_5m, d.ma_10m)):
+            track7_missing_sources.append("moving_average")
         track7_missing_sources.extend(("order_timeout", "support_resistance", "expiry_calendar"))
         contexts["track7_volatility_skew_weekly_insurance"] = self._unavailable(
             "track7_volatility_skew_weekly_insurance",

@@ -45,6 +45,10 @@ class VirtualRuntimeData:
     basis: Decimal | None = None
     bbw_window: tuple[Decimal, ...] | None = None
     volume_window: tuple[Decimal, ...] | None = None
+    ma_1m: Decimal | None = None
+    ma_3m: Decimal | None = None
+    ma_5m: Decimal | None = None
+    ma_10m: Decimal | None = None
 
 class VirtualRuntimeDataProvider:
     """Derive only from VMS observations and injected authoritative sources."""
@@ -89,6 +93,26 @@ class VirtualRuntimeDataProvider:
         except (ValueError, OverflowError, ZeroDivisionError):
             return None
 
+    @staticmethod
+    def _time_window_ma(recent: tuple[Any, ...], as_of: datetime, minutes: int) -> Decimal | None:
+        cutoff = as_of.timestamp() - minutes * 60
+        points: list[tuple[datetime, Decimal]] = []
+        for item in recent:
+            timestamp = getattr(item, "timestamp", None)
+            last_price = getattr(item, "last_price", None)
+            if timestamp is None or last_price is None:
+                continue
+            observed_at = datetime.fromisoformat(timestamp)
+            if observed_at <= as_of:
+                points.append((observed_at, Decimal(str(last_price))))
+        points.sort()
+        if not points or points[0][0].timestamp() > cutoff:
+            return None
+        values = [price for timestamp, price in points if timestamp.timestamp() >= cutoff]
+        if not values:
+            return None
+        return sum(values, Decimal("0")) / Decimal(len(values))
+
     def snapshot(self, tick: Any) -> VirtualRuntimeData:
         observed_at = datetime.fromisoformat(tick.timestamp)
         recent = tuple(self.market.recent_ticks[-self.history_size:])
@@ -101,6 +125,10 @@ class VirtualRuntimeDataProvider:
         returns = tuple(abs(prices[i] / prices[i - 1] - 1) for i in range(1, len(prices)) if prices[i - 1])
         active_vol = (sum(returns, Decimal("0")) / Decimal(len(returns))) if returns else None
         base_vol = active_vol
+        ma_1m = self._time_window_ma(recent, observed_at, 1)
+        ma_3m = self._time_window_ma(recent, observed_at, 3)
+        ma_5m = self._time_window_ma(recent, observed_at, 5)
+        ma_10m = self._time_window_ma(recent, observed_at, 10)
         strike = Decimal(str(tick.strike_price))
         iv = None
         put_iv = None
@@ -185,9 +213,16 @@ class VirtualRuntimeDataProvider:
                     False, False, order_book.source, "OPTION_ORDERBOOK_IDENTITY_OR_DEPTH_MISMATCH"
                 )
 
+        moving_average_available = all(value is not None for value in (ma_1m, ma_3m, ma_5m, ma_10m))
         status = {
             "tick": RuntimeDataStatus(True, True, "VMS.recent_ticks"),
             "ohlc_history": RuntimeDataStatus(len(prices) >= 1, True, "VMS.recent_ticks"),
+            "track7_moving_average": RuntimeDataStatus(
+                moving_average_available,
+                moving_average_available,
+                "VMS.recent_ticks",
+                None if moving_average_available else "TRACK7_MOVING_AVERAGE_HISTORY_COVERAGE_UNAVAILABLE",
+            ),
             "iv_greeks": RuntimeDataStatus(iv is not None and put_iv is not None, iv is not None and put_iv is not None, "VMS.option_quotes", "OPTION_CHAIN_UNAVAILABLE" if iv is None or put_iv is None else None),
             "macro": RuntimeDataStatus(True, True, "VMS.scenario.active_config"),
             "event": RuntimeDataStatus(True, True, "VMS.scenario.shock_schedule"),
@@ -207,6 +242,7 @@ class VirtualRuntimeDataProvider:
             option_expiry=option_expiry, days_to_expiry=days_to_expiry,
             option_bid_qtys=option_bid_qtys, option_ask_qtys=option_ask_qtys,
             poc_price=poc_price, basis=basis, bbw_window=bbw_window, volume_window=volume_window,
+            ma_1m=ma_1m, ma_3m=ma_3m, ma_5m=ma_5m, ma_10m=ma_10m,
         )
 
 

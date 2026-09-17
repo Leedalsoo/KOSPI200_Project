@@ -1,4 +1,5 @@
-from datetime import datetime
+from dataclasses import replace
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from application.bootstrap import create_virtual_runtime_bootstrap
@@ -54,11 +55,49 @@ def test_track7_consumes_authoritative_call_put_iv_without_unblocking_missing_so
     context = provider.build(tick, state, account)["track7_volatility_skew_weekly_insurance"]
     assert "option_iv_chain" not in context.input.data_status
     assert context.input.data_status == {
+        "moving_average": "UNAVAILABLE",
         "order_timeout": "UNAVAILABLE",
         "support_resistance": "UNAVAILABLE",
         "expiry_calendar": "UNAVAILABLE",
     }
     assert context.input.payload.__class__.__name__ == "UnavailableStrategyPayload"
+
+
+def test_track7_moving_average_uses_timestamped_vms_history_without_fallback():
+    bootstrap = create_virtual_runtime_bootstrap()
+    market = bootstrap.bundle.market
+    base_tick = next(market.generate_tick_stream(total_days=1, ticks_per_day=1))
+    base_time = datetime.fromisoformat(base_tick.timestamp)
+    market._recent_ticks.clear()
+    for index in range(11):
+        timestamp = base_time + timedelta(minutes=index)
+        market._recent_ticks.append(
+            replace(base_tick, timestamp=timestamp.isoformat(), last_price=348 + index)
+        )
+    tick = market.recent_ticks[-1]
+    data = StandardRuntimeInputProvider(market).data.snapshot(tick)
+
+    assert data.status["track7_moving_average"].available is True
+    assert data.status["track7_moving_average"].source == "VMS.recent_ticks"
+    assert all(value is not None for value in (data.ma_1m, data.ma_3m, data.ma_5m, data.ma_10m))
+    for minutes, actual in ((1, data.ma_1m), (3, data.ma_3m), (5, data.ma_5m), (10, data.ma_10m)):
+        cutoff = datetime.fromisoformat(tick.timestamp).timestamp() - minutes * 60
+        values = [
+            Decimal(str(item.last_price))
+            for item in market.recent_ticks
+            if cutoff <= datetime.fromisoformat(item.timestamp).timestamp() <= datetime.fromisoformat(tick.timestamp).timestamp()
+        ]
+        assert actual == sum(values, Decimal("0")) / Decimal(len(values))
+
+
+def test_track7_moving_average_stays_unavailable_without_history_coverage():
+    bootstrap = create_virtual_runtime_bootstrap()
+    market = bootstrap.bundle.market
+    tick = next(market.generate_tick_stream(total_days=1, ticks_per_day=1))
+    data = StandardRuntimeInputProvider(market).data.snapshot(tick)
+    assert data.status["track7_moving_average"].available is False
+    assert data.status["track7_moving_average"].reason == "TRACK7_MOVING_AVERAGE_HISTORY_COVERAGE_UNAVAILABLE"
+    assert all(value is None for value in (data.ma_1m, data.ma_3m, data.ma_5m, data.ma_10m))
 
 
 def test_standard_runtime_input_provider_blocks_track5_and_track6_when_volatility_source_is_missing():
