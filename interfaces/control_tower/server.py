@@ -172,9 +172,33 @@ class ControlTowerRequestHandler(BaseHTTPRequestHandler):
             self._send_json({"success": False, "error": "VIRTUAL_MARKET_ASK_REQUIRED"}, HTTPStatus.SERVICE_UNAVAILABLE)
             return
         client_order_id = str(payload.get("client_order_id", "HTTP-VIRTUAL-BUY-001"))
+        option_master = getattr(_virtual_bootstrap.bundle, "option_master", None)
+        option_type = getattr(last_tick, "option_type", None)
+        strike_price = getattr(last_tick, "strike_price", None)
+        expiry = getattr(last_tick, "expiry", None)
+        if option_master is None or not hasattr(option_master, "find_contract_identity"):
+            self._send_json({"success": False, "error": {"code": "AUTHORITATIVE_OPTION_MASTER_REQUIRED", "message": "Authoritative Option Master is required for Virtual Broker test orders."}}, HTTPStatus.SERVICE_UNAVAILABLE)
+            return
+        if not option_type or strike_price is None or not expiry:
+            self._send_json({"success": False, "error": {"code": "AUTHORITATIVE_OPTION_IDENTITY_REQUIRED", "message": "The current Virtual market tick must contain authoritative option identity fields."}}, HTTPStatus.SERVICE_UNAVAILABLE)
+            return
+        master_identity = option_master.find_contract_identity(
+            str(expiry), str(option_type), Decimal(str(strike_price))
+        )
+        if master_identity is None or not master_identity.shrn_iscd:
+            self._send_json({"success": False, "error": {"code": "OPTION_IDENTITY_UNRESOLVED", "message": "The current Virtual option contract is not present in the authoritative Option Master."}}, HTTPStatus.SERVICE_UNAVAILABLE)
+            return
+        if master_identity.option_type is None or master_identity.strike is None or master_identity.contract_multiplier is None:
+            self._send_json({"success": False, "error": {"code": "OPTION_IDENTITY_INCOMPLETE", "message": "The authoritative Option Master identity is incomplete."}}, HTTPStatus.SERVICE_UNAVAILABLE)
+            return
         identity = OptionInstrumentIdentity(
-            instrument_id="KOSPI200", symbol="KOSPI200", expiry="202609",
-            option_type="CALL", strike=Decimal("350"),
+            instrument_id=master_identity.shrn_iscd,
+            symbol=master_identity.shrn_iscd,
+            expiry=master_identity.expiry.replace("-", "")[:6],
+            option_type=master_identity.option_type,
+            strike=master_identity.strike,
+            contract_multiplier=master_identity.contract_multiplier,
+            identity_source="OPTION_MASTER",
         )
         command = BrokerOrderCommand(
             client_order_id=client_order_id,

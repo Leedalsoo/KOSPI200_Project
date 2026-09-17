@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import time
+import threading
 import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass, field
@@ -116,6 +117,7 @@ class KISAuthManager:
         self.cache_file_path = cache_file_path
         self._urlopen = urlopen
         self._current_token: Optional[KISAuthToken] = None
+        self._token_lock = threading.RLock()
         if cache_file_path:
             self._load_token_from_cache()
 
@@ -181,70 +183,77 @@ class KISAuthManager:
                 os.makedirs(directory, exist_ok=True)
             with open(self.cache_file_path, "w", encoding="utf-8") as target:
                 json.dump(asdict(token), target, ensure_ascii=False, indent=2)
+            try:
+                os.chmod(self.cache_file_path, 0o600)
+            except OSError as exc:
+                logger.warning("Failed to restrict KIS token cache permissions: %s", exc)
         except OSError as exc:
             logger.warning("Failed to save KIS token cache: %s", exc)
 
     def issue_token(self) -> KISAuthToken:
-        if not self.has_credentials():
-            raise KISAuthError("KIS AppKey or AppSecret is missing.")
+        with self._token_lock:
+            if not self.has_credentials():
+                raise KISAuthError("KIS AppKey or AppSecret is missing.")
 
-        payload = json.dumps({
-            "grant_type": "client_credentials",
-            "appkey": self.app_key,
-            "appsecret": self.app_secret,
-        }).encode("utf-8")
-        request = urllib.request.Request(
-            f"{self.base_url}{KIS_TOKEN_PATH}",
-            data=payload,
-            headers={"Content-Type": "application/json; charset=UTF-8"},
-            method="POST",
-        )
-
-        try:
-            with self._urlopen(request, timeout=self.timeout) as response:
-                data = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="replace")
-            try:
-                error_data = json.loads(body)
-            except json.JSONDecodeError:
-                error_data = {}
-            if (
-                error_data.get("error_code") == "EGW00133"
-                and self._current_token
-                and self._current_token.is_valid()
-            ):
-                return self._current_token
-            raise KISAuthError(
-                f"HTTP Error {exc.code} ({exc.reason}): {body}",
-                error_code=error_data.get("error_code") or str(exc.code),
-                response_data=error_data,
-            ) from exc
-        except urllib.error.URLError as exc:
-            raise KISAuthError(f"Network connection failed: {exc.reason}") from exc
-        except (OSError, ValueError, json.JSONDecodeError) as exc:
-            raise KISAuthError(f"Unexpected token issuance failure: {exc}") from exc
-
-        if not data.get("access_token"):
-            error_code = data.get("error_code") or data.get("msg_cd") or "UNKNOWN_ERR"
-            description = data.get("error_description") or data.get("msg1") or str(data)
-            raise KISAuthError(
-                f"Token missing in response: [{error_code}] {description}",
-                error_code=error_code,
-                response_data=data,
+            payload = json.dumps({
+                "grant_type": "client_credentials",
+                "appkey": self.app_key,
+                "appsecret": self.app_secret,
+            }).encode("utf-8")
+            request = urllib.request.Request(
+                f"{self.base_url}{KIS_TOKEN_PATH}",
+                data=payload,
+                headers={"Content-Type": "application/json; charset=UTF-8"},
+                method="POST",
             )
 
-        token = KISAuthToken.from_response(data)
-        self._current_token = token
-        self._save_token_to_cache(token)
-        return token
+            try:
+                with self._urlopen(request, timeout=self.timeout) as response:
+                    data = json.loads(response.read().decode("utf-8"))
+            except urllib.error.HTTPError as exc:
+                body = exc.read().decode("utf-8", errors="replace")
+                try:
+                    error_data = json.loads(body)
+                except json.JSONDecodeError:
+                    error_data = {}
+                if (
+                    error_data.get("error_code") == "EGW00133"
+                    and self._current_token
+                    and self._current_token.is_valid()
+                ):
+                    return self._current_token
+                raise KISAuthError(
+                    f"HTTP Error {exc.code} ({exc.reason}): {body}",
+                    error_code=error_data.get("error_code") or str(exc.code),
+                    response_data=error_data,
+                ) from exc
+            except urllib.error.URLError as exc:
+                raise KISAuthError(f"Network connection failed: {exc.reason}") from exc
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                raise KISAuthError(f"Unexpected token issuance failure: {exc}") from exc
+
+            if not data.get("access_token"):
+                error_code = data.get("error_code") or data.get("msg_cd") or "UNKNOWN_ERR"
+                description = data.get("error_description") or data.get("msg1") or str(data)
+                raise KISAuthError(
+                    f"Token missing in response: [{error_code}] {description}",
+                    error_code=error_code,
+                    response_data=data,
+                )
+
+            token = KISAuthToken.from_response(data)
+            self._current_token = token
+            self._save_token_to_cache(token)
+            return token
+
 
     def get_access_token(self, force_refresh: bool = False) -> str:
-        if force_refresh or not self._current_token or not self._current_token.is_valid():
-            self.issue_token()
-        if not self._current_token:
-            raise KISAuthError("Failed to obtain a valid access token.")
-        return self._current_token.access_token
+        with self._token_lock:
+            if force_refresh or not self._current_token or not self._current_token.is_valid():
+                self.issue_token()
+            if not self._current_token:
+                raise KISAuthError("Failed to obtain a valid access token.")
+            return self._current_token.access_token
 
     def get_token_info(self) -> Optional[KISAuthToken]:
         return self._current_token
