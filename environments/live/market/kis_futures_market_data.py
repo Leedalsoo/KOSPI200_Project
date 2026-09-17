@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Callable
 
 from contracts.types import CanonicalMarketTick, DataQuality, MarketState, ProviderHealth
@@ -32,6 +32,7 @@ class KISFuturesMarketDataProvider:
     _quality: dict[str, DataQuality] = field(default_factory=dict)
     _subscribers: list[MarketStateSubscriber] = field(default_factory=list)
     _as_of: datetime | None = None
+    _source: str | None = None
 
     def publish(self, observation: KisIndexFuturesMarketObservation) -> CanonicalMarketTick:
         if self.instrument_id_resolver is None:
@@ -69,6 +70,7 @@ class KISFuturesMarketDataProvider:
         self._ticks[instrument_id] = tick
         self._quality[instrument_id] = quality
         self._as_of = observed_at
+        self._source = observation.source or None
         state = self.snapshot()
         for subscriber in tuple(self._subscribers):
             pass
@@ -89,8 +91,25 @@ class KISFuturesMarketDataProvider:
         self._subscribers.append(callback)
 
     def health(self) -> ProviderHealth:
+        if self._as_of is None:
+            return ProviderHealth(
+                available=False,
+                as_of=None,
+                reason="FUTURES_MARKET_STATE_UNAVAILABLE",
+                source=None,
+                observed_at=None,
+                freshness_seconds=None,
+            )
+        now = datetime.now(timezone.utc)
+        observed_at = self._as_of
+        if observed_at.tzinfo is None:
+            now = datetime.now()
+        freshness_seconds = max(0.0, (now - observed_at).total_seconds())
         return ProviderHealth(
-            available=self._as_of is not None,
+            available=True,
             as_of=self._as_of,
-            reason=None if self._as_of is not None else "FUTURES_MARKET_STATE_UNAVAILABLE",
+            reason=None,
+            source=self._source,
+            observed_at=observed_at,
+            freshness_seconds=freshness_seconds,
         )

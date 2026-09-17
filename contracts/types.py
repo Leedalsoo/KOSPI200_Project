@@ -203,6 +203,9 @@ class ProviderHealth:
     available: bool
     as_of: datetime | None = None
     reason: str | None = None
+    source: str | None = None
+    observed_at: datetime | None = None
+    freshness_seconds: float | None = None
 
 
 __all__: Sequence[str] = (
