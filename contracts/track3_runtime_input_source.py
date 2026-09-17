@@ -23,6 +23,7 @@ class Track3RuntimeInput:
     total_fees: float
     premium_spent: float
     options_legs: tuple[Mapping[str, object], ...]
+    contract_multiplier: float | None
     source: str
 
 

@@ -40,8 +40,9 @@ def payload(state):
         total_fees=1500.0,
         premium_spent=25000.0,
         options_legs=(
-            {"strike": 2.5, "price": 0.12, "qty": 1, "side": "BUY", "type": "CALL"},
+            {"strike": 2.5, "price": 0.12, "qty": 1, "side": "BUY", "type": "CALL", "contract_multiplier": 250000.0},
         ),
+        contract_multiplier=250000.0,
         source="VirtualBroker.position_fee_premium_ledger",
     )
 
@@ -62,7 +63,34 @@ def test_authoritative_source_materializes_track3_payload():
     assert data.total_fees == 1500.0
     assert data.premium_spent == 25000.0
     assert data.options_legs[0]["strike"] == 2.5
+    assert data.options_legs[0]["contract_multiplier"] == 250000.0
+    assert data.contract_multiplier == 250000.0
     assert context.input.data_status["source"] == "VirtualBroker.position_fee_premium_ledger"
+
+
+def test_missing_contract_multiplier_is_blocked():
+    state = market_state()
+    source_payload = payload(state)
+    source_payload = Track3RuntimeInput(
+        observed_at=source_payload.observed_at,
+        spread_history=source_payload.spread_history,
+        active_vol=source_payload.active_vol,
+        base_vol=source_payload.base_vol,
+        price_change_rate=source_payload.price_change_rate,
+        bid_ask_spread=source_payload.bid_ask_spread,
+        gap_pct=source_payload.gap_pct,
+        is_gap=source_payload.is_gap,
+        market_stable=source_payload.market_stable,
+        spread_normalizing=source_payload.spread_normalizing,
+        allow_size_up=source_payload.allow_size_up,
+        total_fees=source_payload.total_fees,
+        premium_spent=source_payload.premium_spent,
+        options_legs=source_payload.options_legs,
+        contract_multiplier=None,
+        source=source_payload.source,
+    )
+    context = Track3RuntimeInputProvider(Source(source_payload)).build(state)
+    assert isinstance(context.input.payload, UnavailableStrategyPayload)
 
 
 def test_stale_authoritative_payload_is_blocked():
@@ -83,6 +111,7 @@ def test_stale_authoritative_payload_is_blocked():
         total_fees=stale.total_fees,
         premium_spent=stale.premium_spent,
         options_legs=stale.options_legs,
+        contract_multiplier=stale.contract_multiplier,
         source=stale.source,
     )
     context = Track3RuntimeInputProvider(Source(stale)).build(state)

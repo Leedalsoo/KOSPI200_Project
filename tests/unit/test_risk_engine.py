@@ -16,6 +16,17 @@ class Margin:
 def account(*, cash=10_000_000, realized=0, used=0, free=10_000_000): return RiskAccountInput(Decimal(str(cash)), Decimal(str(realized)), Decimal(str(used)), Decimal(str(free)))
 def test_kill_switch_denies_before_other_rules():
     e=RiskEngine(margin_engine=Margin()); e.trigger_kill_switch(); assert e.evaluate_order(Command(qty=0),account()).rejection_reason=="REJECTED_BY_KILL_SWITCH"
+
+
+def test_kill_switch_activation_and_reset_are_logged(caplog):
+    import logging
+    e=RiskEngine(margin_engine=Margin())
+    with caplog.at_level(logging.CRITICAL, logger="core.risk.risk_engine"):
+        e.trigger_kill_switch("DAILY_LOSS_LIMIT")
+    assert "KILL SWITCH ACTIVATED: DAILY_LOSS_LIMIT" in caplog.text
+    with caplog.at_level(logging.WARNING, logger="core.risk.risk_engine"):
+        e.reset_kill_switch()
+    assert "KILL SWITCH RESET" in caplog.text
 def test_qty_validation_and_max_are_preserved():
     e=RiskEngine(RiskConfig(max_order_qty=3),Margin()); assert "INVALID_ORDER_QTY" in e.evaluate_order(Command(qty=0),account()).rejection_reason; assert "EXCEEDED_MAX_ORDER_QTY" in e.evaluate_order(Command(qty=4),account()).rejection_reason
 def test_daily_loss_uses_recorded_loss_plus_negative_account_pnl():

@@ -52,8 +52,14 @@ def calculate_options_carry_and_theta(options_legs: Sequence[Mapping[str, object
             continue
         intrinsic = max(0.0, current_index - strike) if option_type == "CALL" else max(0.0, strike - current_index)
         market = float(leg.get("current_market_price", intrinsic))
+        multiplier = leg.get("contract_multiplier")
+        if multiplier is None:
+            raise ValueError("TRACK3_CONTRACT_MULTIPLIER_UNAVAILABLE")
+        multiplier = float(multiplier)
+        if not isfinite(multiplier) or multiplier <= 0:
+            raise ValueError("TRACK3_CONTRACT_MULTIPLIER_INVALID")
         pnl_points = market - entry if side == "BUY" else entry - market
-        total += pnl_points * qty * 250_000.0
+        total += pnl_points * qty * multiplier
     return total
 
 
@@ -76,6 +82,7 @@ class Track3MarketInput:
     premium_spent: float = 0.0
     current_price: float = 0.0
     options_legs: tuple[Mapping[str, object], ...] = ()
+    contract_multiplier: float | None = None
     regime: str | None = None
     date_str: str = ""
 
@@ -164,20 +171,25 @@ class Track3StatisticalArbitrage:
     def estimate_round_trip_cost(
         self, regime: str, qty: int, data: Track3MarketInput
     ) -> float:
-        spread_cost = data.bid_ask_spread * 250_000.0
+        multiplier = data.contract_multiplier
+        if multiplier is None or not isfinite(multiplier) or multiplier <= 0:
+            raise ValueError("TRACK3_CONTRACT_MULTIPLIER_UNAVAILABLE")
+        spread_cost = data.bid_ask_spread * multiplier
         fee_per_leg = 3_000.0
         slippage_ticks = 1.0 if regime == "NORMAL" else 2.0 if regime == "HIGH_VOLATILITY" else 3.0
-        slippage = slippage_ticks * 0.05 * 250_000.0 * qty
+        slippage = slippage_ticks * 0.05 * multiplier * qty
         return (fee_per_leg * 2 * qty) + slippage + (spread_cost * qty) + self.base_round_trip_cost
 
     @staticmethod
     def calculate_expected_gross_profit(
-        z_score: float, spread_history: Sequence[float], qty: int
+        z_score: float, spread_history: Sequence[float], qty: int, contract_multiplier: float | None = None
     ) -> float:
         if len(spread_history) < 10:
             return 0.0
+        if contract_multiplier is None or not isfinite(contract_multiplier) or contract_multiplier <= 0:
+            raise ValueError("TRACK3_CONTRACT_MULTIPLIER_UNAVAILABLE")
         std = pstdev(float(v) for v in spread_history)
-        return abs(z_score) * std * 0.8 * 250_000.0 * qty
+        return abs(z_score) * std * 0.8 * contract_multiplier * qty
 
     @staticmethod
     def calculate_options_carry_and_theta(data: Track3MarketInput) -> float:
@@ -192,7 +204,13 @@ class Track3StatisticalArbitrage:
                 continue
             intrinsic = max(0.0, data.current_price - strike) if option_type == "CALL" else max(0.0, strike - data.current_price)
             market = float(leg.get("current_market_price", intrinsic))
-            total += (market - entry) * qty * 250_000.0 if side == "BUY" else (entry - market) * qty * 250_000.0
+            multiplier = leg.get("contract_multiplier")
+            if multiplier is None:
+                raise ValueError("TRACK3_CONTRACT_MULTIPLIER_UNAVAILABLE")
+            multiplier = float(multiplier)
+            if not isfinite(multiplier) or multiplier <= 0:
+                raise ValueError("TRACK3_CONTRACT_MULTIPLIER_INVALID")
+            total += (market - entry) * qty * multiplier if side == "BUY" else (entry - market) * qty * multiplier
         return total
 
     def _signal(self, action: str, position: str, reason: str, **details: object) -> Signal:
@@ -260,7 +278,7 @@ class Track3StatisticalArbitrage:
                 return Track3Result("OLD_DISLOCATION_BLOCK", regime, z_score)
 
             cost = self.estimate_round_trip_cost(regime, qty, data)
-            gross = self.calculate_expected_gross_profit(z_score, data.spread_history, qty)
+            gross = self.calculate_expected_gross_profit(z_score, data.spread_history, qty, data.contract_multiplier)
             net = gross - cost
             if net < min_profit:
                 return Track3Result("PROFITABILITY_BLOCK", regime, z_score)

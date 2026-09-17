@@ -42,6 +42,8 @@ class Track3RuntimeInputProvider:
             return self._unavailable("TRACK3_COST_SOURCE_INVALID")
         if not payload.options_legs:
             return self._unavailable("TRACK3_OPTION_LEGS_UNAVAILABLE")
+        if payload.contract_multiplier is None or payload.contract_multiplier <= 0:
+            return self._unavailable("TRACK3_CONTRACT_MULTIPLIER_UNAVAILABLE")
 
         tick = market_state.ticks[symbol]
         current_price = float(tick.price)
@@ -70,6 +72,7 @@ class Track3RuntimeInputProvider:
             premium_spent=payload.premium_spent,
             current_price=current_price,
             options_legs=payload.options_legs,
+            contract_multiplier=payload.contract_multiplier,
             date_str=observed_at.date().isoformat(),
         )
         return StrategyContext(
