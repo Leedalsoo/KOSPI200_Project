@@ -172,7 +172,7 @@ class VirtualRuntimeDataProvider:
         support = resistance = None
         support_resistance_status = RuntimeDataStatus(False, False, "Track7SupportResistance", "TRACK7_SUPPORT_RESISTANCE_SOURCE_UNAVAILABLE")
         if self.track7_support_resistance_source is not None and getattr(tick, "symbol", None):
-            observation = self.track7_support_resistance_source.get(symbol=tick.symbol, observed_at=observed_at)
+            observation = self.track7_support_resistance_source.get(symbol=tick.symbol, observed_at=observed_at, current_price=price)
             if observation is not None:
                 support, resistance = observation.support, observation.resistance
                 support_resistance_status = RuntimeDataStatus(True, True, observation.source)

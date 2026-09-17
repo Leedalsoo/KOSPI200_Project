@@ -24,9 +24,9 @@ class Track7AuthoritativeSupportResistanceSource:
             raise ValueError("TRACK7_SUPPORT_RESISTANCE_PROVIDER_REQUIRED")
         self._provider = provider
 
-    def get(self, *, symbol: str, observed_at: datetime) -> Track7SupportResistanceObservation | None:
+    def get(self, *, symbol: str, observed_at: datetime, current_price: Any) -> Track7SupportResistanceObservation | None:
         observation = self._provider.get_support_resistance(
-            symbol=symbol, observed_at=observed_at
+            symbol=symbol, observed_at=observed_at, current_price=current_price
         )
         if observation is None:
             return None

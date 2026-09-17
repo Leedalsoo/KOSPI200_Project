@@ -38,5 +38,5 @@ class Track7SupportResistanceProvider(Protocol):
     """Port for a source that owns the Track7 level definition and data."""
 
     def get_support_resistance(
-        self, *, symbol: str, observed_at: datetime
+        self, *, symbol: str, observed_at: datetime, current_price: Decimal
     ) -> Track7SupportResistanceObservation | None: ...

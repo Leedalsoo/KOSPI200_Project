@@ -23,6 +23,7 @@ from core.risk.risk_config import RiskConfig
 from core.risk.risk_engine import RiskEngine
 from environments.virtual.execution.vssf_command_context_provider import CanonicalVSSFCommandContextProvider
 from infrastructure.kis.track2_option_iv_source import KISTrack2OptionIVSource
+from application.composition.track7_support_resistance_source import Track7AuthoritativeSupportResistanceSource
 from interfaces.control_tower.ui_adapter import ControlTowerUIAdapter
 
 
@@ -51,7 +52,15 @@ def create_virtual_run_session(context: RunContext, option_master: Any) -> RunSe
         historical_path = Path(context.historical_store_path)
         if historical_path.is_file():
             from environments.virtual.market.historical_market_store import HistoricalMarketStore
-            bundle.market.load_historical_store(HistoricalMarketStore(historical_path))
+            from application.historical_daily_ohlc_provider import HistoricalMarketDailyOHLCProvider
+            from application.composition.track7_classic_pivot_provider import Track7ClassicPivotProvider
+            store = HistoricalMarketStore(historical_path)
+            bundle.market.load_historical_store(store, source=context.historical_source)
+            calendar = getattr(bundle.option_master, "calendar", None)
+            if calendar is not None:
+                bundle.track7_support_resistance_source = Track7AuthoritativeSupportResistanceSource(
+                    Track7ClassicPivotProvider(HistoricalMarketDailyOHLCProvider(store, calendar))
+                )
     if context.scenario:
         scenario_engine = getattr(bundle.market, "scenario_engine", None)
         if scenario_engine is not None:

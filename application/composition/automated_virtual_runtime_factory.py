@@ -31,6 +31,7 @@ def attach_standard_automated_loop(bootstrap, *, strategy_keys=None):
         option_master=bootstrap.bundle.option_master,
         track2_option_iv_source=track2_option_iv_source,
         track7_order_timeout_source=getattr(bootstrap.bundle, "track7_order_timeout_source", None),
+        track7_support_resistance_source=getattr(bootstrap.bundle, "track7_support_resistance_source", None),
         track3_runtime_input_source=track3_source,
     )
 
