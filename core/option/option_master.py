@@ -307,6 +307,10 @@ class IOptionContractMaster(ABC):
         return None
 
 
+    def list_contract_identities(self, expiry: Optional[str] = None) -> tuple[KisOptionContractIdentity, ...]:
+        """Return source-owned contract identities for authoritative selection."""
+        return ()
+
     def register_contract_identity(
         self, identity: KisOptionContractIdentity
     ) -> None:
@@ -355,6 +359,10 @@ class _IdentityOptionContractMaster(IOptionContractMaster):
             ):
                 return identity
         return None
+
+    def list_contract_identities(self, expiry: Optional[str] = None) -> tuple[KisOptionContractIdentity, ...]:
+        target = str(expiry).replace("-", "")[:6] if expiry else None
+        return tuple(identity for identity in self._contract_identities.values() if target is None or identity.expiry.replace("-", "")[:6] == target)
 
     def register_contract_identity(
         self, identity: KisOptionContractIdentity

@@ -75,7 +75,11 @@ def create_virtual_run_session(context: RunContext, option_master: Any) -> RunSe
     )
     adapter = ControlTowerUIAdapter(runtime_controller=controller, broker_api=bundle.broker_api)
     strategy_hub = None
-    loop = attach_standard_automated_loop(type("Bootstrap", (), {"bundle": bundle})(), strategy_keys=context.strategy_keys)
+    loop = attach_standard_automated_loop(
+        type("Bootstrap", (), {"bundle": bundle})(),
+        strategy_keys=context.strategy_keys,
+        track9_iv_history_path=context.track9_iv_history_path,
+    )
     strategy_hub = loop.strategy_hub
     runtime_hub = RuntimeHub(loop)
     tower = ControlTowerHub(runtime_controller=controller, ui_adapter=adapter, strategy_hub=strategy_hub, run_context=context)

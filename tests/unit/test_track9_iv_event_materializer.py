@@ -99,3 +99,16 @@ def test_invalid_iv_fails_closed():
             session_date="2026-09-18", symbol="201C51000", expiry="2026-10-15",
             current_price=Decimal("510"), observed_at=start, source=source,
         )
+
+
+def test_0900_prior_observation_is_not_accepted_as_exact_baseline():
+    at_0859 = datetime(2026, 9, 18, 8, 59, 59)
+    source = FakeATMSource([snapshot(at_0859, "0.240", "0.260")])
+    result = Track9IVEventMaterializer().materialize(
+        session_date="2026-09-18", symbol="201C51000", expiry="2026-10-15",
+        current_price=Decimal("510"), observed_at=datetime(2026, 9, 18, 9, 0), source=source,
+    )
+    assert result.status == "BASELINE_UNAVAILABLE"
+    assert result.baseline_iv is None
+    assert result.iv_spike is None
+    assert result.iv_crush is None

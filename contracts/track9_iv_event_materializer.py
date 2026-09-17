@@ -94,7 +94,7 @@ class Track9IVEventMaterializer:
         if snapshot is None:
             return Track9IVEventValues(None, None, None, None, None, None, None, None, "UNAVAILABLE")
         self._validate(snapshot)
-        if not self._baseline and observed_at.time() == SESSION_START:
+        if not self._baseline and observed_at.time() == SESSION_START and snapshot.observed_at == observed_at:
             self._baseline = snapshot
         if self._baseline is None:
             return Track9IVEventValues(None, None, None, None, None, snapshot.strike, None, snapshot.source, "BASELINE_UNAVAILABLE")

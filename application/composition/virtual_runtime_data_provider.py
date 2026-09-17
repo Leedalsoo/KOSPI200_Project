@@ -11,6 +11,7 @@ from contracts.volume_profile_source import VolumeProfileSource
 from contracts.basis_source import BasisSource
 from contracts.track2_market_metrics_source import Track2MarketMetricsSource
 from contracts.track2_option_iv_source import Track2OptionIVSource
+from contracts.track9_iv_event_materializer import Track9IVEventMaterializer, Track9ATMIVSource
 from application.composition.track7_calendar_source import Track7CalendarSource
 from application.composition.track7_support_resistance_source import Track7AuthoritativeSupportResistanceSource
 
@@ -36,6 +37,8 @@ class VirtualRuntimeData:
     put_iv: Decimal | None
     option_delta: Decimal | None
     option_gamma: Decimal | None
+    iv_spike: Decimal | None
+    iv_crush: Decimal | None
     macro_regime: str | None
     event_upcoming: bool | None
     status: dict[str, RuntimeDataStatus]
@@ -60,7 +63,7 @@ class VirtualRuntimeData:
 
 class VirtualRuntimeDataProvider:
     """Derive only from VMS observations and injected authoritative sources."""
-    def __init__(self, market: Any, *, history_size: int = 50, option_expiry_source: Any | None = None, track7_order_timeout_source: Any | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track7_support_resistance_source: Track7AuthoritativeSupportResistanceSource | None = None) -> None:
+    def __init__(self, market: Any, *, history_size: int = 50, option_expiry_source: Any | None = None, track7_order_timeout_source: Any | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, track7_support_resistance_source: Track7AuthoritativeSupportResistanceSource | None = None) -> None:
         self.market = market
         self.history_size = history_size
         self.option_expiry_source = option_expiry_source
@@ -71,6 +74,8 @@ class VirtualRuntimeDataProvider:
         self.basis_source = basis_source
         self.track2_metrics_source = track2_metrics_source
         self.track2_option_iv_source = track2_option_iv_source
+        self.track9_iv_event_materializer = track9_iv_event_materializer
+        self.track9_atm_iv_source = track9_atm_iv_source
         self.track7_support_resistance_source = track7_support_resistance_source
 
     @staticmethod
@@ -153,6 +158,18 @@ class VirtualRuntimeDataProvider:
             else:
                 put_iv, iv = current_iv, opposite_iv
         delta = gamma = None
+        iv_spike = iv_crush = None
+        if (self.track9_iv_event_materializer is not None and self.track9_atm_iv_source is not None
+                and getattr(tick, "symbol", None) and getattr(tick, "expiry", None)):
+            event_values = self.track9_iv_event_materializer.materialize(
+                session_date=observed_at.date().isoformat(),
+                symbol=tick.symbol,
+                expiry=tick.expiry,
+                current_price=Decimal(str(tick.underlying_price)),
+                observed_at=observed_at,
+                source=self.track9_atm_iv_source,
+            )
+            iv_spike, iv_crush = event_values.iv_spike, event_values.iv_crush
         if iv is not None:
             s, k, sigma = float(price), float(tick.strike_price), float(iv)
             t = max(1.0 / 365.0, (datetime.strptime(tick.expiry, "%Y%m") - observed_at.replace(day=1)).total_seconds() / 31536000.0)
@@ -261,6 +278,7 @@ class VirtualRuntimeDataProvider:
                 None if moving_average_available else "TRACK7_MOVING_AVERAGE_HISTORY_COVERAGE_UNAVAILABLE",
             ),
             "iv_greeks": RuntimeDataStatus(iv is not None and put_iv is not None, iv is not None and put_iv is not None, "VMS.option_quotes", "OPTION_CHAIN_UNAVAILABLE" if iv is None or put_iv is None else None),
+            "track9_iv_event": RuntimeDataStatus(iv_spike is not None and iv_crush is not None, iv_spike is not None and iv_crush is not None, "KIS:H0IOCNT0:Track9IVTimeSeries", "TRACK9_IV_EVENT_UNAVAILABLE" if iv_spike is None or iv_crush is None else None),
             "macro": RuntimeDataStatus(True, True, "VMS.scenario.active_config"),
             "event": RuntimeDataStatus(True, True, "VMS.scenario.shock_schedule"),
             "option_expiry": expiry_status,
@@ -277,6 +295,7 @@ class VirtualRuntimeDataProvider:
             active_vol=metrics_active_vol if metrics_active_vol is not None else active_vol,
             base_vol=metrics_base_vol if metrics_base_vol is not None else base_vol,
             option_iv=iv, put_iv=put_iv, option_delta=delta, option_gamma=gamma,
+            iv_spike=iv_spike, iv_crush=iv_crush,
             macro_regime=macro_regime, event_upcoming=event_upcoming, status=status,
             option_expiry=option_expiry, days_to_expiry=days_to_expiry,
             option_bid_qtys=option_bid_qtys, option_ask_qtys=option_ask_qtys,

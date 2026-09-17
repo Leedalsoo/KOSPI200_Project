@@ -28,12 +28,13 @@ from contracts.volume_profile_source import VolumeProfileSource
 from contracts.basis_source import BasisSource
 from contracts.track2_market_metrics_source import Track2MarketMetricsSource
 from contracts.track2_option_iv_source import Track2OptionIVSource
+from contracts.track9_iv_event_materializer import Track9IVEventMaterializer, Track9ATMIVSource
 
 
 class StandardRuntimeInputProvider:
     """Build standard inputs from observable VMS/VSSF sources only."""
 
-    def __init__(self, market: Any, *, track7_order_timeout_source: Any | None = None, track7_support_resistance_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None) -> None:
+    def __init__(self, market: Any, *, track7_order_timeout_source: Any | None = None, track7_support_resistance_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None) -> None:
         self.track7_order_timeout_source = track7_order_timeout_source
         self.track7_support_resistance_source = track7_support_resistance_source
         self.data = VirtualRuntimeDataProvider(
@@ -43,6 +44,8 @@ class StandardRuntimeInputProvider:
             basis_source=basis_source,
             track2_metrics_source=track2_metrics_source,
             track2_option_iv_source=track2_option_iv_source,
+            track9_iv_event_materializer=track9_iv_event_materializer,
+            track9_atm_iv_source=track9_atm_iv_source,
         )
         self.track3 = Track3RuntimeInputProvider(track3_runtime_input_source)
 
