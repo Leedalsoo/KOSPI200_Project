@@ -6,7 +6,6 @@ options carry/theta calculation.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
 from decimal import Decimal
 from math import isfinite
 from statistics import mean, pstdev
@@ -193,25 +192,8 @@ class Track3StatisticalArbitrage:
 
     @staticmethod
     def calculate_options_carry_and_theta(data: Track3MarketInput) -> float:
-        total = 0.0
-        for leg in data.options_legs:
-            strike = float(leg.get("strike", 0.0))
-            entry = float(leg.get("price", 0.0))
-            qty = int(leg.get("qty", 1))
-            side = str(leg.get("side", "BUY"))
-            option_type = str(leg.get("type", "CALL"))
-            if strike <= 0:
-                continue
-            intrinsic = max(0.0, data.current_price - strike) if option_type == "CALL" else max(0.0, strike - data.current_price)
-            market = float(leg.get("current_market_price", intrinsic))
-            multiplier = leg.get("contract_multiplier")
-            if multiplier is None:
-                raise ValueError("TRACK3_CONTRACT_MULTIPLIER_UNAVAILABLE")
-            multiplier = float(multiplier)
-            if not isfinite(multiplier) or multiplier <= 0:
-                raise ValueError("TRACK3_CONTRACT_MULTIPLIER_INVALID")
-            total += (market - entry) * qty * multiplier if side == "BUY" else (entry - market) * qty * multiplier
-        return total
+        return calculate_options_carry_and_theta(data.options_legs, data.current_price)
+
 
     def _signal(self, action: str, position: str, reason: str, **details: object) -> Signal:
         payload = {"action": action, "position": position, **details}
