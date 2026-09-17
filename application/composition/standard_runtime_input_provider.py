@@ -33,9 +33,9 @@ from contracts.track2_option_iv_source import Track2OptionIVSource
 class StandardRuntimeInputProvider:
     """Build standard inputs from observable VMS/VSSF sources only."""
 
-    def __init__(self, market: Any, *, option_expiry_source: OptionExpirySource | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None) -> None:
+    def __init__(self, market: Any, *, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None) -> None:
         self.data = VirtualRuntimeDataProvider(
-            market, option_expiry_source=option_expiry_source,
+            market, option_expiry_source=option_expiry_source, trading_calendar=trading_calendar, option_master=option_master,
             option_orderbook_source=option_orderbook_source,
             volume_profile_source=volume_profile_source,
             basis_source=basis_source,
@@ -202,7 +202,9 @@ class StandardRuntimeInputProvider:
             track7_missing_sources.append("option_iv_chain")
         if not all(value is not None for value in (d.ma_1m, d.ma_3m, d.ma_5m, d.ma_10m)):
             track7_missing_sources.append("moving_average")
-        track7_missing_sources.extend(("order_timeout", "support_resistance", "expiry_calendar"))
+        if not all(value is not None for value in (d.is_new_week_start, d.is_expiry_day, d.is_week_end)):
+            track7_missing_sources.append("expiry_calendar")
+        track7_missing_sources.extend(("order_timeout", "support_resistance"))
         contexts["track7_volatility_skew_weekly_insurance"] = self._unavailable(
             "track7_volatility_skew_weekly_insurance",
             tuple(track7_missing_sources),

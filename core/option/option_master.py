@@ -387,6 +387,7 @@ class InMemoryOptionContractMaster(_IdentityOptionContractMaster):
         auto_load_kis_source: bool = False,
         calendar: Optional[TradingCalendar] = None,
     ) -> None:
+        self.calendar = calendar
         self._contracts: Dict[str, str] = dict(contracts or {})
         self._init_identity_registry()
         self._last_error: Optional[str] = None

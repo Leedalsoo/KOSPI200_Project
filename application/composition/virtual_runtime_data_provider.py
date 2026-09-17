@@ -11,6 +11,7 @@ from contracts.volume_profile_source import VolumeProfileSource
 from contracts.basis_source import BasisSource
 from contracts.track2_market_metrics_source import Track2MarketMetricsSource
 from contracts.track2_option_iv_source import Track2OptionIVSource
+from application.composition.track7_calendar_source import Track7CalendarSource
 
 @dataclass(frozen=True)
 class RuntimeDataStatus:
@@ -49,13 +50,17 @@ class VirtualRuntimeData:
     ma_3m: Decimal | None = None
     ma_5m: Decimal | None = None
     ma_10m: Decimal | None = None
+    is_new_week_start: bool | None = None
+    is_expiry_day: bool | None = None
+    is_week_end: bool | None = None
 
 class VirtualRuntimeDataProvider:
     """Derive only from VMS observations and injected authoritative sources."""
-    def __init__(self, market: Any, *, history_size: int = 50, option_expiry_source: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None) -> None:
+    def __init__(self, market: Any, *, history_size: int = 50, option_expiry_source: Any | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None) -> None:
         self.market = market
         self.history_size = history_size
         self.option_expiry_source = option_expiry_source
+        self.trading_calendar = Track7CalendarSource(trading_calendar, option_master) if trading_calendar is not None else None
         self.option_orderbook_source = option_orderbook_source
         self.volume_profile_source = volume_profile_source
         self.basis_source = basis_source
@@ -156,11 +161,25 @@ class VirtualRuntimeDataProvider:
         option_expiry = None
         days_to_expiry = None
         expiry_status = RuntimeDataStatus(False, False, "OptionExpirySource", "OPTION_EXPIRY_SOURCE_UNAVAILABLE")
+        calendar_flags = (None, None, None)
+        calendar_status = RuntimeDataStatus(False, False, "TradingCalendar", "TRACK7_TRADING_CALENDAR_UNAVAILABLE")
         if self.option_expiry_source is not None and getattr(tick, "symbol", None):
             option_expiry = self.option_expiry_source.resolve_expiry(tick.symbol)
-            if option_expiry is not None:
-                days_to_expiry = (option_expiry - observed_at.date()).days
-                expiry_status = RuntimeDataStatus(True, True, "KIS.OptionMaster.expiry")
+        if option_expiry is None and self.trading_calendar is not None:
+            try:
+                option_expiry = self.trading_calendar.resolve_option_expiry(tick)
+            except (ValueError, TypeError):
+                option_expiry = None
+        if option_expiry is not None:
+            days_to_expiry = (option_expiry - observed_at.date()).days
+            expiry_status = RuntimeDataStatus(True, True, "KIS.OptionMaster.expiry")
+        if self.trading_calendar is not None:
+            try:
+                calendar_flags = self.trading_calendar.flags(observed_at.date(), option_expiry)
+                calendar_status = RuntimeDataStatus(True, True, "KIS.TradingCalendar")
+            except (ValueError, TypeError):
+                calendar_flags = (None, None, None)
+                calendar_status = RuntimeDataStatus(False, False, "KIS.TradingCalendar", "TRACK7_TRADING_CALENDAR_UNAVAILABLE")
         option_bid_qtys = None
         option_ask_qtys = None
         orderbook_status = RuntimeDataStatus(
@@ -227,6 +246,7 @@ class VirtualRuntimeDataProvider:
             "macro": RuntimeDataStatus(True, True, "VMS.scenario.active_config"),
             "event": RuntimeDataStatus(True, True, "VMS.scenario.shock_schedule"),
             "option_expiry": expiry_status,
+            "track7_calendar": calendar_status,
             "option_orderbook": orderbook_status,
             "volume_profile_poc": poc_status,
             "basis": basis_status,
@@ -243,6 +263,7 @@ class VirtualRuntimeDataProvider:
             option_bid_qtys=option_bid_qtys, option_ask_qtys=option_ask_qtys,
             poc_price=poc_price, basis=basis, bbw_window=bbw_window, volume_window=volume_window,
             ma_1m=ma_1m, ma_3m=ma_3m, ma_5m=ma_5m, ma_10m=ma_10m,
+            is_new_week_start=calendar_flags[0], is_expiry_day=calendar_flags[1], is_week_end=calendar_flags[2],
         )
 
 
