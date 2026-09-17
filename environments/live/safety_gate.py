@@ -13,7 +13,6 @@ class LiveSafetyGate:
 
     def approve(self, approval: LiveApproval) -> None:
         if not approval.approved_by.strip():
-            pass
             raise ValueError("approval identity is required")
         self._approval = approval
 
@@ -22,15 +21,11 @@ class LiveSafetyGate:
 
     def evaluate(self, quantity: int, account_age_seconds: float) -> LiveGateResult:
         if self._approval is None:
-            pass
             return LiveGateResult(False, "live approval is missing")
         if not self.policy.can_submit:
-            pass
             return LiveGateResult(False, "live safety policy is disarmed")
         if quantity <= 0 or quantity > self.policy.max_order_quantity:
-            pass
             return LiveGateResult(False, "order quantity exceeds live limit")
         if account_age_seconds > self.policy.max_account_staleness_seconds:
-            pass
             return LiveGateResult(False, "account/position data is stale")
         return LiveGateResult(True, "approved")

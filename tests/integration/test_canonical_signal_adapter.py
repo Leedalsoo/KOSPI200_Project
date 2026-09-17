@@ -76,7 +76,6 @@ def test_track1_proposal_and_external_identity_mismatch_fails_closed():
     )
 
     with pytest.raises(ValueError, match="OPTION_TYPE_IDENTITY_MISMATCH"):
-        pass
         signal_to_canonical(
             make_track1_option_signal(),
             make_runtime(),
@@ -102,13 +101,11 @@ def test_signal_identity_and_external_identity_mismatch_fails_closed():
     )
 
     with pytest.raises(ValueError, match="OPTION_IDENTITY_MISMATCH"):
-        pass
         signal_to_canonical(signal, make_runtime(), instrument_identity=bad_identity)
 
 
 def test_track1_option_without_authoritative_identity_stays_fail_closed():
     with pytest.raises(ValueError, match="OPTION_IDENTITY_REQUIRED"):
-        pass
         signal_to_canonical(make_track1_option_signal(), make_runtime())
 
 # Consolidated from tests\integration\test_canonical_signal_adapter_track4_seam.py; retained because it covers the same production boundary.
@@ -162,7 +159,6 @@ def test_track4_proposal_semantics_are_preserved_at_canonical_boundary():
 def test_track4_missing_execution_proposal_fails_closed():
     signal = Signal("TRACK4_GAMMA_SCALPING", "LONG", 1.0, "DELTA_HEDGE", execution_proposal=None)
     with pytest.raises(ValueError, match="EXECUTION_PROPOSAL_REQUIRED"):
-        pass
         signal_to_canonical(signal, make_track4_runtime())
 
 
@@ -174,7 +170,6 @@ def test_option_canonical_boundary_requires_authoritative_identity():
     )
     signal = Signal("TRACK4_GAMMA_SCALPING", "LONG", 1.0, "OPTION_HEDGE", execution_proposal=proposal)
     with pytest.raises(ValueError, match="OPTION_IDENTITY_REQUIRED"):
-        pass
         signal_to_canonical(signal, make_track4_runtime())
 
 

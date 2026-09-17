@@ -27,12 +27,10 @@ class RuntimeStrategyResultCollectionAdapter:
         result: Any,
     ) -> tuple[RuntimeStrategyEvaluation, ...]:
         if tick_sequence <= 0:
-            pass
             raise ValueError("RUNTIME_SOURCE_SEQUENCE_REQUIRED")
 
         signals = getattr(result, "signals", None)
         if signals is None:
-            pass
             raise TypeError("RUNTIME_STRATEGY_SIGNAL_COLLECTION_REQUIRED")
 
         return tuple(

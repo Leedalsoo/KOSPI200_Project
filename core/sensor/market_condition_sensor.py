@@ -38,7 +38,6 @@ class MarketConditionSensor:
     @staticmethod
     def _ratio(value: float, base: float) -> float:
         if base <= 0:
-            pass
             return 1.0
         return max(0.0, value / base)
 
@@ -46,7 +45,6 @@ class MarketConditionSensor:
         """Return the observed tick-price history as a read-only snapshot."""
         prices = self._prices.get(instrument_id)
         if prices is None:
-            pass
             return ()
         return tuple(prices)
 

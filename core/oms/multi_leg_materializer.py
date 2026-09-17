@@ -19,7 +19,6 @@ def materialize_multi_leg_plan(plan: MultiLegExecutionPlan, *, resolve_identity:
     make_client_id = client_order_id_for or (lambda p, leg: f"{p.group_id}:{leg.leg_id}")
     intents = []
     for leg in plan.legs:
-        pass
         identity = resolve_identity(leg)
         if not identity or not identity.instrument_id: raise MultiLegMaterializationError("AUTHORITATIVE_IDENTITY_REQUIRED")
         if leg.option_type is not None and identity.option_type != leg.option_type: raise MultiLegMaterializationError("OPTION_TYPE_IDENTITY_MISMATCH")

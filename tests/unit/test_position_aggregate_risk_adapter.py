@@ -24,13 +24,10 @@ def test_missing_side_fails_closed():
             return {"OPTION_X": PositionAggregate(side="", qty=3)}
 
     try:
-        pass
         position_aggregate_to_risk_input(Source())
     except TypeError as exc:
-        pass
         assert str(exc) == "RISK_POSITION_SIDE_REQUIRED"
     else:
-        pass
         raise AssertionError("missing side must fail closed")
 
 
@@ -40,13 +37,10 @@ def test_invalid_qty_fails_closed():
             return {"OPTION_X": PositionAggregate(side="BUY", qty=1.5)}
 
     try:
-        pass
         position_aggregate_to_risk_input(Source())
     except TypeError as exc:
-        pass
         assert str(exc) == "RISK_POSITION_QTY_REQUIRED"
     else:
-        pass
         raise AssertionError("invalid qty must fail closed")
 
 
@@ -56,11 +50,8 @@ def test_non_mapping_snapshot_fails_closed():
             return None
 
     try:
-        pass
         position_aggregate_to_risk_input(Source())
     except TypeError as exc:
-        pass
         assert str(exc) == "RISK_POSITION_AGGREGATE_SOURCE_REQUIRED"
     else:
-        pass
         raise AssertionError("non-mapping snapshot must fail closed")

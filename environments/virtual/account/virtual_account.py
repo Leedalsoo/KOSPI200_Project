@@ -19,7 +19,6 @@ class VirtualAccount(AccountProvider):
 
     def snapshot(self) -> AccountSnapshot:
         if self.clock is None:
-            pass
             raise RuntimeError("VirtualAccount.snapshot requires an injected ClockProvider")
         return AccountSnapshot(
             as_of=self.clock.now(),

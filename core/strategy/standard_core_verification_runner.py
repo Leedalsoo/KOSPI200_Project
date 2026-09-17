@@ -24,5 +24,4 @@ def run_independent_verification() -> None:
 
 
 if __name__ == "__main__":
-    pass
     run_independent_verification()

@@ -28,16 +28,12 @@ class OptionIdentitySelection:
 
     def __post_init__(self) -> None:
         if not self.symbol:
-            pass
             raise OptionIdentitySourceError("SYMBOL_REQUIRED")
         if not self.expiry:
-            pass
             raise OptionIdentitySourceError("EXPIRY_REQUIRED")
         if not self.option_type:
-            pass
             raise OptionIdentitySourceError("OPTION_TYPE_REQUIRED")
         if self.strike <= 0:
-            pass
             raise OptionIdentitySourceError("STRIKE_REQUIRED")
 
 
@@ -59,21 +55,16 @@ def resolve_authoritative_option_identity(
 
     record = source.resolve(selection)
     if record is None:
-        pass
         raise OptionIdentitySourceError("AUTHORITATIVE_IDENTITY_NOT_FOUND")
 
     identity = record.to_identity()
     if identity.symbol != selection.symbol:
-        pass
         raise OptionIdentitySourceError("AUTHORITATIVE_SYMBOL_MISMATCH")
     if identity.expiry != selection.expiry:
-        pass
         raise OptionIdentitySourceError("AUTHORITATIVE_EXPIRY_MISMATCH")
     if identity.option_type != selection.option_type:
-        pass
         raise OptionIdentitySourceError("AUTHORITATIVE_OPTION_TYPE_MISMATCH")
     if identity.strike != selection.strike:
-        pass
         raise OptionIdentitySourceError("AUTHORITATIVE_STRIKE_MISMATCH")
 
     return record

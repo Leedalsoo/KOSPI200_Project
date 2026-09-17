@@ -89,7 +89,6 @@ def test_deny_does_not_call_router():
 
 def test_approved_without_token_fails_closed():
     with pytest.raises(RuntimeError, match="RISK_APPROVAL_TOKEN_REQUIRED"):
-        pass
         route_from_runtime_authoritative_sources(
             command(),
             risk_gate=Gate(token=None),

@@ -33,7 +33,6 @@ class HistoricalReplayEngine:
 
     def next_tick(self) -> Optional[ReferenceCanonicalMarketTick]:
         if self.exhausted:
-            pass
             return None
         tick = self._ticks[self._cursor]
         self._cursor += 1

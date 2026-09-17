@@ -29,9 +29,7 @@ def test_shared_oms_and_router_ownership_passes():
 
 def test_mismatched_oms_or_router_fails_closed():
     with pytest.raises(ValueError, match='LIVE_RUNTIME_OMS_OWNERSHIP_MISMATCH'):
-        pass
         LiveRuntimeBootstrap(Execution(object()),Router(object()))
     fsm=object(); router=Router(fsm)
     with pytest.raises(ValueError, match='LIVE_RUNTIME_ROUTER_OWNERSHIP_MISMATCH'):
-        pass
         LiveRuntimeBootstrap(Execution(fsm),router,Transport(Router(fsm)))

@@ -30,31 +30,23 @@ class KisDomesticFuturesOrderPayloadAdapter:
 
     def to_payload(self, command: BrokerOrderCommand) -> dict[str, str]:
         if command.asset_type != "FUTURES":
-            pass
             raise KisOrderPayloadError("FUTURES_ASSET_TYPE_REQUIRED")
         if not command.broker_symbol:
-            pass
             raise KisOrderPayloadError("SHTN_PDNO_REQUIRED")
         if not re.fullmatch(r"[A-Za-z0-9]{8}", command.broker_symbol):
-            pass
             raise KisOrderPayloadError("SHTN_PDNO_MUST_BE_8_ALPHANUMERIC")
         if command.broker_symbol[0] != "1":
-            pass
             raise KisOrderPayloadError("FUTURES_SHTN_PDNO_PRODUCT_PREFIX_REQUIRED")
         if command.quantity <= 0:
-            pass
             raise KisOrderPayloadError("ORD_QTY_REQUIRED")
         if command.requested_price is None or command.requested_price <= 0:
-            pass
             raise KisOrderPayloadError("UNIT_PRICE_REQUIRED")
         if command.order_type != "LIMIT":
-            pass
             # Current Standard contract does not define a safe market-order mapping.
             raise KisOrderPayloadError("UNSUPPORTED_ORDER_TYPE")
 
         side = str(command.side).upper()
         if side not in {"BUY", "SELL"}:
-            pass
             raise KisOrderPayloadError("SIDE_REQUIRED")
 
         return {

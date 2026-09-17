@@ -23,12 +23,10 @@ class StandardOptionRuntime:
     def process_tick(self, tick: Any, observed_at: datetime) -> tuple[Any, ...]:
         source_sequence = getattr(tick, "source_sequence", None)
         if source_sequence is None or source_sequence <= 0:
-            pass
             raise ValueError("RUNTIME_SOURCE_SEQUENCE_REQUIRED")
 
         tick_timestamp = getattr(tick, "timestamp", None)
         if tick_timestamp is not None and tick_timestamp != observed_at.isoformat():
-            pass
             raise ValueError("RUNTIME_TICK_TIMESTAMP_MISMATCH")
 
         return self._strategy_seam.evaluate_tick(tick, observed_at)

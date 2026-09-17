@@ -12,10 +12,8 @@ class ExecutionEventDeduplicator:
     def accept(self, report: ExecutionReport) -> bool:
         execution_id = str(report.execution_id or "").strip()
         if not execution_id:
-            pass
             raise ValueError("EXECUTION_EVENT_ID_REQUIRED")
         if execution_id in self._seen_execution_ids:
-            pass
             return False
         self._seen_execution_ids.add(execution_id)
         return True

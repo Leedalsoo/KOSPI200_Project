@@ -113,7 +113,6 @@ def test_full_live_execution_composition():
 
 def test_missing_runtime_dependency_fails_closed():
     with pytest.raises(ValueError, match="LIVE_EXECUTION_RUNTIME_DEPENDENCY_REQUIRED:broker"):
-        pass
         create_live_execution_runtime_composition(
             transport=FakeTransport({}),
             execution_adapter=FakeExecutionAdapter(),
@@ -166,7 +165,6 @@ def test_runtime_composition_wires_recovery_to_shared_settlement():
 
 def test_recovery_transport_and_adapter_must_be_paired():
     with pytest.raises(ValueError, match="LIVE_RECOVERY_TRANSPORT_ADAPTER_MUST_BE_PAIRED"):
-        pass
         create_live_execution_runtime_composition(
             transport=FakeTransport({}),
             execution_adapter=FakeExecutionAdapter(),

@@ -27,7 +27,6 @@ class FakeGate:
     def admit_order(self, command, *_args, **_kwargs):
         self.last_evaluation_result = self.result
         if self.result.decision == "REDUCE":
-            pass
             self.result.reduced_command = replace(command, qty=2)
         return self.result.is_approved, None, self.result.rejection_reason
 
@@ -220,7 +219,6 @@ def test_decision_to_command_requires_authoritative_client_order_id():
     approved = DecisionArbiter().arbitrate([approved_signal()], account=None).approved_signals
 
     with pytest.raises(ValueError, match="CLIENT_ORDER_ID_REQUIRED"):
-        pass
         approved_signal_to_command(
 approved[0],
             context=DecisionCommandContext(client_order_id=""),

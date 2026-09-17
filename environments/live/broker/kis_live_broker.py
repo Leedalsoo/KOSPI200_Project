@@ -23,22 +23,17 @@ class LiveBrokerAdapter:
 
     def submit(self, command: BrokerOrderCommand, identity: OrderIdentity, account_age_seconds: float) -> BrokerOrderResponse:
         if not self.connected:
-            pass
             raise RuntimeError("live broker is disconnected")
         if not self.idempotency.reserve(identity):
-            pass
             raise RuntimeError("duplicate client order identity")
 
         gate = self.gate.evaluate(command.quantity, account_age_seconds)
         if not gate.allowed:
-            pass
             raise RuntimeError(gate.reason)
 
         broker_command = command
         if command.asset_type == "FUTURES":
-            pass
             if self.futures_command_adapter is None:
-                pass
                 raise RuntimeError("FUTURES_COMMAND_ADAPTER_REQUIRED")
             broker_command = self.futures_command_adapter.to_broker_command(command)
 

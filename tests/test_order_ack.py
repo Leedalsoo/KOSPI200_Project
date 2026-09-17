@@ -32,25 +32,19 @@ def test_rejected_ack_maps_without_broker_order_id():
 
 def test_accepted_ack_requires_broker_order_id():
     try:
-        pass
         to_order_ack_event(
             BrokerOrderResponse(client_order_id="ORD-3", accepted=True)
         )
     except OrderAckBoundaryError as exc:
-        pass
         assert str(exc) == "BROKER_ORDER_ID_REQUIRED_FOR_ACCEPTED_ACK"
     else:
-        pass
         raise AssertionError("expected accepted ACK validation failure")
 
 
 def test_missing_client_order_id_fails_closed():
     try:
-        pass
         to_order_ack_event(BrokerOrderResponse(client_order_id="", accepted=False))
     except OrderAckBoundaryError as exc:
-        pass
         assert str(exc) == "CLIENT_ORDER_ID_REQUIRED"
     else:
-        pass
         raise AssertionError("expected client order id validation failure")

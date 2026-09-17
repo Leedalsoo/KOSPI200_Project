@@ -24,26 +24,20 @@ self,
         self, config: EnvironmentConfig, policy: RuntimePolicy
     ) -> EnvironmentBundle:
         if config.environment is EnvironmentType.VIRTUAL:
-            pass
             if self._virtual_builder is None:
-                pass
                 raise RuntimeError(
                     "Virtual Environment composition is not configured: "
                     "inject a builder that supplies the actual VMS/VSSF components"
                 )
             return self._virtual_builder(config, policy)
         if config.environment is EnvironmentType.HIGH_SPEED:
-            pass
             from environments.high_speed.bundle import HighSpeedEnvironmentBundle
             return HighSpeedEnvironmentBundle(config, policy)
         if config.environment is EnvironmentType.PAPER:
-            pass
             from environments.paper.bundle import PaperEnvironmentBundle
             return PaperEnvironmentBundle(config, policy)
         if config.environment is EnvironmentType.LIVE:
-            pass
             if self._live_builder is None:
-                pass
                 raise RuntimeError(
                     "Live Environment composition is not configured: "
                     "inject a builder that supplies the actual broker/market/account/position components"

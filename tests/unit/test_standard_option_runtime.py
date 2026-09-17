@@ -101,7 +101,6 @@ def test_invalid_tick_is_rejected_before_track4_seam():
     runtime = StandardOptionRuntime(seam)
 
     with pytest.raises(ValueError, match="RUNTIME_SOURCE_SEQUENCE_REQUIRED"):
-        pass
         runtime.process_tick(authoritative_tick(sequence=None), AS_OF)
 
     assert seam.calls == []
@@ -112,7 +111,6 @@ def test_timestamp_mismatch_is_rejected_before_track4_seam():
     runtime = StandardOptionRuntime(seam)
 
     with pytest.raises(ValueError, match="RUNTIME_TICK_TIMESTAMP_MISMATCH"):
-        pass
         runtime.process_tick(authoritative_tick(timestamp="2026-01-02T10:00:01"), AS_OF)
 
     assert seam.calls == []

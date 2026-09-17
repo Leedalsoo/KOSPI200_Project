@@ -22,30 +22,22 @@ self,
         runtime: RuntimeExecutionContext,
     ) -> CanonicalOrderCommand:
         if signal.qty <= 0:
-            pass
             raise CanonicalOrderCommandValidationError("QUANTITY_REQUIRED")
         if signal.price <= 0:
-            pass
             raise CanonicalOrderCommandValidationError("PRICE_REQUIRED")
         if not signal.track_id:
-            pass
             raise CanonicalOrderCommandValidationError("TRACK_ID_REQUIRED")
         if not signal.instrument_id:
-            pass
             raise CanonicalOrderCommandValidationError("AUTHORITATIVE_INSTRUMENT_ID_REQUIRED")
 
         client_order_id = runtime.client_order_id(signal.track_id)
 
         if signal.asset_type == CanonicalAssetType.OPTION:
-            pass
             if not signal.symbol or not signal.expiry:
-                pass
                 raise CanonicalOrderCommandValidationError("OPTION_SYMBOL_EXPIRY_REQUIRED")
             if signal.option_type is None:
-                pass
                 raise CanonicalOrderCommandValidationError("OPTION_TYPE_REQUIRED")
             if signal.strike <= 0:
-                pass
                 raise CanonicalOrderCommandValidationError("STRIKE_REQUIRED")
 
         return CanonicalOrderCommand(

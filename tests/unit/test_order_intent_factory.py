@@ -73,7 +73,6 @@ def test_contract_changing_override_fails_closed():
         asset_type="OPTION",
     )
     with pytest.raises(ValueError, match="AUTHORITATIVE_IDENTITY_REQUIRED_FOR_STRIKE_OVERRIDE"):
-        pass
         OrderIntentFactory(OptionIdentityResolver()).create(signal, execution)
 
 
@@ -88,7 +87,6 @@ def test_flat_signal_is_not_executable():
         asset_type="OPTION",
     )
     with pytest.raises(OrderIntentValidationError, match="ORDER_SIDE_REQUIRED"):
-        pass
         OrderIntentFactory(OptionIdentityResolver()).create(signal, execution)
 
 
@@ -103,5 +101,4 @@ def test_missing_option_identity_fails_closed():
         asset_type="OPTION",
     )
     with pytest.raises(ValueError, match="OPTION_IDENTITY_REQUIRED"):
-        pass
         OrderIntentFactory(OptionIdentityResolver()).create(signal, execution)

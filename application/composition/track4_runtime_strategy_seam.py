@@ -34,15 +34,12 @@ self,
         observed_at: datetime,
     ) -> tuple[RuntimeStrategyEvaluation, ...]:
         if tick.source_sequence is None or tick.source_sequence <= 0:
-            pass
             raise ValueError("TRACK4_RUNTIME_SOURCE_SEQUENCE_REQUIRED")
         if tick.timestamp != observed_at.isoformat():
-            pass
             raise ValueError("TRACK4_RUNTIME_TICK_TIMESTAMP_MISMATCH")
 
         payload = self._materializer.materialize(observed_at)
         if not isinstance(payload, Track4MarketInput):
-            pass
             raise TypeError("TRACK4_RUNTIME_TYPED_PAYLOAD_REQUIRED")
 
         context = StrategyContext(

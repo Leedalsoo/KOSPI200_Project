@@ -18,35 +18,25 @@ class OrderIntentAdapter:
 
     def to_broker_command(self, intent: OrderIntent) -> BrokerOrderCommand:
         if not intent.client_order_id:
-            pass
             raise OrderIntentMappingError("CLIENT_ORDER_ID_REQUIRED")
         if not intent.instrument_id:
-            pass
             raise OrderIntentMappingError("INSTRUMENT_ID_REQUIRED")
         if intent.quantity <= 0:
-            pass
             raise OrderIntentMappingError("QUANTITY_REQUIRED")
         if not intent.side:
-            pass
             raise OrderIntentMappingError("SIDE_REQUIRED")
         if not intent.order_type:
-            pass
             raise OrderIntentMappingError("ORDER_TYPE_REQUIRED")
 
         identity = intent.instrument_identity
         if intent.asset_type == "OPTION":
-            pass
             if identity is None:
-                pass
                 raise OrderIntentMappingError("OPTION_IDENTITY_REQUIRED")
             if not identity.symbol or not identity.expiry:
-                pass
                 raise OrderIntentMappingError("OPTION_SYMBOL_EXPIRY_REQUIRED")
             if identity.option_type is None or identity.strike is None or identity.strike <= 0:
-                pass
                 raise OrderIntentMappingError("OPTION_CONTRACT_FIELDS_REQUIRED")
             if identity.instrument_id != intent.instrument_id:
-                pass
                 raise OrderIntentMappingError("INSTRUMENT_IDENTITY_MISMATCH")
 
         return BrokerOrderCommand(

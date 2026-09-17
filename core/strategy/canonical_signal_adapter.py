@@ -23,7 +23,6 @@ class RuntimeSignalContext:
 def _require_non_empty(value: str, field_name: str) -> str:
     value = str(value or "").strip()
     if not value:
-        pass
         raise ValueError(f"{field_name}_REQUIRED")
     return value
 
@@ -38,23 +37,18 @@ def signal_to_canonical(
     track_id = _require_non_empty(runtime.track_id, "TRACK_ID")
     proposal = signal.execution_proposal
     if proposal is None:
-        pass
         raise ValueError("EXECUTION_PROPOSAL_REQUIRED")
     if proposal.proposed_quantity <= 0:
-        pass
         raise ValueError("QTY_REQUIRED")
     if not proposal.asset_type:
-        pass
         raise ValueError("ASSET_TYPE_REQUIRED")
     if not proposal.side:
-        pass
         raise ValueError("SIDE_REQUIRED")
 
     asset_type = CanonicalAssetType(str(proposal.asset_type))
     side = CanonicalOrderSide(str(proposal.side))
     signal_identity: Optional[OptionInstrumentIdentity] = signal.instrument_identity
     if signal_identity is not None and instrument_identity is not None and signal_identity != instrument_identity:
-        pass
         raise ValueError("OPTION_IDENTITY_MISMATCH")
     identity: Optional[OptionInstrumentIdentity] = signal_identity or instrument_identity
     option_type: Optional[CanonicalOptionType] = None
@@ -64,21 +58,15 @@ def signal_to_canonical(
     instrument_id = ""
 
     if asset_type == CanonicalAssetType.OPTION:
-        pass
         if identity is None:
-            pass
             raise ValueError("OPTION_IDENTITY_REQUIRED")
         if not identity.instrument_id or not identity.symbol or not identity.expiry:
-            pass
             raise ValueError("OPTION_IDENTITY_INCOMPLETE")
         if identity.option_type is None or identity.strike is None:
-            pass
             raise ValueError("OPTION_IDENTITY_INCOMPLETE")
         if proposal.option_type is not None and str(proposal.option_type) != str(identity.option_type):
-            pass
             raise ValueError("OPTION_TYPE_IDENTITY_MISMATCH")
         if proposal.strike is not None and proposal.strike != identity.strike:
-            pass
             raise ValueError("STRIKE_IDENTITY_MISMATCH")
         option_type = CanonicalOptionType(str(identity.option_type))
         strike = float(identity.strike)

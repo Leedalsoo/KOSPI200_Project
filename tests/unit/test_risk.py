@@ -20,13 +20,10 @@ def test_risk_approval_token_is_immutable():
     token = RiskApprovalToken(uuid4(), 1, "sig")
 
     try:
-        pass
         token.signature = "changed"
     except Exception:
         pass
-        pass
     else:
-        pass
         raise AssertionError("RiskApprovalToken must be immutable")
 
 

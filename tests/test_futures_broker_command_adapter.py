@@ -49,11 +49,9 @@ def test_adapter_does_not_use_existing_broker_symbol_as_fallback():
 def test_invalid_command_is_rejected_before_transport():
     invalid = replace(command(), quantity=0)
     with pytest.raises(FuturesBrokerCommandMappingError, match="QUANTITY_REQUIRED"):
-        pass
         KisFuturesBrokerCommandAdapter(StubSymbolSource()).to_broker_command(invalid)
 
 
 def test_missing_symbol_is_fail_closed():
     with pytest.raises(FuturesBrokerCommandMappingError, match="FUTURES_BROKER_SYMBOL_REQUIRED"):
-        pass
         KisFuturesBrokerCommandAdapter(StubSymbolSource("")).to_broker_command(command())

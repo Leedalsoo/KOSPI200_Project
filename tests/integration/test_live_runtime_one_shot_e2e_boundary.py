@@ -175,5 +175,4 @@ def test_one_shot_requires_risk_context():
     entry, _, _ = build_entry(events)
 
     with pytest.raises(ValueError, match="RUNTIME_RISK_CONTEXT_REQUIRED"):
-        pass
         entry.process_tick("TICK-1", "OBS-1", risk_context=None)

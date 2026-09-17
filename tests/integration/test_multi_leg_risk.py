@@ -92,7 +92,6 @@ def test_deny_stops_later_legs():
 def test_client_order_id_provenance_mismatch_fails_closed():
     g = gate()
     with pytest.raises(MultiLegRiskError, match="CLIENT_ORDER_ID_PROVENANCE_MISMATCH"):
-        pass
         admit_multi_leg_intents([intent("O1", "a")], risk_gate=g, account=account(), command_factory=lambda i: Command("OTHER", "t", 1, 1.0, "BUY", "LEG"))
 
 
@@ -107,5 +106,4 @@ def test_reduced_quantity_provenance_mismatch_fails_closed():
         def admit_order(self, *args, **kwargs):
             return True, self.last_evaluation_result.token, None
     with pytest.raises(MultiLegRiskError, match="REDUCED_QUANTITY_PROVENANCE_MISMATCH"):
-        pass
         admit_multi_leg_intents([intent("O1", "a")], risk_gate=FakeGate(), account=account(), command_factory=factory)

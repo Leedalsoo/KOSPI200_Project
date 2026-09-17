@@ -41,5 +41,4 @@ def test_reduce_only_projects_authoritative_quantity():
 def test_risk_quantity_increase_fails_closed():
     effective=type('Bad',(),{'client_order_id':'ORD-1','qty':6})()
     with pytest.raises(ValueError, match='RISK_QUANTITY_INCREASE_FORBIDDEN'):
-        pass
         route_from_runtime_authoritative_sources(canonical(), risk_gate=Gate(effective), context=RiskRouterContext(Account(),PositionSource(),object(),broker_command()))

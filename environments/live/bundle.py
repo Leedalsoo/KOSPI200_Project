@@ -16,7 +16,6 @@ class LiveEnvironmentBundle:
 
     def initialize(self) -> None:
         if self.policy.approval_state.value != "DISARMED":
-            pass
             raise RuntimeError("Live bundle must start disarmed")
 
     def connect(self) -> bool:
@@ -24,7 +23,6 @@ class LiveEnvironmentBundle:
 
     def start(self) -> None:
         if not getattr(self.broker, "connected", False):
-            pass
             raise RuntimeError("Live bundle cannot start before broker connection")
 
     def stop(self) -> None:
@@ -32,5 +30,4 @@ class LiveEnvironmentBundle:
 
     def shutdown(self) -> None:
         if getattr(self.broker, "connected", False):
-            pass
             self.broker.disconnect()

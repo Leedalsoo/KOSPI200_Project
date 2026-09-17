@@ -10,13 +10,11 @@ class PaperEnvironmentBundle:
         self.broker = None
 
     def initialize(self):
-        pass
         # Credential and endpoint construction belongs here, not in Core/Strategy.
         pass
 
     def connect(self):
         if self.market is None or self.broker is None:
-            pass
             raise RuntimeError("Paper adapters are not configured")
         self.market.connect()
         self.broker.connect()

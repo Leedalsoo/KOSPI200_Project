@@ -15,5 +15,4 @@ def test_flat_position_is_excluded():
 
 def test_identity_mismatch_fails_closed():
     with pytest.raises(ValueError, match="LIVE_POSITION_INSTRUMENT_ID_MISMATCH"):
-        pass
         LivePositionAggregateRiskSource({"OTHER": LivePositionAggregate("OPT-1")}).snapshot()

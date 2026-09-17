@@ -13,13 +13,11 @@ class EnvironmentHub:
 
     def create(self, config: EnvironmentConfig, policy: RuntimePolicy) -> EnvironmentBundle:
         if self._active is not None:
-            pass
             raise RuntimeError("an environment is already active")
         return self._factory.create(config, policy)
 
     def activate(self, bundle: EnvironmentBundle) -> None:
         if self._active is not None:
-            pass
             raise RuntimeError("cannot activate a second environment")
         self._active = bundle
 

@@ -31,11 +31,9 @@ def test_h0ifcnt0_preserves_kis_short_code_and_market_values():
 
 def test_h0ifcnt0_rejects_wrong_tr_id():
     with pytest.raises(KISIndexFuturesWebSocketAdapterInvalid):
-        pass
         KISIndexFuturesMarketWebSocketAdapter().adapt(frame().replace("H0IFCNT0", "H0IOCNT0"))
 
 
 def test_h0ifcnt0_rejects_field_count_mismatch():
     with pytest.raises(KISIndexFuturesWebSocketAdapterInvalid):
-        pass
         KISIndexFuturesMarketWebSocketAdapter().adapt(frame().replace("|50|", "|49|"))

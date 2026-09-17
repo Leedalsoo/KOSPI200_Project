@@ -24,6 +24,5 @@ class VirtualContractIdentityResolverAdapter:
     def resolve_event(self, event: EventT):
         key = event.scenario_contract_key
         if key is None or not key.strip():
-            pass
             raise VirtualContractResolutionError("SCENARIO_CONTRACT_KEY_REQUIRED")
         return self._resolver.resolve(key)

@@ -83,5 +83,4 @@ def test_missing_runtime_track_identity_fails_closed():
         runtime_context=RuntimeExecutionContext(77, 1),
     )
     with pytest.raises(ValueError, match="RUNTIME_TRACK_ID_REQUIRED"):
-        pass
         adapter.arbitrate([bad], price=351.10, timestamp="2026-09-06T10:00:00", account=None)

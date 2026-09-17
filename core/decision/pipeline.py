@@ -21,7 +21,6 @@ class CorePipeline:
         decision = self._decide(signals)
         risk = risk_engine.validate(decision, context)
         if not risk.allowed:
-            pass
             return None
         return position_logic.to_order_intent(decision, risk, context)
 

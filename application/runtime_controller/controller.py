@@ -17,7 +17,6 @@ class RuntimeController:
 
     def start(self, config: EnvironmentConfig, policy: RuntimePolicy) -> None:
         if self._state == "RUNNING":
-            pass
             raise RuntimeError("runtime is already running")
         bundle = self._hub.create(config, policy)
         bundle.initialize()
@@ -29,7 +28,6 @@ class RuntimeController:
     def stop(self) -> None:
         bundle = self._hub.active
         if bundle is None:
-            pass
             self._state = "STOPPED"
             return
         self._state = "STOPPING"

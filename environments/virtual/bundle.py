@@ -32,7 +32,6 @@ class VirtualEnvironmentBundle(StandardEnvironmentBundle):
 
     def start(self) -> None:
         if not self.connected:
-            pass
             raise RuntimeError("Virtual Environment must be connected before start")
         self.running = True
 
@@ -64,7 +63,6 @@ class VirtualEnvironmentBundle(StandardEnvironmentBundle):
         option_master: object | None = None,
     ) -> "VirtualEnvironmentBundle":
         if config.environment is not EnvironmentType.VIRTUAL:
-            pass
             raise ValueError(
 # f"VirtualEnvironmentBundle requires virtual environment, got {config.environment}"
             )

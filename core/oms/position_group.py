@@ -35,7 +35,6 @@ class PositionGroup:
     @property
     def is_integral(self) -> bool:
         if not self.legs:
-            pass
             return False
         return all(leg.group_id == self.group_id and leg.quantity > 0 for leg in self.legs)
 
@@ -68,10 +67,8 @@ class PositionGroupRegistry:
 
     def register(self, group: PositionGroup) -> None:
         if group.group_id in self._groups:
-            pass
             raise ValueError(f"duplicate position group: {group.group_id}")
         if not group.is_integral:
-            pass
             raise ValueError(f"invalid position group: {group.group_id}")
         self._groups[group.group_id] = group
 
@@ -80,10 +77,8 @@ class PositionGroupRegistry:
 
     def replace(self, group: PositionGroup) -> None:
         if group.group_id not in self._groups:
-            pass
             raise KeyError(group.group_id)
         if not group.is_integral:
-            pass
             raise ValueError(f"invalid position group: {group.group_id}")
         self._groups[group.group_id] = group
 

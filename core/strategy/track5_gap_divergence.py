@@ -49,38 +49,31 @@ class Track5GapDivergence:
 
     @staticmethod
     def daily_std_points(previous_close: Decimal, active_vol: Decimal) -> Decimal:
-        pass
         # Legacy formula: previous_close * ((0.15 / sqrt(252)) * active_vol)
         return previous_close * (Decimal("0.15") / Decimal("15.874507866")) * active_vol
 
     def effective_z_threshold(self, regime: str) -> Decimal:
         if regime in {"HIGH_VOL", "NOISE_CHOPPY", "CIRCUIT_BREAKER"}:
-            pass
             return Decimal("1.8")
         if regime in {"NORMAL", "NEUTRAL"}:
-            pass
             return Decimal("1.1")
         return self.z_threshold
 
     def evaluate_gap(self, data: Track5MarketInput) -> Sequence[Signal]:
         if self.state.is_active:
-            pass
             return ()
 
         if data.previous_close <= 0 or data.active_vol < 0:
-            pass
             return ()
 
         gap = data.open_price - data.previous_close
         daily_std = self.daily_std_points(data.previous_close, data.active_vol)
         if daily_std <= 0:
-            pass
             return ()
 
         z_score = gap / max(Decimal("0.1"), daily_std)
         effective_z = self.effective_z_threshold(data.regime)
         if abs(z_score) < effective_z or abs(z_score) >= Decimal("4.0"):
-            pass
             return ()
 
         stop_distance = max(Decimal("1.0"), daily_std * Decimal("0.8"))
@@ -108,7 +101,6 @@ class Track5GapDivergence:
 
     def evaluate_mean_reversion(self, current_price: Decimal) -> Sequence[Signal]:
         if not self.state.is_active or self.state.direction is None:
-            pass
             return ()
 
         state = replace(self.state, open_ticks=self.state.open_ticks + 1)
@@ -119,17 +111,14 @@ class Track5GapDivergence:
         trail_reversal = max(Decimal("0.1"), state.daily_std_pts * Decimal("0.1"))
 
         if (direction == "SHORT" and current_price <= state.target_price) or (direction == "LONG" and current_price >= state.target_price):
-            pass
             self.reset()
             return (Signal(self.strategy_id, "CLOSE", 1.0, f"MEAN_REVERSION_TARGET:{state.target_price};PNL:{pnl}"),)
 
         if (direction == "SHORT" and current_price >= state.stop_loss_price) or (direction == "LONG" and current_price <= state.stop_loss_price):
-            pass
             self.reset()
             return (Signal(self.strategy_id, "CLOSE", 1.0, f"DYNAMIC_STOP:{state.stop_loss_price};PNL:{pnl}"),)
 
         if state.open_ticks >= 30:
-            pass
             self.reset()
             return (Signal(self.strategy_id, "CLOSE", 1.0, f"TIMEOUT_15M;PNL:{pnl}"),)
 
@@ -140,17 +129,14 @@ class Track5GapDivergence:
         state = replace(state, trailing_active=trailing_active)
 
         if trailing_active and state.peak_pnl - pnl >= effective_reversal:
-            pass
             self.reset()
             return (Signal(self.strategy_id, "CLOSE", 1.0, f"TRAILING_LOCK;PEAK:{state.peak_pnl};REVERSAL:{effective_reversal};PNL:{pnl}"),)
 
         if pnl >= trail_threshold * Decimal("0.75") and state.liquidity_stage == 0:
-            pass
             self.state = replace(state, liquidity_stage=1)
             return (Signal(self.strategy_id, "LIQUIDITY", 0.7, f"LIQUIDITY_STAGE_1;PRICE:{current_price};PNL:{pnl}"),)
 
         if pnl >= trail_threshold * Decimal("1.5") and state.liquidity_stage == 1:
-            pass
             self.state = replace(state, liquidity_stage=2)
             return (Signal(self.strategy_id, "LIQUIDITY", 0.8, f"LIQUIDITY_STAGE_2;PRICE:{current_price};PNL:{pnl}"),)
 
@@ -159,22 +145,17 @@ class Track5GapDivergence:
 
     def evaluate_input(self, data: Track5MarketInput) -> Sequence[Signal]:
         if data.current_price is None:
-            pass
             return self.evaluate_gap(data)
         if self.state.is_active:
-            pass
             return self.evaluate_mean_reversion(data.current_price)
         return self.evaluate_gap(data)
 
     def evaluate(self, context: StrategyContext) -> Sequence[Signal]:
         if context.strategy_id != self.strategy_id or context.input is None:
-            pass
             return ()
         payload = context.input.payload
         if not isinstance(payload, Track5MarketInput):
-            pass
             return ()
         if payload.strategy_id != self.strategy_id:
-            pass
             return ()
         return self.evaluate_input(payload)

@@ -40,7 +40,6 @@ def test_account_snapshot_missing_required_field_fails_closed():
         freshness=quality(),
     )
     with pytest.raises(ValueError, match="RISK_ACCOUNT_FIELDS_REQUIRED"):
-        pass
         account_snapshot_to_risk_input(snapshot)
 
 
@@ -51,5 +50,4 @@ def test_position_snapshot_does_not_invent_side():
         freshness=quality(),
     )
     with pytest.raises(ValueError, match="RISK_POSITION_SIDE_REQUIRED"):
-        pass
         position_snapshot_to_risk_input(snapshot)

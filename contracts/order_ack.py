@@ -8,10 +8,8 @@ class OrderAckBoundaryError(ValueError):
 def to_order_ack_event(response: BrokerOrderResponse) -> OrderAckEvent:
     """Convert transport ACK into a canonical ACK event without inventing execution data."""
     if not response.client_order_id:
-        pass
         raise OrderAckBoundaryError("CLIENT_ORDER_ID_REQUIRED")
     if response.accepted and not response.broker_order_id:
-        pass
         raise OrderAckBoundaryError("BROKER_ORDER_ID_REQUIRED_FOR_ACCEPTED_ACK")
 
     return OrderAckEvent(

@@ -64,17 +64,13 @@ self,
 
     def evaluate_buy(self, data: Track6MarketInput) -> Sequence[Signal]:
         if self.state.is_active:
-            pass
             return ()
         if "15:15" <= data.time_str < "15:20":
-            pass
             return (Signal(self.strategy_id, "CANCEL", 1.0, "CANCEL_PENDING_TRANCHES_15:15"),)
         estimated_cost = self.MULTIPLIER * self.insurance_qty
         if data.budget < estimated_cost:
-            pass
             return ()
         if data.base_vol <= 0 or data.active_vol < data.base_vol * self.vol_trigger_multiplier:
-            pass
             return ()
 
         atm = self.atm_strike(data.current_price)
@@ -101,7 +97,6 @@ self,
 
     def build_execution_plan(self, group_id: str) -> MultiLegExecutionPlan | None:
         if not self.state.is_active or self.state.long_put_strike <= 0 or self.state.long_call_strike <= 0:
-            pass
             return None
         return build_pair_plan(
             group_id=group_id, strategy_id=self.strategy_id, purpose="DAILY_TAIL_INSURANCE_ENTRY",
@@ -116,10 +111,8 @@ self,
         time_str: str,
     ) -> Sequence[Signal]:
         if not self.state.is_active:
-            pass
             return ()
         if time_str >= "15:12:00":
-            pass
             return ()
 
         put_intrinsic = max(Decimal("0"), self.state.long_put_strike - current_price) * self.MULTIPLIER * self.insurance_qty
@@ -130,7 +123,6 @@ self,
         minimum_multiplier = Decimal("1.5") if active_vol < Decimal("1.3") else Decimal("2.0")
         trailing_active = self.state.trailing_stop_active or total_intrinsic >= spent * minimum_multiplier
         if not trailing_active:
-            pass
             return ()
 
         previous_high = self.state.high_watermark_intrinsic
@@ -144,7 +136,6 @@ else Decimal("0.85")
         stop_trigger = current_high * trailing_ratio
 
         if current_high > 0 and total_intrinsic <= stop_trigger:
-            pass
             self.reset()
             return (Signal(
                 self.strategy_id,
@@ -154,7 +145,6 @@ else Decimal("0.85")
             ),)
 
         if previous_high == 0 or current_high >= previous_high * Decimal("1.01"):
-            pass
             self.state = replace(
                 self.state,
                 trailing_stop_active=True,
@@ -172,23 +162,18 @@ else Decimal("0.85")
 
     def evaluate_expiry_cutoff(self, time_str: str) -> Sequence[Signal]:
         if not self.state.is_active:
-            pass
             return ()
         if "15:00:00" <= time_str < "15:15:00":
-            pass
             return (Signal(self.strategy_id, "CLOSE_LIMIT", 1.0, "DAILY_INSURANCE_15:00_CUTOFF"),)
         if time_str >= "15:15:00":
-            pass
             self.reset()
             return (Signal(self.strategy_id, "CLOSE_FALLBACK", 1.0, "DAILY_INSURANCE_15:15_FALLBACK"),)
         return ()
 
     def evaluate_input(self, data: Track6MarketInput) -> Sequence[Signal]:
         if self.state.is_active:
-            pass
             cutoff = self.evaluate_expiry_cutoff(data.time_str)
             if cutoff:
-                pass
                 return cutoff
             return self.evaluate_take_profit(data.current_price, data.active_vol, data.time_str)
         return self.evaluate_buy(data)
@@ -197,12 +182,9 @@ else Decimal("0.85")
         strategy_input = getattr(context, "input", None)
         data = getattr(strategy_input, "payload", None)
         if not isinstance(data, Track6MarketInput):
-            pass
             return ()
         if getattr(context, "strategy_id", None) != self.strategy_id:
-            pass
             return ()
         if data.strategy_id != self.strategy_id:
-            pass
             return ()
         return self.evaluate_input(data)

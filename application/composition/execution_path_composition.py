@@ -23,7 +23,6 @@ class RuntimeTransportComposition:
         }
         missing = [name for name, value in required.items() if value is None]
         if missing:
-            pass
             raise ValueError("RUNTIME_TRANSPORT_DEPENDENCY_REQUIRED:" + ",".join(missing))
 
 @dataclass(frozen=True)
@@ -42,7 +41,6 @@ class StandardOrderIntentComposition:
         }
         missing = [name for name, value in required.items() if value is None]
         if missing:
-            pass
             raise ValueError("STANDARD_ORDER_INTENT_DEPENDENCY_REQUIRED:" + ",".join(missing))
 
 def create_runtime_transport_composition(*, strategy_runtime: Any, strategy_to_decision: Any, decision_to_command: Any, risk_gate: Any, account_snapshot: Any, position_source: Any, order_router: Any, broker_command: Any) -> RuntimeTransportComposition:

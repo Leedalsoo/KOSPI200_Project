@@ -29,31 +29,24 @@ def build_order_intent_execution_input(
     status = str(risk_result.decision).upper()
 
     if status == "DENY" or not risk_result.is_approved:
-        pass
         raise RiskOrderIntentMappingError(
             risk_result.rejection_reason or "ORDER_DENIED_BY_RISK"
         )
 
     if status == "ALLOW":
-        pass
         quantity = int(risk_result.approved_qty)
     elif status == "REDUCE":
-        pass
         reduced = getattr(risk_result, "reduced_command", None)
         reduced_qty = getattr(reduced, "qty", None) if reduced is not None else None
         if reduced_qty is None:
-            pass
             raise RiskOrderIntentMappingError("REDUCED_QUANTITY_REQUIRED")
         if int(risk_result.approved_qty) != int(reduced_qty):
-            pass
             raise RiskOrderIntentMappingError("RISK_QUANTITY_PROVENANCE_MISMATCH")
         quantity = int(reduced_qty)
     else:
-        pass
         raise RiskOrderIntentMappingError(f"UNKNOWN_RISK_DECISION: {status}")
 
     if quantity <= 0:
-        pass
         raise RiskOrderIntentMappingError("APPROVED_QUANTITY_REQUIRED")
 
     return OrderIntentExecutionInput(

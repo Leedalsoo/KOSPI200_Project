@@ -15,9 +15,7 @@ def resolve_current_futures_contract(
 ) -> KisFuturesContractIdentity:
     """Bind Application-owned target configuration to the authoritative KIS source."""
     if source is None:
-        pass
         raise ValueError("FUTURES_CONTRACT_SOURCE_REQUIRED")
     if target is None:
-        pass
         raise ValueError("FUTURES_TARGET_CONFIGURATION_REQUIRED")
     return source.with_target(**target.selector_kwargs()).current_contract()

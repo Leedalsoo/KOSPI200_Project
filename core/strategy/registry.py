@@ -12,25 +12,20 @@ class StrategyRegistry:
     def register(self, strategy: Strategy) -> None:
         key = (strategy.strategy_id, strategy.version)
         if key in self._strategies:
-            pass
             raise ValueError(f"duplicate strategy: {key}")
         self._strategies[key] = strategy
 
     def get(self, strategy_id: str, version: str) -> Strategy:
         try:
-            pass
             return self._strategies[(strategy_id, version)]
         except KeyError as exc:
-            pass
             raise KeyError(f"strategy not registered: {(strategy_id, version)}") from exc
 
     def validate_context(self, context: StrategyContext) -> None:
         if context.input is None:
-            pass
             return
         payload_strategy_id = getattr(context.input.payload, "strategy_id", None)
         if payload_strategy_id is not None and payload_strategy_id != context.strategy_id:
-            pass
             raise ValueError(
                 "strategy input payload mismatch: "
                 f"context={context.strategy_id!r}, payload={payload_strategy_id!r}"
@@ -38,7 +33,6 @@ class StrategyRegistry:
 
     def prepare(self, strategy_id: str, version: str, context: StrategyContext) -> Strategy:
         if context.strategy_id != strategy_id:
-            pass
             raise ValueError(
                 "strategy context mismatch: "
                 f"context={context.strategy_id!r}, requested={strategy_id!r}"

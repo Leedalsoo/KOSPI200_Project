@@ -36,22 +36,17 @@ class KISFuturesMarketDataProvider:
 
     def publish(self, observation: KisIndexFuturesMarketObservation) -> CanonicalMarketTick:
         if self.instrument_id_resolver is None:
-            pass
             raise KISFuturesMarketProjectionError("FUTURES_INSTRUMENT_ID_RESOLVER_REQUIRED")
         if self.observed_at_resolver is None:
-            pass
             raise KISFuturesMarketProjectionError("FUTURES_OBSERVED_AT_RESOLVER_REQUIRED")
 
         instrument_id = self.instrument_id_resolver(observation.shrn_iscd.strip())
         if not instrument_id:
-            pass
             raise KISFuturesMarketProjectionError("FUTURES_INSTRUMENT_ID_REQUIRED")
         observed_at = self.observed_at_resolver(observation)
         if not isinstance(observed_at, datetime):
-            pass
             raise KISFuturesMarketProjectionError("FUTURES_OBSERVED_AT_REQUIRED")
         if observation.price is None:
-            pass
             raise KISFuturesMarketProjectionError("FUTURES_LAST_PRICE_REQUIRED")
 
         tick = CanonicalMarketTick(
@@ -73,13 +68,11 @@ class KISFuturesMarketDataProvider:
         self._source = observation.source or None
         state = self.snapshot()
         for subscriber in tuple(self._subscribers):
-            pass
             subscriber(state)
         return tick
 
     def snapshot(self) -> MarketState:
         if self._as_of is None:
-            pass
             raise KISFuturesMarketProjectionError("FUTURES_MARKET_STATE_UNAVAILABLE")
         return MarketState(
             as_of=self._as_of,

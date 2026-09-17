@@ -19,7 +19,6 @@ class VirtualPosition(PositionProvider):
 
     def snapshot(self) -> PositionSnapshot:
         if self.clock is None:
-            pass
             raise RuntimeError("VirtualPosition.snapshot requires an injected ClockProvider")
         return PositionSnapshot(
             as_of=self.clock.now(),
@@ -57,10 +56,8 @@ class ExecutionEventIdentityAdapter:
 
     def identify(self, report: ExecutionReport) -> ExecutionEventIdentity:
         if not report.execution_id:
-            pass
             raise ValueError("EXECUTION_EVENT_ID_REQUIRED")
         if not report.client_order_id:
-            pass
             raise ValueError("EXECUTION_EVENT_CLIENT_ORDER_ID_REQUIRED")
         return ExecutionEventIdentity(
             execution_id=report.execution_id,
@@ -97,11 +94,9 @@ def test_execution_id_is_preserved_without_reconstruction():
 
 def test_missing_execution_id_fails_closed():
     with pytest.raises(ValueError, match="EXECUTION_EVENT_ID_REQUIRED"):
-        pass
         ExecutionEventIdentityAdapter().identify(report(execution_id=None))
 
 
 def test_missing_client_order_id_fails_closed():
     with pytest.raises(ValueError, match="EXECUTION_EVENT_CLIENT_ORDER_ID_REQUIRED"):
-        pass
         ExecutionEventIdentityAdapter().identify(report(client_order_id=""))

@@ -27,16 +27,13 @@ class StandardOrderRouter:
         if not callable(submit): raise OrderRouterError("BROKER_SUBMIT_REQUIRED")
 
         if self._order_state_machine.get(command.client_order_id) is None:
-            pass
             self._order_state_machine.apply_intent(command)
         self._order_state_machine.register_broker_order_command(command)
 
         response = submit(command, **kwargs)
         if not isinstance(response, BrokerOrderResponse):
-            pass
             raise OrderRouterError("BROKER_ORDER_RESPONSE_REQUIRED")
         if response.client_order_id != command.client_order_id:
-            pass
             raise OrderRouterError("BROKER_RESPONSE_CLIENT_ORDER_ID_MISMATCH")
 
         self._order_state_machine.apply_ack(to_order_ack_event(response))

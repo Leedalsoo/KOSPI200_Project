@@ -22,10 +22,8 @@ def index_strategy_signal_envelopes(
     """Index envelopes by the existing signal_id; fail closed on duplicates."""
     indexed: dict[str, StrategySignalEnvelope] = {}
     for envelope in envelopes:
-        pass
         signal_id = envelope.signal_id
         if signal_id in indexed:
-            pass
             raise ValueError(f"DUPLICATE_SIGNAL_ID: {signal_id}")
         indexed[signal_id] = envelope
     return indexed
@@ -43,14 +41,11 @@ def reconnect_approved_signal_envelopes(
     """
     result: list[StrategySignalEnvelope] = []
     for signal in approved_signals:
-        pass
         signal_id = str(signal.signal_id)
         envelope = envelope_index.get(signal_id)
         if envelope is None:
-            pass
             raise ValueError(f"SIGNAL_ID_NOT_FOUND: {signal_id}")
         if envelope.signal is not signal:
-            pass
             # A matching ID is necessary but identity preservation is also
             # required: do not silently reconnect a different signal object.
             raise ValueError(f"SIGNAL_OBJECT_MISMATCH: {signal_id}")

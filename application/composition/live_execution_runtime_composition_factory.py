@@ -82,7 +82,6 @@ def create_live_execution_runtime_composition(
     }
     missing = [name for name, value in required.items() if value is None]
     if missing:
-        pass
         raise ValueError("LIVE_EXECUTION_RUNTIME_DEPENDENCY_REQUIRED:" + ",".join(missing))
 
     settlement = create_live_execution_position_composition(
@@ -100,11 +99,9 @@ def create_live_execution_runtime_composition(
     )
 
     if (recovery_transport is None) != (recovery_adapter is None):
-        pass
         raise ValueError("LIVE_RECOVERY_TRANSPORT_ADAPTER_MUST_BE_PAIRED")
     recovery_service = None
     if recovery_transport is not None:
-        pass
         recovery_service = create_live_execution_recovery_composition(
             transport=recovery_transport,
             adapter=recovery_adapter,

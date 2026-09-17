@@ -52,7 +52,6 @@ def create_virtual_environment_builder(
 ) -> VirtualEnvironmentBuilder:
     """Create the concrete Virtual builder from one explicit dependency scope."""
     if builder_type is None:
-        pass
         from application.composition.concrete_virtual_environment_builder import (
 ConcreteVirtualEnvironmentBuilder,
         )

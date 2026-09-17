@@ -41,7 +41,6 @@ class KISWebSocketApprovalKeyProvider:
 
     def issue(self) -> str:
         if not self._auth.has_credentials():
-            pass
             raise FuturesMarketTransportError("KIS credentials are required for websocket approval key")
         payload = {"grant_type": "client_credentials", "appkey": self._auth.app_key, "secretkey": self._auth.app_secret}
         request = Request(
@@ -51,16 +50,12 @@ class KISWebSocketApprovalKeyProvider:
             method="POST",
         )
         try:
-            pass
             with urlopen(request, timeout=self._timeout) as response:
-                pass
                 data: dict[str, Any] = json.loads(response.read().decode("utf-8"))
         except Exception as exc:
-            pass
             raise FuturesMarketTransportError("KIS websocket approval-key request failed") from exc
         approval_key = str(data.get("approval_key", "")).strip()
         if not approval_key:
-            pass
             raise FuturesMarketTransportError("KIS websocket approval_key is missing")
         return approval_key
 
@@ -75,7 +70,6 @@ class KISFuturesMarketTransport:
 
     async def connect(self) -> None:
         try:
-            pass
             import websockets
             self._socket = await websockets.connect(
                 self._config.ws_url or self._config.default_ws_url,
@@ -83,7 +77,6 @@ class KISFuturesMarketTransport:
                 open_timeout=self._config.timeout,
             )
         except Exception as exc:
-            pass
             raise FuturesMarketTransportError("KIS futures websocket connection failed") from exc
         self._connected = True
 
@@ -102,17 +95,14 @@ class KISFuturesMarketTransport:
 
     async def _send_subscription(self, tr_type: str, tr_id: str, symbol: str) -> None:
         if not self._connected or self._socket is None:
-            pass
             raise FuturesMarketTransportError("KIS futures websocket is not connected")
         if not tr_id.strip() or not symbol.strip():
-            pass
             raise FuturesMarketTransportError("tr_id and symbol are required")
         approval_key = self._approval.issue()
         await self._socket.send(self._message(approval_key, tr_type, tr_id, symbol))
 
     async def recv(self) -> str:
         if not self._connected or self._socket is None:
-            pass
             raise FuturesMarketTransportError("KIS futures websocket is not connected")
         value = await self._socket.recv()
         return value.decode("utf-8") if isinstance(value, bytes) else str(value)

@@ -18,7 +18,6 @@ class VirtualClock(ClockProvider):
 
     def sleep_policy(self, seconds: float) -> None:
         if seconds < 0:
-            pass
             raise ValueError("seconds must be non-negative")
         self._now += timedelta(seconds=seconds)
         self._monotonic += seconds
@@ -46,7 +45,6 @@ class VMSClockProvider(ClockProvider):
 
     def __init__(self, source: VMSClockSource, *, tick_milliseconds: int = 500):
         if tick_milliseconds <= 0:
-            pass
             raise ValueError("VMS_CLOCK_TICK_MILLISECONDS_REQUIRED")
         self._source = source
         self._tick_milliseconds = tick_milliseconds
@@ -55,7 +53,6 @@ class VMSClockProvider(ClockProvider):
     def now(self) -> datetime:
         current = self._source.current_time
         if not isinstance(current, datetime):
-            pass
             raise TypeError("VMS_CLOCK_CURRENT_TIME_REQUIRED")
         return current
 
@@ -64,15 +61,12 @@ class VMSClockProvider(ClockProvider):
 
     def sleep_policy(self, seconds: float) -> None:
         if seconds < 0:
-            pass
             raise ValueError("seconds must be non-negative")
         milliseconds = int(round(seconds * 1000.0))
         if milliseconds == 0:
-            pass
             return
         remaining = milliseconds
         while remaining > 0:
-            pass
             step = min(self._tick_milliseconds, remaining)
             self._source.advance_tick(step)
             remaining -= step

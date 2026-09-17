@@ -63,13 +63,11 @@ def test_command_uses_runtime_authoritative_client_order_id_and_preserves_identi
 
 def test_missing_authoritative_instrument_id_fails_closed():
     with pytest.raises(CanonicalOrderCommandValidationError, match="AUTHORITATIVE_INSTRUMENT_ID_REQUIRED"):
-        pass
         CanonicalOrderCommandAdapter().create(option_signal(instrument_id=""), runtime())
 
 
 def test_option_identity_defaults_are_not_used_as_fallbacks():
     with pytest.raises(CanonicalOrderCommandValidationError, match="OPTION_SYMBOL_EXPIRY_REQUIRED"):
-        pass
         CanonicalOrderCommandAdapter().create(option_signal(symbol="", expiry=""), runtime())
 
 

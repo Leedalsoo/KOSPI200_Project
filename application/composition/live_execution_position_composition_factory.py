@@ -43,7 +43,6 @@ def create_live_execution_position_composition(
     }
     missing = [name for name, value in required.items() if value is None]
     if missing:
-        pass
         raise ValueError("LIVE_COMPOSITION_DEPENDENCY_REQUIRED:" + ",".join(missing))
 
     bridge = LiveExecutionPositionBridge(

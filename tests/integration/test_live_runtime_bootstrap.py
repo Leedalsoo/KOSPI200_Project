@@ -66,7 +66,6 @@ def test_oms_ownership_mismatch_fails_closed():
     router_fsm = FakeFSM()
 
     with pytest.raises(ValueError, match="LIVE_RUNTIME_OMS_OWNERSHIP_MISMATCH"):
-        pass
         LiveRuntimeBootstrap(
             execution=FakeExecution(FakeSettlement(execution_fsm)),
             order_router=FakeRouter(router_fsm),

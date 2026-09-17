@@ -37,8 +37,6 @@ def test_empty_signal_collection_produces_no_evaluation():
 def test_invalid_tick_sequence_and_non_collection_fail_closed():
     adapter = RuntimeStrategyResultCollectionAdapter()
     with pytest.raises(ValueError, match="RUNTIME_SOURCE_SEQUENCE_REQUIRED"):
-        pass
         adapter.collect(tick_sequence=0, context="ctx", result=Result(()))
     with pytest.raises(TypeError, match="RUNTIME_STRATEGY_SIGNAL_COLLECTION_REQUIRED"):
-        pass
         adapter.collect(tick_sequence=1, context="ctx", result=object())

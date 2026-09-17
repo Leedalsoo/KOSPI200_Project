@@ -74,7 +74,6 @@ def test_command_without_instrument_key_fails_closed():
         tag_id = "Track1"
 
     with pytest.raises(TypeError, match="RISK_ORDER_COMMAND_FIELDS_REQUIRED"):
-        pass
         validate_risk_order_command(InvalidCommand())
 
 

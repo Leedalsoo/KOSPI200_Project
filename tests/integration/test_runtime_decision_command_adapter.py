@@ -39,5 +39,4 @@ def test_runtime_context_supplies_client_order_id_without_signal_or_adapter_fall
 
 def test_approved_signal_without_runtime_context_fails_closed():
     with pytest.raises(ValueError, match="RUNTIME_APPROVED_SIGNAL_CONTEXT_REQUIRED"):
-        pass
         RuntimeDecisionCommandAdapter().build_commands([], [signal()])

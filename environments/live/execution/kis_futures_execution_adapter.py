@@ -50,33 +50,26 @@ class KISFuturesExecutionNotice:
     def broker_order_id(self) -> str:
         value = self.values["oder_no"].strip()
         if not value:
-            pass
             raise KISFuturesExecutionAdapterInvalid("KIS execution notice has no order number")
         return value
 
     @property
     def filled_quantity(self) -> int:
         try:
-            pass
             quantity = int(self.values["cntg_qty"].strip())
         except (TypeError, ValueError) as exc:
-            pass
             raise KISFuturesExecutionAdapterInvalid("invalid KIS cntg_qty") from exc
         if quantity <= 0:
-            pass
             raise KISFuturesExecutionAdapterInvalid("KIS execution quantity must be positive")
         return quantity
 
     @property
     def execution_price(self) -> Decimal:
         try:
-            pass
             price = Decimal(self.values["cntg_unpr"].strip())
         except (InvalidOperation, ValueError) as exc:
-            pass
             raise KISFuturesExecutionAdapterInvalid("invalid KIS cntg_unpr") from exc
         if price <= 0:
-            pass
             raise KISFuturesExecutionAdapterInvalid("KIS execution price must be positive")
         return price
 
@@ -98,20 +91,15 @@ class KISFuturesExecutionNoticeAdapter:
     def parse(self, frame: str) -> KISFuturesExecutionNotice:
         parts = frame.split("|")
         if len(parts) < 4 or parts[0] not in {"0", "1"}:
-            pass
             raise KISFuturesExecutionAdapterInvalid("invalid KIS realtime frame envelope")
         if parts[1] != self.TR_ID:
-            pass
             raise KISFuturesExecutionAdapterInvalid("unexpected KIS execution notice TR ID")
         try:
-            pass
             field_count = int(parts[2])
         except ValueError as exc:
-            pass
             raise KISFuturesExecutionAdapterInvalid("invalid KIS field count") from exc
         values = parts[3].split("^")
         if field_count != len(values) or len(values) != len(_FIELDS):
-            pass
             raise KISFuturesExecutionAdapterInvalid("KIS execution notice field count mismatch")
         return KISFuturesExecutionNotice(
             values=dict(zip(_FIELDS, values, strict=True)),
@@ -124,22 +112,17 @@ class KISFuturesExecutionNoticeAdapter:
         context: KISFuturesExecutionContext,
     ) -> ExecutionReport:
         if not context.client_order_id.strip():
-            pass
             raise KISFuturesExecutionAdapterInvalid("client_order_id is required")
         if context.order_quantity <= 0:
-            pass
             raise KISFuturesExecutionAdapterInvalid("order_quantity must be positive")
         if context.prior_filled_quantity < 0:
-            pass
             raise KISFuturesExecutionAdapterInvalid("prior_filled_quantity must be non-negative")
         if notice.values["cntg_yn"].strip().upper() != "Y":
-            pass
             raise KISFuturesExecutionAdapterInvalid("notice is not an execution event")
 
         fill_qty = notice.filled_quantity
         cumulative = context.prior_filled_quantity + fill_qty
         if cumulative > context.order_quantity:
-            pass
             raise KISFuturesExecutionAdapterInvalid("execution quantity exceeds order quantity")
         status = "FILLED" if cumulative == context.order_quantity else "PARTIALLY_FILLED"
 

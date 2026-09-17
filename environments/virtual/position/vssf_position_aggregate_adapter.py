@@ -13,17 +13,13 @@ class VSSFPositionAggregateAdapter(PositionAggregateSource):
     def snapshot(self) -> Mapping[str, PositionAggregate]:
         positions = getattr(self._position_source, "positions", None)
         if not isinstance(positions, Mapping):
-            pass
             raise TypeError("VSSF_POSITION_SOURCE_REQUIRED")
 
         projected: dict[str, PositionAggregate] = {}
         for instrument_key, state in positions.items():
-            pass
             if not isinstance(instrument_key, str) or not instrument_key:
-                pass
                 raise TypeError("VSSF_POSITION_INSTRUMENT_KEY_REQUIRED")
             if not isinstance(state, Mapping):
-                pass
                 raise TypeError("VSSF_POSITION_STATE_REQUIRED")
 
             side = state.get("side")
@@ -31,13 +27,10 @@ class VSSFPositionAggregateAdapter(PositionAggregateSource):
             avg_price = state.get("avg_price")
 
             if not isinstance(side, str) or side not in {"BUY", "SELL"}:
-                pass
                 raise TypeError("VSSF_POSITION_SIDE_REQUIRED")
             if not isinstance(qty, int) or qty <= 0:
-                pass
                 raise TypeError("VSSF_POSITION_QTY_REQUIRED")
             if avg_price is not None and not isinstance(avg_price, (int, float)):
-                pass
                 raise TypeError("VSSF_POSITION_AVG_PRICE_INVALID")
 
             projected[instrument_key] = PositionAggregate(

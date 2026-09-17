@@ -22,21 +22,17 @@ class ProductionTradingCalendar:
     def prev_trading_day(self, value: date) -> date:
         current = value - timedelta(days=1)
         while not self.is_trading_day(current):
-            pass
             current -= timedelta(days=1)
         return current
 
     def trading_days_between(self, start: date, end: date) -> int:
         if start == end:
-            pass
             return 0
         sign = 1 if end > start else -1
         current, stop = (start, end) if sign > 0 else (end, start)
         count = 0
         while current < stop:
-            pass
             current += timedelta(days=1)
             if self.is_trading_day(current):
-                pass
                 count += 1
         return sign * count

@@ -21,9 +21,7 @@ class HighSpeedEnvironmentBundle:
 
     def stop_safely(self, cpu_ratio: float, memory_ratio: float) -> bool:
         if cpu_ratio >= self.policy.max_cpu_ratio:
-            pass
             return True
         if memory_ratio >= self.policy.max_memory_ratio:
-            pass
             return True
         return False

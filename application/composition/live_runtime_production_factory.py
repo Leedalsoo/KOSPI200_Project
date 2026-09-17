@@ -17,26 +17,20 @@ create_live_control_tower_runtime_api,
 
 
 class _LiveExecutionTransportOwnershipRegistry:
-    pass
     """Fail-closed ownership registry for one shared execution transport."""
 
     def __init__(self) -> None:
-        pass
         self._owners: dict[int, object] = {}
 
     def claim(self, transport: Any):
-        pass
         key = id(transport)
         if key in self._owners:
-            pass
             raise RuntimeError("LIVE_EXECUTION_TRANSPORT_ALREADY_OWNED")
         token = object()
         self._owners[key] = token
 
         def release() -> None:
-            pass
             if self._owners.get(key) is token:
-                pass
                 self._owners.pop(key, None)
 
         return release
@@ -46,7 +40,6 @@ _execution_transport_ownership = _LiveExecutionTransportOwnershipRegistry()
 
 
 def create_live_control_tower_runtime(*, lifecycle_coordinator: LiveRuntimeLifecycleCoordinator):
-    pass
     """Attach the authoritative Live lifecycle graph to the Control Tower boundary."""
     return create_live_control_tower_runtime_api(
         lifecycle_coordinator=lifecycle_coordinator,
@@ -82,7 +75,6 @@ def create_live_runtime_lifecycle_coordinator(
     """
     position_owner = getattr(position_fill_adapter, "_aggregate", None)
     if position_owner is not position_aggregate:
-        pass
         raise ValueError("LIVE_RUNTIME_POSITION_AGGREGATE_OWNERSHIP_MISMATCH")
 
     execution_dependencies = {
@@ -98,9 +90,7 @@ def create_live_runtime_lifecycle_coordinator(
         "recovery_adapter": recovery_adapter,
     }
     if tick_entry is not None:
-        pass
         if risk_state_providers is None:
-            pass
             raise ValueError("LIVE_RUNTIME_RISK_STATE_PROVIDERS_REQUIRED")
         provider_mismatches = [
 name
@@ -109,7 +99,6 @@ name
 # is not getattr(risk_state_providers, name, None)
         ]
         if provider_mismatches:
-            pass
             raise ValueError(
                 "LIVE_RUNTIME_RISK_STATE_PROVIDER_OWNERSHIP_MISMATCH:"
 + ",".join(provider_mismatches)
@@ -133,14 +122,12 @@ name
     controller = create_live_runtime_controller(live_builder=bundle_builder)
     release_transport_ownership = _execution_transport_ownership.claim(transport)
     try:
-        pass
         return LiveRuntimeLifecycleCoordinator(
             controller=controller,
             bootstrap=bootstrap,
             release_execution_transport_ownership=release_transport_ownership,
         )
     except Exception:
-        pass
         # Coordinator construction is part of assembly.  If it fails after the
         # transport claim, release the claim so a failed assembly cannot poison
         # the transport for the next explicit runtime construction.

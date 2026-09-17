@@ -15,7 +15,6 @@ class ExecutionEventDeduplicator:
         """Return True only for a previously unseen execution identity."""
         identity = self._identity_adapter.identify(report)
         if identity.execution_id in self._seen_execution_ids:
-            pass
             return False
         self._seen_execution_ids.add(identity.execution_id)
         return True

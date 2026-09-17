@@ -29,19 +29,14 @@ class ExternalAuthoritativeOptionIdentityRecord:
 
     def to_identity(self) -> OptionInstrumentIdentity:
         if not self.instrument_id:
-            pass
             raise AuthoritativeOptionIdentityRecordError("INSTRUMENT_ID_REQUIRED")
         if not self.symbol:
-            pass
             raise AuthoritativeOptionIdentityRecordError("SYMBOL_REQUIRED")
         if not self.expiry:
-            pass
             raise AuthoritativeOptionIdentityRecordError("EXPIRY_REQUIRED")
         if not self.option_type:
-            pass
             raise AuthoritativeOptionIdentityRecordError("OPTION_TYPE_REQUIRED")
         if self.strike <= 0:
-            pass
             raise AuthoritativeOptionIdentityRecordError("STRIKE_REQUIRED")
 
         return OptionInstrumentIdentity(

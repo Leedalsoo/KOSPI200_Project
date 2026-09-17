@@ -21,14 +21,10 @@ class StrategyExecutionProposal:
 
     def __post_init__(self) -> None:
         if self.proposed_quantity <= 0:
-            pass
             raise ValueError("PROPOSED_QUANTITY_REQUIRED")
         if not self.asset_type:
-            pass
             raise ValueError("ASSET_TYPE_REQUIRED")
         if self.requested_price is not None and self.requested_price <= 0:
-            pass
             raise ValueError("REQUESTED_PRICE_MUST_BE_POSITIVE")
         if self.strike is not None and self.strike <= 0:
-            pass
             raise ValueError("STRIKE_MUST_BE_POSITIVE")

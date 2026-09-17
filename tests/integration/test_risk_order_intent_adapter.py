@@ -59,7 +59,6 @@ def test_reduce_maps_reduced_command_quantity():
 
 def test_reduce_provenance_mismatch_fails_closed():
     with pytest.raises(RiskOrderIntentMappingError, match="PROVENANCE"):
-        pass
         build_order_intent_execution_input(
             decision(), RiskResult("REDUCE", True, 4, ReducedCommand(3))
         )
@@ -67,7 +66,6 @@ def test_reduce_provenance_mismatch_fails_closed():
 
 def test_deny_does_not_build_execution_input():
     with pytest.raises(RiskOrderIntentMappingError, match="LIMIT"):
-        pass
         build_order_intent_execution_input(
             decision(), RiskResult("DENY", False, 0, rejection_reason="LIMIT")
         )
@@ -75,7 +73,6 @@ def test_deny_does_not_build_execution_input():
 
 def test_unknown_risk_decision_fails_closed():
     with pytest.raises(RiskOrderIntentMappingError, match="UNKNOWN_RISK_DECISION"):
-        pass
         build_order_intent_execution_input(
             decision(), RiskResult("UNKNOWN", True, 5)
         )

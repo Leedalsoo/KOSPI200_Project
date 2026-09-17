@@ -20,8 +20,6 @@ class KISFuturesExecutionCorrelationProvider:
 
     def resolve(self, broker_order_id: str) -> ExecutionCorrelation:
         try:
-            pass
             return self._orders.resolve_execution_correlation(broker_order_id)
         except Exception as exc:
-            pass
             raise KISFuturesExecutionCorrelationError(str(exc)) from exc

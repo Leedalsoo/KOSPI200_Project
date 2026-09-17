@@ -42,7 +42,6 @@ def test_missing_authoritative_state_fails_closed():
         lambda: None, lambda: "position"
     )
     with pytest.raises(ValueError, match="RUNTIME_RISK_AUTHORITATIVE_STATE_REQUIRED"):
-        pass
         entry.process_tick("tick", "time", risk_context=Context())
 
 # Consolidated from tests\integration\test_live_runtime_tick_entry.py; retained because it covers the same production boundary.

@@ -18,6 +18,5 @@ class LiveCredentials:
             "base_url": os.getenv(ref.base_url_env, "https://openapi.koreainvestment.com:9443").strip(),
         }
         if not values["app_key"] or not values["app_secret"] or not values["account_no"]:
-            pass
             raise RuntimeError("Live credentials are incomplete")
         return cls(**values)

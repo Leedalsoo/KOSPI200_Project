@@ -18,7 +18,6 @@ def create_live_runtime_controller(
 ) -> RuntimeController:
     """Create a Live RuntimeController using only caller-supplied dependencies."""
     if live_builder is None:
-        pass
         raise ValueError("LIVE_RUNTIME_BUILDER_REQUIRED")
     factory = EnvironmentFactory(live_builder=live_builder)
     return RuntimeController(hub=EnvironmentHub(factory=factory))
@@ -46,12 +45,10 @@ def build_live_bundle_from_components(
     }
     missing = [name for name, value in required.items() if value is None]
     if missing:
-        pass
         raise ValueError("LIVE_RUNTIME_DEPENDENCY_REQUIRED:" + ",".join(missing))
 
     def builder(config: EnvironmentConfig, policy: RuntimePolicy) -> LiveEnvironmentBundle:
         if config.environment.value != "live":
-            pass
             raise ValueError("LIVE_RUNTIME_BUILDER_ENVIRONMENT_MISMATCH")
         return LiveEnvironmentBundle(
             market=market,

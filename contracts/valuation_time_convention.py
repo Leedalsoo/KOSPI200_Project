@@ -15,10 +15,8 @@ class TimeToExpirySnapshot:
 
     def __post_init__(self) -> None:
         if self.years <= 0:
-            pass
             raise ValueError("time to expiry must be positive")
         if not self.source:
-            pass
             raise ValueError("time-to-expiry source is required")
 
 class ValuationTimeConvention(ABC):

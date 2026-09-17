@@ -76,20 +76,15 @@ class Track7VolatilitySkewWeeklyInsurance:
 
     def evaluate_insurance_buy(self, data: Track7MarketInput) -> Sequence[Signal]:
         if data.date_str != self.state.bought_date and self.state.bought_date is not None:
-            pass
             self.reset()
         if self.state.insurance_active:
-            pass
             return ()
         if "15:15" <= data.time_str < "15:20":
-            pass
             return (Signal(self.strategy_id, "CANCEL", 1.0, "CANCEL_PENDING_TRANCHES_15:15"),)
         if not data.is_new_week_start:
-            pass
             return ()
         cost = self.insurance_cost(data.active_vol)
         if data.budget < cost:
-            pass
             return ()
         atm = self.atm_strike(data.current_price)
         put_strike = atm - self.strike_offset
@@ -99,27 +94,21 @@ class Track7VolatilitySkewWeeklyInsurance:
 
     def evaluate_skew_arbitrage(self, data: Track7MarketInput) -> Sequence[Signal]:
         if data.call_iv is None or data.put_iv is None:
-            pass
             return ()
         skew = data.put_iv - data.call_iv
         if not self.state.skew_active:
-            pass
             if abs(skew) < self.SKEW_ENTRY:
-                pass
                 return ()
             self.state = replace(self.state, skew_active=True, skew_limit_pending=True)
             direction = "LONG_PUT_SHORT_CALL" if skew > 0 else "LONG_CALL_SHORT_PUT"
             return (Signal(self.strategy_id, "ENTER_SKEW_ARB_LIMIT", 1.0, f"TYPE:{direction};SKEW:{skew};QTY:1"),)
         if self.state.skew_limit_pending and data.skew_limit_timeout:
-            pass
             self.state = replace(self.state, skew_limit_pending=False)
             return (Signal(self.strategy_id, "ENTER_SKEW_ARB_FALLBACK_MARKET", 1.0, f"SKEW:{skew};TIMEOUT_SEC:{self.FALLBACK_TIMEOUT_SEC};QTY:1"),)
         if abs(skew) > self.SKEW_STOP:
-            pass
             self.state = replace(self.state, skew_active=False, skew_limit_pending=False)
             return (Signal(self.strategy_id, "CLOSE_SKEW_ARB_STOP_LOSS", 1.0, f"SKEW:{skew};STOP:{self.SKEW_STOP};QTY:1"),)
         if abs(skew) <= self.SKEW_EXIT:
-            pass
             self.state = replace(self.state, skew_active=False, skew_limit_pending=False)
             return (Signal(self.strategy_id, "CLOSE_SKEW_ARB_LIMIT", 1.0, f"SKEW:{skew};EXIT:{self.SKEW_EXIT};QTY:1"),)
         return ()
@@ -127,44 +116,35 @@ class Track7VolatilitySkewWeeklyInsurance:
     def evaluate_preemptive_take_profit(self, data: Track7MarketInput) -> Sequence[Signal]:
         required = (data.ma_1m, data.ma_3m, data.ma_5m, data.ma_10m)
         if any(value is None for value in required):
-            pass
             return ()
         bullish_cross = data.ma_1m > data.ma_3m > data.ma_5m > data.ma_10m
         bearish_cross = data.ma_1m < data.ma_3m < data.ma_5m < data.ma_10m
         near_resistance = data.resistance is not None and data.current_price >= data.resistance
         near_support = data.support is not None and data.current_price <= data.support
         if bullish_cross or bearish_cross or near_resistance or near_support:
-            pass
             return (Signal(self.strategy_id, "PREEMPTIVE_LIMIT_TAKE_PROFIT", 0.8, f"MA_CROSS:{bullish_cross or bearish_cross};SUPPORT:{data.support};RESISTANCE:{data.resistance};PRICE:{data.current_price}"),)
         return ()
 
     def evaluate_expiry_cutoff(self, data: Track7MarketInput) -> Sequence[Signal]:
         if not self.state.insurance_active:
-            pass
             return ()
         if self.expiry_mode == "D-4" and self.state.bought_date == data.date_str and data.time_str >= "15:00:00":
-            pass
             self.reset()
             return (Signal(self.strategy_id, "CLOSE_WEEKLY_INSURANCE_PREEMPTIVE_D4", 1.0, "D4_PREEMPTIVE_CUTOFF"),)
         expiry_active = data.is_expiry_day or data.is_week_end
         if not expiry_active:
-            pass
             return ()
         if "15:00:00" <= data.time_str < "15:15:00":
-            pass
             return (Signal(self.strategy_id, "CLOSE_WEEKLY_INSURANCE_LIMIT", 1.0, "15:00_LIMIT_CUTOFF"),)
         if data.time_str >= "15:15:00":
-            pass
             self.reset()
             return (Signal(self.strategy_id, "CLOSE_WEEKLY_INSURANCE_FALLBACK_MARKET", 1.0, "15:15_FALLBACK_MARKET"),)
         return ()
 
     def evaluate_input(self, data: Track7MarketInput) -> Sequence[Signal]:
         if self.state.insurance_active:
-            pass
             cutoff = self.evaluate_expiry_cutoff(data)
             if cutoff:
-                pass
                 return cutoff
         signals: list[Signal] = []
         if not self.state.insurance_active:
@@ -178,12 +158,9 @@ class Track7VolatilitySkewWeeklyInsurance:
         strategy_input = getattr(context, "input", None)
         data = getattr(strategy_input, "payload", None)
         if not isinstance(data, Track7MarketInput):
-            pass
             return ()
         if getattr(context, "strategy_id", None) != self.strategy_id:
-            pass
             return ()
         if data.strategy_id != self.strategy_id:
-            pass
             return ()
         return self.evaluate_input(data)

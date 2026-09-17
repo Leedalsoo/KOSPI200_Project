@@ -38,5 +38,4 @@ def test_selected_shrn_iscd_becomes_execution_symbol_without_identity_conversion
 
 def test_target_selector_remains_fail_closed():
     with pytest.raises(ValueError):
-        pass
         FuturesTargetConfiguration()

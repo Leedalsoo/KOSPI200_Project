@@ -21,15 +21,11 @@ class LiveRuntimeBootstrap:
 
     def __post_init__(self) -> None:
         if self.order_router._order_state_machine is not self.execution.settlement.order_state_machine:
-            pass
             raise ValueError("LIVE_RUNTIME_OMS_OWNERSHIP_MISMATCH")
         if self.runtime_transport is not None and self.runtime_transport.risk_context.order_router is not self.order_router:
-            pass
             raise ValueError("LIVE_RUNTIME_ROUTER_OWNERSHIP_MISMATCH")
         if self.tick_entry is not None:
-            pass
             if self.runtime_transport is None:
-                pass
                 raise ValueError("LIVE_RUNTIME_TRANSPORT_REQUIRED_FOR_TICK_ENTRY")
             required_same = (
                 ("strategy_runtime", self.tick_entry.runtime, self.runtime_transport.strategy_runtime),
@@ -39,18 +35,15 @@ class LiveRuntimeBootstrap:
             )
             mismatch = [name for name, entry_value, transport_value in required_same if entry_value is not transport_value]
             if mismatch:
-                pass
                 raise ValueError("LIVE_RUNTIME_TICK_ENTRY_TRANSPORT_OWNERSHIP_MISMATCH:" + ",".join(mismatch))
 
     def process_tick_once(self, tick: Any, observed_at: Any):
         if self.tick_entry is None:
-            pass
             raise ValueError("LIVE_RUNTIME_TICK_ENTRY_REQUIRED")
         return self.tick_entry.process_tick(tick, observed_at, risk_context=self.runtime_transport.risk_context)
 
     def startup_reconcile(self, query: Any):
         if self.recovery_service is None:
-            pass
             raise ValueError("LIVE_RUNTIME_RECOVERY_SERVICE_REQUIRED")
         return self.recovery_service.recover(query)
 
@@ -74,7 +67,6 @@ class LiveRuntimeBootstrap:
 def create_live_runtime_bootstrap(*, runtime_transport=None, tick_entry=None, recovery_service=None, **execution_dependencies):
     execution = create_live_execution_runtime_composition(**execution_dependencies)
     if recovery_service is None:
-        pass
         recovery_service = getattr(execution, "recovery_service", None)
     router = StandardOrderRouter(order_state_machine=execution.settlement.order_state_machine, broker_adapter=execution.broker)
     return LiveRuntimeBootstrap(execution=execution, order_router=router, runtime_transport=runtime_transport, tick_entry=tick_entry, recovery_service=recovery_service)

@@ -27,7 +27,6 @@ class VirtualMarketFeed:
         self._sequence = 0
 
     def next_tick(self) -> CanonicalMarketTick:
-        pass
         # Baseline's scenario engine is injected here in the next migration step.
         self._sequence += 1
         observed_at: datetime = self.clock.now()

@@ -27,7 +27,6 @@ class Track3LeggingCoordinator:
 
     def next_after_fill(self, plan: LeggingPlan, filled_leg_id: str) -> OrderIntent | None:
         if filled_leg_id != plan.first_leg.leg_id:
-            pass
             return None
         leg = plan.second_leg
         return OrderIntent(

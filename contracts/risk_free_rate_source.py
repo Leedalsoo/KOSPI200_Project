@@ -14,10 +14,8 @@ class RiskFreeRateSnapshot:
 
     def __post_init__(self) -> None:
         if self.rate < Decimal("-1"):
-            pass
             raise ValueError("risk-free rate is invalid")
         if not self.source:
-            pass
             raise ValueError("risk-free rate source is required")
 
 class RiskFreeRateProvider(ABC):

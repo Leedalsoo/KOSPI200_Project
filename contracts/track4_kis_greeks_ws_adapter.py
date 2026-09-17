@@ -42,31 +42,24 @@ self,
     ) -> Track4KisGreeksProvider:
         parts = frame.split("|")
         if len(parts) < 4 or parts[0] not in {"0", "1"}:
-            pass
             raise Track4KisWebSocketAdapterInvalid("invalid KIS realtime frame envelope")
         if parts[1] != self.TR_ID:
-            pass
             raise Track4KisWebSocketAdapterInvalid("unexpected KIS TR ID")
 
         try:
-            pass
             field_count = int(parts[2])
         except ValueError as exc:
-            pass
             raise Track4KisWebSocketAdapterInvalid("invalid KIS field count") from exc
 
         values = parts[3].split("^")
         if field_count != len(values):
-            pass
             raise Track4KisWebSocketAdapterInvalid("KIS field count mismatch")
         required_max = max(_INSTRUMENT_INDEX, _OBSERVED_HOUR_INDEX, _DELTA_INDEX, _GAMMA_INDEX, _THETA_INDEX, _IV_INDEX)
         if len(values) <= required_max:
-            pass
             raise Track4KisWebSocketAdapterInvalid("KIS H0IOCNT0 payload is incomplete")
 
         instrument_id = values[_INSTRUMENT_INDEX].strip()
         if not instrument_id:
-            pass
             raise Track4KisWebSocketAdapterInvalid("instrument id is missing")
 
         # observed_at is intentionally supplied by the caller; bsop_hour is retained

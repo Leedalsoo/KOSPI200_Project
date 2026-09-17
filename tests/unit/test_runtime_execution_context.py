@@ -16,7 +16,6 @@ def test_runtime_context_fails_closed_for_missing_or_invalid_sequences(
     local_sequence,
 ):
     with pytest.raises(ValueError):
-        pass
         RuntimeExecutionContext(
             tick_sequence=tick_sequence,
             local_sequence=local_sequence,

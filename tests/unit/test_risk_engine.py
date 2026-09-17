@@ -53,7 +53,6 @@ def test_expected_position_preserves_reference_side_qty_rules():
 def test_invalid_risk_config_cannot_construct_risk_engine():
     import pytest
     with pytest.raises(ValueError, match="MAX_DAILY_LOSS_KRW_POSITIVE_REQUIRED"):
-        pass
         RiskEngine(RiskConfig(max_daily_loss_krw=0), Margin())
 
 

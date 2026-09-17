@@ -7,7 +7,6 @@ class AcceleratedClockConfig:
 
     def __post_init__(self) -> None:
         if self.speed_multiplier <= 0:
-            pass
             raise ValueError("speed_multiplier must be > 0")
 
 class AcceleratedClock:
@@ -22,7 +21,6 @@ class AcceleratedClock:
 
     def advance(self, elapsed_real_seconds: float) -> datetime:
         if elapsed_real_seconds < 0:
-            pass
             raise ValueError("elapsed_real_seconds must be >= 0")
         self._current += timedelta(
             seconds=elapsed_real_seconds * self.config.speed_multiplier

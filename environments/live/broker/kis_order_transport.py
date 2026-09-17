@@ -34,10 +34,8 @@ class KISDomesticFuturesOrderTransport:
 
     def authenticate(self) -> bool:
         try:
-            pass
             return bool(self.auth.get_access_token())
         except KISAuthError:
-            pass
             return False
 
     def submit(self, command: BrokerOrderCommand) -> BrokerOrderResponse:
@@ -54,13 +52,10 @@ class KISDomesticFuturesOrderTransport:
         )
 
         try:
-            pass
             with self.urlopen(request, timeout=self.timeout) as response:
-                pass
                 raw = response.read().decode("utf-8")
             data = json.loads(raw)
         except urllib.error.HTTPError as exc:
-            pass
             body = exc.read().decode("utf-8", errors="replace")
             return BrokerOrderResponse(
                 client_order_id=command.client_order_id,
@@ -69,10 +64,8 @@ class KISDomesticFuturesOrderTransport:
                 message=body,
             )
         except (urllib.error.URLError, OSError, TimeoutError) as exc:
-            pass
             raise KisOrderTransportError(f"KIS order transport failed: {exc}") from exc
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            pass
             raise KisOrderTransportError(f"KIS order response is not valid JSON: {exc}") from exc
 
         return self.normalize_response(command.client_order_id, data)

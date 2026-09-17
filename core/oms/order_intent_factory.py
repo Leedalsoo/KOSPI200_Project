@@ -43,27 +43,21 @@ self,
         execution: OrderIntentExecutionInput,
     ) -> OrderIntent:
         if execution.quantity <= 0:
-            pass
             raise OrderIntentValidationError("QUANTITY_REQUIRED")
         if not execution.order_type:
-            pass
             raise OrderIntentValidationError("ORDER_TYPE_REQUIRED")
         if not execution.order_purpose:
-            pass
             raise OrderIntentValidationError("ORDER_PURPOSE_REQUIRED")
         if not execution.asset_type:
-            pass
             raise OrderIntentValidationError("ASSET_TYPE_REQUIRED")
 
         side = {"LONG": "BUY", "SHORT": "SELL"}.get(signal.direction)
         if side is None:
-            pass
             raise OrderIntentValidationError("ORDER_SIDE_REQUIRED")
 
         identity = None
         instrument_id = ""
         if execution.asset_type == "OPTION":
-            pass
             identity = self.resolver.resolve(
                 OptionIdentityResolutionInput(
                     instrument_identity=signal.instrument_identity,
@@ -73,12 +67,10 @@ self,
             )
             instrument_id = identity.instrument_id
         elif signal.instrument_identity is not None:
-            pass
             identity = signal.instrument_identity
             instrument_id = identity.instrument_id
 
         if not instrument_id:
-            pass
             raise OrderIntentValidationError("INSTRUMENT_ID_REQUIRED")
 
         return OrderIntent(

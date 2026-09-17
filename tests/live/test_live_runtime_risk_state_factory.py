@@ -13,5 +13,4 @@ def test_authoritative_account_and_position_are_exposed_without_synthesis():
 
 def test_missing_account_fails_closed():
     with pytest.raises(ValueError, match="LIVE_ACCOUNT_PROVIDER_REQUIRED"):
-        pass
         create_live_runtime_risk_state_providers(account=None, position_source=Position())

@@ -34,31 +34,26 @@ def test_resolve_preserves_same_value_overrides():
 
 def test_changed_option_type_override_fails_closed():
     with pytest.raises(IdentityResolutionError, match="AUTHORITATIVE_IDENTITY_REQUIRED_FOR_OPTION_TYPE_OVERRIDE"):
-        pass
         OptionIdentityResolver().resolve(OptionIdentityResolutionInput(identity(), "PUT"))
 
 
 def test_changed_strike_override_fails_closed():
     with pytest.raises(IdentityResolutionError, match="AUTHORITATIVE_IDENTITY_REQUIRED_FOR_STRIKE_OVERRIDE"):
-        pass
         OptionIdentityResolver().resolve(OptionIdentityResolutionInput(identity(), None, Decimal("345.0")))
 
 
 def test_missing_identity_fails_closed():
     with pytest.raises(IdentityResolutionError, match="OPTION_IDENTITY_REQUIRED"):
-        pass
         OptionIdentityResolver().resolve(OptionIdentityResolutionInput(None))
 
 
 def test_missing_expiry_fails_closed():
     bad = OptionInstrumentIdentity("KOSPI200-X-C-350.0", "KOSPI200", None, "CALL", Decimal("350.0"))
     with pytest.raises(IdentityResolutionError, match="EXPIRY_REQUIRED"):
-        pass
         OptionIdentityResolver().resolve(OptionIdentityResolutionInput(bad))
 
 
 def test_zero_strike_fails_closed():
     bad = OptionInstrumentIdentity("KOSPI200-X-C-0.0", "KOSPI200", "202609", "CALL", Decimal("0"))
     with pytest.raises(IdentityResolutionError, match="STRIKE_REQUIRED"):
-        pass
         OptionIdentityResolver().resolve(OptionIdentityResolutionInput(bad))

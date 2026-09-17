@@ -53,5 +53,4 @@ def test_missing_optional_values_are_not_synthesized():
 )
 def test_invalid_execution_proposal_values_fail_closed(kwargs):
     with pytest.raises(ValueError):
-        pass
         StrategyExecutionProposal(**kwargs)

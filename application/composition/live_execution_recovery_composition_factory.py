@@ -21,7 +21,6 @@ def create_live_execution_recovery_composition(
     }
     missing = [name for name, value in required.items() if value is None]
     if missing:
-        pass
         raise ValueError("LIVE_RECOVERY_COMPOSITION_DEPENDENCY_REQUIRED:" + ",".join(missing))
 
     return LiveExecutionRecoveryService(

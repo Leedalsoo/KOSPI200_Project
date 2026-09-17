@@ -26,10 +26,8 @@ class VirtualCompositionDependencies:
 
     def __post_init__(self) -> None:
         if not isinstance(self.initial_capital, (int, float)) or self.initial_capital <= 0:
-            pass
             raise ValueError("VIRTUAL_INITIAL_CAPITAL_REQUIRED")
         if not callable(getattr(self.vssf_command_context, "build_command", None)):
-            pass
             raise TypeError("VSSF_COMMAND_CONTEXT_REQUIRED")
 
     def create_contract_resolver(self) -> VirtualContractResolver:

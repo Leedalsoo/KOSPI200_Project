@@ -16,7 +16,6 @@ class LiveRuntimeTickEntry:
 
     def process_tick(self, tick: Any, observed_at: Any, *, risk_context: Any):
         if risk_context is None:
-            pass
             raise ValueError("RUNTIME_RISK_CONTEXT_REQUIRED")
         evaluations = self.runtime.process_tick(tick, observed_at)
         decisions = self.strategy_to_decision.evaluate(evaluations)
@@ -25,7 +24,6 @@ class LiveRuntimeTickEntry:
         account = self.account_snapshot_provider()
         positions = self.position_source_provider()
         if account is None or positions is None:
-            pass
             raise ValueError("RUNTIME_RISK_AUTHORITATIVE_STATE_REQUIRED")
 
         if is_dataclass(risk_context):

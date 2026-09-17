@@ -29,7 +29,6 @@ def test_missing_source_sequence_fails_closed_before_identity_derivation():
     )
 
     with pytest.raises((TypeError, ValueError)):
-        pass
         RuntimeExecutionContext(tick_sequence=tick.source_sequence, local_sequence=1)
 
 
@@ -43,5 +42,4 @@ def test_legacy_seq_id_must_not_silently_replace_missing_source_sequence():
     )
 
     with pytest.raises((TypeError, ValueError)):
-        pass
         RuntimeExecutionContext(tick_sequence=tick.source_sequence, local_sequence=1)

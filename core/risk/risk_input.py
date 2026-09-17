@@ -28,7 +28,6 @@ def account_snapshot_to_risk_input(snapshot: AccountSnapshot) -> RiskAccountInpu
     required = ("cash", "realized_pnl", "margin_used", "available_cash")
     missing = [key for key in required if key not in snapshot.balances]
     if missing:
-        pass
         raise ValueError(f"RISK_ACCOUNT_FIELDS_REQUIRED: {','.join(missing)}")
     return RiskAccountInput(
         total_balance=Decimal(snapshot.balances["cash"]),

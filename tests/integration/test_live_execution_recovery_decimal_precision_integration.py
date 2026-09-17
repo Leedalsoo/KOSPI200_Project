@@ -3,7 +3,6 @@ from decimal import Decimal, getcontext
 
 def delta_price(cumulative, cumulative_average, prior_filled_quantity, prior_average_price):
     if prior_filled_quantity == 0:
-        pass
         return cumulative_average
     return (cumulative_average * Decimal(cumulative) - prior_average_price * Decimal(prior_filled_quantity)) / Decimal(cumulative - prior_filled_quantity)
 

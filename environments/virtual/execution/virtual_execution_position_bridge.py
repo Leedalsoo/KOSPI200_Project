@@ -14,6 +14,5 @@ class VirtualExecutionPositionBridge:
     def submit(self, command: BrokerOrderCommand) -> ExecutionReport:
         report = self.broker.submit(command)
         if self.deduplicator.accept(report):
-            pass
             self.fill_adapter.apply(command, report)
         return report

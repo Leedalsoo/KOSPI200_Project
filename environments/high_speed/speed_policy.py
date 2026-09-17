@@ -10,13 +10,10 @@ class HighSpeedPolicy:
 
     def validate(self) -> None:
         if self.speed_multiplier not in ALLOWED_SPEEDS and self.speed_multiplier != float("inf"):
-            pass
             raise ValueError("unsupported speed multiplier")
         if not 0 < self.max_cpu_ratio <= 1:
-            pass
             raise ValueError("invalid max_cpu_ratio")
         if not 0 < self.max_memory_ratio <= 1:
-            pass
             raise ValueError("invalid max_memory_ratio")
 
     @property
