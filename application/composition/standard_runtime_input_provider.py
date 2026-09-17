@@ -15,6 +15,7 @@ from core.strategy.contracts import CommonStrategyInput, StrategyContext, Strate
 from core.strategy.track1_tail_defense import Track1Input
 from core.strategy.track2_asymmetric_trap import Track2MarketInputs
 from core.strategy.track3_statistical_arbitrage import Track3MarketInput
+from application.composition.track3_runtime_input_provider import Track3RuntimeInputProvider
 from core.strategy.track4_gamma_scalping import Track4MarketInput
 from core.strategy.track5_gap_divergence import Track5MarketInput
 from core.strategy.track6_daily_tail_insurance import Track6MarketInput
@@ -32,7 +33,7 @@ from contracts.track2_option_iv_source import Track2OptionIVSource
 class StandardRuntimeInputProvider:
     """Build standard inputs from observable VMS/VSSF sources only."""
 
-    def __init__(self, market: Any, *, option_expiry_source: OptionExpirySource | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None) -> None:
+    def __init__(self, market: Any, *, option_expiry_source: OptionExpirySource | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None) -> None:
         self.data = VirtualRuntimeDataProvider(
             market, option_expiry_source=option_expiry_source,
             option_orderbook_source=option_orderbook_source,
@@ -41,6 +42,7 @@ class StandardRuntimeInputProvider:
             track2_metrics_source=track2_metrics_source,
             track2_option_iv_source=track2_option_iv_source,
         )
+        self.track3 = Track3RuntimeInputProvider(track3_runtime_input_source)
 
     @staticmethod
     def _unavailable(strategy_id: str, sources: tuple[str, ...], reason: str) -> StrategyContext:
@@ -146,13 +148,8 @@ class StandardRuntimeInputProvider:
                     )
                 )
 
-        # Track3 must not receive fabricated stability, normalization, fee,
-        # premium, or option-leg attribution values.
-        contexts["Strategy_3_StatArb"] = self._unavailable(
-            "Strategy_3_StatArb",
-            ("market_stability", "spread_normalization", "position_sizing", "fee_ledger", "premium_attribution", "option_legs"),
-            "TRACK3_REQUIRED_AUTHORITATIVE_SOURCES_UNAVAILABLE",
-        )
+        # Track3 is materialized only through its authoritative source seam.
+        contexts["Strategy_3_StatArb"] = self.track3.build(market_state, account=account)
 
         # Track4 standard path is intentionally fail-closed. The dedicated
         # Track4 materializer must supply same-tick KIS Greeks and attribution.
