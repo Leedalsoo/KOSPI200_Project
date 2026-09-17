@@ -13,6 +13,7 @@ from typing import Any
 from core.oms.oms_fsm import OrderStateMachine
 from application.composition.live_runtime_lifecycle_coordinator import LiveRuntimeLifecycleCoordinator
 from application.composition.live_runtime_production_factory import create_live_runtime_lifecycle_coordinator
+from application.market_data_hub import MarketDataHub
 from contracts.futures_execution_symbol_source import KisFuturesExecutionSymbolSource
 from application.composition.futures_target_configuration import FuturesTargetConfiguration
 from environments.live.broker.kis_live_broker import LiveBrokerAdapter
@@ -175,13 +176,14 @@ def create_authoritative_kis_live_runtime_composition(
         instrument_id_resolver=lambda s: current_contract.shrn_iscd,
         observed_at_resolver=lambda obs: obs.observed_at,
     )
+    market_data_hub = MarketDataHub({"kis": market_data_provider}, active="kis")
 
     # 11. Reconciler
     reconciler = LiveReconciler()
 
     # 12. Assemble Live Coordinator
     coordinator = create_live_runtime_lifecycle_coordinator(
-        market=market_data_provider,
+        market=market_data_hub,
         broker=broker,
         account=account,
         position=position_aggregate,
