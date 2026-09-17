@@ -12,6 +12,7 @@ from contracts.basis_source import BasisSource
 from contracts.track2_market_metrics_source import Track2MarketMetricsSource
 from contracts.track2_option_iv_source import Track2OptionIVSource
 from application.composition.track7_calendar_source import Track7CalendarSource
+from application.composition.track7_support_resistance_source import Track7AuthoritativeSupportResistanceSource
 
 @dataclass(frozen=True)
 class RuntimeDataStatus:
@@ -54,10 +55,12 @@ class VirtualRuntimeData:
     is_expiry_day: bool | None = None
     is_week_end: bool | None = None
     order_timeout: bool | None = None
+    support: Decimal | None = None
+    resistance: Decimal | None = None
 
 class VirtualRuntimeDataProvider:
     """Derive only from VMS observations and injected authoritative sources."""
-    def __init__(self, market: Any, *, history_size: int = 50, option_expiry_source: Any | None = None, track7_order_timeout_source: Any | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None) -> None:
+    def __init__(self, market: Any, *, history_size: int = 50, option_expiry_source: Any | None = None, track7_order_timeout_source: Any | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track7_support_resistance_source: Track7AuthoritativeSupportResistanceSource | None = None) -> None:
         self.market = market
         self.history_size = history_size
         self.option_expiry_source = option_expiry_source
@@ -68,6 +71,7 @@ class VirtualRuntimeDataProvider:
         self.basis_source = basis_source
         self.track2_metrics_source = track2_metrics_source
         self.track2_option_iv_source = track2_option_iv_source
+        self.track7_support_resistance_source = track7_support_resistance_source
 
     @staticmethod
     def _norm_cdf(x: float) -> float:
@@ -165,6 +169,13 @@ class VirtualRuntimeDataProvider:
         expiry_status = RuntimeDataStatus(False, False, "OptionExpirySource", "OPTION_EXPIRY_SOURCE_UNAVAILABLE")
         calendar_flags = (None, None, None)
         order_timeout = None
+        support = resistance = None
+        support_resistance_status = RuntimeDataStatus(False, False, "Track7SupportResistance", "TRACK7_SUPPORT_RESISTANCE_SOURCE_UNAVAILABLE")
+        if self.track7_support_resistance_source is not None and getattr(tick, "symbol", None):
+            observation = self.track7_support_resistance_source.get(symbol=tick.symbol, observed_at=observed_at)
+            if observation is not None:
+                support, resistance = observation.support, observation.resistance
+                support_resistance_status = RuntimeDataStatus(True, True, observation.source)
         if self.track7_order_timeout_source is not None:
             order_timeout = self.track7_order_timeout_source.is_strategy_timed_out(
                 "TRACK7", observed_at
@@ -254,6 +265,7 @@ class VirtualRuntimeDataProvider:
             "event": RuntimeDataStatus(True, True, "VMS.scenario.shock_schedule"),
             "option_expiry": expiry_status,
             "track7_calendar": calendar_status,
+            "track7_support_resistance": support_resistance_status,
             "option_orderbook": orderbook_status,
             "volume_profile_poc": poc_status,
             "basis": basis_status,
@@ -272,6 +284,7 @@ class VirtualRuntimeDataProvider:
             ma_1m=ma_1m, ma_3m=ma_3m, ma_5m=ma_5m, ma_10m=ma_10m,
             is_new_week_start=calendar_flags[0], is_expiry_day=calendar_flags[1], is_week_end=calendar_flags[2],
             order_timeout=order_timeout,
+            support=support, resistance=resistance,
         )
 
 

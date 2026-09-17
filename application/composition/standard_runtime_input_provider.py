@@ -33,10 +33,11 @@ from contracts.track2_option_iv_source import Track2OptionIVSource
 class StandardRuntimeInputProvider:
     """Build standard inputs from observable VMS/VSSF sources only."""
 
-    def __init__(self, market: Any, *, track7_order_timeout_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None) -> None:
+    def __init__(self, market: Any, *, track7_order_timeout_source: Any | None = None, track7_support_resistance_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None) -> None:
         self.track7_order_timeout_source = track7_order_timeout_source
+        self.track7_support_resistance_source = track7_support_resistance_source
         self.data = VirtualRuntimeDataProvider(
-            market, option_expiry_source=option_expiry_source, track7_order_timeout_source=track7_order_timeout_source, trading_calendar=trading_calendar, option_master=option_master,
+            market, option_expiry_source=option_expiry_source, track7_order_timeout_source=track7_order_timeout_source, track7_support_resistance_source=track7_support_resistance_source, trading_calendar=trading_calendar, option_master=option_master,
             option_orderbook_source=option_orderbook_source,
             volume_profile_source=volume_profile_source,
             basis_source=basis_source,
@@ -207,7 +208,8 @@ class StandardRuntimeInputProvider:
             track7_missing_sources.append("expiry_calendar")
         if d.order_timeout is None:
             track7_missing_sources.append("order_timeout")
-        track7_missing_sources.append("support_resistance")
+        if d.status.get("track7_support_resistance") is None or not d.status["track7_support_resistance"].available:
+            track7_missing_sources.append("support_resistance")
         if "support_resistance" not in track7_missing_sources and not track7_missing_sources:
             contexts["track7_volatility_skew_weekly_insurance"] = StrategyContext(
                 market_state, "track7_volatility_skew_weekly_insurance", StrategyInput(
@@ -216,6 +218,7 @@ class StandardRuntimeInputProvider:
                         d.as_of.date().isoformat(), bool(d.is_new_week_start), d.active_vol,
                         call_iv=d.option_iv, put_iv=d.put_iv, skew_limit_timeout=False,
                         ma_1m=d.ma_1m, ma_3m=d.ma_3m, ma_5m=d.ma_5m, ma_10m=d.ma_10m,
+                        support=d.support, resistance=d.resistance,
                         time_str=d.as_of.strftime("%H:%M:%S"),
                         is_expiry_day=bool(d.is_expiry_day), is_week_end=bool(d.is_week_end),
                     )
