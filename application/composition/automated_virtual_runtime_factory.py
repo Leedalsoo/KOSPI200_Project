@@ -11,6 +11,7 @@ from infrastructure.kis.track9_iv_observation_history_store import KISTrack9IVOb
 from infrastructure.kis.track9_atm_iv_source import KISTrack9ATMIVSource
 from contracts.track9_iv_event_materializer import Track9IVEventMaterializer
 from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
+from environments.virtual.account.track9_margin_read_model import VSSFTrack9MarginReadModel
 from application.strategy_hub.hub import StrategyHub
 from core.strategy.standard_registry import STANDARD_STRATEGY_KEYS, build_standard_strategy_registry
 
@@ -38,10 +39,12 @@ def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_h
         bootstrap.bundle.option_master,
     )
     fee_ledger = VirtualTrack9FeeLedger()
+    margin_read_model = VSSFTrack9MarginReadModel(bootstrap.bundle.account)
     run_id = run_id or getattr(getattr(bootstrap, "run_context", None), "run_id", "")
     provider = StandardRuntimeInputProvider(
         bootstrap.bundle.market,
         track9_fee_ledger=fee_ledger,
+        track9_margin_read_model=margin_read_model,
         run_id=run_id,
         option_expiry_source=expiry_source,
         trading_calendar=getattr(bootstrap.bundle.option_master, "calendar", None),

@@ -11,6 +11,7 @@ class VSSFAccountSnapshotAdapter(AccountProvider):
 
     def __init__(self, account_source: Any):
         self._account_source = account_source
+        self.account_id = "ACC-VSSF-001"
 
     def snapshot(self) -> AccountSnapshot:
         getter = getattr(self._account_source, "get_canonical_summary", None)
