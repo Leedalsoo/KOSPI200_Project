@@ -10,9 +10,12 @@ class CanonicalMarketTick:
 @dataclass(frozen=True)
 class CanonicalOrderCommand:
  client_order_id:str; track_id:str; asset_type:CanonicalAssetType; side:CanonicalOrderSide; qty:int; price:float; option_type:Optional[CanonicalOptionType]=None; strike:float=0.0; symbol:str="KOSPI200"; expiry:str=""; tag_id:str=""
+ strategy_id:str=""
+ group_id:str=""
+ leg_id:str=""
 @dataclass(frozen=True)
 class CanonicalExecutionReport:
- exec_id:str; client_order_id:str; track_id:str; asset_type:CanonicalAssetType; side:CanonicalOrderSide; executed_qty:int; executed_price:float; fee:float; slippage:float; timestamp:str; symbol:str="KOSPI200"; option_type:Optional[CanonicalOptionType]=None; strike:float=0.0; expiry:str=""
+ exec_id:str; client_order_id:str; track_id:str; asset_type:CanonicalAssetType; side:CanonicalOrderSide; executed_qty:int; executed_price:float; fee:float; slippage:float; timestamp:str; symbol:str="KOSPI200"; option_type:Optional[CanonicalOptionType]=None; strike:float=0.0; expiry:str=""; strategy_id:str=""; group_id:str=""; leg_id:str=""
 @dataclass
 class CanonicalAccountSummary:
  account_id:str; total_balance:float; realized_pnl:float; unrealized_pnl:float; used_margin:float; free_margin:float; timestamp:str=""; positions:Dict[str,Dict[str,Any]]=field(default_factory=dict)

@@ -51,6 +51,8 @@ def test_virtual_multileg_execution_populates_track9_lot_read_models(tmp_path):
     assert len(insurance) == 1
     assert insurance[0].position_role == PositionRole.OVERNIGHT_INSURANCE
     assert insurance[0].remaining_quantity == 2
+    assert bridge.fee_ledger.total(run_id="RUNTIME-PROV-1") == Decimal("0")
+    assert len(bridge.fee_ledger.query(run_id="RUNTIME-PROV-1")) == 2
 
 
 def test_repeated_bridge_executions_consume_fifo_and_create_reversal_lot(tmp_path):

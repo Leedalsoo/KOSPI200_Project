@@ -15,6 +15,9 @@ class ExecutionEngine:
             option_type=getattr(command, "option_type", None),
             strike=float(getattr(command, "strike", 0.0)),
             expiry=getattr(command, "expiry", ""),
+            strategy_id=getattr(command, "strategy_id", ""),
+            group_id=getattr(command, "group_id", ""),
+            leg_id=getattr(command, "leg_id", ""),
         )
         self.reports.append(rep)
         return rep

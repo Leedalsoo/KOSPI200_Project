@@ -79,6 +79,7 @@ def create_virtual_run_session(context: RunContext, option_master: Any) -> RunSe
         type("Bootstrap", (), {"bundle": bundle})(),
         strategy_keys=context.strategy_keys,
         track9_iv_history_path=context.track9_iv_history_path,
+        run_id=context.run_id,
     )
     strategy_hub = loop.strategy_hub
     runtime_hub = RuntimeHub(loop)

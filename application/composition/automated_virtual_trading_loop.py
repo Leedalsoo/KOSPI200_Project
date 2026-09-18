@@ -13,6 +13,7 @@ from application.composition.runtime_decision_command_adapter import RuntimeDeci
 from application.composition.runtime_strategy_result_collection_adapter import RuntimeStrategyResultCollectionAdapter
 from application.composition.runtime_strategy_to_decision_adapter import RuntimeStrategyToDecisionAdapter
 from contracts.types import BrokerOrderCommand, BrokerOrderResponse, ExecutionReport, OptionInstrumentIdentity
+from contracts.track9_fee_ledger import Track9FeeRecord, Track9FeeLedger
 from core.decision.decision_arbiter import DecisionArbiter
 from core.oms.oms_fsm import OrderStateMachine
 from core.oms.order_router import StandardOrderRouter
@@ -54,11 +55,15 @@ class _VirtualBrokerAckAdapter:
 class AutomatedVirtualTradingLoop:
     """Connect real Virtual Market ticks to registered Strategy execution."""
 
-    def __init__(self, *, bundle, strategy_hub: StrategyHubPort,
+    def __init__(self, *, bundle, strategy_hub: StrategyHubPort, run_id: str, fee_ledger: Track9FeeLedger | None = None,
                  context_builder: Callable[[object, MarketState], dict[str, StrategyContext]],
                  identity_provider: Callable[[object], OptionInstrumentIdentity],
                  risk_config: RiskConfig | None = None) -> None:
+        if not run_id.strip():
+            raise ValueError("AUTOMATED_RUNTIME_RUN_ID_REQUIRED")
         self.bundle = bundle
+        self.run_id = run_id
+        self.fee_ledger = fee_ledger
         self.strategy_hub = strategy_hub
         self.context_builder = context_builder
         self.identity_provider = identity_provider
@@ -119,6 +124,8 @@ class AutomatedVirtualTradingLoop:
                 order_purpose="AUTOMATED_STRATEGY",
                 track_id=canonical.track_id,
                 tag_id=canonical.tag_id or "STRATEGY",
+                group_id=canonical.client_order_id,
+                leg_id=canonical.tag_id or canonical.client_order_id,
             )
             account = self.bundle.account.snapshot()
             risk_command = replace(canonical, symbol=canonical.symbol or "KOSPI200")
@@ -141,8 +148,30 @@ class AutomatedVirtualTradingLoop:
                 remaining_quantity=report.remaining_quantity,
                 execution_price=report.execution_price,
                 execution_timestamp=report.execution_timestamp,
+                fee=report.fee,
+                group_id=report.group_id,
+                leg_id=report.leg_id,
             ))
             if report.status == "FILLED":
+                if self.fee_ledger is not None:
+                    if report.execution_id is None or report.execution_timestamp is None or report.execution_price is None or report.fee is None:
+                        raise RuntimeError("AUTOMATED_RUNTIME_FEE_PROVENANCE_REQUIRED")
+                    self.fee_ledger.record(
+                        Track9FeeRecord(
+                            run_id=self.run_id,
+                            strategy_id=canonical.track_id,
+                            group_id=broker_command.group_id or "",
+                            leg_id=broker_command.leg_id or "",
+                            client_order_id=report.client_order_id,
+                            execution_id=report.execution_id,
+                            instrument_id=broker_command.instrument_id,
+                            fee_amount=report.fee,
+                            executed_quantity=report.filled_quantity,
+                            executed_price=report.execution_price,
+                            executed_at=report.execution_timestamp,
+                            source="VSSF:CanonicalExecutionReport.fee",
+                        )
+                    )
                 filled += report.filled_quantity
                 execution_ids.append(report.execution_id)
 

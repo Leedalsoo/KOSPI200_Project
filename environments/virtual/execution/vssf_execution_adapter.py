@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from typing import Protocol
 
 from contracts.types import BrokerOrderCommand, DataQuality, ExecutionReport
@@ -31,6 +32,7 @@ class VSSFExecutionAdapter:
                 filled_quantity=int(result.executed_qty), remaining_quantity=0,
                 execution_price=result.executed_price,
                 execution_timestamp=datetime.fromisoformat(result.timestamp),
+                fee=Decimal(str(result.fee)),
                 source_freshness=DataQuality(is_fresh=True, is_complete=True,
                     source_available=True, reason="vssf_authoritative_execution"),
             )

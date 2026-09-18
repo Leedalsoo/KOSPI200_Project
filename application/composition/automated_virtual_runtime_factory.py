@@ -10,11 +10,12 @@ from infrastructure.kis.track2_option_iv_source import KISTrack2OptionIVSource
 from infrastructure.kis.track9_iv_observation_history_store import KISTrack9IVObservationHistoryStore
 from infrastructure.kis.track9_atm_iv_source import KISTrack9ATMIVSource
 from contracts.track9_iv_event_materializer import Track9IVEventMaterializer
+from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
 from application.strategy_hub.hub import StrategyHub
 from core.strategy.standard_registry import STANDARD_STRATEGY_KEYS, build_standard_strategy_registry
 
 
-def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_history_path=None):
+def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_history_path=None, run_id=None):
     """Attach all nine Standard strategies to the RuntimeController-owned VMS."""
     selected_keys = tuple(strategy_keys) if strategy_keys else STANDARD_STRATEGY_KEYS
     strategy_hub = StrategyHub(build_standard_strategy_registry(), selected_keys)
@@ -36,8 +37,12 @@ def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_h
         vssf_runtime,
         bootstrap.bundle.option_master,
     )
+    fee_ledger = VirtualTrack9FeeLedger()
+    run_id = run_id or getattr(getattr(bootstrap, "run_context", None), "run_id", "")
     provider = StandardRuntimeInputProvider(
         bootstrap.bundle.market,
+        track9_fee_ledger=fee_ledger,
+        run_id=run_id,
         option_expiry_source=expiry_source,
         trading_calendar=getattr(bootstrap.bundle.option_master, "calendar", None),
         option_master=bootstrap.bundle.option_master,
@@ -75,6 +80,8 @@ def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_h
     loop = AutomatedVirtualTradingLoop(
         bundle=bootstrap.bundle,
         strategy_hub=strategy_hub,
+        run_id=run_id,
+        fee_ledger=fee_ledger,
         context_builder=lambda tick, state: provider.build(tick, state, bootstrap.bundle.account),
         identity_provider=identity,
     )

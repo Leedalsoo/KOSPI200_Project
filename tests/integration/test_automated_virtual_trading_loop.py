@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from application.bootstrap import create_virtual_runtime_bootstrap
 from application.composition.automated_virtual_trading_loop import AutomatedVirtualTradingLoop
+from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
 from contracts.types import OptionInstrumentIdentity
 from core.domain.market_models import MarketState
 from core.strategy.contracts import CommonStrategyInput, StrategyContext, StrategyInput
@@ -38,7 +39,8 @@ def test_market_tick_to_strategy_orchestrator_oms_virtual_execution_and_control_
         )
 
     loop = AutomatedVirtualTradingLoop(
-        bundle=bundle, strategy_hub=strategy_hub,
+        bundle=bundle, strategy_hub=strategy_hub, run_id="TEST-RUN-AUTOMATED",
+        fee_ledger=VirtualTrack9FeeLedger(),
         context_builder=contexts, identity_provider=identity,
     )
     bundle.market.subscribe(loop.on_tick)
@@ -51,6 +53,9 @@ def test_market_tick_to_strategy_orchestrator_oms_virtual_execution_and_control_
     assert result.approved == 1
     assert result.routed == 1
     assert result.filled == 1
+    assert loop.fee_ledger is not None
+    assert loop.fee_ledger.total(run_id="TEST-RUN-AUTOMATED") == Decimal("0")
+    assert len(loop.fee_ledger.query(run_id="TEST-RUN-AUTOMATED")) == 1
     assert result.rejected == 0
     assert result.execution_ids
     assert bundle.execution.reports()

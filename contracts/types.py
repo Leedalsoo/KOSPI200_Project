@@ -177,6 +177,7 @@ class ExecutionReport:
     remaining_quantity: int
     execution_price: Decimal | None
     execution_timestamp: datetime | None
+    fee: Decimal | None = None
     source_freshness: DataQuality | None = None
     rejected_reason: str | None = None
     group_id: str | None = None

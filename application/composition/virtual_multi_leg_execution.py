@@ -18,7 +18,9 @@ from application.composition.runtime_authoritative_risk_router_adapter import (
 )
 from environments.virtual.execution.vssf_command_context_provider import CanonicalVSSFCommandContextProvider
 from contracts.position_provenance import PositionRole, PositionLotProvenance
+from contracts.track9_fee_ledger import Track9FeeRecord
 from environments.virtual.position.virtual_position_lot_store import VirtualPositionLotStore
+from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
 from contracts.track9_position_read_models import (
     Track9OptionPositionAttributionReadModel, Track9InsurancePositionReadModel,
 )
@@ -70,6 +72,7 @@ class VirtualMultiLegExecutionBridge:
             raise ValueError("MULTI_LEG_RUN_ID_REQUIRED")
         self.run_id = run_id
         self.position_lot_store = VirtualPositionLotStore()
+        self.fee_ledger = VirtualTrack9FeeLedger()
         self.option_position_attribution = Track9OptionPositionAttributionReadModel(self.position_lot_store)
         self.insurance_position = Track9InsurancePositionReadModel(self.position_lot_store)
         self.provenance: dict[str, dict[str, str]] = {}
@@ -188,6 +191,7 @@ class VirtualMultiLegExecutionBridge:
                 remaining_quantity=raw.remaining_quantity,
                 execution_price=raw.execution_price,
                 execution_timestamp=raw.execution_timestamp,
+                fee=Decimal(str(getattr(raw, "fee", "0"))),
                 group_id=plan.group_id,
                 leg_id=leg.leg_id,
             )
@@ -214,6 +218,24 @@ class VirtualMultiLegExecutionBridge:
                     position_role=role,
                 )
                 self.position_lot_store.apply_execution(lot)
+                if report.fee is None or report.execution_price is None:
+                    raise RuntimeError("MULTI_LEG_FEE_PROVENANCE_EXECUTION_REQUIRED")
+                self.fee_ledger.record(
+                    Track9FeeRecord(
+                        run_id=self.run_id,
+                        strategy_id=plan.strategy_id,
+                        group_id=plan.group_id,
+                        leg_id=leg.leg_id,
+                        client_order_id=client_order_id,
+                        execution_id=report.execution_id,
+                        instrument_id=identity.instrument_id,
+                        fee_amount=report.fee,
+                        executed_quantity=report.filled_quantity,
+                        executed_price=report.execution_price,
+                        executed_at=report.execution_timestamp,
+                        source="VSSF:CanonicalExecutionReport.fee",
+                    )
+                )
             from environments.virtual.position.virtual_position_aggregate import VirtualPositionAggregate
             from environments.virtual.position.virtual_position_fill_adapter import VirtualPositionFillAdapter
             leg_position = self.leg_positions.get(identity.instrument_id)

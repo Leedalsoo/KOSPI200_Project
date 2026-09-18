@@ -68,4 +68,7 @@ class CanonicalVSSFCommandContextProvider:
             symbol=symbol,
             expiry=expiry,
             tag_id=order.tag_id,
+            strategy_id=order.strategy_id or "",
+            group_id=order.group_id or "",
+            leg_id=order.leg_id or "",
         )
