@@ -3,6 +3,7 @@ from decimal import Decimal
 from typing import Sequence
 
 from core.strategy.contracts import Signal, StrategyContext, StrategyInput
+from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
 from core.strategy.multi_leg_plan import build_pair_plan
 from contracts.types import MultiLegExecutionPlan
 
@@ -98,9 +99,16 @@ class Track8MacroRegimeMonthlyStrangle:
                 self.strategy_id,
                 "BUY_LIMIT_TRANCHE",
                 1.0,
-                f"DTE:{data.dte};CALL:{call_strike};PUT:{put_strike};"
-                f"QTY_CALL:{qty_call};QTY_PUT:{qty_put};"
-                "PRICING:MID_PRICE_OFFSET;TICK:1;FALLBACK_SEC:5",
+                f"DTE:{data.dte};CALL:{call_strike};PUT:{put_strike};QTY_CALL:{qty_call};QTY_PUT:{qty_put};PRICING:MID_PRICE_OFFSET;TICK:1;FALLBACK_SEC:5",
+                execution_proposal=StrategyExecutionProposal(
+                    proposed_quantity=qty_call,
+                    asset_type="OPTION",
+                    side="BUY",
+                    track_id=self.strategy_id,
+                    tag_id="MONTHLY_STRANGLE_ENTRY_CALL",
+                    option_type="CALL",
+                    strike=call_strike,
+                ),
             ),
         )
 

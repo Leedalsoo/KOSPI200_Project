@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Sequence
 
 from core.strategy.contracts import Signal, StrategyContext, StrategyInput
+from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
 from core.strategy.multi_leg_plan import build_pair_plan
 from contracts.types import MultiLegExecutionPlan
 
@@ -110,9 +111,16 @@ class Track9EventOvernightInsurance:
                     self.strategy_id,
                     "ADD_INSURANCE",
                     1.0,
-                    f"TARGET_QTY:{target};DIFF:{diff};"
-                    f"PUT:{atm-self.strike_offset};CALL:{atm+self.strike_offset};"
-                    "PRICING:MID_PRICE_OFFSET;TICK:1;FALLBACK_SEC:2",
+                    f"TARGET_QTY:{target};DIFF:{diff};PUT:{atm-self.strike_offset};CALL:{atm+self.strike_offset};PRICING:MID_PRICE_OFFSET;TICK:1;FALLBACK_SEC:2",
+                    execution_proposal=StrategyExecutionProposal(
+                        proposed_quantity=diff,
+                        asset_type="OPTION",
+                        side="BUY",
+                        track_id=self.strategy_id,
+                        tag_id="OVERNIGHT_INSURANCE_ADD_PUT",
+                        option_type="PUT",
+                        strike=atm - self.strike_offset,
+                    ),
                 ),
             )
         return (

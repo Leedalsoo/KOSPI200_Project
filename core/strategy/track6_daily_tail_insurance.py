@@ -3,6 +3,7 @@ from decimal import Decimal
 from typing import Sequence
 
 from core.strategy.contracts import Signal, StrategyContext
+from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
 from core.strategy.multi_leg_plan import build_pair_plan
 from contracts.types import MultiLegExecutionPlan
 
@@ -90,9 +91,16 @@ self,
             self.strategy_id,
             "BUY_INSURANCE",
 1.0,
-            f"VOL_SPIKE:{data.active_vol}>={data.base_vol * self.vol_trigger_multiplier};"
-# f"PUT:{put_strike};CALL:{call_strike};QTY:{self.insurance_qty};"
-# f"COST:{estimated_cost};EXECUTION:SUBSECOND_TICK_CHASER_IOC",
+            f"VOL_SPIKE:{data.active_vol}>={data.base_vol * self.vol_trigger_multiplier};PUT:{put_strike};CALL:{call_strike};QTY:{self.insurance_qty}",
+            execution_proposal=StrategyExecutionProposal(
+                proposed_quantity=self.insurance_qty,
+                asset_type="OPTION",
+                side="BUY",
+                track_id=self.strategy_id,
+                tag_id="DAILY_TAIL_INSURANCE_ENTRY",
+                option_type="PUT",
+                strike=put_strike,
+            ),
         ),)
 
     def build_execution_plan(self, group_id: str) -> MultiLegExecutionPlan | None:
