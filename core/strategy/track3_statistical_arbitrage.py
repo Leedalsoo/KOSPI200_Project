@@ -12,6 +12,7 @@ from statistics import mean, pstdev
 from typing import Mapping, Sequence
 
 from core.strategy.contracts import Signal, StrategyContext
+from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
 
 
 @dataclass(frozen=True)
@@ -197,11 +198,28 @@ class Track3StatisticalArbitrage:
 
     def _signal(self, action: str, position: str, reason: str, **details: object) -> Signal:
         payload = {"action": action, "position": position, **details}
+        quantity = int(details.get("qty", 0) or 0)
+        if quantity <= 0:
+            raise ValueError("TRACK3_EXECUTION_QTY_REQUIRED")
+        if action == "EXECUTE_STAT_ARB":
+            side = "SELL" if position == "SHORT_SPREAD" else "BUY"
+        elif action == "CLOSE_STAT_ARB":
+            side = "BUY" if position == "CLOSE_SHORT_SPREAD" else "SELL"
+        else:
+            raise ValueError("TRACK3_EXECUTION_ACTION_UNSUPPORTED")
+        proposal = StrategyExecutionProposal(
+            proposed_quantity=quantity,
+            asset_type="FUTURES",
+            side=side,
+            track_id=self.strategy_id,
+            tag_id=action,
+        )
         return Signal(
             strategy_id=self.strategy_id,
             direction=position,
             confidence=1.0,
             reason=f"{reason} | {payload}",
+            execution_proposal=proposal,
         )
 
     def evaluate(self, context: StrategyContext) -> Sequence[Signal]:
