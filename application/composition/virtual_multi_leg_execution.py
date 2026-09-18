@@ -17,6 +17,11 @@ from application.composition.runtime_authoritative_risk_router_adapter import (
     RiskRouterContext, route_from_runtime_authoritative_sources,
 )
 from environments.virtual.execution.vssf_command_context_provider import CanonicalVSSFCommandContextProvider
+from contracts.position_provenance import PositionRole, PositionLotProvenance
+from environments.virtual.position.virtual_position_lot_store import VirtualPositionLotStore
+from contracts.track9_position_read_models import (
+    Track9OptionPositionAttributionReadModel, Track9InsurancePositionReadModel,
+)
 
 
 @dataclass(frozen=True)
@@ -49,7 +54,7 @@ class _AckAdapter:
 class VirtualMultiLegExecutionBridge:
     """Preserve group/leg identity while routing every leg through Risk -> OMS -> VSSF."""
 
-    def __init__(self, *, bundle: Any, option_master: IOptionContractMaster | None = None, risk_config: RiskConfig | None = None) -> None:
+    def __init__(self, *, bundle: Any, run_id: str, option_master: IOptionContractMaster | None = None, risk_config: RiskConfig | None = None) -> None:
         self.bundle = bundle
         self.option_master = option_master or getattr(bundle, "option_master", None)
         self.fsm = OrderStateMachine()
@@ -61,6 +66,12 @@ class VirtualMultiLegExecutionBridge:
         self.command_context = CanonicalVSSFCommandContextProvider()
         self.groups: dict[str, list[ExecutionReport]] = {}
         self.position_groups = PositionGroupRegistry()
+        if not run_id.strip():
+            raise ValueError("MULTI_LEG_RUN_ID_REQUIRED")
+        self.run_id = run_id
+        self.position_lot_store = VirtualPositionLotStore()
+        self.option_position_attribution = Track9OptionPositionAttributionReadModel(self.position_lot_store)
+        self.insurance_position = Track9InsurancePositionReadModel(self.position_lot_store)
         self.provenance: dict[str, dict[str, str]] = {}
         self.leg_positions: dict[str, Any] = {}
 
@@ -139,6 +150,7 @@ class VirtualMultiLegExecutionBridge:
                 tag_id=leg.leg_id,
                 group_id=plan.group_id,
                 leg_id=leg.leg_id,
+                position_role=leg.position_role,
             )
             canonical = self.command_context.build_command(broker_command)
             vssf.order_book.update_bid_ask(float(bid), float(ask), identity.instrument_id)
@@ -180,6 +192,28 @@ class VirtualMultiLegExecutionBridge:
                 leg_id=leg.leg_id,
             )
             reports.append(report)
+            if report.status == "FILLED" and report.filled_quantity > 0:
+                if not report.execution_id or report.execution_timestamp is None:
+                    raise RuntimeError("MULTI_LEG_POSITION_PROVENANCE_EXECUTION_REQUIRED")
+                role = PositionRole(leg.position_role)
+                lot = PositionLotProvenance(
+                    run_id=self.run_id,
+                    instrument_id=identity.instrument_id,
+                    strategy_id=plan.strategy_id,
+                    group_id=plan.group_id,
+                    leg_id=leg.leg_id,
+                    client_order_id=client_order_id,
+                    execution_id=report.execution_id,
+                    side=leg.side,
+                    opened_quantity=report.filled_quantity,
+                    remaining_quantity=report.filled_quantity,
+                    execution_timestamp=report.execution_timestamp,
+                    instrument_identity=identity,
+                    contract_multiplier=identity.contract_multiplier,
+                    identity_source=identity.identity_source or "",
+                    position_role=role,
+                )
+                self.position_lot_store.apply_execution(lot)
             from environments.virtual.position.virtual_position_aggregate import VirtualPositionAggregate
             from environments.virtual.position.virtual_position_fill_adapter import VirtualPositionFillAdapter
             leg_position = self.leg_positions.get(identity.instrument_id)

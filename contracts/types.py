@@ -63,6 +63,7 @@ class ExecutionLeg:
     option_type: str | None = None
     strike: Decimal | None = None
     requested_price: Decimal | None = None
+    position_role: str = "NONE"
 
 
 @dataclass(frozen=True)
@@ -115,6 +116,7 @@ class OrderIntent:
     tag_id: str | None = None
     group_id: str | None = None
     leg_id: str | None = None
+    position_role: str = "NONE"
 
 
 @dataclass(frozen=True)
@@ -137,6 +139,7 @@ class BrokerOrderCommand:
     tag_id: str | None = None
     group_id: str | None = None
     leg_id: str | None = None
+    position_role: str = "NONE"
 
 
 @dataclass(frozen=True)

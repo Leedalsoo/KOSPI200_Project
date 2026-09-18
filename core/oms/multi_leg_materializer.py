@@ -25,5 +25,5 @@ def materialize_multi_leg_plan(plan: MultiLegExecutionPlan, *, resolve_identity:
         if leg.strike is not None and identity.strike != leg.strike: raise MultiLegMaterializationError("STRIKE_IDENTITY_MISMATCH")
         client_order_id = make_client_id(plan, leg)
         if not client_order_id: raise MultiLegMaterializationError("CLIENT_ORDER_ID_REQUIRED")
-        intents.append(OrderIntent(client_order_id=client_order_id, instrument_id=identity.instrument_id, side=leg.side, quantity=leg.quantity, intent_type=semantics.order_purpose, strategy_id=plan.strategy_id, instrument_identity=identity, asset_type=semantics.asset_type, requested_price=leg.requested_price, order_type=semantics.order_type, order_purpose=semantics.order_purpose, track_id=plan.strategy_id, group_id=plan.group_id, leg_id=leg.leg_id))
+        intents.append(OrderIntent(client_order_id=client_order_id, instrument_id=identity.instrument_id, side=leg.side, quantity=leg.quantity, intent_type=semantics.order_purpose, strategy_id=plan.strategy_id, instrument_identity=identity, asset_type=semantics.asset_type, requested_price=leg.requested_price, order_type=semantics.order_type, order_purpose=semantics.order_purpose, track_id=plan.strategy_id, group_id=plan.group_id, leg_id=leg.leg_id, position_role=leg.position_role))
     return tuple(intents)

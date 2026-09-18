@@ -67,7 +67,7 @@ def create_virtual_run_session(context: RunContext, option_master: Any) -> RunSe
             scenario_engine.set_scenario(context.scenario)
     vssf = bundle.execution._authoritative_execute.__self__.vssf_runtime
     risk_engine = RiskEngine(config=RiskConfig(), margin_engine=vssf.margin_engine)
-    bridge = VirtualMultiLegExecutionBridge(bundle=bundle, option_master=bundle.option_master, risk_config=RiskConfig())
+    bridge = VirtualMultiLegExecutionBridge(bundle=bundle, run_id=context.run_id, option_master=bundle.option_master, risk_config=RiskConfig())
     bundle.broker_api.attach_group_read_model(
         snapshot_reader=bridge.position_groups.snapshot,
         reports_reader=bridge.group_reports,

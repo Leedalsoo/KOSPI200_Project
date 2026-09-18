@@ -25,7 +25,7 @@ def test_virtual_fill_position_grouped_pnl_preserves_authoritative_multiplier_an
     for _ in events:
         assert bundle.market.replay_next() is not None
 
-    bridge = VirtualMultiLegExecutionBridge(bundle=bundle, option_master=bundle.option_master)
+    bridge = VirtualMultiLegExecutionBridge(bundle=bundle, run_id="TEST-RUN", option_master=bundle.option_master)
     plan = MultiLegExecutionPlan(
         group_id="GROUP-POSITION-PROV-1",
         strategy_id="STRATEGY-POSITION-PROV-1",
