@@ -14,6 +14,7 @@ from typing import ClassVar, Sequence
 from contracts.types import MultiLegExecutionPlan
 from core.strategy.contracts import Signal, StrategyContext
 from core.strategy.multi_leg_plan import build_trap_plan
+from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
 
 
 @dataclass(frozen=True)
@@ -289,7 +290,24 @@ class Track2AsymmetricTrap:
         self._entry_instrument = tick.instrument_id
         self._high_pnl_ratio = Decimal("0")
         self._daily_entry_count += 1
-        return (Signal(self.strategy_id, "LONG", 1.0, "ASYMMETRIC_TRAP_ENTRY"),)
+        trap = self.build_asymmetric_trap(
+            tick.price, inputs.active_vol, inputs.base_vol
+        )
+        short_put = trap["signals"][0]["strikes"]["put"]
+        proposal = StrategyExecutionProposal(
+            proposed_quantity=1,
+            asset_type="OPTION",
+            requested_price=None,
+            side="SELL",
+            track_id=self.strategy_id,
+            tag_id="TRAP_PLAN",
+            option_type="PUT",
+            strike=short_put,
+        )
+        return (Signal(
+            self.strategy_id, "LONG", 1.0, "ASYMMETRIC_TRAP_ENTRY",
+            execution_proposal=proposal,
+        ),)
 
     def evaluate(self, context: StrategyContext) -> Sequence[Signal]:
         # Canonical MarketState에 없는 BBW/IV/Basis/OBI/POC를 임의 생성하지 않는다.
