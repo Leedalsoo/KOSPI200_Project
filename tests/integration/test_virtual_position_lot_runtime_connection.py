@@ -51,3 +51,52 @@ def test_virtual_multileg_execution_populates_track9_lot_read_models(tmp_path):
     assert len(insurance) == 1
     assert insurance[0].position_role == PositionRole.OVERNIGHT_INSURANCE
     assert insurance[0].remaining_quantity == 2
+
+
+def test_repeated_bridge_executions_consume_fifo_and_create_reversal_lot(tmp_path):
+    bundle = _bundle(tmp_path)
+    store = HistoricalMarketStore(tmp_path / "repeat-events.jsonl")
+    store.append(ReferenceCanonicalMarketTick(
+        timestamp="2026-10-15T10:00:00.001", underlying_price=512.5,
+        strike_price=510.0, option_type="CALL", contract_multiplier=250000.0,
+        bid_price=3.20, ask_price=3.30, last_price=3.25, volume=100, seq_id=1,
+        expiry="202610", symbol="201S11305",
+    ), source="KIS:H0IOCNT0")
+    bundle.market.load_historical_store(store, source="KIS:H0IOCNT0")
+    assert bundle.market.replay_next() is not None
+    bridge = VirtualMultiLegExecutionBridge(
+        bundle=bundle, run_id="RUNTIME-FIFO-1", option_master=bundle.option_master
+    )
+
+    def execute(group, side, qty, strategy, role=PositionRole.NONE):
+        plan = MultiLegExecutionPlan(
+            group_id=group, strategy_id=strategy,
+            legs=(ExecutionLeg("call", side, qty, "CALL", Decimal("510"), position_role=role),),
+        )
+        return bridge.execute(plan)
+
+    first = execute("G1", "BUY", 2, "S1", PositionRole.OVERNIGHT_INSURANCE)
+    second = execute("G2", "BUY", 3, "S2")
+    close = execute("G3", "SELL", 4, "S3")
+    assert [x.execution_id for x in bridge.position_lot_store.open_lots()] == [second.reports[0].execution_id]
+    residual = bridge.position_lot_store.open_lots()[0]
+    assert residual.remaining_quantity == 1
+    assert residual.strategy_id == "S2"
+    assert residual.group_id == "G2"
+    assert residual.position_role == PositionRole.NONE
+    assert bridge.position_lot_store.close_events()[0].source_lot_execution_id == first.reports[0].execution_id
+    assert bridge.position_lot_store.close_events()[1].source_lot_execution_id == second.reports[0].execution_id
+
+    reversal = execute("G4", "SELL", 3, "S4", PositionRole.EVENT_INSURANCE)
+    lots = bridge.position_lot_store.open_lots()
+    assert len(lots) == 1
+    new_lot = lots[0]
+    assert new_lot.execution_id == reversal.reports[0].execution_id
+    assert new_lot.strategy_id == "S4"
+    assert new_lot.group_id == "G4"
+    assert new_lot.leg_id == "call"
+    assert new_lot.remaining_quantity == 2
+    assert new_lot.position_role == PositionRole.EVENT_INSURANCE
+    assert all(x.execution_id != second.reports[0].execution_id for x in lots)
+    assert bridge.position_lot_store.close_events()[2].source_lot_execution_id == second.reports[0].execution_id
+    assert bridge.insurance_position.snapshot()[0].execution_id == reversal.reports[0].execution_id
