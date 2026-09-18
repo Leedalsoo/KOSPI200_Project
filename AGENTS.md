@@ -2,166 +2,44 @@
 
 ## 1. 프로젝트 목적
 
-KOSPI200 선물·옵션을 대상으로 하는 **자동매매 시스템**을 구축한다.
-핵심은 사람이 주문 버튼을 누르는 UI가 아니라, 시장 데이터부터 전략·Risk·OMS·Broker·체결·포지션·PnL까지 이어지는 자동 실행 경로다.
+KOSPI200 선물·옵션 자동매매 시스템을 구축한다.
+핵심 실행 경로는 시장 데이터 → 전략 입력 → 전략 → Decision → Risk → OMS/Router → Broker → Execution → Position/Margin/PnL → Control Tower Read Model이다.
 
-표준 실행 흐름은 다음과 같다.
-
-```text
-Market Tick
-→ Strategy Input
-→ Strategy
-→ Orchestrator
-→ Signal / Execution Intent
-→ Risk
-→ OMS / Order Router
-→ Broker
-→ Execution Report
-→ Position / Margin / PnL
-→ Control Tower projection
-```
-
-Control Tower는 감독·운영 계층이다.
-정상 주문을 직접 만드는 주 경로가 아니며 start/stop/restart, kill switch, panic halt, 상태·체결·포지션·PnL 확인을 담당한다.
+Control Tower는 감독·운영 계층이다. 정상 주문을 직접 만드는 주 실행 경로가 아니며 상태 조회와 start/stop/restart, kill switch, panic halt 등의 운영 기능을 담당한다.
 
 ## 2. 환경 원칙
 
-동일한 Standard Core를 다음 Environment Bundle로 교체·검증할 수 있어야 한다.
+Standard Core를 Virtual/Paper/Live/High-Speed 환경에서 교체·검증할 수 있어야 한다.
+현재 개발·통합 검증의 기본 환경은 Virtual Trading이다.
+Paper/Live 외부 연결과 실제 주문은 별도 안전 조건을 충족하기 전까지 실행하지 않는다.
 
-1. High-Speed Test
-2. Virtual Trading
-3. Paper Trading
-4. Live Trading
+Real KIS 주문은 어떤 단계에서도 실행하지 않는다.
 
-현재 개발·통합 검증의 기본 환경은 **Virtual Trading**이다.
-Paper/Live의 외부 KIS 연결과 실제 주문은 별도 안전 조건을 충족하기 전까지 실행하지 않는다.
+## 3. authoritative source와 fail-closed
 
-## 3. 사실성·권위 소스 원칙
+- 코드·문서의 존재만으로 PASS를 선언하지 않는다. 실제 실행·통합 검증 증거가 있어야 한다.
+- authoritative source가 없으면 `BLOCKED`, `UNAVAILABLE`, `NotImplemented`로 명시한다.
+- 값이 없다고 0, False, 고정값, 임의 계산값 또는 synthetic 값으로 정상 runtime을 채우지 않는다.
+- Mock/Synthetic 데이터를 실제 Live 검증으로 주장하지 않는다.
+- 기존 generic 객체를 이름만 바꾸어 authoritative source로 승격하지 않는다.
+- fill price를 quote/mark의 대체값으로 사용하지 않는다.
+- 종목 identity, expiry, strike, option type, broker symbol, contract multiplier는 authoritative source 없이 추정하지 않는다.
 
-- Mock/Synthetic 데이터로 실제 검증을 했다고 주장하지 않는다.
-- 종목 identity, 계약 만기, strike, option type, broker symbol, contract multiplier 등은 authoritative source 없이 추정하지 않는다.
-- 실제 source가 없으면 명시적으로 `BLOCKED`, `UNAVAILABLE`, `NotImplemented`로 표현한다.
-- fill price를 quote/mark의 임의 대체값으로 사용하지 않는다.
-- 전략 입력은 실제 Virtual Runtime source에서 공급하고 fixture fallback을 숨겨 사용하지 않는다.
-- 각 leg의 `strategy_id → group_id → leg_id → client_order_id → execution_id` provenance를 보존한다.
+## 4. 표준 코드 경계
 
-## 4. Multi-Leg 원칙
+`contracts/` → 표준 계약·DTO·port
+`core/` → 환경 독립 domain·strategy·risk·OMS 규칙
+`application/` → orchestration·composition·Hub
+`environments/` → Virtual/Paper/Live/High-Speed 구현
+`infrastructure/` → KIS/KRX 등 외부 adapter/source
+`interfaces/` → Control Tower 및 외부 API/UI
+`tests/` → 실행 가능한 회귀·통합 검증
 
-Multi-leg 전략은 `MultiLegExecutionPlan → ExecutionLeg → OrderIntent → Risk → OMS/Router → Broker → ExecutionReport`의 표준 경로를 사용한다.
+Legacy 구현을 새 표준 경로에 다시 연결하지 않는다. 기능 보존이 필요하면 현재 표준 경계에 맞게 명시적으로 이관한다.
 
-2-leg 또는 4-leg 그룹을 검증할 때 다음을 각각 확인한다.
+## 5. 거래소·증권사·Broker API 경계
 
-- 모든 leg가 동일한 group_id를 가진다.
-- leg_id와 client_order_id가 중복되지 않는다.
-- 실제 leg별 instrument identity와 quote를 사용한다.
-- Risk 승인과 주문 provenance가 leg별로 보존된다.
-- 체결 후 Position은 VSSF의 권위 있는 상태를 반영한다.
-- Group PnL은 검증된 leg PnL의 합으로 계산한다.
-
-## 5. 검증 원칙
-
-AI나 이전 작업 기록의 PASS 선언만으로 완료를 인정하지 않는다.
-실제 작업 폴더에서 명령, 출력, exit code를 직접 확인한다.
-
-기본 검증 순서는 다음과 같다.
-
-```text
-영향 범위 확인
-→ focused pytest
-→ 필요한 실제 Virtual E2E 실행
-→ py -m pytest -q
-→ git diff --check
-→ project200_gate
-→ git status
-```
-
-검증 결과는 `PASS / FAIL / BLOCKED`로 구분한다.
-FAIL 또는 BLOCKED를 PASS처럼 표현하지 않는다.
-
-## 6. 코드 구조 원칙
-
-- `contracts/`: 표준 계약·DTO·port
-- `core/`: domain, strategy, risk, OMS의 환경 독립 규칙
-- `application/`: orchestration과 composition
-- `environments/`: Virtual/Paper/Live/High-Speed 구현
-- `infrastructure/`: 외부 KIS·KRX 등의 adapter/source
-- `interfaces/`: Control Tower 및 외부 API/UI 경계
-- `tests/`: 현재 코드에 대한 실행 가능한 회귀·통합 검증
-
-Legacy 구현을 새 경로에 다시 연결하지 않는다.
-기능 보존이 필요하면 현재 표준 경계에 맞게 명시적으로 이관한다.
-
-## 7. 문서·파일 관리
-
-Notion `질문과답변`이 작업 연속성의 기록이며, 작업 폴더에는 현재 구현과 유지에 필요한 문서만 둔다.
-과거 단계별 작업 기록, 임시 검증 문서, 중복 테스트 설명서는 Notion 기록으로 보존하고 저장소에서는 제거한다.
-
-다음은 저장소에 두지 않는다.
-- `Process/` 단계별 작업 기록
-- `.pytest_cache/` 등 실행 캐시
-- 일회성 verification runner
-- 실행 로그 및 생성된 검증 JSON
-- 폐기된 Legacy UI
-
-`.env`와 credential은 절대로 commit하지 않는다.
-KIS master 원본처럼 현재 source로 사용되는 외부 자료는 코드에서 실제 참조 여부를 확인한 후 별도로 관리한다.
-
-## 8. Git 규칙
-
-작업 전후 `git status`와 변경 파일을 확인한다.
-민감정보·캐시·임시파일을 commit하지 않는다.
-
-테스트가 PASS하고 변경 범위가 의도한 상태일 때만 commit/push한다.
-`project200_gate`의 다른 모든 항목이 PASS이고 `runtime_evidence_probe`만 Live credential 미완비로 BLOCKED인 경우는 예외로 commit/push를 허용한다. 이 경우도 Gate 전체 판정은 FAIL로 기록하고, PASS로 표현하지 않는다.
-원격 기준 브랜치는 `Project200`이며, push 후 반드시 원격 HEAD가 해당 commit SHA를 가리키는지 확인한다.
-
-## 9. Notion 기록 규칙
-
-의미 있는 구현·정리·검증 작업은 Notion `질문과답변` 아래 `[No.xxx 답변내용요약]` 페이지에 기록한다.
-기록에는 목적, 실제 변경 내용, 검증 명령과 결과, exit code, Git commit SHA, push 상태, 남은 BLOCKED 사항을 포함한다.
-
-## 10. 현재 방향
-
-현재 우선순위는 Virtual 자동매매 폐쇄루프의 사실성을 높이는 것이다.
-특히 9개 Strategy Runtime Input의 authoritative source와 Multi-Leg의 instrument identity, option quote, contract multiplier, grouped Position/PnL, Control Tower provenance를 순서대로 완성·검증한다.
-
-Real KIS 주문은 실행하지 않는다.
-Virtual에서 충분한 실제 실행 증거를 확보한 뒤에만 다음 환경으로 이동한다.
-
-## 11. 최신 검증 상태 및 Live 시장데이터 경계
-
-2026-09-16 기준 최신 검증 결과를 다음과 같이 적용한다.
-
-- Contract-level `Option Quote → OrderBook → Virtual Execution` 경로는 실제 코드와 테스트로 검증된 상태다.
-- Virtual Multi-Leg 실행은 authoritative Option Master의 계약 identity와 계약별 `bid/ask/last`를 사용한다.
-- BUY는 해당 계약의 Ask, SELL은 해당 계약의 Bid를 사용한다.
-- Position/PnL mark도 동일 계약의 `last`를 사용하며 KOSPI200 기초자산 가격으로 대체하지 않는다.
-- KIS 시장데이터는 `infrastructure/kis/futures_market_transport.py`의 WebSocket 경계를 통해 수신한다.
-- KIS index-option realtime 거래/체결 TR은 `H0IOCNT0`, 호가 TR은 `H0IOASP0`를 사용한다.
-- VTS에서는 `H0IOASP0` 실시간 옵션호가가 지원되지 않으므로 VTS WebSocket 연결 성공만으로 실제 호가 수신을 PASS 처리하지 않는다.
-- Live 시장데이터를 실제로 검증하려면 Live 자격증명과 실제 market-data frame 수신 증거가 모두 필요하다.
-- 현재 `.env`의 일반 KIS credential은 VTS 용도로 확인되었으며 Live credential로 간주하지 않는다.
-- Live credential이 없는 상태에서는 `Live market data → Option Quote`를 `BLOCKED`로 판정한다.
-- Real KIS 주문 API는 계속 금지한다. 시장데이터 수신 검증과 Virtual Execution은 주문 없이 수행한다.
-- 실제 Live frame 수신 전에는 Live E2E `PASS`를 선언하지 않는다.
-
-현재 우선 진행 경로는 다음과 같다.
-
-```text
-KIS Live WebSocket
-→ authoritative Option Master identity mapping
-→ contract-level Option Quote
-→ contract-level OrderBook
-→ Virtual Execution
-→ Position / PnL
-```
-
-모든 검증은 이 AGENTS.md의 원칙에 따라 실제 작업 폴더의 명령·출력·exit code를 기준으로 판정한다.
-
-## 12. 거래소 → 증권사 → Broker API → Option Program 구조 기준
-
-프로젝트의 핵심 데이터 경계는 거래소와 Option Program을 직접 연결하는 구조가 아니다.
-실제 환경은 다음 관계를 기준으로 한다.
+실제 환경:
 
 ```text
 KRX 실제 거래소
@@ -170,7 +48,7 @@ KRX 실제 거래소
 → Option Program
 ```
 
-Virtual 환경은 이를 동일한 개념으로 모사한다.
+Virtual 환경:
 
 ```text
 Virtual Exchange (KRX-like)
@@ -179,32 +57,42 @@ Virtual Exchange (KRX-like)
 → Option Program
 ```
 
-Virtual Exchange는 KRX와 유사한 시장 데이터·체결·호가 구조를 제공한다.
-Virtual Broker는 Virtual Exchange 데이터를 수신하고 계좌·증거금·주문·체결·포지션·PnL 등 증권사 데이터를 결합하여 KIS-like API로 제공한다.
+Option Program은 거래소나 증권사의 내부 구현을 직접 호출하지 않고 Standard Broker API를 사용한다. 증권사 교체는 해당 API Adapter 계층에서 처리한다.
 
-Option Program은 특정 거래소나 증권사의 내부 구현을 직접 알지 않으며 Standard Broker API만 사용한다.
-KIS, KIS VTS, KIS Live 또는 다른 증권사를 연결할 때는 해당 증권사 API Adapter 계층을 교체하는 것을 기본 원칙으로 한다.
+## 6. Multi-Leg 실행과 provenance
 
-따라서 다음 구조를 잘못된 직접 연결로 간주한다.
+표준 경로는 다음과 같다.
 
 ```text
-Exchange → Standard Exchange Port → Option Program
-Exchange → Option Program
+MultiLegExecutionPlan
+→ ExecutionLeg
+→ OrderIntent
+→ Risk
+→ OMS / Order Router
+→ Broker
+→ ExecutionReport
 ```
 
-목표 구조는 항상 거래소 데이터가 증권사 계층으로 들어간 뒤 증권사 API를 통해 Option Program으로 공급되는 것이다.
+각 leg에 대해 다음 provenance를 보존한다.
+`strategy_id → group_id → leg_id → client_order_id → execution_id`
 
-No.474에서 검증된 `POST /api/environment/virtual_broker/order`는 이 Broker API 경계의 기반으로 유지한다.
-No.495/496의 KIS VTS 검증 결과처럼 VTS와 Live의 외부 데이터 지원 범위는 실제 증거에 따라 `PASS / BLOCKED`로 구분한다.
+검증 시 모든 leg의 group_id 일치, leg/client_order 고유성, 실제 contract identity와 quote, Risk 승인, 주문 provenance, VSSF Position, 검증된 leg PnL 합산을 확인한다.
 
-Real KIS 주문은 계속 실행하지 않는다. 실제 Live market-data frame 수신 전에는 Live E2E PASS를 선언하지 않는다.
+Virtual Position provenance는 lot 단위로 유지한다. `run_id`, instrument identity, strategy/group/leg, client_order_id, execution_id, position role 등의 불변 provenance와 remaining quantity를 보존하고 partial close는 FIFO, reversal은 기존 lot 소진 후 초과분만 신규 lot로 처리한다.
 
+Insurance role은 `NONE / OVERNIGHT_INSURANCE / EVENT_INSURANCE / REHEDGE_INSURANCE` 중 명시적으로 부여하며 raw order-purpose 문자열을 사후 해석하지 않는다.
 
-## 13. KRX 형태 Historical Data 축적 → Virtual Exchange 생성 기준
+## 7. 시장데이터 및 Historical 원칙
 
-Virtual 시장데이터의 사실성을 높이기 위해 실제 KRX 형태의 시장 이벤트를 장기간 축적하고, 그 축적 데이터를 Virtual Exchange의 입력으로 사용할 수 있는 구조를 우선 구축한다.
+시장데이터의 기본 경계는 다음과 같다.
 
-목표 경계는 변경하지 않는다.
+```text
+KIS Provider / Historical Provider / Other Provider
+→ MarketDataHub
+→ Runtime / Strategy
+```
+
+Virtual 시장 데이터는 다음 경계를 따른다.
 
 ```text
 KRX 데이터 수집/정규화
@@ -215,158 +103,105 @@ KRX 데이터 수집/정규화
 → Option Program
 ```
 
-Historical Market Store는 canonical market event를 append-only로 보존하고 `source`를 반드시 명시한다. 실제 KRX 데이터가 아직 연결되지 않은 상태에서는 KRX 데이터가 수집되었다고 간주하지 않으며, `KRX_CAPTURE` 같은 source 라벨을 테스트에서만 사용한다.
+Historical Store의 source/provenance를 유지한다. 실제 KRX 데이터가 확보되지 않은 상태에서 KRX 데이터가 수집되었다고 간주하지 않는다. Replay/Scenario/Synthetic 결과도 실제 KRX 데이터와 혼동하지 않는다.
 
-Virtual Exchange의 데이터 생성 방식은 다음 3단계로 발전시킨다.
+실제 KRX Historical 데이터셋이 없으면 해당 실데이터 검증은 `BLOCKED`이며, 코드 존재만으로 해결된 것으로 간주하지 않는다.
 
-1. **Replay**: 축적된 실제/검증된 historical event를 시간순으로 재생한다.
-2. **Scenario**: historical 특성에 기반한 변동성·갭·충격·유동성 조건을 시나리오로 재현한다.
-3. **Synthetic**: 축적된 historical 특성에서 모델을 추출하여 새로운 virtual market event를 생성한다.
+## 8. KIS Live 시장데이터 경계
 
-Replay/Scenario/Synthetic 결과를 실제 KRX 데이터와 혼동하지 않도록 provenance와 source를 유지한다. Option Program은 이 내부 데이터 저장소를 직접 읽지 않고 기존 `Virtual Exchange → Virtual Broker → Virtual Broker API` 경계를 통해서만 시장 상태를 받는다.
+KIS index-option realtime 거래/체결 TR은 `H0IOCNT0`, 호가 TR은 `H0IOASP0`를 사용한다.
 
-옵션 시장 데이터 축적 대상에는 최소한 timestamp, instrument identity, expiry, strike, call/put, bid/ask/last, bid/ask quantity, trade volume, sequence/event identity, underlying linkage, contract multiplier 및 source/provenance를 포함할 수 있도록 확장한다. 단, KRX의 실제 필드 의미와 값은 authoritative KRX source가 확보된 뒤 adapter에서 매핑하며 임의 추정하지 않는다.
+VTS에서는 `H0IOASP0` 실시간 옵션호가가 지원되지 않으므로 WebSocket 연결 성공만으로 실제 옵션호가 수신 PASS를 선언하지 않는다.
 
-현재 구현 단계는 **Phase 1 기반 구축**이다. `HistoricalMarketStore`와 `HistoricalReplayEngine.from_store()`를 제공하지만 실제 KRX 수집 연결은 아직 구현/검증하지 않았다.
+Live 시장데이터 PASS에는 Live 자격증명과 실제 market-data frame 수신 증거가 모두 필요하다. 현재 Live credential이 없으면 Live market-data → Option Quote는 `BLOCKED`이다.
 
-## 14. Strategy / Runtime / Control Tower / Scenario-Test Hub 삽입 기준
+Live 검증 전까지 시장데이터 수신과 Virtual Execution을 주문 없이 검증한다.
+## 9. Track9 현재 기준
 
-현재 구조를 전면 재작성하지 않고, 이미 존재하는 seam을 안정적인 Hub 경계로 승격한다.
+Track9 Runtime Input 9개 중 현재 연결된 authoritative source:
+- `iv_timeseries`
+- `option_position_attribution`
+- `insurance_position`
+- `fee_ledger`
+- `margin_read_model`
 
-### 14.1 Strategy Hub
+현재 `BLOCKED`인 잔여 source:
+- `premium_attribution`
+- `event_calendar`
+- `event_budget`
+- `risk_guard`
 
-`core/strategy/registry.py`의 `StrategyRegistry`와 `core/strategy/orchestrator.py`의 `StrategyOrchestrator`가 현재 Strategy seam이다. 9개 전략은 `core/strategy/standard_registry.py`의 `STANDARD_STRATEGY_TYPES`에서 등록된다.
+잔여 4개는 authoritative source를 먼저 계약 수준으로 정의하고 실제 source가 확보된 항목만 연결한다. 의미가 다른 기존 구현을 대체 source로 승격하지 않는다.
 
-향후 Hub는 다음 책임만 가진다.
+특히 TradingCalendar ≠ `event_calendar`, 일반 MarginEngine ≠ `margin_read_model`, RiskEngine kill switch/RiskApprovalReadModel ≠ Track9 `risk_guard`로 취급한다.
 
-```text
-StrategyHub
-├─ Strategy Registry
-├─ Strategy Config
-├─ Strategy Version
-├─ Enable/Disable
-├─ Strategy Context 공급
-└─ Strategy Adapter
-   ├─ Track1
-   ├─ Track2
-   ├─ …
-   └─ Track9
-```
+Track9 전체 9개 Runtime Input이 연결되기 전에는 Track9 전체 runtime PASS를 선언하지 않는다.
 
-각 전략은 `StrategyContext`를 입력으로 받고 `Signal`/Execution Proposal을 출력한다. 전략 내부에서 KIS, VirtualBroker, Control Tower, Scenario Store를 직접 호출하지 않는다. 한 전략의 구현·버전·파라미터 교체는 `strategy_id + version` 등록/설정만 변경하고 다른 전략의 코드·계약·실행 경로를 변경하지 않는 것을 목표로 한다.
+## 10. 현재 다음 작업 우선순위
 
-### 14.2 Runtime Hub
+1. Track9 잔여 4개 authoritative source 확보·계약·연결 여부 확인.
+2. Track1/4/8의 남은 BLOCKED Runtime Input을 계약 → source → fail-closed 테스트 순서로 진행.
+3. 실제 KRX Historical Market 데이터 확보 후 Track7 실데이터 검증 진행.
+4. Legacy VSSF `position_manager.py` / `pnl_engine.py`의 `250000` 고정값 정리.
+5. `CanonicalMarketTick` 중복 타입 통합 여부 재검토.
+6. KIS VTS 실제 지수옵션 실시간호가 subscription 가능 여부와 KRX Data Marketplace 제공조건 확인.
+7. Live credential 확보 후 `runtime_evidence_probe` 및 `project200_gate` 재검증.
+## 11. Hub 경계
 
-현재 실제 Strategy → Decision → Risk → OMS/Router → Virtual Broker 연결 seam은 `application/composition/automated_virtual_trading_loop.py`이다. 이 파일의 `context_builder`, `StrategyOrchestrator`, `RuntimeStrategyResultCollectionAdapter`, `RuntimeStrategyToDecisionAdapter`, `RuntimeDecisionCommandAdapter`, Risk/Router 연결을 Runtime Hub의 내부 구성요소로 본다.
+현재 Hub 경계는 기존 seam을 표준 공개 계약으로 감싸는 방향을 유지한다.
 
-Runtime Hub가 tick/run context를 소유하고 Strategy Hub에는 `StrategyContext`만 전달한다. Strategy가 Runtime 내부 객체를 참조하지 않도록 한다.
+- Strategy Hub: Strategy Registry/Orchestrator와 strategy selection/lifecycle을 담당한다.
+- Runtime Hub: Runtime loop와 Strategy → Decision → Risk → OMS/Router 연결을 소유한다.
+- Environment Hub: Environment Bundle의 lifecycle을 담당한다.
+- Run/Scenario Hub: `RunContext`, scenario/replay 선택, 독립 실행 상태를 담당한다.
+- Control Tower Hub: UI/API에 runtime status, environment 정보, 운영 명령을 제공한다.
 
-### 14.3 Environment Hub
+전략은 `StrategyContext`를 사용하며 KIS, VirtualBroker, Control Tower, Scenario Store를 직접 호출하지 않는다.
+Hub 간 통신은 공개 `contracts/` 또는 명시된 application port를 사용하고 private attribute 의존을 새로 만들지 않는다.
 
-`application/environment_hub/hub.py`의 `EnvironmentHub`는 이미 Environment Bundle 생성/활성화 seam을 제공한다. `EnvironmentConfig`와 `RuntimePolicy`를 통해 Virtual/Paper/Live/High-Speed 환경을 교체할 수 있게 유지한다.
+반복 테스트는 매 실행마다 독립된 Run ID와 새 Environment Bundle/VSSF account/position/execution state를 사용한다. 이전 run의 주문·체결·포지션·PnL·strategy state를 다음 run에 재사용하지 않는다.
 
-단, 현재 `EnvironmentHub`는 동시에 하나의 active environment만 허용하므로 반복 가능한 테스트 실행을 위한 `RunContext`와는 분리한다. Environment lifecycle과 Test Run lifecycle을 동일 객체로 합치지 않는다.
+## 12. 현재 검증 상태
 
-### 14.4 Scenario / Test Hub
+No.613 기준 최신 전체 회귀는 `626 passed`이며, Track9 focused 검증은 `37 passed`이다.
 
-현재 Virtual Market에는 `HistoricalReplayEngine`, `ScenarioEngine`, `load_historical_store()` 및 `replay_next()` seam이 존재하고, High-Speed에는 `DeterministicScenario` seam이 존재한다. 이를 Scenario/Test Hub가 선택·초기화·실행하도록 승격한다.
+`project200_gate` 전체 판정은 Live credential 미완비에 따른 `runtime_evidence_probe` BLOCKED 때문에 FAIL일 수 있다. 이 경우 세부 gate 결과를 확인하며, 다른 항목이 모두 PASS이고 해당 항목만 Live credential 미완비로 BLOCKED이면 commit/push는 허용한다.
 
-목표는 다음과 같다.
+현재 Live credential 미완비 상태에서 Live E2E PASS를 선언하지 않는다.
 
-```text
-TestControlHub
-├─ Scenario / Historical Replay selection
-├─ Environment selection
-├─ Run ID
-├─ initial capital / account profile
-├─ strategy selection + version + parameters
-├─ clock / replay speed
-└─ reset / teardown
-```
+## 13. 검증 절차
 
-반복 테스트는 매 실행마다 독립된 `Run ID`와 새 Environment Bundle/VSSF account/position/execution state를 사용한다. 이전 실행의 주문·체결·포지션·PnL·strategy state를 다음 실행에 재사용하지 않는다. Replay cursor, scenario state, clock, account, position, execution ledger도 run 종료 시 폐기하거나 명시적으로 새 인스턴스로 생성한다.
-
-### 14.5 Control Tower UI Hub
-
-`interfaces/control_tower/server.py`와 `interfaces/control_tower/ui_adapter.py`가 현재 UI/API seam이다. UI는 Strategy/Core 내부 객체를 직접 호출하지 않고 Control Tower API/read model을 통해 상태를 조회한다는 원칙을 유지한다.
-
-현재 UI adapter가 RuntimeController의 `_hub` 같은 private field를 읽는 부분과, server의 고정 Virtual test order/identity처럼 운영 데이터와 테스트 동작이 섞인 부분은 후속 정리 대상이다. 최종 Hub 구조에서는 Control Tower가 `Runtime Hub`, `Environment Hub`, `Strategy Hub`, `TestControl Hub`의 공개 계약만 사용해야 한다.
-
-권장 UI 구조:
+작업 전후 `git status`와 변경 파일을 확인한다.
 
 ```text
-Control Tower UI
-├─ Environment Hub
-├─ Strategy Hub
-├─ Test / Scenario Hub
-├─ Runtime status
-├─ Risk / OMS status
-├─ Broker / Execution
-└─ Position / Margin / PnL
+영향 범위 확인
+→ focused pytest
+→ 필요한 Virtual E2E
+→ py -m pytest -q
+→ git diff --check
+→ project200_gate
+→ git status
 ```
 
-### 14.6 Hub 경계의 변경 불변 규칙
+Python은 Windows launcher `py`로 실행한다. 실제 명령·출력·exit code를 기준으로 PASS/FAIL/BLOCKED를 판정한다.
 
-- Strategy 교체가 Runtime/Broker/UI 코드를 수정하게 만들지 않는다.
-- Environment 교체가 Strategy 구현을 수정하게 만들지 않는다.
-- Scenario 교체가 Strategy 구현을 수정하게 만들지 않는다.
-- UI 변경이 Strategy/Core 실행 경로를 수정하게 만들지 않는다.
-- Hub 간 통신은 공개 `contracts/` 또는 명시된 application port를 사용하고 private attribute 의존을 새로 만들지 않는다.
-- 실제 authoritative source가 없는 값은 Hub에서 임의 생성하지 않고 `UNAVAILABLE/BLOCKED`를 전달한다.
-- Control Tower의 정상 주문 생성은 계속 주 실행 경로가 아니다.
+FAIL 또는 BLOCKED를 PASS처럼 표현하지 않는다.
+## 14. 문서·Git 관리
 
-### 14.7 현재 코드에 대한 정확한 삽입 위치
+Notion `질문과답변`은 작업 연속성의 기준 기록이다. 의미 있는 구현·정리·검증은 `[No.xxx 답변내용요약]` 페이지에 목적, 변경 내용, 검증 명령/결과, exit code, commit SHA, push 상태, 남은 BLOCKED 사항을 기록한다.
 
-```text
-[Control Tower UI/API]
-        │
-        ▼
-[Control Tower Hub / Read Model]
-        │
-        ├──────────────► [Environment Hub]
-        │                       │
-        │                       ▼
-        │                 [Environment Bundle]
-        │
-        ├──────────────► [TestControl / Scenario Hub]
-        │                       │
-        │                       ▼
-        │                 [RunContext]
-        │
-        └──────────────► [Runtime Hub]
-                                │
-                                ▼
-                         [Strategy Hub]
-                                │
-                 ┌──────────────┼──────────────┐
-                 ▼              ▼              ▼
-                T1             T2            … T9
-                 │              │              │
-                 └──────────────┼──────────────┘
-                                ▼
-                         Decision → Risk
-                                ▼
-                         OMS / Order Router
-                                ▼
-                              Broker
-                                ▼
-                       Execution / Position
-                                ▼
-                            PnL / Read Model
-```
+작업 폴더에는 현재 구현과 유지에 필요한 파일만 둔다. 단계별 기록, 일회성 verification runner, 실행 로그/검증 JSON, 캐시 및 폐기된 Legacy UI는 저장소에 두지 않는다.
 
-이 설계는 현재 `StrategyRegistry → StrategyOrchestrator`, `AutomatedVirtualTradingLoop`, `EnvironmentHub`, `VirtualMarketSimulatorRuntime`, `HistoricalReplayEngine/ScenarioEngine`, `ControlTowerUIAdapter/server`라는 실제 seam을 기준으로 한다. 다음 구현 단계에서는 먼저 공개 Hub contract와 RunContext를 추가하고, 기존 객체를 그 contract 뒤로 이동한 뒤 테스트를 추가한다. 한 번에 9개 전략 구현 자체를 수정하지 않는다.
+`.env` 및 credential은 절대로 commit하지 않는다.
 
-## 15. Hub backend boundaries implemented
+commit/push는 변경 범위가 의도한 상태이고 검증이 PASS일 때 수행한다. 단, `project200_gate`의 다른 모든 항목이 PASS이고 `runtime_evidence_probe`만 Live credential 미완비로 BLOCKED인 경우는 예외로 commit/push할 수 있다. 이때도 Gate 전체 판정은 FAIL로 기록한다.
 
-The Hub boundary defined in section 14 is now implemented for the Virtual runtime.
+원격 기준 브랜치는 `Project200`이다. push 후 원격 HEAD가 해당 commit SHA를 가리키는지 확인한다.
 
-- `application/strategy_hub/`: `StrategyHubPort` and `StrategyHub` own the registry/orchestrator seam and expose strategy selection/lifecycle without exposing individual strategy implementations to Runtime.
-- `application/runtime_hub/`: `RuntimeHub` owns the Runtime loop boundary and does not expose Strategy Registry internals.
-- `application/run_hub/`: `RunContext` and `RunContextFactory` define per-run identity/config so repeated runs can receive independent run IDs.
-- `application/control_tower_hub.py`: `ControlTowerHub` is the UI/API facade over Runtime status, environment detail, and operational commands.
-- `RuntimeController.environment_hub` is the public Environment lifecycle seam; Control Tower UI projection no longer reads `_hub` directly.
-- `AutomatedVirtualTradingLoop` consumes `StrategyHubPort`; the standard composition creates the nine-strategy `StrategyHub` and injects it.
-- Control Tower HTTP status/environment/command routes use `ControlTowerHub`. The existing adapter command implementation remains behind that facade.
+## 15. 절대 금지
 
-Verification requirement remains unchanged: application tests must pass in the exact Desktop working folder with `py`; Live KIS evidence is independent and remains BLOCKED when Live credentials or frames are unavailable.
+- 실제 KIS 주문 실행
+- Live credential 또는 market-data frame이 없는 상태에서 Live E2E PASS 선언
+- authoritative source가 없는 값을 임의 fallback으로 정상 runtime에 주입
+- Mock/Synthetic 결과를 실제 시장 검증으로 표현
+- private attribute 의존을 새로운 표준 경계로 추가
