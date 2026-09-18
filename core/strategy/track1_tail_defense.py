@@ -32,6 +32,7 @@ class Track1State:
     hedge_count_date: date | None = None
     active_hedge: str | None = None
     hedge_entry_price: float | None = None
+    active_hedge_quantity: int = 0
     profit_buffer: float = 0.0
     market_opened: bool = False
 
@@ -86,6 +87,19 @@ class Track1TailDefense(Strategy):
         return Signal(self.strategy_id, side, 1.0,
                       f"FENCE_BUILD:{fence_type}:{strike}:#{tag}:{reason}",
                       execution_proposal=proposal)
+
+    def _build_hedge_unwind_signal(self) -> Signal:
+        quantity = self.state.active_hedge_quantity
+        if quantity <= 0 or self.state.active_hedge not in {"BUY", "SELL"}:
+            raise ValueError("TRACK1_ACTIVE_HEDGE_PROVENANCE_REQUIRED")
+        side = "BUY" if self.state.active_hedge == "SELL" else "SELL"
+        return Signal(
+            self.strategy_id, side, 1.0, "FUTURES_UNWIND:1.5PT_REVERSION",
+            execution_proposal=StrategyExecutionProposal(
+                proposed_quantity=quantity, asset_type="FUTURES", requested_price=None,
+                side=side, track_id=self.strategy_id, tag_id="FUTURES_UNWIND",
+            ),
+        )
 
     def evaluate(self, context: StrategyContext) -> Sequence[Signal]:
         if context.strategy_id != self.strategy_id:
@@ -162,6 +176,7 @@ class Track1TailDefense(Strategy):
                     self.state.active_hedge = None
                     self.state.hedge_entry_price = None
                     return signals
+                self.state.active_hedge_quantity = hedge_qty
                 self.state.futures_hedge_count += 1
                 signals.append(Signal(
                     self.strategy_id,
@@ -184,10 +199,10 @@ class Track1TailDefense(Strategy):
             reverted = ((self.state.active_hedge == "SELL" and price - self.state.hedge_entry_price >= 1.5) or
                         (self.state.active_hedge == "BUY" and self.state.hedge_entry_price - price >= 1.5))
             if reverted:
-                unwind = "BUY" if self.state.active_hedge == "SELL" else "SELL"
-                signals.append(Signal(self.strategy_id, unwind, 1.0, "FUTURES_UNWIND:1.5PT_REVERSION"))
+                signals.append(self._build_hedge_unwind_signal())
                 self.state.active_hedge = None
                 self.state.hedge_entry_price = None
+                self.state.active_hedge_quantity = 0
 
         return signals
 

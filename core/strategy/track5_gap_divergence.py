@@ -3,6 +3,7 @@ from decimal import Decimal
 from typing import Sequence
 
 from core.strategy.contracts import Signal, StrategyContext
+from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
 
 
 @dataclass(frozen=True)
@@ -13,6 +14,8 @@ class Track5MarketInput:
     active_vol: Decimal
     regime: str = "NORMAL"
     current_price: Decimal | None = None
+    execution_asset_type: str | None = None
+    position_quantity: int | None = None
 
 
 @dataclass(frozen=True)
@@ -92,11 +95,22 @@ class Track5GapDivergence:
             liquidity_stage=0,
             daily_std_pts=daily_std,
         )
+        proposal = None
+        if data.execution_asset_type and data.position_quantity is not None and data.position_quantity > 0:
+            side = "SELL" if direction == "SHORT" else "BUY"
+            proposal = StrategyExecutionProposal(
+                proposed_quantity=data.position_quantity,
+                asset_type=data.execution_asset_type,
+                side=side,
+                track_id=self.strategy_id,
+                tag_id="GAP_DIVERGENCE_ENTRY",
+            )
         return (Signal(
             strategy_id=self.strategy_id,
             direction=direction,
             confidence=float(min(Decimal("1"), abs(z_score) / Decimal("4"))),
             reason=f"GAP_Z_SCORE:{z_score:.4f};ENTRY:{data.open_price};TARGET:{data.previous_close};STOP:{stop}",
+            execution_proposal=proposal,
         ),)
 
     def evaluate_mean_reversion(self, current_price: Decimal) -> Sequence[Signal]:
