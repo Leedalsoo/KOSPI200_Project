@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 from datetime import date, datetime, time, timedelta, timezone
+from decimal import Decimal
 from pathlib import Path
 
 from infrastructure.kis.auth import KISAuthManager
@@ -66,7 +67,7 @@ def _latest_krx_spot_price() -> str:
 def build_plan() -> CollectionPlan:
     reference_price = _latest_krx_spot_price()
     return build_collection_plan(
-        reference_price=__import__("decimal").Decimal(reference_price),
+        reference_price=Decimal(reference_price),
         option_master_paths=(ROOT / "data_2801_20260919.xlsx",),
         weekly_master_paths=(
             ROOT / "data_2923_20260919.xlsx",
