@@ -115,3 +115,19 @@ def load_futures_master(paths: Iterable[str | Path], product_type: FuturesProduc
     if not identities:
         raise KRXMarketplaceMasterError("NO_FUTURES_IDENTITIES")
     return KRXMarketplaceFuturesMaster(identities, tuple(sources))
+
+
+def merge_futures_masters(*masters: KRXMarketplaceFuturesMaster) -> KRXMarketplaceFuturesMaster:
+    """Combine KRX Marketplace futures masters without changing their product type."""
+    identities = {}
+    sources = []
+    for master in masters:
+        sources.extend(master.source_files)
+        for code, identity in master.identities.items():
+            existing = identities.get(code)
+            if existing is not None and existing != identity:
+                raise KRXMarketplaceMasterError(f"CONFLICTING_FUTURES_IDENTITY:{code}")
+            identities[code] = identity
+    if not identities:
+        raise KRXMarketplaceMasterError("NO_FUTURES_IDENTITIES")
+    return KRXMarketplaceFuturesMaster(identities, tuple(sources))
