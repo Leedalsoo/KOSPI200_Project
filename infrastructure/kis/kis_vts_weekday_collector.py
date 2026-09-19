@@ -10,6 +10,7 @@ from pathlib import Path
 from infrastructure.kis.auth import KISAuthManager
 from infrastructure.kis.futures_market_transport import KISFuturesMarketTransport
 from infrastructure.kis.kis_realtime_collector import KISRealtimeCollector
+from infrastructure.kis.kis_vts_collection_diagnostic import diagnose_collection, write_human_report, write_report
 from infrastructure.kis.kis_weekday_collection_plan import (
     CollectionPlan,
     CollectionWindow,
@@ -77,6 +78,21 @@ def build_plan() -> CollectionPlan:
         mini_futures_symbol="A05609",
         as_of=WINDOW.start,
     )
+
+
+def write_daily_collection_diagnostic(day: date, plan: CollectionPlan) -> dict[str, Path]:
+    raw_path = _raw_store_for(day).path
+    report = diagnose_collection(raw_path, LOG_PATH, plan)
+    json_path = DATA_ROOT / day.isoformat() / "collection_report.json"
+    text_path = DATA_ROOT / day.isoformat() / "collection_report.txt"
+    write_report(report, json_path)
+    write_human_report(report, text_path)
+    LOGGER.info(
+        "COLLECTION_DIAGNOSTIC date=%s overall=%s missing=%d reconnects=%d errors=%d hash=%s",
+        day.isoformat(), report.overall, len(report.missing_contracts),
+        report.reconnect_count, report.error_frames, report.hash_validation,
+    )
+    return {"json": json_path, "text": text_path}
 
 
 def _raw_store_for(day: date) -> KISRealtimeRawStore:
@@ -148,6 +164,11 @@ async def _collect_day(day: date, plan: CollectionPlan) -> None:
         day.isoformat(),
         manifest["record_count"],
         manifest["file_sha256"],
+    )
+    paths = write_daily_collection_diagnostic(day, plan)
+    LOGGER.info(
+        "COLLECTION_REPORT_WRITTEN date=%s json=%s text=%s",
+        day.isoformat(), paths["json"], paths["text"],
     )
 
 
