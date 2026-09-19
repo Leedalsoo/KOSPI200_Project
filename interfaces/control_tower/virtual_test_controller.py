@@ -18,15 +18,17 @@ class VirtualTestState:
 class VirtualTestController:
     """Control boundary for deterministic Virtual Exchange test runs."""
 
-    def __init__(self, *, market: Any, market_factory: Callable[[], Any] | None = None) -> None:
+    def __init__(self, *, market: Any, market_factory: Callable[[], Any] | None = None, tick_handler: Callable[[Any], Any] | None = None) -> None:
         self._market_factory = market_factory or self._default_factory(market)
         self._market = market
+        self._tick_handler = tick_handler
         self._stream = None
         self._state = "READY"
         self._processed_ticks = 0
         self._last_tick = None
         self._kill_switch = True
         self._blocked_reason = "FAIL_SAFE_DEFAULT"
+        self._last_runtime_result = None
 
     @staticmethod
     def _default_factory(market: Any) -> Callable[[], Any]:
@@ -59,7 +61,7 @@ class VirtualTestController:
             "contract_multiplier": tick.contract_multiplier,
             "seq_id": tick.seq_id,
         }
-        return asdict(VirtualTestState(
+        model = asdict(VirtualTestState(
             state=self._state,
             scenario=scenario_state.get("active_scenario"),
             available_scenarios=self._available_scenarios(),
@@ -68,6 +70,12 @@ class VirtualTestController:
             kill_switch=self._kill_switch,
             blocked_reason=self._blocked_reason,
         ))
+        if self._last_runtime_result is not None:
+            runtime_result = self._last_runtime_result
+            model["runtime_result"] = asdict(runtime_result) if hasattr(runtime_result, "__dataclass_fields__") else runtime_result
+        else:
+            model["runtime_result"] = None
+        return model
 
     def set_scenario(self, name: str) -> None:
         scenario = getattr(self._market, "scenario", None)
@@ -100,6 +108,7 @@ class VirtualTestController:
         self._last_tick = None
         self._kill_switch = True
         self._blocked_reason = "FAIL_SAFE_DEFAULT"
+        self._last_runtime_result = None
 
     def arm_for_test(self) -> None:
         """Open only the virtual test controller; this never arms Paper/Live trading."""
@@ -120,4 +129,6 @@ class VirtualTestController:
             return None
         self._last_tick = tick
         self._processed_ticks += 1
+        if self._tick_handler is not None:
+            self._last_runtime_result = self._tick_handler(tick)
         return tick

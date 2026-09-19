@@ -89,7 +89,7 @@ def create_virtual_run_session(context: RunContext, option_master: Any) -> RunSe
     )
     strategy_hub = loop.strategy_hub
     runtime_hub = RuntimeHub(loop)
-    virtual_test_controller = VirtualTestController(market=bundle.market)
+    virtual_test_controller = VirtualTestController(market=bundle.market, tick_handler=runtime_hub.on_tick)
     tower = ControlTowerHub(
         runtime_controller=controller,
         ui_adapter=adapter,
