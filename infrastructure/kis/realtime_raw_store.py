@@ -91,6 +91,8 @@ class KISRealtimeRawStore:
             "endpoint": clean_endpoint,
             "trading_date": records[0]["trading_date"] if records else None,
             "instrument": records[0]["instrument"] if records else None,
+            "instruments": sorted({str(record["instrument"]) for record in records}),
+            "tr_ids": sorted({str(record["tr_id"]) for record in records}),
             "record_count": len(records),
             "file": str(self.path),
             "file_sha256": self.sha256(),

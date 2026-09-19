@@ -111,5 +111,7 @@ def test_raw_store_writes_manifest_with_file_hash(tmp_path):
     assert manifest["source"] == "KIS_VTS_WEBSOCKET"
     assert manifest["endpoint"].startswith("ws://")
     assert manifest["record_count"] == 1
+    assert manifest["instruments"] == ["A01609"]
+    assert manifest["tr_ids"] == ["H0IFCNT0"]
     assert len(manifest["file_sha256"]) == 64
     assert Path(manifest["manifest_path"]).exists()
