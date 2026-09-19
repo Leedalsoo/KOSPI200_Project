@@ -8,7 +8,7 @@ from core.strategy.track9_event_overnight_insurance import Track9EventOvernightI
 
 def test_track6_entry_has_option_execution_proposal():
     s = Track6DailyTailInsurance()
-    d = Track6MarketInput(s.strategy_id, Decimal("350"), Decimal("2"), Decimal("1"), Decimal("1000000"), "2026-09-04")
+    d = Track6MarketInput(s.strategy_id, Decimal("350"), Decimal("2"), Decimal("1"), Decimal("1000000"), "2026-09-04", listed_put_strike=Decimal("337.5"), listed_call_strike=Decimal("362.5"), contract_multiplier=Decimal("250000"))
     sig = next(x for x in s.evaluate(StrategyContext(strategy_id=s.strategy_id, input=StrategyInput(payload=d))) if x.direction == "BUY_INSURANCE")
     assert sig.execution_proposal is not None
     assert sig.execution_proposal.asset_type == "OPTION"
@@ -50,7 +50,7 @@ def test_track6_8_9_proposals_reach_canonical_boundary():
 
     cases = []
     s6 = Track6DailyTailInsurance()
-    d6 = Track6MarketInput(s6.strategy_id, Decimal("350"), Decimal("2"), Decimal("1"), Decimal("1000000"), "2026-09-04")
+    d6 = Track6MarketInput(s6.strategy_id, Decimal("350"), Decimal("2"), Decimal("1"), Decimal("1000000"), "2026-09-04", listed_put_strike=Decimal("337.5"), listed_call_strike=Decimal("362.5"), contract_multiplier=Decimal("250000"))
     cases.append((s6, d6))
     s8 = Track8MacroRegimeMonthlyStrangle()
     d8 = Track8MarketInput(s8.strategy_id, Decimal("20"), Decimal("2000000"), Decimal("350"), "NORMAL", "2026-09-04")

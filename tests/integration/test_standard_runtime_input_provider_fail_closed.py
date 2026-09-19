@@ -118,3 +118,27 @@ def test_standard_runtime_input_provider_blocks_track5_and_track6_when_volatilit
             assert "active_vol" in contexts[strategy_id].input.data_status or "base_vol" in contexts[strategy_id].input.data_status
     finally:
         market._recent_ticks.extend(original)
+
+
+def test_track6_runtime_input_uses_listed_option_contract_source():
+    from types import SimpleNamespace
+    bootstrap = create_virtual_runtime_bootstrap()
+    market = bootstrap.bundle.market
+    account = bootstrap.bundle.account
+    ticks = list(market.generate_tick_stream(total_days=1, ticks_per_day=11))
+    tick = ticks[-1]
+    state = MarketState(
+        as_of=datetime.fromisoformat(tick.timestamp),
+        ticks={"KOSPI200": tick},
+        quality={"KOSPI200": DataQuality(True, True, True)},
+    )
+    selection = SimpleNamespace(
+        put=SimpleNamespace(strike=Decimal("337.5"), contract_multiplier=Decimal("123456")),
+        call=SimpleNamespace(strike=Decimal("362.5"), contract_multiplier=Decimal("123456")),
+    )
+    source = SimpleNamespace(select=lambda **kwargs: selection)
+    provider = StandardRuntimeInputProvider(market, track6_option_contract_source=source)
+    payload = provider.build(tick, state, account)["track6_daily_tail_insurance"].input.payload
+    assert payload.listed_put_strike == Decimal("337.5")
+    assert payload.listed_call_strike == Decimal("362.5")
+    assert payload.contract_multiplier == Decimal("123456")

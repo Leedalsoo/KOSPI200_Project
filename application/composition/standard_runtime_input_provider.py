@@ -31,18 +31,20 @@ from contracts.track2_option_iv_source import Track2OptionIVSource
 from contracts.track9_iv_event_materializer import Track9IVEventMaterializer, Track9ATMIVSource
 from contracts.track9_fee_ledger import Track9FeeLedger
 from contracts.track9_margin_read_model import Track9MarginReadModel
+from application.composition.track6_option_contract_source import Track6OptionContractSource
 
 
 class StandardRuntimeInputProvider:
     """Build standard inputs from observable VMS/VSSF sources only."""
 
-    def __init__(self, market: Any, *, track9_fee_ledger: Track9FeeLedger | None = None, track9_margin_read_model: Track9MarginReadModel | None = None, run_id: str | None = None, track7_order_timeout_source: Any | None = None, track7_support_resistance_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None) -> None:
+    def __init__(self, market: Any, *, track9_fee_ledger: Track9FeeLedger | None = None, track9_margin_read_model: Track9MarginReadModel | None = None, run_id: str | None = None, track7_order_timeout_source: Any | None = None, track7_support_resistance_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None, track6_option_contract_source: Track6OptionContractSource | None = None) -> None:
         self.track9_fee_ledger = track9_fee_ledger
         self.track9_margin_read_model = track9_margin_read_model
         self.run_id = run_id
         self.track9_margin_ratio = None
         self.track7_order_timeout_source = track7_order_timeout_source
         self.track7_support_resistance_source = track7_support_resistance_source
+        self.track6_option_contract_source = track6_option_contract_source
         self.data = VirtualRuntimeDataProvider(
             market, option_expiry_source=option_expiry_source, track7_order_timeout_source=track7_order_timeout_source, track7_support_resistance_source=track7_support_resistance_source, trading_calendar=trading_calendar, option_master=option_master,
             option_orderbook_source=option_orderbook_source,
@@ -200,13 +202,33 @@ class StandardRuntimeInputProvider:
             contexts["track6_daily_tail_insurance"] = self._unavailable(
                 "track6_daily_tail_insurance", ("account_available_cash",), "ACCOUNT_SOURCE_UNAVAILABLE"
             )
-        else:
-            contexts["track6_daily_tail_insurance"] = StrategyContext(
-                market_state, "track6_daily_tail_insurance", StrategyInput(common,
-                    Track6MarketInput("track6_daily_tail_insurance", d.price, d.active_vol,
-                                      d.base_vol, common.budget, d.as_of.date().isoformat(),
-                                      d.as_of.strftime("%H:%M:%S")))
+        elif self.track6_option_contract_source is None:
+            contexts["track6_daily_tail_insurance"] = self._unavailable(
+                "track6_daily_tail_insurance", ("listed_option_contracts",), "TRACK6_OPTION_CONTRACT_SOURCE_UNAVAILABLE"
             )
+        else:
+            try:
+                selection = self.track6_option_contract_source.select(
+                    expiry=getattr(tick, "expiry", ""), current_price=d.price
+                )
+                multiplier = Decimal(str(selection.put.contract_multiplier))
+                call_multiplier = Decimal(str(selection.call.contract_multiplier))
+                if multiplier <= 0 or call_multiplier <= 0 or multiplier != call_multiplier:
+                    raise ValueError("TRACK6_CONTRACT_MULTIPLIER_REQUIRED")
+            except (ValueError, TypeError, AttributeError) as exc:
+                contexts["track6_daily_tail_insurance"] = self._unavailable(
+                    "track6_daily_tail_insurance", ("listed_option_contracts",), str(exc)
+                )
+            else:
+                contexts["track6_daily_tail_insurance"] = StrategyContext(
+                    market_state, "track6_daily_tail_insurance", StrategyInput(common,
+                        Track6MarketInput("track6_daily_tail_insurance", d.price, d.active_vol,
+                                          d.base_vol, common.budget, d.as_of.date().isoformat(),
+                                          d.as_of.strftime("%H:%M:%S"),
+                                          listed_put_strike=Decimal(str(selection.put.strike)),
+                                          listed_call_strike=Decimal(str(selection.call.strike)),
+                                          contract_multiplier=multiplier))
+                )
 
         # Track7 may consume CALL/PUT IV already projected from the injected
         # authoritative Track2/KIS IV source. Do not report IV as missing when

@@ -5,6 +5,7 @@ from application.composition.automated_virtual_trading_loop import AutomatedVirt
 from application.composition.standard_runtime_input_provider import StandardRuntimeInputProvider
 from application.composition.option_expiry_source import KisOptionMasterExpirySource
 from application.composition.virtual_track3_runtime_input_source import VirtualTrack3RuntimeInputSource
+from application.composition.track6_option_contract_source import Track6OptionContractSource
 from contracts.types import OptionInstrumentIdentity
 from infrastructure.kis.track2_option_iv_source import KISTrack2OptionIVSource
 from infrastructure.kis.track9_iv_observation_history_store import KISTrack9IVObservationHistoryStore
@@ -55,6 +56,7 @@ def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_h
         track7_order_timeout_source=getattr(bootstrap.bundle, "track7_order_timeout_source", None),
         track7_support_resistance_source=getattr(bootstrap.bundle, "track7_support_resistance_source", None),
         track3_runtime_input_source=track3_source,
+        track6_option_contract_source=Track6OptionContractSource(bootstrap.bundle.option_master),
     )
 
     def identity(evaluation, tick):

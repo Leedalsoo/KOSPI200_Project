@@ -17,6 +17,9 @@ class Track6MarketInput:
     budget: Decimal
     date_str: str
     time_str: str = "09:00:00"
+    listed_put_strike: Decimal | None = None
+    listed_call_strike: Decimal | None = None
+    contract_multiplier: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -37,7 +40,6 @@ class Track6DailyTailInsurance:
     VOL_TRIGGER_MULTIPLIER = Decimal("1.3")
     STRIKE_OFFSET = Decimal("12.5")
     INSURANCE_QTY = 1
-    MULTIPLIER = Decimal("250000")
 
     def __init__(
 self,
@@ -68,15 +70,18 @@ self,
             return ()
         if "15:15" <= data.time_str < "15:20":
             return (Signal(self.strategy_id, "CANCEL", 1.0, "CANCEL_PENDING_TRANCHES_15:15"),)
-        estimated_cost = self.MULTIPLIER * self.insurance_qty
+        if data.contract_multiplier is None or data.contract_multiplier <= 0:
+            return ()
+        if data.listed_put_strike is None or data.listed_call_strike is None:
+            return ()
+        estimated_cost = data.contract_multiplier * self.insurance_qty
         if data.budget < estimated_cost:
             return ()
         if data.base_vol <= 0 or data.active_vol < data.base_vol * self.vol_trigger_multiplier:
             return ()
 
-        atm = self.atm_strike(data.current_price)
-        put_strike = atm - self.strike_offset
-        call_strike = atm + self.strike_offset
+        put_strike = data.listed_put_strike
+        call_strike = data.listed_call_strike
         self.state = replace(
             self.state,
             is_active=True,
@@ -123,10 +128,13 @@ self,
         if time_str >= "15:12:00":
             return ()
 
-        put_intrinsic = max(Decimal("0"), self.state.long_put_strike - current_price) * self.MULTIPLIER * self.insurance_qty
-        call_intrinsic = max(Decimal("0"), current_price - self.state.long_call_strike) * self.MULTIPLIER * self.insurance_qty
+        multiplier = self.state.premium_spent / Decimal(self.insurance_qty) if self.insurance_qty else Decimal("0")
+        if multiplier <= 0:
+            return ()
+        put_intrinsic = max(Decimal("0"), self.state.long_put_strike - current_price) * multiplier * self.insurance_qty
+        call_intrinsic = max(Decimal("0"), current_price - self.state.long_call_strike) * multiplier * self.insurance_qty
         total_intrinsic = put_intrinsic + call_intrinsic
-        spent = self.state.premium_spent if self.state.premium_spent > 0 else self.MULTIPLIER
+        spent = self.state.premium_spent
 
         minimum_multiplier = Decimal("1.5") if active_vol < Decimal("1.3") else Decimal("2.0")
         trailing_active = self.state.trailing_stop_active or total_intrinsic >= spent * minimum_multiplier
