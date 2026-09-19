@@ -15,6 +15,7 @@ from application.composition.live_runtime_lifecycle_coordinator import LiveRunti
 from application.composition.live_runtime_production_factory import create_live_runtime_lifecycle_coordinator
 from application.market_data_hub import MarketDataHub
 from contracts.futures_execution_symbol_source import KisFuturesExecutionSymbolSource
+from contracts.futures_contract_spec import FuturesProductType
 from application.composition.futures_target_configuration import FuturesTargetConfiguration
 from environments.live.broker.kis_live_broker import LiveBrokerAdapter
 from environments.live.broker.kis_order_payload import (
@@ -130,7 +131,7 @@ def create_authoritative_kis_live_runtime_composition(
     )
     symbol_source = KisFuturesExecutionSymbolSource(
         source=contract_source,
-        target=FuturesTargetConfiguration(underlying_short_code="2001"),
+        target=FuturesTargetConfiguration(underlying_short_code="2001", product_type=FuturesProductType.MINI),
     )
     futures_cmd_adapter = KisFuturesBrokerCommandAdapter(symbol_source=symbol_source)
     policy = safety_policy or LiveSafetyPolicy(

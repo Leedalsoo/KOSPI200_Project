@@ -4,6 +4,8 @@ from decimal import Decimal
 from enum import Enum
 from typing import Mapping, Sequence
 
+from contracts.futures_identity_source_port import FuturesInstrumentIdentity
+
 @dataclass(frozen=True)
 class CanonicalMarketTick:
     instrument_id: str
@@ -107,7 +109,7 @@ class OrderIntent:
     intent_type: str
     strategy_id: str | None = None
     risk_context: str | None = None
-    instrument_identity: OptionInstrumentIdentity | None = None
+    instrument_identity: OptionInstrumentIdentity | FuturesInstrumentIdentity | None = None
     asset_type: str | None = None
     requested_price: Decimal | None = None
     order_type: str | None = None
@@ -130,7 +132,7 @@ class BrokerOrderCommand:
     order_type: str
     broker_symbol: str | None = None
     session_id: str | None = None
-    instrument_identity: OptionInstrumentIdentity | None = None
+    instrument_identity: OptionInstrumentIdentity | FuturesInstrumentIdentity | None = None
     asset_type: str | None = None
     requested_price: Decimal | None = None
     strategy_id: str | None = None

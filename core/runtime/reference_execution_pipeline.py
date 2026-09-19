@@ -29,6 +29,8 @@ class CanonicalRiskCommandAdapter:
     strike: float = 0.0
     symbol: str = ""
     expiry: str = ""
+    contract_multiplier: float | None = None
+    identity_source: str = ""
 
     @classmethod
     def from_command(cls, command: CanonicalOrderCommand) -> "CanonicalRiskCommandAdapter":
@@ -44,6 +46,7 @@ class CanonicalRiskCommandAdapter:
             strike=command.strike,
             symbol=command.symbol,
             expiry=command.expiry,
+            contract_multiplier=command.contract_multiplier, identity_source=command.identity_source,
         )
 
     def get_instrument_key(self) -> str:
@@ -182,4 +185,7 @@ def approved_signal_to_command(
         symbol=getattr(signal, "symbol", ""),
         expiry=getattr(signal, "expiry", ""),
         tag_id=signal.tag_id,
+        instrument_id=getattr(signal, "instrument_id", ""),
+        contract_multiplier=getattr(signal, "contract_multiplier", None),
+        identity_source=getattr(signal, "identity_source", ""),
     )

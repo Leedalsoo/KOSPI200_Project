@@ -1,14 +1,14 @@
-﻿"""Runtime Strategy to Decision Adapter."""
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable
 from application.composition.runtime_strategy_result_collection_adapter import RuntimeStrategyEvaluation
 from contracts.types import OptionInstrumentIdentity
+from contracts.futures_identity_source_port import FuturesInstrumentIdentity
 from core.decision.decision_arbiter import ArbitrationResult, DecisionArbiter
 from core.strategy.canonical_signal_adapter import RuntimeSignalContext, signal_to_canonical
 from shared.contracts.canonical import CanonicalStrategySignal
 
-InstrumentIdentityProvider = Callable[[RuntimeStrategyEvaluation, Any], OptionInstrumentIdentity | None]
+InstrumentIdentityProvider = Callable[[RuntimeStrategyEvaluation, Any], OptionInstrumentIdentity | FuturesInstrumentIdentity | None]
 
 @dataclass(frozen=True)
 class RuntimeDecisionResult:
@@ -37,4 +37,3 @@ class RuntimeStrategyToDecisionAdapter:
             canonical_signals.append(signal_to_canonical(signal, RuntimeSignalContext(signal_id=signal_id, track_id=track_id, price=price, timestamp=timestamp), instrument_identity=identity))
         arbitration = self._arbiter.arbitrate(canonical_signals, account)
         return RuntimeDecisionResult(canonical_signals=tuple(canonical_signals), arbitration=arbitration)
-

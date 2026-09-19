@@ -1,17 +1,17 @@
-"""KIS index-futures contract projection from fo_idx_code_mts.mst.
-Authoritative meanings follow KIS 종목마스터정보(지수선물옵션).h.
-"""
+"""KIS index-futures contract projection from fo_idx_code_mts.mst."""
 from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Iterable, Optional
+from decimal import Decimal
+
+from contracts.futures_contract_spec import FuturesProductType, KRXFuturesContractSpecSource
 
 KIS_FUTURES_INFO_TYPES = frozenset({"1", "3", "7", "9", "B"})
 KIS_CURRENT_MONTH_CODE = "1"
 
-
 class FuturesContractMasterError(ValueError):
     pass
-
 
 @dataclass(frozen=True)
 class KisFuturesContractIdentity:
@@ -22,10 +22,18 @@ class KisFuturesContractIdentity:
     unas_shrn_iscd: Optional[str]
     unas_kor_name: Optional[str]
     kor_name: Optional[str] = None
+    product_type: FuturesProductType | None = None
+    contract_multiplier: Decimal | None = None
+    identity_source: str | None = None
 
+def _product_type(info_type: str) -> FuturesProductType | None:
+    if info_type == "1":
+        return FuturesProductType.STANDARD
+    if info_type == "B":
+        return FuturesProductType.MINI
+    return None
 
 def parse_kis_futures_contracts(raw_content: str) -> tuple[KisFuturesContractIdentity, ...]:
-    records: list[KisFuturesContractIdentity] = []
     seen: dict[str, KisFuturesContractIdentity] = {}
     for line in raw_content.splitlines():
         if not line or "|" not in line:
@@ -36,14 +44,15 @@ def parse_kis_futures_contracts(raw_content: str) -> tuple[KisFuturesContractIde
         info_type, shrn_iscd, stnd_iscd, kor_name = parts[:4]
         if info_type not in KIS_FUTURES_INFO_TYPES or not shrn_iscd:
             continue
+        product_type = _product_type(info_type)
+        spec = KRXFuturesContractSpecSource.get(product_type) if product_type else None
         identity = KisFuturesContractIdentity(
-            shrn_iscd=shrn_iscd,
-            stnd_iscd=stnd_iscd or None,
-            info_type=info_type,
-            mmsc_cls_code=parts[6],
-            unas_shrn_iscd=parts[7] or None,
-            unas_kor_name=parts[8] or None,
-            kor_name=kor_name or None,
+            shrn_iscd=shrn_iscd, stnd_iscd=stnd_iscd or None, info_type=info_type,
+            mmsc_cls_code=parts[6], unas_shrn_iscd=parts[7] or None,
+            unas_kor_name=parts[8] or None, kor_name=kor_name or None,
+            product_type=product_type,
+            contract_multiplier=spec.contract_multiplier if spec else None,
+            identity_source=("KIS_FUTURES_MASTER+" + spec.source if spec else None),
         )
         existing = seen.get(shrn_iscd)
         if existing is not None and existing != identity:
@@ -51,45 +60,40 @@ def parse_kis_futures_contracts(raw_content: str) -> tuple[KisFuturesContractIde
         seen[shrn_iscd] = identity
     return tuple(seen.values())
 
-
 def select_current_futures_contract(
-    records: Iterable[KisFuturesContractIdentity],
-    *,
+    records: Iterable[KisFuturesContractIdentity], *,
     underlying_short_code: Optional[str] = None,
     underlying_name: Optional[str] = None,
+    product_type: FuturesProductType | None = None,
 ) -> KisFuturesContractIdentity:
     candidates = [r for r in records if r.mmsc_cls_code == KIS_CURRENT_MONTH_CODE]
     if underlying_short_code is not None:
         candidates = [r for r in candidates if r.unas_shrn_iscd == underlying_short_code]
     if underlying_name is not None:
         candidates = [r for r in candidates if r.unas_kor_name == underlying_name]
+    if product_type is not None:
+        candidates = [r for r in candidates if r.product_type is product_type]
     if len(candidates) != 1:
         raise FuturesContractMasterError(f"CURRENT_FUTURES_NOT_UNIQUE:{len(candidates)}")
     return candidates[0]
 
-
 class KisCurrentFuturesContractSource:
-    def __init__(self, records, *, underlying_short_code=None, underlying_name=None):
+    def __init__(self, records, *, underlying_short_code=None, underlying_name=None, product_type=None):
         self._records = tuple(records)
         self._underlying_short_code = underlying_short_code
         self._underlying_name = underlying_name
+        self._product_type = product_type
 
     def current_contract(self) -> KisFuturesContractIdentity:
         return select_current_futures_contract(
-            self._records,
-            underlying_short_code=self._underlying_short_code,
-            underlying_name=self._underlying_name,
+            self._records, underlying_short_code=self._underlying_short_code,
+            underlying_name=self._underlying_name, product_type=self._product_type,
         )
 
-    def with_target(
-        self,
-        *,
-        underlying_short_code: Optional[str] = None,
-        underlying_name: Optional[str] = None,
-    ) -> "KisCurrentFuturesContractSource":
-        """Return a source view using an explicit Application target selector."""
+    def with_target(self, *, underlying_short_code: Optional[str] = None,
+                    underlying_name: Optional[str] = None,
+                    product_type: FuturesProductType | None = None):
         return KisCurrentFuturesContractSource(
-            self._records,
-            underlying_short_code=underlying_short_code,
-            underlying_name=underlying_name,
+            self._records, underlying_short_code=underlying_short_code,
+            underlying_name=underlying_name, product_type=product_type,
         )

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Protocol
+
+from contracts.futures_contract_spec import FuturesProductType
 
 
 class FuturesIdentitySourceError(ValueError):
@@ -12,12 +15,19 @@ class FuturesIdentitySourceError(ValueError):
 class FuturesInstrumentIdentity:
     instrument_id: str
     symbol: str
+    product_type: FuturesProductType
+    contract_multiplier: Decimal
+    identity_source: str
 
     def __post_init__(self) -> None:
-        if not str(self.instrument_id).strip():
+        if not self.instrument_id.strip():
             raise FuturesIdentitySourceError("FUTURES_INSTRUMENT_ID_REQUIRED")
-        if not str(self.symbol).strip():
+        if not self.symbol.strip():
             raise FuturesIdentitySourceError("FUTURES_SYMBOL_REQUIRED")
+        if self.contract_multiplier <= 0:
+            raise FuturesIdentitySourceError("FUTURES_CONTRACT_MULTIPLIER_REQUIRED")
+        if not self.identity_source.strip():
+            raise FuturesIdentitySourceError("FUTURES_IDENTITY_SOURCE_REQUIRED")
 
 
 class FuturesIdentitySourcePort(Protocol):

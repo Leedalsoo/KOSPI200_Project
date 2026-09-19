@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from contracts.types import BrokerOrderCommand, ExecutionReport
 from environments.virtual.position.virtual_position_aggregate import VirtualPositionAggregate
 
@@ -24,11 +26,7 @@ class VirtualPositionFillAdapter:
             raise ValueError("POSITION_FILL_CONTRACT_MULTIPLIER_REQUIRED")
         if not identity.identity_source:
             raise ValueError("POSITION_FILL_IDENTITY_SOURCE_REQUIRED")
-
         self.position.apply_fill(
-            side=command.side,
-            quantity=report.filled_quantity,
-            price=float(report.execution_price),
-            contract_multiplier=identity.contract_multiplier,
-            identity_source=identity.identity_source,
+            side=command.side, quantity=report.filled_quantity, price=float(report.execution_price),
+            contract_multiplier=identity.contract_multiplier, identity_source=identity.identity_source,
         )
