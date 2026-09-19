@@ -9,12 +9,44 @@ class ControlTowerHub:
 
     def __init__(self, *, runtime_controller: Any, ui_adapter: Any,
                  strategy_hub: Any | None = None, run_context: Any | None = None,
-                 run_hub: Any | None = None) -> None:
+                 run_hub: Any | None = None, virtual_test_controller: Any | None = None) -> None:
         self._runtime_controller = runtime_controller
         self._ui_adapter = ui_adapter
         self._strategy_hub = strategy_hub
         self._run_context = run_context
         self._run_hub = run_hub
+        self._virtual_test_controller = virtual_test_controller
+
+    def virtual_test_read_model(self) -> dict[str, Any]:
+        if self._virtual_test_controller is None:
+            raise RuntimeError("VIRTUAL_TEST_CONTROLLER_UNAVAILABLE")
+        return self._virtual_test_controller.read_model()
+
+    def virtual_test_action(self, action: str, *, scenario: str | None = None, reason: str | None = None) -> dict[str, Any]:
+        controller = self._virtual_test_controller
+        if controller is None:
+            raise RuntimeError("VIRTUAL_TEST_CONTROLLER_UNAVAILABLE")
+        action = action.upper()
+        if action == "ARM":
+            controller.arm_for_test()
+        elif action == "START":
+            controller.start()
+        elif action == "PAUSE":
+            controller.pause()
+        elif action == "NEXT_TICK":
+            tick = controller.next_tick()
+            return {**controller.read_model(), "tick": tick}
+        elif action == "RESET":
+            controller.reset()
+        elif action == "KILL_SWITCH":
+            controller.engage_kill_switch(reason or "UI_KILL_SWITCH")
+        elif action == "SET_SCENARIO":
+            if not scenario:
+                raise ValueError("VIRTUAL_TEST_SCENARIO_REQUIRED")
+            controller.set_scenario(scenario)
+        else:
+            raise ValueError(f"UNSUPPORTED_VIRTUAL_TEST_ACTION:{action}")
+        return controller.read_model()
 
     def status(self) -> dict[str, Any]: return self._ui_adapter.get_summary()
     def environment(self, tab_id: str) -> dict[str, Any]: return self._ui_adapter.get_tab_detail(tab_id)

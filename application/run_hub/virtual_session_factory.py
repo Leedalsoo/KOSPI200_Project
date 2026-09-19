@@ -25,6 +25,7 @@ from environments.virtual.execution.vssf_command_context_provider import Canonic
 from infrastructure.kis.track2_option_iv_source import KISTrack2OptionIVSource
 from application.composition.track7_support_resistance_source import Track7AuthoritativeSupportResistanceSource
 from interfaces.control_tower.ui_adapter import ControlTowerUIAdapter
+from interfaces.control_tower.virtual_test_controller import VirtualTestController
 
 
 def create_virtual_run_session(context: RunContext, option_master: Any) -> RunSession:
@@ -67,7 +68,7 @@ def create_virtual_run_session(context: RunContext, option_master: Any) -> RunSe
                     Track7ClassicPivotProvider(HistoricalMarketDailyOHLCProvider(daily_store, calendar))
                 )
     if context.scenario:
-        scenario_engine = getattr(bundle.market, "scenario_engine", None)
+        scenario_engine = getattr(bundle.market, "scenario", None)
         if scenario_engine is not None:
             scenario_engine.set_scenario(context.scenario)
     vssf = bundle.execution._authoritative_execute.__self__.vssf_runtime
@@ -88,7 +89,14 @@ def create_virtual_run_session(context: RunContext, option_master: Any) -> RunSe
     )
     strategy_hub = loop.strategy_hub
     runtime_hub = RuntimeHub(loop)
-    tower = ControlTowerHub(runtime_controller=controller, ui_adapter=adapter, strategy_hub=strategy_hub, run_context=context)
+    virtual_test_controller = VirtualTestController(market=bundle.market)
+    tower = ControlTowerHub(
+        runtime_controller=controller,
+        ui_adapter=adapter,
+        strategy_hub=strategy_hub,
+        run_context=context,
+        virtual_test_controller=virtual_test_controller,
+    )
     return RunSession(
         context=context,
         runtime_controller=controller,
