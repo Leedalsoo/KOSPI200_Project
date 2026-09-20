@@ -10,6 +10,7 @@ from application.composition.runtime_decision_command_adapter import RuntimeDeci
 from application.composition.runtime_strategy_result_collection_adapter import RuntimeStrategyResultCollectionAdapter
 from application.composition.runtime_strategy_to_decision_adapter import RuntimeStrategyToDecisionAdapter
 from application.composition.track3_futures_execution_plan_adapter import Track3FuturesExecutionPlanAdapter
+from application.composition.track3_analytics_provider import build_track3_analytics_snapshot
 from application.composition.virtual_futures_execution import VirtualFuturesExecutionBridge
 from contracts.futures_contract_master import KisCurrentFuturesContractSource, parse_kis_futures_contracts
 from contracts.futures_contract_spec import FuturesProductType
@@ -34,6 +35,7 @@ def _context(payload):
         market_state=MarketState(as_of=as_of, ticks={"KOSPI200": tick}, quality={}),
         strategy_id="Strategy_3_StatArb",
         input=StrategyInput(common=CommonStrategyInput(as_of=as_of, current_price=Decimal("500")), payload=payload),
+        analytics=build_track3_analytics_snapshot(payload, run_id="track3-test", current_pnl=0.0, as_of=as_of),
     )
 
 
@@ -41,7 +43,7 @@ def _payload(multiplier):
     return Track3MarketInput(
         spread_history=(1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0),
         active_vol=0.1, base_vol=0.1, bid_ask_spread=0.02, current_price=500.0,
-        options_legs=({"strike": 500, "price": 1.0, "qty": 1, "side": "BUY", "type": "CALL", "contract_multiplier": multiplier},),
+        options_legs=({"strike": 500, "price": 1.0, "current_market_price": 1.0, "qty": 1, "side": "BUY", "type": "CALL", "contract_multiplier": multiplier},),
         contract_multiplier=float(multiplier), market_stable=True, spread_normalizing=True,
         time_str="10:00:00", date_str="2026-09-18",
     )
@@ -60,7 +62,7 @@ def test_track3_strategy_decision_command_and_virtual_execution_e2e():
     identity = _identity(FuturesProductType.STANDARD)
     strategy = Track3StatisticalArbitrage()
     context = _context(_payload(identity.contract_multiplier))
-    result = strategy.evaluate_input(context.input.payload)
+    result = strategy.evaluate_input(context.input.payload, context.analytics)
     assert result.status == "ENTER"
     evaluations = RuntimeStrategyResultCollectionAdapter().collect(tick_sequence=1, context=context, result=result)
     decision = RuntimeStrategyToDecisionAdapter(DecisionArbiter()).arbitrate(

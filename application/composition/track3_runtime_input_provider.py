@@ -6,6 +6,7 @@ from contracts.track3_runtime_input_source import Track3RuntimeInputSource
 from core.domain.market_models import MarketState
 from core.strategy.contracts import StrategyContext, StrategyInput, UnavailableStrategyPayload
 from core.strategy.track3_statistical_arbitrage import Track3MarketInput
+from application.composition.track3_analytics_provider import build_track3_analytics_snapshot
 
 
 class Track3RuntimeInputProvider:
@@ -75,6 +76,9 @@ class Track3RuntimeInputProvider:
             contract_multiplier=payload.contract_multiplier,
             date_str=observed_at.date().isoformat(),
         )
+        analytics = build_track3_analytics_snapshot(
+            data, run_id=f"{self.strategy_id}:{observed_at.isoformat()}", current_pnl=float(pnl) if pnl is not None else None, as_of=observed_at
+        )
         return StrategyContext(
             market_state=market_state,
             strategy_id=self.strategy_id,
@@ -82,6 +86,7 @@ class Track3RuntimeInputProvider:
                 "track3": "AVAILABLE",
                 "source": payload.source,
             }),
+            analytics=analytics,
         )
 
     @staticmethod

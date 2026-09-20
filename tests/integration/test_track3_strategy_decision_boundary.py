@@ -13,6 +13,7 @@ from core.strategy.contracts import (
     StrategyContext,
     StrategyInput,
 )
+from application.composition.track3_analytics_provider import build_track3_analytics_snapshot
 from core.strategy.track3_statistical_arbitrage import (
     Track3MarketInput,
     Track3StatisticalArbitrage,
@@ -28,6 +29,7 @@ def _context(data: Track3MarketInput) -> StrategyContext:
             common=CommonStrategyInput(as_of=as_of, current_price=500),
             payload=data,
         ),
+        analytics=build_track3_analytics_snapshot(data, run_id="track3-test", current_pnl=0.0, as_of=as_of),
     )
 
 
@@ -57,7 +59,7 @@ def _entry_data() -> Track3MarketInput:
 
 def test_track3_entry_signal_materializes_to_canonical_decision():
     strategy = Track3StatisticalArbitrage()
-    result = strategy.evaluate_input(_entry_data())
+    result = strategy.evaluate_input(_entry_data(), _context(_entry_data()).analytics)
 
     assert result.status == "ENTER"
     signal = result.signals[0]
@@ -89,7 +91,7 @@ def test_track3_entry_signal_materializes_to_canonical_decision():
 
 def test_track3_signal_without_execution_proposal_remains_fail_closed():
     strategy = Track3StatisticalArbitrage()
-    result = strategy.evaluate_input(_entry_data())
+    result = strategy.evaluate_input(_entry_data(), _context(_entry_data()).analytics)
     signal = result.signals[0]
 
     from core.strategy.contracts import Signal
@@ -123,3 +125,35 @@ def test_track3_signal_without_execution_proposal_remains_fail_closed():
     assert decision.canonical_signals == ()
     assert decision.arbitration.approved_signals == []
 
+
+
+def test_track3_strategy_plugin_declares_common_analytics_and_consumes_snapshot():
+    context = _context(_entry_data())
+    strategy = Track3StatisticalArbitrage()
+    keys = {requirement.metric_key for requirement in strategy.feature_requirements()}
+    assert {"spread.z_score", "spread.std", "volatility.ratio", "microstructure.spread"}.issubset(keys)
+    signals = strategy.evaluate(context)
+    assert signals and signals[0].execution_proposal is not None
+
+
+def test_track3_market_regime_logic_remains_strategy_specific():
+    data = _entry_data()
+    data = Track3MarketInput(**{**data.__dict__, "regime": "HIGH_VOLATILITY"})
+    strategy = Track3StatisticalArbitrage()
+    assert strategy.detect_market_regime(
+        data, vol_ratio=1.0, price_change_rate=0.0, bid_ask_spread=0.02, gap_pct=0.0
+    ) == "HIGH_VOLATILITY"
+
+
+def test_track3_evaluation_fails_closed_when_required_pnl_analytics_is_missing():
+    data = _entry_data()
+    as_of = datetime.fromisoformat("2026-09-18T10:00:00")
+    analytics = build_track3_analytics_snapshot(data, run_id="track3-test", current_pnl=None, as_of=as_of)
+    context = StrategyContext(
+        market_state=MarketState(as_of=as_of, ticks={}, quality={}),
+        strategy_id="Strategy_3_StatArb",
+        input=StrategyInput(common=CommonStrategyInput(as_of=as_of, current_price=500), payload=data),
+        analytics=analytics,
+    )
+    strategy = Track3StatisticalArbitrage()
+    assert strategy.evaluate(context) == ()

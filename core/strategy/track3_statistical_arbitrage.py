@@ -1,66 +1,13 @@
-"""Track3 Statistical Arbitrage strategy — pure functions and strategy class.
-
-Pure utility functions for butterfly legs, calendar spread IV validation, and
-options carry/theta calculation.
-"""
+"""Track3 Statistical Arbitrage strategy and strategy-specific state/rules."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from decimal import Decimal
 from math import isfinite
-from statistics import mean, pstdev
-from typing import Mapping, Sequence
+from typing import Mapping
 
-from core.strategy.contracts import Signal, StrategyContext
+from contracts.analytics import AnalyticsStatus
+from core.strategy.contracts import Signal, StrategyContext, StrategyFeatureRequirement, validate_strategy_features
 from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
-
-
-@dataclass(frozen=True)
-class Track3OptionLeg:
-    strike: Decimal
-    quantity: int
-    side: str
-
-
-def calculate_butterfly_legs(atm_strike: Decimal, tick_size: Decimal) -> tuple[Track3OptionLeg, ...]:
-    if tick_size <= 0:
-        raise ValueError("tick_size must be positive")
-    return (
-        Track3OptionLeg(atm_strike - tick_size, 1, "BUY"),
-        Track3OptionLeg(atm_strike, 2, "SELL"),
-        Track3OptionLeg(atm_strike + tick_size, 1, "BUY"),
-    )
-
-
-def validate_calendar_spread_iv(near_iv: Sequence[float], far_iv: Sequence[float], threshold: float = 0.05) -> bool:
-    if len(near_iv) < 2 or len(far_iv) < 2 or len(near_iv) != len(far_iv):
-        return False
-    spreads = [n - f for n, f in zip(near_iv, far_iv)]
-    return abs(spreads[-1] - sum(spreads[:-1]) / len(spreads[:-1])) > threshold
-
-
-def calculate_options_carry_and_theta(options_legs: Sequence[Mapping[str, object]], current_index: float) -> float:
-    """계약별 현재 시장가격과 진입가격 차이로 옵션 leg PnL을 계산한다."""
-    total = 0.0
-    for leg in options_legs:
-        strike = float(leg.get("strike", 0.0) or 0.0)
-        entry = float(leg.get("price", 0.0) or 0.0)
-        qty = int(leg.get("qty", 1) or 1)
-        side = str(leg.get("side", "BUY"))
-        option_type = str(leg.get("type", "CALL"))
-        if strike <= 0 or qty <= 0:
-            continue
-        intrinsic = max(0.0, current_index - strike) if option_type == "CALL" else max(0.0, strike - current_index)
-        market = float(leg.get("current_market_price", intrinsic))
-        multiplier = leg.get("contract_multiplier")
-        if multiplier is None:
-            raise ValueError("TRACK3_CONTRACT_MULTIPLIER_UNAVAILABLE")
-        multiplier = float(multiplier)
-        if not isfinite(multiplier) or multiplier <= 0:
-            raise ValueError("TRACK3_CONTRACT_MULTIPLIER_INVALID")
-        pnl_points = market - entry if side == "BUY" else entry - market
-        total += pnl_points * qty * multiplier
-    return total
 
 
 @dataclass(frozen=True)
@@ -135,19 +82,14 @@ class Track3StatisticalArbitrage:
         self._current_date = ""
 
     @staticmethod
-    def calculate_z_score(spread_series: Sequence[float]) -> tuple[float, bool]:
-        if len(spread_series) < 10:
-            return 0.0, False
-        values = tuple(float(v) for v in spread_series)
-        if not all(isfinite(v) for v in values):
-            return 0.0, False
-        std = pstdev(values)
-        if std == 0.0:
-            return 0.0, True
-        return (values[-1] - mean(values)) / std, True
-
-    @staticmethod
-    def detect_market_regime(data: Track3MarketInput) -> str:
+    def detect_market_regime(
+        data: Track3MarketInput,
+        *,
+        vol_ratio: float,
+        price_change_rate: float,
+        bid_ask_spread: float,
+        gap_pct: float,
+    ) -> str:
         explicit = data.regime
         if explicit in {"HIGH_VOL", "HIGH_VOLATILITY"}:
             return "HIGH_VOLATILITY"
@@ -155,46 +97,25 @@ class Track3StatisticalArbitrage:
             return "EXTREME_MOVE"
         if explicit in {"GAP", "GAP_OPEN"}:
             return "GAP"
-
-        vol_ratio = data.active_vol / max(0.1, data.base_vol)
-        gap = data.is_gap or (
-            data.time_str < "09:05:00" and abs(data.gap_pct) >= 0.008
-        )
+        gap = data.is_gap or (data.time_str < "09:05:00" and abs(gap_pct) >= 0.008)
         if gap:
             return "GAP"
-        if abs(data.price_change_rate) >= 0.02 or vol_ratio >= 2.5:
+        if abs(price_change_rate) >= 0.02 or vol_ratio >= 2.5:
             return "EXTREME_MOVE"
-        if vol_ratio >= 1.4 or data.bid_ask_spread > 0.3:
+        if vol_ratio >= 1.4 or bid_ask_spread > 0.3:
             return "HIGH_VOLATILITY"
         return "NORMAL"
 
     def estimate_round_trip_cost(
-        self, regime: str, qty: int, data: Track3MarketInput
+        self, regime: str, qty: int, *, bid_ask_spread: float, contract_multiplier: float | None
     ) -> float:
-        multiplier = data.contract_multiplier
-        if multiplier is None or not isfinite(multiplier) or multiplier <= 0:
-            raise ValueError("TRACK3_CONTRACT_MULTIPLIER_UNAVAILABLE")
-        spread_cost = data.bid_ask_spread * multiplier
-        fee_per_leg = 3_000.0
-        slippage_ticks = 1.0 if regime == "NORMAL" else 2.0 if regime == "HIGH_VOLATILITY" else 3.0
-        slippage = slippage_ticks * 0.05 * multiplier * qty
-        return (fee_per_leg * 2 * qty) + slippage + (spread_cost * qty) + self.base_round_trip_cost
-
-    @staticmethod
-    def calculate_expected_gross_profit(
-        z_score: float, spread_history: Sequence[float], qty: int, contract_multiplier: float | None = None
-    ) -> float:
-        if len(spread_history) < 10:
-            return 0.0
         if contract_multiplier is None or not isfinite(contract_multiplier) or contract_multiplier <= 0:
             raise ValueError("TRACK3_CONTRACT_MULTIPLIER_UNAVAILABLE")
-        std = pstdev(float(v) for v in spread_history)
-        return abs(z_score) * std * 0.8 * contract_multiplier * qty
-
-    @staticmethod
-    def calculate_options_carry_and_theta(data: Track3MarketInput) -> float:
-        return calculate_options_carry_and_theta(data.options_legs, data.current_price)
-
+        spread_cost = bid_ask_spread * contract_multiplier
+        fee_per_leg = 3_000.0
+        slippage_ticks = 1.0 if regime == "NORMAL" else 2.0 if regime == "HIGH_VOLATILITY" else 3.0
+        slippage = slippage_ticks * 0.05 * contract_multiplier * qty
+        return (fee_per_leg * 2 * qty) + slippage + (spread_cost * qty) + self.base_round_trip_cost
 
     def _signal(self, action: str, position: str, reason: str, **details: object) -> Signal:
         payload = {"action": action, "position": position, **details}
@@ -222,15 +143,35 @@ class Track3StatisticalArbitrage:
             execution_proposal=proposal,
         )
 
+    def feature_requirements(self):
+        return tuple(
+            StrategyFeatureRequirement(key, "tick", 1.0, frozenset({AnalyticsStatus.AVAILABLE}))
+            for key in (
+                "spread.z_score",
+                "spread.std",
+                "volatility.ratio",
+                "microstructure.spread",
+                "price.change_rate",
+                "market.gap_pct",
+                "cost.fees",
+                "portfolio.current_pnl",
+                "portfolio.options_pnl",
+                "portfolio.premium_spent",
+            )
+        )
+
     def evaluate(self, context: StrategyContext) -> Sequence[Signal]:
-        """MarketState 자체만으로 부족한 Track3 입력은 context 확장 입력으로 받는다."""
         data = context.input.payload if context.input is not None else None
-        if not isinstance(data, Track3MarketInput):
+        analytics = context.analytics
+        if not isinstance(data, Track3MarketInput) or analytics is None or context.strategy_id != self.strategy_id:
             return ()
-        result = self.evaluate_input(data)
+        metrics = validate_strategy_features(self.feature_requirements(), analytics)
+        if any(m.status is not AnalyticsStatus.AVAILABLE or m.value is None for m in metrics):
+            return ()
+        result = self.evaluate_input(data, analytics)
         return result.signals
 
-    def evaluate_input(self, data: Track3MarketInput) -> Track3Result:
+    def evaluate_input(self, data: Track3MarketInput, analytics) -> Track3Result:
         if data.date_str and data.date_str != self._current_date:
             self._current_date = data.date_str
             self.cooldown_ticks = 0
@@ -241,14 +182,25 @@ class Track3StatisticalArbitrage:
             self.position_group_legs = []
             self.group_integrity = True
 
-        z_score, valid = self.calculate_z_score(data.spread_history)
-        regime = self.detect_market_regime(data)
+        z_score = float(analytics.get("spread.z_score").value)
+        spread_std = float(analytics.get("spread.std").value)
+        vol_ratio = float(analytics.get("volatility.ratio").value)
+        bid_ask_spread = float(analytics.get("microstructure.spread").value)
+        price_change_rate = float(analytics.get("price.change_rate").value)
+        gap_pct = float(analytics.get("market.gap_pct").value)
+        regime = self.detect_market_regime(
+            data,
+            vol_ratio=vol_ratio,
+            price_change_rate=price_change_rate,
+            bid_ask_spread=bid_ask_spread,
+            gap_pct=gap_pct,
+        )
+        total_fees = float(analytics.get("cost.fees").value)
+        effective_pnl = float(analytics.get("portfolio.current_pnl").value) + float(analytics.get("portfolio.options_pnl").value)
+        premium_spent = float(analytics.get("portfolio.premium_spent").value)
         if self.cooldown_ticks > 0:
             self.cooldown_ticks -= 1
-        if not valid:
-            return Track3Result("HOLD", regime, z_score)
 
-        vol_ratio = data.active_vol / max(0.1, data.base_vol)
         if regime == "HIGH_VOLATILITY":
             threshold = max(2.2, self.z_entry_threshold * vol_ratio * 1.2)
             min_profit = self.min_required_profit * 1.5
@@ -266,7 +218,6 @@ class Track3StatisticalArbitrage:
             min_profit = self.min_required_profit
             qty = 2 if abs(z_score) >= 2.5 and data.allow_size_up else 1
 
-        effective_pnl = data.current_pnl + self.calculate_options_carry_and_theta(data)
         signals: list[Signal] = []
 
         if self.active_position is None:
@@ -277,8 +228,10 @@ class Track3StatisticalArbitrage:
             if self.last_exit_z_score is not None and abs(z_score - self.last_exit_z_score) < 0.8:
                 return Track3Result("OLD_DISLOCATION_BLOCK", regime, z_score)
 
-            cost = self.estimate_round_trip_cost(regime, qty, data)
-            gross = self.calculate_expected_gross_profit(z_score, data.spread_history, qty, data.contract_multiplier)
+            cost = self.estimate_round_trip_cost(
+                regime, qty, bid_ask_spread=bid_ask_spread, contract_multiplier=data.contract_multiplier
+            )
+            gross = abs(z_score) * spread_std * 0.8 * data.contract_multiplier * qty
             net = gross - cost
             if net < min_profit:
                 return Track3Result("PROFITABILITY_BLOCK", regime, z_score)
@@ -309,7 +262,7 @@ class Track3StatisticalArbitrage:
             return self._close("MARKET_CLOSE_FLATTEN", z_score, tuple(signals), cooldown=20)
 
         self._arb_high_pnl = max(self._arb_high_pnl, effective_pnl)
-        spent = max(1.0, data.premium_spent)
+        spent = max(1.0, premium_spent)
         if self._arb_high_pnl > 30_000.0:
             ratio = self._arb_high_pnl / spent
             trailing = 0.90 if ratio >= 2.0 else 0.88 if ratio >= 1.3 else 0.85
@@ -326,8 +279,10 @@ class Track3StatisticalArbitrage:
             return self._close("TIMEOUT_EXIT", z_score, tuple(signals), cooldown=20)
 
         converged = (self.active_position == "SHORT_SPREAD" and z_score <= self.z_exit_threshold) or (self.active_position == "LONG_SPREAD" and z_score >= -self.z_exit_threshold)
-        cost = self.estimate_round_trip_cost(regime, 1, data)
-        net_exit = effective_pnl - data.total_fees - cost
+        cost = self.estimate_round_trip_cost(
+            regime, 1, bid_ask_spread=bid_ask_spread, contract_multiplier=data.contract_multiplier
+        )
+        net_exit = effective_pnl - total_fees - cost
         profitable = net_exit >= -5_000.0
         if regime == "HIGH_VOLATILITY" and effective_pnl > 10_000.0:
             profitable = True
