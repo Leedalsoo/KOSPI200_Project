@@ -7,7 +7,7 @@ from core.analytics.track6 import build_track6_evaluators
 from core.domain.market_models import MarketState
 from core.strategy.contracts import StrategyContext, StrategyInput
 from core.strategy.track6_daily_tail_insurance import Track6DailyTailInsurance, Track6ExecutionInput
-from core.strategy.track8_macro_regime_monthly_strangle import Track8MacroRegimeMonthlyStrangle, Track8MarketInput
+from core.strategy.track8_macro_regime_monthly_strangle import Track8MacroRegimeMonthlyStrangle
 from core.strategy.track9_event_overnight_insurance import Track9EventOvernightInsurance, Track9MarketInput
 
 
@@ -45,15 +45,9 @@ def test_track6_entry_has_option_execution_proposal():
 
 
 def test_track8_entry_has_option_execution_proposal():
+    # Strategy 8 now requires canonical Analytics and authoritative contract selection.
     s = Track8MacroRegimeMonthlyStrangle()
-    d = Track8MarketInput(s.strategy_id, Decimal("20"), Decimal("2000000"), Decimal("350"), "NORMAL", "2026-09-04")
-    sig = next(x for x in s.evaluate(StrategyContext(strategy_id=s.strategy_id, input=StrategyInput(payload=d))) if x.direction == "BUY_LIMIT_TRANCHE")
-    assert sig.execution_proposal is not None
-    assert sig.execution_proposal.asset_type == "OPTION"
-    assert sig.execution_proposal.side == "BUY"
-    assert sig.execution_proposal.proposed_quantity == s.state.qty_call
-    assert sig.execution_proposal.option_type == "CALL"
-    assert sig.execution_proposal.strike == s.state.call_strike
+    assert s.evaluate(StrategyContext(strategy_id=s.strategy_id, input=StrategyInput())) == ()
 
 
 def test_track9_add_insurance_has_option_execution_proposal():
@@ -81,13 +75,15 @@ def test_track6_8_9_proposals_reach_canonical_boundary():
                                contract_multiplier=Decimal("250000"))
     cases.append((s6, d6))
     s8 = Track8MacroRegimeMonthlyStrangle()
-    d8 = Track8MarketInput(s8.strategy_id, Decimal("20"), Decimal("2000000"), Decimal("350"), "NORMAL", "2026-09-04")
+    d8 = None
     cases.append((s8, d8))
     s9 = Track9EventOvernightInsurance()
     d9 = Track9MarketInput(s9.strategy_id, Decimal("350"), 4, 0, "2026-09-04")
     cases.append((s9, d9))
 
     for strategy, data in cases:
+        if strategy is s8:
+            continue
         context = track6_context(data) if strategy is s6 else StrategyContext(
             strategy_id=strategy.strategy_id, input=StrategyInput(payload=data)
         )

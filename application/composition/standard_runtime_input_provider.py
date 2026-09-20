@@ -16,7 +16,6 @@ from core.strategy.track1_tail_defense import Track1Input
 from application.composition.track3_runtime_input_provider import Track3RuntimeInputProvider
 from core.strategy.track4_gamma_scalping import Track4MarketInput
 from core.strategy.track6_daily_tail_insurance import Track6ExecutionInput
-from core.strategy.track8_macro_regime_monthly_strangle import Track8MarketInput
 from core.strategy.track9_event_overnight_insurance import Track9MarketInput
 from contracts.option_expiry_source import OptionExpirySource
 from contracts.option_orderbook_source import OptionOrderBookSource
@@ -33,6 +32,7 @@ from application.composition.track4_analytics_provider import build_track4_analy
 from application.composition.track5_analytics_provider import build_track5_analytics_snapshot
 from application.composition.track6_analytics_provider import build_track6_analytics_snapshot
 from application.composition.track7_analytics_provider import build_track7_analytics_snapshot
+from application.composition.track8_analytics_provider import build_track8_analytics_snapshot
 
 
 class StandardRuntimeInputProvider:
@@ -262,13 +262,25 @@ class StandardRuntimeInputProvider:
                 ),
             )
 
-        # Track8: DTE cannot be derived from YYYYMM alone. Fees, margin and risk
-        # guard also require broker/risk read models.
-        contexts["track8_macro_regime_monthly_strangle"] = self._unavailable(
-            "track8_macro_regime_monthly_strangle",
-            ("fee_ledger", "margin_read_model", "risk_guard"),
-            "TRACK8_REQUIRED_AUTHORITATIVE_SOURCES_UNAVAILABLE",
+        # Track8 receives canonical analytics only when the authoritative
+        # option contract, fee, margin and risk inputs are all present.
+        track8_required = (
+            d.days_to_expiry, d.option_iv, d.put_iv, d.macro_regime, common.current_pnl,
+            common.total_fees, self.track9_margin_ratio,
         )
+        if not all(value is not None for value in track8_required):
+            contexts["track8_macro_regime_monthly_strangle"] = self._unavailable(
+                "track8_macro_regime_monthly_strangle",
+                ("track8_authoritative_option_contract", "fee_ledger", "margin_read_model", "risk_guard"),
+                "TRACK8_REQUIRED_AUTHORITATIVE_SOURCES_UNAVAILABLE",
+            )
+        else:
+            contexts["track8_macro_regime_monthly_strangle"] = StrategyContext(
+                market_state, "track8_macro_regime_monthly_strangle", StrategyInput(common),
+                analytics=build_track8_analytics_snapshot(
+                    d, run_id=self.run_id or "virtual", as_of=d.as_of
+                ),
+            )
 
         # Track9: account positions alone do not identify short vs insurance
         # legs. Event/IV/fee/premium/margin/risk sources are separate authorities.
