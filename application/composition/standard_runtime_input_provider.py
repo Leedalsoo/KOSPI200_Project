@@ -15,7 +15,7 @@ from core.strategy.contracts import CommonStrategyInput, StrategyContext, Strate
 from core.strategy.track1_tail_defense import Track1Input
 from application.composition.track3_runtime_input_provider import Track3RuntimeInputProvider
 from core.strategy.track4_gamma_scalping import Track4MarketInput
-from core.strategy.track6_daily_tail_insurance import Track6MarketInput
+from core.strategy.track6_daily_tail_insurance import Track6ExecutionInput
 from core.strategy.track7_volatility_skew_weekly_insurance import Track7MarketInput
 from core.strategy.track8_macro_regime_monthly_strangle import Track8MarketInput
 from core.strategy.track9_event_overnight_insurance import Track9MarketInput
@@ -32,6 +32,7 @@ from application.composition.track6_option_contract_source import Track6OptionCo
 from application.composition.track2_analytics_provider import build_track2_analytics_snapshot
 from application.composition.track4_analytics_provider import build_track4_analytics_snapshot
 from application.composition.track5_analytics_provider import build_track5_analytics_snapshot
+from application.composition.track6_analytics_provider import build_track6_analytics_snapshot
 
 
 class StandardRuntimeInputProvider:
@@ -202,15 +203,7 @@ class StandardRuntimeInputProvider:
             ),
         )
 
-        if d.active_vol is None or d.base_vol is None:
-            contexts["track6_daily_tail_insurance"] = self._unavailable(
-                "track6_daily_tail_insurance", ("active_vol", "base_vol"), "VOLATILITY_SOURCE_UNAVAILABLE"
-            )
-        elif common.budget is None:
-            contexts["track6_daily_tail_insurance"] = self._unavailable(
-                "track6_daily_tail_insurance", ("account_available_cash",), "ACCOUNT_SOURCE_UNAVAILABLE"
-            )
-        elif self.track6_option_contract_source is None:
+        if self.track6_option_contract_source is None:
             contexts["track6_daily_tail_insurance"] = self._unavailable(
                 "track6_daily_tail_insurance", ("listed_option_contracts",), "TRACK6_OPTION_CONTRACT_SOURCE_UNAVAILABLE"
             )
@@ -228,14 +221,19 @@ class StandardRuntimeInputProvider:
                     "track6_daily_tail_insurance", ("listed_option_contracts",), str(exc)
                 )
             else:
+                execution_input = Track6ExecutionInput(
+                    strategy_id="track6_daily_tail_insurance",
+                    date_str=d.as_of.date().isoformat(),
+                    time_str=d.as_of.strftime("%H:%M:%S"),
+                    listed_put_strike=Decimal(str(selection.put.strike)),
+                    listed_call_strike=Decimal(str(selection.call.strike)),
+                    contract_multiplier=multiplier,
+                )
                 contexts["track6_daily_tail_insurance"] = StrategyContext(
-                    market_state, "track6_daily_tail_insurance", StrategyInput(common,
-                        Track6MarketInput("track6_daily_tail_insurance", d.price, d.active_vol,
-                                          d.base_vol, common.budget, d.as_of.date().isoformat(),
-                                          d.as_of.strftime("%H:%M:%S"),
-                                          listed_put_strike=Decimal(str(selection.put.strike)),
-                                          listed_call_strike=Decimal(str(selection.call.strike)),
-                                          contract_multiplier=multiplier))
+                    market_state, "track6_daily_tail_insurance", StrategyInput(common, execution_input),
+                    analytics=build_track6_analytics_snapshot(
+                        d, run_id=self.run_id or "virtual", as_of=d.as_of
+                    ),
                 )
 
         # Track7 may consume CALL/PUT IV already projected from the injected

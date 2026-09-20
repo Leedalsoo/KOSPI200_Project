@@ -9,13 +9,14 @@ from core.strategy.track1_tail_defense import Track1Input
 from core.strategy.track3_statistical_arbitrage import Track3MarketInput
 from core.strategy.track4_gamma_scalping import Track4MarketInput
 from core.strategy.track5_gap_divergence import Track5MarketInput
-from core.strategy.track6_daily_tail_insurance import Track6MarketInput
+from core.strategy.track6_daily_tail_insurance import Track6ExecutionInput
 from core.strategy.track7_volatility_skew_weekly_insurance import Track7MarketInput
 from core.strategy.track8_macro_regime_monthly_strangle import Track8MarketInput
 from core.strategy.track9_event_overnight_insurance import Track9MarketInput
 from contracts.analytics import AnalyticsProvenance, AnalyticsRequest, MarketSnapshot
 from core.analytics.engine import AnalyticsEngine
 from core.analytics.track2 import build_track2_evaluators
+from core.analytics.track6 import build_track6_evaluators
 
 AS_OF = datetime(2026, 1, 2, 10, 0)
 DATE = "2026-01-02"
@@ -83,14 +84,13 @@ def payloads():
             regime="NORMAL",
             current_price=PRICE,
         ),
-        "track6_daily_tail_insurance": Track6MarketInput(
+        "track6_daily_tail_insurance": Track6ExecutionInput(
             strategy_id="track6_daily_tail_insurance",
-            current_price=PRICE,
-            active_vol=Decimal("1"),
-            base_vol=Decimal("1"),
-            budget=Decimal("1000000"),
             date_str=DATE,
             time_str="10:00:00",
+            listed_put_strike=Decimal("337.5"),
+            listed_call_strike=Decimal("362.5"),
+            contract_multiplier=Decimal("250000"),
         ),
         "track7_volatility_skew_weekly_insurance": Track7MarketInput(
             strategy_id="track7_volatility_skew_weekly_insurance",
@@ -155,6 +155,23 @@ def track2_analytics() -> MarketSnapshot:
     return AnalyticsEngine(build_track2_evaluators()).evaluate(market, requests)
 
 
+def track6_analytics() -> MarketSnapshot:
+    market = MarketSnapshot(
+        "FIXTURE", AS_OF, AnalyticsProvenance("integration-fixture"), None,
+        {"current_price": PRICE, "active_vol": Decimal("2"),
+         "base_vol": Decimal("1"), "equity": Decimal("1000000")},
+    )
+    keys = (
+        ("price.last", ("current_price",)),
+        ("volatility.active", ("active_vol",)),
+        ("volatility.base", ("base_vol",)),
+        ("volatility.ratio", ("active_vol", "base_vol")),
+        ("portfolio.equity", ("equity",)),
+    )
+    requests = tuple(AnalyticsRequest(k, "tick", 1, d, 1.0, "authoritative", "1") for k, d in keys)
+    return AnalyticsEngine(build_track6_evaluators()).evaluate(market, requests)
+
+
 def contexts() -> dict[str, StrategyContext]:
     state = canonical_market_state()
     result = {
@@ -170,6 +187,12 @@ def contexts() -> dict[str, StrategyContext]:
         strategy_id="track2_asymmetric_trap",
         input=StrategyInput(common=common_input()),
         analytics=track2_analytics(),
+    )
+    result["track6_daily_tail_insurance"] = StrategyContext(
+        market_state=state,
+        strategy_id="track6_daily_tail_insurance",
+        input=StrategyInput(common=common_input(), payload=result["track6_daily_tail_insurance"].input.payload),
+        analytics=track6_analytics(),
     )
     return result
 
