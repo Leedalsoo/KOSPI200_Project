@@ -16,7 +16,7 @@ from core.strategy.track1_tail_defense import Track1Input
 from application.composition.track3_runtime_input_provider import Track3RuntimeInputProvider
 from core.strategy.track4_gamma_scalping import Track4MarketInput
 from core.strategy.track6_daily_tail_insurance import Track6ExecutionInput
-from core.strategy.track9_event_overnight_insurance import Track9MarketInput
+from application.composition.track9_analytics_provider import build_track9_analytics_snapshot
 from contracts.option_expiry_source import OptionExpirySource
 from contracts.option_orderbook_source import OptionOrderBookSource
 from contracts.volume_profile_source import VolumeProfileSource
@@ -282,12 +282,15 @@ class StandardRuntimeInputProvider:
                 ),
             )
 
-        # Track9: account positions alone do not identify short vs insurance
-        # legs. Event/IV/fee/premium/margin/risk sources are separate authorities.
-        contexts["track9_event_overnight_insurance"] = self._unavailable(
-            "track9_event_overnight_insurance",
-            ("option_position_attribution", "event_calendar", "iv_timeseries", "fee_ledger",
-             "premium_attribution", "insurance_position", "margin_read_model", "risk_guard", "event_budget"),
-            "TRACK9_REQUIRED_AUTHORITATIVE_SOURCES_UNAVAILABLE",
+        # Track9 consumes canonical AnalyticsSnapshot. Dedicated event calendar, event budget, premium attribution and risk guard remain unavailable until their authoritative sources are connected.
+        track9_selection = None
+        if self.track6_option_contract_source is not None:
+            try:
+                track9_selection = self.track6_option_contract_source.select(expiry=getattr(tick, "expiry", ""), current_price=d.price)
+            except (ValueError, TypeError, AttributeError):
+                track9_selection = None
+        contexts["track9_event_overnight_insurance"] = StrategyContext(
+            market_state, "track9_event_overnight_insurance", StrategyInput(common),
+            analytics=build_track9_analytics_snapshot(d, run_id=self.run_id or "virtual", as_of=d.as_of, total_fees=common.total_fees, margin_ratio=self.track9_margin_ratio, option_contract_selection=track9_selection),
         )
         return contexts

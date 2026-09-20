@@ -26,12 +26,16 @@ def test_standard_runtime_input_provider_never_fabricates_blocked_fields():
         "Strategy_3_StatArb",
         "track7_volatility_skew_weekly_insurance",
         "track8_macro_regime_monthly_strangle",
-        "track9_event_overnight_insurance",
     ):
         payload = contexts[strategy_id].input.payload
         assert payload.__class__.__name__ == "UnavailableStrategyPayload"
         assert contexts[strategy_id].input.data_status
         assert all(value == "UNAVAILABLE" for value in contexts[strategy_id].input.data_status.values())
+
+    track9 = contexts["track9_event_overnight_insurance"]
+    assert track9.analytics is not None
+    assert track9.analytics.get("events.upcoming").value is None
+    assert track9.analytics.get("risk.guard_active").value is None
 
 
 def test_track7_consumes_authoritative_call_put_iv_without_unblocking_missing_sources():

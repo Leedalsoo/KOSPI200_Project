@@ -4,11 +4,12 @@ from decimal import Decimal
 from contracts.analytics import AnalyticsProvenance, AnalyticsRequest, MarketSnapshot
 from core.analytics.engine import AnalyticsEngine
 from core.analytics.track6 import build_track6_evaluators
+from core.analytics.track9 import build_track9_evaluators
 from core.domain.market_models import MarketState
-from core.strategy.contracts import StrategyContext, StrategyInput
+from core.strategy.contracts import CommonStrategyInput, StrategyContext, StrategyInput
 from core.strategy.track6_daily_tail_insurance import Track6DailyTailInsurance, Track6ExecutionInput
 from core.strategy.track8_macro_regime_monthly_strangle import Track8MacroRegimeMonthlyStrangle
-from core.strategy.track9_event_overnight_insurance import Track9EventOvernightInsurance, Track9MarketInput
+from core.strategy.track9_event_overnight_insurance import Track9EventOvernightInsurance
 
 
 def track6_context(data):
@@ -50,17 +51,55 @@ def test_track8_entry_has_option_execution_proposal():
     assert s.evaluate(StrategyContext(strategy_id=s.strategy_id, input=StrategyInput())) == ()
 
 
+def track9_context():
+    market = MarketSnapshot(
+        "T9-TEST", datetime.fromisoformat("2026-09-04T10:00:00"),
+        AnalyticsProvenance("test"), None,
+        {"active_sell_qty": 4, "insurance_qty": 0, "event_upcoming": True,
+         "iv_spike": Decimal("4"), "iv_crush": Decimal("0"),
+         "current_pnl": Decimal("0"), "total_fees": Decimal("0"),
+         "margin_ratio": Decimal("0"), "risk_guard_active": False,
+         "event_budget": Decimal("1000000"), "estimated_event_cost": Decimal("100"),
+         "atm_put_strike": Decimal("335"), "atm_call_strike": Decimal("365"),
+         "contract_multiplier": Decimal("250000"), "premium_spent": Decimal("100000")}
+    )
+    keys = (
+        ("portfolio.active_sell_qty", ("active_sell_qty",)),
+        ("portfolio.insurance_qty", ("insurance_qty",)),
+        ("events.upcoming", ("event_upcoming",)),
+        ("options.iv_spike", ("iv_spike",)),
+        ("options.iv_crush", ("iv_crush",)),
+        ("portfolio.current_pnl", ("current_pnl",)),
+        ("portfolio.total_fees", ("total_fees",)),
+        ("portfolio.net_pnl", ("current_pnl", "total_fees")),
+        ("portfolio.margin_ratio", ("margin_ratio",)),
+        ("risk.guard_active", ("risk_guard_active",)),
+        ("portfolio.event_budget", ("event_budget",)),
+        ("portfolio.estimated_event_cost", ("estimated_event_cost",)),
+        ("options.atm_call_strike", ("atm_call_strike",)),
+        ("options.atm_put_strike", ("atm_put_strike",)),
+        ("options.contract_multiplier", ("contract_multiplier",)),
+        ("portfolio.premium_spent", ("premium_spent",)),
+    )
+    analytics = AnalyticsEngine(build_track9_evaluators()).evaluate(
+        market, tuple(AnalyticsRequest(k, "tick", 1, d, 1.0, "authoritative", "1") for k, d in keys)
+    )
+    common = CommonStrategyInput(
+        as_of=analytics.as_of, time_str="10:00:00", date_str="2026-09-04"
+    )
+    return StrategyContext(MarketState(as_of=analytics.as_of, ticks={}, quality={}),
+                           "track9_event_overnight_insurance", StrategyInput(common), analytics=analytics)
+
+
 def test_track9_add_insurance_has_option_execution_proposal():
-    s = Track9EventOvernightInsurance()
-    d = Track9MarketInput(s.strategy_id, Decimal("350"), 4, 0, "2026-09-04")
-    sig = next(x for x in s.evaluate_overnight_insurance(d) if x.direction == "ADD_INSURANCE")
+    strategy = Track9EventOvernightInsurance()
+    sig = next(x for x in strategy.evaluate_overnight_insurance(track9_context()) if x.direction == "ADD_INSURANCE")
     assert sig.execution_proposal is not None
     assert sig.execution_proposal.asset_type == "OPTION"
     assert sig.execution_proposal.side == "BUY"
     assert sig.execution_proposal.proposed_quantity == 2
     assert sig.execution_proposal.option_type == "PUT"
     assert sig.execution_proposal.strike == Decimal("335")
-
 
 def test_track6_8_9_proposals_reach_canonical_boundary():
     from application.composition.runtime_strategy_result_collection_adapter import RuntimeStrategyResultCollectionAdapter
@@ -77,9 +116,7 @@ def test_track6_8_9_proposals_reach_canonical_boundary():
     s8 = Track8MacroRegimeMonthlyStrangle()
     d8 = None
     cases.append((s8, d8))
-    s9 = Track9EventOvernightInsurance()
-    d9 = Track9MarketInput(s9.strategy_id, Decimal("350"), 4, 0, "2026-09-04")
-    cases.append((s9, d9))
+
 
     for strategy, data in cases:
         if strategy is s8:

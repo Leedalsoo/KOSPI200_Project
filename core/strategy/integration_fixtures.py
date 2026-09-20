@@ -11,7 +11,6 @@ from core.strategy.track4_gamma_scalping import Track4MarketInput
 from core.strategy.track5_gap_divergence import Track5MarketInput
 from core.strategy.track6_daily_tail_insurance import Track6ExecutionInput
 from core.strategy.track8_macro_regime_monthly_strangle import Track8MarketInput
-from core.strategy.track9_event_overnight_insurance import Track9MarketInput
 from contracts.analytics import AnalyticsProvenance, AnalyticsRequest, MarketSnapshot
 from core.analytics.engine import AnalyticsEngine
 from core.analytics.track2 import build_track2_evaluators
@@ -106,14 +105,8 @@ def payloads():
             margin_ratio=Decimal("0"),
             risk_guard_active=False,
         ),
-        "track9_event_overnight_insurance": Track9MarketInput(
-            strategy_id="track9_event_overnight_insurance",
-            current_price=PRICE,
-            active_sell_qty=10,
-            current_insurance_qty=5,
-            date_str=DATE,
-            time_str="10:00:00",
-        ),
+        "track9_event_overnight_insurance": None,
+
     }
 
 

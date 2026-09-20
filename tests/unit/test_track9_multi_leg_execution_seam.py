@@ -2,7 +2,7 @@ from decimal import Decimal
 from contracts.types import OptionInstrumentIdentity
 from core.oms.multi_leg_materializer import MultiLegExecutionSemantics, materialize_multi_leg_plan
 from core.oms.multi_leg_submission import submit_multi_leg_intents
-from core.strategy.track9_event_overnight_insurance import Track9EventOvernightInsurance
+from core.strategy.multi_leg_plan import build_pair_plan
 
 class Command:
     def __init__(self, intent):
@@ -17,8 +17,7 @@ def resolver(leg):
     return OptionInstrumentIdentity(f"OPT-{leg.option_type}-{leg.strike}", "KOSPI200", "2026-09", leg.option_type, leg.strike)
 
 def test_track9_actual_pair_plan_to_common_materializer_and_submission_seam():
-    strategy = Track9EventOvernightInsurance()
-    plan = strategy.build_pair_execution_plan("T9-G", "OVERNIGHT_INSURANCE", Decimal("350"), 2)
+    plan = build_pair_plan(group_id="T9-G", strategy_id="track9_event_overnight_insurance", purpose="OVERNIGHT_INSURANCE", put_strike=Decimal("335"), call_strike=Decimal("365"), put_quantity=2, call_quantity=2, side="BUY")
     assert [(x.leg_id, x.side, x.option_type, x.strike, x.quantity) for x in plan.legs] == [
         ("put", "BUY", "PUT", Decimal("335"), 2),
         ("call", "BUY", "CALL", Decimal("365"), 2)]
