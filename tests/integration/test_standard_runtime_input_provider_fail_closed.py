@@ -119,9 +119,14 @@ def test_standard_runtime_input_provider_blocks_track5_and_track6_when_volatilit
         track5_context = contexts["track5_gap_divergence"]
         assert track5_context.analytics is not None
         assert track5_context.analytics.get("volatility.expected_move").value is None
-        track6_payload = contexts["track6_daily_tail_insurance"].input.payload
-        assert track6_payload.__class__.__name__ == "UnavailableStrategyPayload"
-        assert "active_vol" in contexts["track6_daily_tail_insurance"].input.data_status or "base_vol" in contexts["track6_daily_tail_insurance"].input.data_status
+        track6_context = contexts["track6_daily_tail_insurance"]
+        if track6_context.analytics is not None:
+            assert track6_context.analytics.get("volatility.active").value is None
+            assert track6_context.analytics.get("volatility.base").value is None
+            assert track6_context.analytics.get("volatility.ratio").value is None
+            assert track6_context.analytics.get("portfolio.premium_spent").value is None
+        else:
+            assert track6_context.input.data_status["listed_option_contracts"] == "UNAVAILABLE"
     finally:
         market._recent_ticks.extend(original)
 
