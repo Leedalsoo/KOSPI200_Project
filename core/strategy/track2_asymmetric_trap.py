@@ -37,6 +37,7 @@ class Track2MarketInputs:
 class Track2AsymmetricTrap:
     strategy_id: ClassVar[str] = "track2_asymmetric_trap"
     version: ClassVar[str] = "1.0"
+    ENTRY_QUANTITY: ClassVar[int] = 1
     CAPITAL_ALLOCATION_RATE = Decimal("0.10")
     MAX_DAILY_ENTRIES = 2
     COOLDOWN = timedelta(minutes=15)
@@ -295,7 +296,7 @@ class Track2AsymmetricTrap:
         )
         short_put = trap["signals"][0]["strikes"]["put"]
         proposal = StrategyExecutionProposal(
-            proposed_quantity=1,
+            proposed_quantity=self.ENTRY_QUANTITY,
             asset_type="OPTION",
             requested_price=None,
             side="SELL",

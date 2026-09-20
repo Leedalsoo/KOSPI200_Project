@@ -31,10 +31,15 @@ FORBIDDEN_OPERATIONAL_PATTERNS = [
     r"generate[_-]?(fake|dummy)",
 ]
 
-TARGET_FILES = [
-    ROOT / "interfaces" / "control_tower" / "ui_adapter.py",
-    ROOT / "interfaces" / "control_tower" / "server.py",
+TARGET_ROOTS = [
+    ROOT / "core",
+    ROOT / "application",
+    ROOT / "infrastructure",
+    ROOT / "environments",
+    ROOT / "interfaces",
 ]
+
+EXCLUDED_SOURCE_PARTS = {"__pycache__"}
 
 
 @dataclass
@@ -68,14 +73,26 @@ def check_required_files() -> Check:
 
 def check_source_literals() -> Check:
     findings: list[str] = []
-    for path in TARGET_FILES:
-        if not path.exists():
-            findings.append(f"missing:{path.relative_to(ROOT)}")
+    operational_patterns = FORBIDDEN_OPERATIONAL_PATTERNS + [
+        r"\bproposed_quantity\s*=\s*1\b",
+        r"\bproposed_quantity\s*:\s*int\s*=\s*1\b",
+        r"\b(?:contract_)?multiplier\s*=\s*250000\b",
+        r"\b(?:contract_)?multiplier\s*:\s*(?:int|float)\s*=\s*250000\b",
+    ]
+    legacy_ui_patterns = FORBIDDEN_LITERAL_PATTERNS
+    ui_roots = {ROOT / "interfaces"}
+    patterns_by_root = [(root, operational_patterns) for root in TARGET_ROOTS]
+    patterns_by_root.extend((root, legacy_ui_patterns) for root in ui_roots)
+    for root, patterns in patterns_by_root:
+        if not root.exists():
             continue
-        text = path.read_text(encoding="utf-8", errors="replace")
-        for pattern in FORBIDDEN_LITERAL_PATTERNS + FORBIDDEN_OPERATIONAL_PATTERNS:
-            if re.search(pattern, text, flags=re.IGNORECASE):
-                findings.append(f"{path.relative_to(ROOT)} matches {pattern}")
+        for path in root.rglob("*.py"):
+            if any(part in EXCLUDED_SOURCE_PARTS for part in path.parts):
+                continue
+            text = path.read_text(encoding="utf-8", errors="replace")
+            for pattern in patterns:
+                if re.search(pattern, text, flags=re.IGNORECASE):
+                    findings.append(f"{path.relative_to(ROOT)} matches {pattern}")
     return Check("no_known_fake_operational_literals", "PASS" if not findings else "FAIL", "; ".join(findings) or "no findings")
 
 

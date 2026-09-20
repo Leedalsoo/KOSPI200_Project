@@ -41,6 +41,7 @@ class Track1TailDefense(Strategy):
     """Track 1 Tail Defense를 Standard Strategy Contract로 이식한 상태기계."""
 
     strategy_id = "TRACK1_TAIL_DEFENSE"
+    FENCE_QUANTITY = 1
     version = "1.1.0"
 
     def __init__(self, profit_target: float = 500_000.0, max_hedge_allowed: int = 20) -> None:
@@ -75,7 +76,7 @@ class Track1TailDefense(Strategy):
         # The side is the explicit side of this signal, not a generic direction→side conversion.
         side = "BUY" if fence_type == "CALL" else "SELL"
         proposal = StrategyExecutionProposal(
-            proposed_quantity=1,
+            proposed_quantity=self.FENCE_QUANTITY,
             asset_type="OPTION",
             requested_price=None,
             side=side,
@@ -125,7 +126,7 @@ class Track1TailDefense(Strategy):
                         1.0,
                         f"FENCE_CLEAR:D4_CUTOFF:{self.state.active_fence_type}:{self.state.active_fence_strike}:#{self.state.active_fence_tag}",
                         execution_proposal=StrategyExecutionProposal(
-                            proposed_quantity=1,
+                            proposed_quantity=self.FENCE_QUANTITY,
                             asset_type="OPTION",
                             requested_price=None,
                             side=None,
