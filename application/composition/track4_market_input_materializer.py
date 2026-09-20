@@ -56,4 +56,5 @@ class Track4RuntimeInputMaterializer:
             premium_spent=None,
             accumulated_gamma_profit=None,
             theta_decay_cost=None,
+            current_theta=self._greeks_provider.current_theta(),
         )

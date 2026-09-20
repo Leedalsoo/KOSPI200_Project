@@ -32,6 +32,7 @@ from contracts.track9_fee_ledger import Track9FeeLedger
 from contracts.track9_margin_read_model import Track9MarginReadModel
 from application.composition.track6_option_contract_source import Track6OptionContractSource
 from application.composition.track2_analytics_provider import build_track2_analytics_snapshot
+from application.composition.track4_analytics_provider import build_track4_analytics_snapshot
 
 
 class StandardRuntimeInputProvider:
@@ -160,17 +161,34 @@ class StandardRuntimeInputProvider:
         # Track3 is materialized only through its authoritative source seam.
         contexts["Strategy_3_StatArb"] = self.track3.build(market_state, account=account)
 
-        # Track4 standard path is intentionally fail-closed. The dedicated
-        # Track4 materializer must supply same-tick KIS Greeks and attribution.
-        if d.option_delta is None or d.option_gamma is None:
-            contexts["track4_gamma_scalping"] = self._unavailable(
-                "track4_gamma_scalping", ("option_iv_greeks",), "OPTION_GREEKS_UNAVAILABLE"
-            )
-        else:
+        # Track4 consumes canonical analytics. Same-tick Greeks remain authoritative
+        # inputs when supplied; optional attribution metrics remain unavailable without
+        # their dedicated authoritative source.
+        if d.option_delta is None or d.option_gamma is None or d.active_vol is None or d.base_vol is None or common.budget is None or common.current_pnl is None or not d.prices:
             contexts["track4_gamma_scalping"] = self._unavailable(
                 "track4_gamma_scalping",
-                ("kis_same_tick_greeks", "premium_attribution", "gamma_pnl_attribution", "theta_attribution"),
-                "TRACK4_AUTHORITATIVE_RUNTIME_PATH_REQUIRES_DEDICATED_MATERIALIZER",
+                ("option_greeks", "account_equity", "ohlc_history"),
+                "TRACK4_COMMON_ANALYTICS_INPUTS_UNAVAILABLE",
+            )
+        else:
+            track4_payload = Track4MarketInput(
+                observed_at=d.as_of,
+                current_price=d.price,
+                active_vol=d.active_vol,
+                base_vol=d.base_vol,
+                time_str=d.as_of.strftime("%H:%M:%S"),
+                current_delta=d.option_delta,
+                current_gamma=d.option_gamma,
+                current_pnl=common.current_pnl,
+                current_equity=common.budget,
+                price_history=d.prices,
+                current_theta=None,
+            )
+            contexts["track4_gamma_scalping"] = StrategyContext(
+                market_state,
+                "track4_gamma_scalping",
+                StrategyInput(common, track4_payload),
+                analytics=build_track4_analytics_snapshot(track4_payload, run_id=self.run_id or "virtual", as_of=d.as_of),
             )
 
         # Track5/6 retain only values that have real VMS/VSSF sources. A missing
