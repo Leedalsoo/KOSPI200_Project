@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import json
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 from urllib.request import Request, urlopen
 
 from cryptography.hazmat.primitives import padding
@@ -47,10 +47,11 @@ class KISFuturesExecutionTransport:
 
     TR_ID = "H0IFCNI0"
 
-    def __init__(self, auth: KISAuthManager, config: KISFuturesExecutionTransportConfig | None = None, *, socket_factory=None) -> None:
+    def __init__(self, auth: KISAuthManager, config: KISFuturesExecutionTransportConfig | None = None, *, socket_factory=None, urlopen: Callable[..., Any] = urlopen) -> None:
         self._auth = auth
         self._config = config or KISFuturesExecutionTransportConfig(is_vts=auth.is_vts)
         self._socket_factory = socket_factory
+        self._urlopen = urlopen
         self._socket: Any = None
         self._connected = False
         self._crypto: dict[str, tuple[str, str]] = {}
@@ -61,13 +62,13 @@ class KISFuturesExecutionTransport:
             raise FuturesExecutionTransportError("KIS credentials are required for websocket approval key")
         payload = {"grant_type": "client_credentials", "appkey": self._auth.app_key, "secretkey": self._auth.app_secret}
         request = Request(
-# f"{self._auth.base_url.rstrip('/')}{self._config.approval_path}",
+            f"{self._auth.base_url.rstrip('/')}{self._config.approval_path}",
             data=json.dumps(payload).encode("utf-8"),
             headers={"content-type": "application/json"},
             method="POST",
         )
         try:
-            with urlopen(request, timeout=self._config.timeout) as response:
+            with self._urlopen(request, timeout=self._config.timeout) as response:
                 data: dict[str, Any] = json.loads(response.read().decode("utf-8"))
         except Exception as exc:
             raise FuturesExecutionTransportError("KIS websocket approval-key request failed") from exc
