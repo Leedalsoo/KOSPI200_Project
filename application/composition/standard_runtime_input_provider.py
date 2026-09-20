@@ -13,10 +13,8 @@ from application.composition.virtual_runtime_data_provider import VirtualRuntime
 from core.domain.market_models import MarketState
 from core.strategy.contracts import CommonStrategyInput, StrategyContext, StrategyInput, UnavailableStrategyPayload
 from core.strategy.track1_tail_defense import Track1Input
-from core.strategy.track3_statistical_arbitrage import Track3MarketInput
 from application.composition.track3_runtime_input_provider import Track3RuntimeInputProvider
 from core.strategy.track4_gamma_scalping import Track4MarketInput
-from core.strategy.track5_gap_divergence import Track5MarketInput
 from core.strategy.track6_daily_tail_insurance import Track6MarketInput
 from core.strategy.track7_volatility_skew_weekly_insurance import Track7MarketInput
 from core.strategy.track8_macro_regime_monthly_strangle import Track8MarketInput
@@ -33,6 +31,7 @@ from contracts.track9_margin_read_model import Track9MarginReadModel
 from application.composition.track6_option_contract_source import Track6OptionContractSource
 from application.composition.track2_analytics_provider import build_track2_analytics_snapshot
 from application.composition.track4_analytics_provider import build_track4_analytics_snapshot
+from application.composition.track5_analytics_provider import build_track5_analytics_snapshot
 
 
 class StandardRuntimeInputProvider:
@@ -191,18 +190,17 @@ class StandardRuntimeInputProvider:
                 analytics=build_track4_analytics_snapshot(track4_payload, run_id=self.run_id or "virtual", as_of=d.as_of),
             )
 
-        # Track5/6 retain only values that have real VMS/VSSF sources. A missing
-        # volatility observation now blocks the strategy instead of becoming 0.
-        if d.active_vol is None:
-            contexts["track5_gap_divergence"] = self._unavailable(
-                "track5_gap_divergence", ("active_vol",), "ACTIVE_VOL_UNAVAILABLE"
-            )
-        else:
-            contexts["track5_gap_divergence"] = StrategyContext(
-                market_state, "track5_gap_divergence", StrategyInput(common,
-                    Track5MarketInput("track5_gap_divergence", d.open_price, d.previous_close,
-                                      d.active_vol, d.macro_regime or "NORMAL", d.price))
-            )
+        # Track5 always receives the canonical AnalyticsSnapshot. Missing
+        # authoritative observations become unavailable metrics and the Strategy
+        # remains fail-closed at its feature boundary.
+        contexts["track5_gap_divergence"] = StrategyContext(
+            market_state,
+            "track5_gap_divergence",
+            StrategyInput(common),
+            analytics=build_track5_analytics_snapshot(
+                d, run_id=self.run_id or "virtual", as_of=d.as_of
+            ),
+        )
 
         if d.active_vol is None or d.base_vol is None:
             contexts["track6_daily_tail_insurance"] = self._unavailable(
