@@ -13,7 +13,6 @@ from application.composition.virtual_runtime_data_provider import VirtualRuntime
 from core.domain.market_models import MarketState
 from core.strategy.contracts import CommonStrategyInput, StrategyContext, StrategyInput, UnavailableStrategyPayload
 from core.strategy.track1_tail_defense import Track1Input
-from core.strategy.track2_asymmetric_trap import Track2MarketInputs
 from core.strategy.track3_statistical_arbitrage import Track3MarketInput
 from application.composition.track3_runtime_input_provider import Track3RuntimeInputProvider
 from core.strategy.track4_gamma_scalping import Track4MarketInput
@@ -32,6 +31,7 @@ from contracts.track9_iv_event_materializer import Track9IVEventMaterializer, Tr
 from contracts.track9_fee_ledger import Track9FeeLedger
 from contracts.track9_margin_read_model import Track9MarginReadModel
 from application.composition.track6_option_contract_source import Track6OptionContractSource
+from application.composition.track2_analytics_provider import build_track2_analytics_snapshot
 
 
 class StandardRuntimeInputProvider:
@@ -153,16 +153,8 @@ class StandardRuntimeInputProvider:
                 )
             else:
                 contexts["track2_asymmetric_trap"] = StrategyContext(
-                    market_state, "track2_asymmetric_trap", StrategyInput(
-                        common, Track2MarketInputs(
-                            bbw_window=tuple(float(x) for x in d.bbw_window),
-                            volume_window=tuple(float(x) for x in d.volume_window),
-                            basis=d.basis, put_iv=d.put_iv, call_iv=d.option_iv,
-                            poc_price=d.poc_price, bid_qtys=d.option_bid_qtys,
-                            ask_qtys=d.option_ask_qtys, active_vol=float(d.active_vol),
-                            base_vol=float(d.base_vol),
-                        )
-                    )
+                    market_state, "track2_asymmetric_trap", StrategyInput(common),
+                    analytics=build_track2_analytics_snapshot(d, run_id=self.run_id or "virtual"),
                 )
 
         # Track3 is materialized only through its authoritative source seam.

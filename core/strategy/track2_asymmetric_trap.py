@@ -1,14 +1,13 @@
 """Track2 asymmetric trap strategy.
 
-Track2-specific market inputs are carried through a typed StrategyInput payload.
-The standard StrategyContext path never fabricates missing BBW/IV/basis/POC/OBI
-inputs; without the typed payload the strategy fails closed.
+Track2 consumes canonical Common Analytics features through StrategyContext.analytics.
+Missing authoritative analytics remain unavailable and fail closed; strategy code owns
+only Trap-specific rules, state transitions, and execution proposal construction.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 from typing import ClassVar, Sequence
 
 from contracts.types import MultiLegExecutionPlan
@@ -17,28 +16,11 @@ from core.strategy.multi_leg_plan import build_trap_plan
 from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
 
 
-@dataclass(frozen=True)
-class Track2MarketInputs:
-    """Authoritative Track2-specific market input bundle."""
-
-    bbw_window: Sequence[float]
-    volume_window: Sequence[float]
-    basis: Decimal
-    put_iv: Decimal
-    call_iv: Decimal
-    poc_price: Decimal
-    bid_qtys: Sequence[Decimal]
-    ask_qtys: Sequence[Decimal]
-    active_vol: float
-    base_vol: float
-    strategy_id: str = "track2_asymmetric_trap"
-
 
 class Track2AsymmetricTrap:
     strategy_id: ClassVar[str] = "track2_asymmetric_trap"
     version: ClassVar[str] = "1.0"
     ENTRY_QUANTITY: ClassVar[int] = 1
-    CAPITAL_ALLOCATION_RATE = Decimal("0.10")
     MAX_DAILY_ENTRIES = 2
     COOLDOWN = timedelta(minutes=15)
     MARKET_CUTOFF = time(15, 15)
@@ -149,60 +131,6 @@ class Track2AsymmetricTrap:
             quantity=1,
         )
 
-    @staticmethod
-    def check_market_trigger(
-        bbw_window: Sequence[float], volume_window: Sequence[float]
-    ) -> bool:
-        if len(bbw_window) < 2 or len(volume_window) < 2:
-            return False
-        if bbw_window[-1] != min(bbw_window):
-            return False
-        history = volume_window[:-1]
-        mean = sum(history) / len(history)
-        variance = sum((x - mean) ** 2 for x in history) / len(history)
-        std = variance ** 0.5
-        if std == 0:
-            z_score = 99.0 if volume_window[-1] > mean else 0.0
-        else:
-            z_score = (volume_window[-1] - mean) / std
-        return z_score > 3.0
-
-    @staticmethod
-    def validate_whipsaw_filters(
-        last_price: Decimal,
-        bid_qtys: Sequence[Decimal],
-        ask_qtys: Sequence[Decimal],
-        basis: Decimal,
-        put_iv: Decimal,
-        call_iv: Decimal,
-        poc_price: Decimal,
-    ) -> bool:
-        bid_sum = sum(bid_qtys[:5], Decimal("0"))
-        ask_sum = sum(ask_qtys[:5], Decimal("0"))
-        total = bid_sum + ask_sum
-        obi = Decimal("0") if total == 0 else (bid_sum - ask_sum) / total
-        if abs(obi) <= Decimal("0.5") or basis <= Decimal("0.3"):
-            return False
-        is_upward = last_price > poc_price
-        if is_upward and put_iv >= call_iv:
-            return False
-        if not is_upward and call_iv >= put_iv:
-            return False
-        return abs(last_price - poc_price) > Decimal("1.0")
-
-    @staticmethod
-    def reversal_price(current_bbo_price: Decimal) -> Decimal:
-        tick_size = (
-            Decimal("0.01")
-            if current_bbo_price < Decimal("3.0")
-            else Decimal("0.05")
-        )
-        price = current_bbo_price - Decimal("2") * tick_size
-        price = (
-            price / tick_size
-        ).to_integral_value(rounding=ROUND_HALF_UP) * tick_size
-        return max(price, Decimal("0.01"))
-
     def evaluate_trap(self, current_price: Decimal, now: datetime) -> Sequence[Signal]:
         if (
             self._short_switch_at is not None
@@ -263,37 +191,60 @@ class Track2AsymmetricTrap:
                 )
         return ()
 
-    def evaluate_with_inputs(
-        self, context: StrategyContext, inputs: Track2MarketInputs
-    ) -> Sequence[Signal]:
-        if context.market_state is None:
+    def feature_requirements(self):
+        from contracts.analytics import AnalyticsStatus
+        from core.strategy.contracts import StrategyFeatureRequirement
+
+        keys = (
+            "volatility.bbw", "volume.z_score", "microstructure.obi",
+            "futures.basis", "options.put_iv", "options.call_iv",
+            "volume_profile.poc", "volatility.active", "volatility.base",
+        )
+        return tuple(
+            StrategyFeatureRequirement(k, "tick", 1.0, frozenset({AnalyticsStatus.AVAILABLE}))
+            for k in keys
+        )
+
+    def evaluate(self, context: StrategyContext) -> Sequence[Signal]:
+        from contracts.analytics import AnalyticsStatus
+        from core.strategy.contracts import validate_strategy_features
+
+        if context.strategy_id != self.strategy_id or context.analytics is None:
             return ()
-        now = context.market_state.as_of
+        metrics = validate_strategy_features(self.feature_requirements(), context.analytics)
+        if any(m.status is not AnalyticsStatus.AVAILABLE or m.value is None for m in metrics):
+            return ()
+        values = {m.metric_key: m.value for m in metrics}
+        now = context.market_state.as_of if context.market_state is not None else context.analytics.as_of
+        tick = next(iter(context.market_state.ticks.values()), None) if context.market_state else None
+        if tick is None:
+            return ()
         if now.time() >= self.MARKET_CUTOFF or self._daily_entry_count >= self.MAX_DAILY_ENTRIES:
-            return ()
+            return self.evaluate_trap(tick.price, now)
         if self._last_loss_at is not None and now - self._last_loss_at < self.COOLDOWN:
             return ()
-        tick = next(iter(context.market_state.ticks.values()), None)
-        if tick is None or not self.check_market_trigger(inputs.bbw_window, inputs.volume_window):
+        if not bool(values["volatility.bbw"]) or float(values["volume.z_score"]) <= 3.0:
             return ()
-        if not self.validate_whipsaw_filters(
-            tick.price,
-            inputs.bid_qtys,
-            inputs.ask_qtys,
-            inputs.basis,
-            inputs.put_iv,
-            inputs.call_iv,
-            inputs.poc_price,
-        ):
+        obi = Decimal(str(values["microstructure.obi"]))
+        basis = Decimal(str(values["futures.basis"]))
+        put_iv = Decimal(str(values["options.put_iv"]))
+        call_iv = Decimal(str(values["options.call_iv"]))
+        poc_price = Decimal(str(values["volume_profile.poc"]))
+        if abs(obi) <= Decimal("0.5") or basis <= Decimal("0.3"):
             return ()
+        is_upward = tick.price > poc_price
+        if (is_upward and put_iv >= call_iv) or (not is_upward and call_iv >= put_iv):
+            return ()
+        if abs(tick.price - poc_price) <= Decimal("1.0"):
+            return ()
+        active_vol = float(values["volatility.active"])
+        base_vol = float(values["volatility.base"])
         self._trap_active = True
         self._entry_price = tick.price
         self._entry_instrument = tick.instrument_id
         self._high_pnl_ratio = Decimal("0")
         self._daily_entry_count += 1
-        trap = self.build_asymmetric_trap(
-            tick.price, inputs.active_vol, inputs.base_vol
-        )
+        trap = self.build_asymmetric_trap(tick.price, active_vol, base_vol)
         short_put = trap["signals"][0]["strikes"]["put"]
         proposal = StrategyExecutionProposal(
             proposed_quantity=self.ENTRY_QUANTITY,
@@ -306,18 +257,9 @@ class Track2AsymmetricTrap:
             strike=short_put,
         )
         return (Signal(
-            self.strategy_id, "LONG", 1.0, "ASYMMETRIC_TRAP_ENTRY",
+            self.strategy_id,
+            "LONG",
+            1.0,
+            "ASYMMETRIC_TRAP_ENTRY",
             execution_proposal=proposal,
         ),)
-
-    def evaluate(self, context: StrategyContext) -> Sequence[Signal]:
-        # Canonical MarketState에 없는 BBW/IV/Basis/OBI/POC를 임의 생성하지 않는다.
-        # 표준 입력은 StrategyContext.input.payload에서만 받는다.
-        if context.strategy_id != self.strategy_id or context.input is None:
-            return ()
-        payload = context.input.payload
-        if not isinstance(payload, Track2MarketInputs):
-            return ()
-        if payload.strategy_id != context.strategy_id:
-            return ()
-        return self.evaluate_with_inputs(context, payload)

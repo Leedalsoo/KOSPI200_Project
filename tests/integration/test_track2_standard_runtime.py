@@ -6,7 +6,6 @@ from contracts.basis_source import BasisObservation
 from contracts.kis_index_futures_market_ws_adapter import KisIndexFuturesMarketObservation
 from contracts.option_orderbook_source import OptionOrderBookLevel, OptionOrderBookSnapshot
 from contracts.types import MarketState
-from core.strategy.contracts import UnavailableStrategyPayload
 from infrastructure.kis.basis_source import KISBasisSource
 from infrastructure.kis.track2_market_metrics_source import KISTrack2MarketMetricsSource
 from infrastructure.kis.volume_profile_source import KISVolumeProfileSource
@@ -45,9 +44,8 @@ def test_track2_reaches_authoritative_bbw_volume_boundary_before_remaining_iv_bl
         market, option_orderbook_source=OB(), volume_profile_source=poc,
         basis_source=basis, track2_metrics_source=metrics,
     )
-    payload = provider.build(tick, state)["track2_asymmetric_trap"].input.payload
-    assert isinstance(payload, UnavailableStrategyPayload)
-    assert payload.reason == "OPTION_CHAIN_UNAVAILABLE"
+    context = provider.build(tick, state)["track2_asymmetric_trap"]
+    assert context.analytics is None
     runtime_data = provider.data.snapshot(tick)
     assert runtime_data.basis == Decimal("1.0")
     assert runtime_data.bbw_window is not None and len(runtime_data.bbw_window) >= 2
@@ -60,7 +58,7 @@ class IV:
         return {"CALL": Decimal("0.241"), "PUT": Decimal("0.257")}[option_type]
 
 
-def test_track2_typed_payload_uses_authoritative_call_put_iv_source() -> None:
+def test_track2_analytics_snapshot_uses_authoritative_call_put_iv_source() -> None:
     market = VirtualMarketSimulatorRuntime()
     metrics = KISTrack2MarketMetricsSource(price_window=20, history_size=40)
     poc = KISVolumeProfileSource()
@@ -85,8 +83,9 @@ def test_track2_typed_payload_uses_authoritative_call_put_iv_source() -> None:
         market, option_orderbook_source=OB(), volume_profile_source=poc,
         basis_source=basis, track2_metrics_source=metrics, track2_option_iv_source=IV(),
     )
-    payload = provider.build(tick, state)["track2_asymmetric_trap"].input.payload
-    assert payload.call_iv == Decimal("0.241")
-    assert payload.put_iv == Decimal("0.257")
-    assert payload.basis == Decimal("1.0")
-    assert payload.bbw_window and payload.volume_window
+    analytics = provider.build(tick, state)["track2_asymmetric_trap"].analytics
+    assert analytics is not None
+    assert analytics.get("options.call_iv").value == Decimal("0.241")
+    assert analytics.get("options.put_iv").value == Decimal("0.257")
+    assert analytics.get("futures.basis").value == Decimal("1.0")
+    assert analytics.get("volatility.bbw").value is False

@@ -6,7 +6,6 @@ from decimal import Decimal
 from core.domain.market_models import CanonicalMarketTick, MarketState
 from core.strategy.contracts import CommonStrategyInput, StrategyContext, StrategyInput
 from core.strategy.track1_tail_defense import Track1Input
-from core.strategy.track2_asymmetric_trap import Track2MarketInputs
 from core.strategy.track3_statistical_arbitrage import Track3MarketInput
 from core.strategy.track4_gamma_scalping import Track4MarketInput
 from core.strategy.track5_gap_divergence import Track5MarketInput
@@ -14,6 +13,9 @@ from core.strategy.track6_daily_tail_insurance import Track6MarketInput
 from core.strategy.track7_volatility_skew_weekly_insurance import Track7MarketInput
 from core.strategy.track8_macro_regime_monthly_strangle import Track8MarketInput
 from core.strategy.track9_event_overnight_insurance import Track9MarketInput
+from contracts.analytics import AnalyticsProvenance, AnalyticsRequest, MarketSnapshot
+from core.analytics.engine import AnalyticsEngine
+from core.analytics.track2 import build_track2_evaluators
 
 AS_OF = datetime(2026, 1, 2, 10, 0)
 DATE = "2026-01-02"
@@ -46,19 +48,6 @@ def payloads():
             momentum_confirmed=False,
             days_to_expiry=10.0,
             current_time=AS_OF,
-            active_vol=1.0,
-            base_vol=1.0,
-        ),
-        "track2_asymmetric_trap": Track2MarketInputs(
-            strategy_id="track2_asymmetric_trap",
-            bbw_window=(2.0, 1.0),
-            volume_window=(1.0, 10.0),
-            basis=Decimal("0.5"),
-            put_iv=Decimal("1.2"),
-            call_iv=Decimal("1.0"),
-            poc_price=Decimal("348"),
-            bid_qtys=(Decimal("10"),) * 5,
-            ask_qtys=(Decimal("1"),) * 5,
             active_vol=1.0,
             base_vol=1.0,
         ),
@@ -141,9 +130,34 @@ def payloads():
     }
 
 
+def track2_analytics() -> MarketSnapshot:
+    observations = {
+        "bbw_window": (0.30, 0.20, 0.10),
+        "volume_window": (100.0, 100.0, 500.0),
+        "basis": Decimal("0.5"),
+        "put_iv": Decimal("1.2"),
+        "call_iv": Decimal("1.0"),
+        "poc_price": Decimal("348"),
+        "bid_qtys": (Decimal("10"),) * 5,
+        "ask_qtys": (Decimal("1"),) * 5,
+        "active_vol": Decimal("1"),
+        "base_vol": Decimal("1"),
+    }
+    market = MarketSnapshot("FIXTURE", AS_OF, AnalyticsProvenance("integration-fixture"), None, observations)
+    keys = (
+        ("volatility.bbw", ("bbw_window",)), ("volume.z_score", ("volume_window",)),
+        ("microstructure.obi", ("bid_qtys", "ask_qtys")), ("futures.basis", ("basis",)),
+        ("options.put_iv", ("put_iv",)), ("options.call_iv", ("call_iv",)),
+        ("volume_profile.poc", ("poc_price",)), ("volatility.active", ("active_vol",)),
+        ("volatility.base", ("base_vol",)),
+    )
+    requests = tuple(AnalyticsRequest(k, "tick", 20, d, 1.0, "authoritative", "1") for k, d in keys)
+    return AnalyticsEngine(build_track2_evaluators()).evaluate(market, requests)
+
+
 def contexts() -> dict[str, StrategyContext]:
     state = canonical_market_state()
-    return {
+    result = {
         strategy_id: StrategyContext(
             market_state=state,
             strategy_id=strategy_id,
@@ -151,6 +165,13 @@ def contexts() -> dict[str, StrategyContext]:
         )
         for strategy_id, payload in payloads().items()
     }
+    result["track2_asymmetric_trap"] = StrategyContext(
+        market_state=state,
+        strategy_id="track2_asymmetric_trap",
+        input=StrategyInput(common=common_input()),
+        analytics=track2_analytics(),
+    )
+    return result
 
 
 

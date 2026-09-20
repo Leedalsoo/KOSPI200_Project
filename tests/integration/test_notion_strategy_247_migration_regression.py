@@ -1,8 +1,11 @@
 from datetime import datetime
 from decimal import Decimal
 
-from core.strategy.contracts import CommonStrategyInput, StrategyContext, StrategyInput
-from core.strategy.track2_asymmetric_trap import Track2AsymmetricTrap, Track2MarketInputs
+from contracts.analytics import AnalyticsProvenance, AnalyticsRequest, MarketSnapshot
+from core.analytics.engine import AnalyticsEngine
+from core.analytics.track2 import build_track2_evaluators
+from core.strategy.contracts import StrategyContext
+from core.strategy.track2_asymmetric_trap import Track2AsymmetricTrap
 from core.strategy.track4_gamma_scalping import Track4GammaScalping, Track4MarketInput
 from core.strategy.track7_volatility_skew_weekly_insurance import (
     Track7MarketInput,
@@ -10,30 +13,32 @@ from core.strategy.track7_volatility_skew_weekly_insurance import (
 )
 
 
-def track2_inputs(active_vol: float = 0.20, base_vol: float = 0.20) -> Track2MarketInputs:
-    return Track2MarketInputs(
-        bbw_window=(0.30, 0.20, 0.10), volume_window=(100.0, 100.0, 500.0),
-        basis=Decimal("1.0"), put_iv=Decimal("0.15"), call_iv=Decimal("0.20"),
-        poc_price=Decimal("495"),
-        bid_qtys=tuple(Decimal("100") for _ in range(5)),
-        ask_qtys=tuple(Decimal("1") for _ in range(5)),
-        active_vol=active_vol, base_vol=base_vol,
-    )
-
-
 def track2_context() -> StrategyContext:
     as_of = datetime(2026, 9, 18, 10, 0)
     tick = type("Tick", (), {"instrument_id": "KOSPI200", "observed_at": as_of,
                               "price": Decimal("500"), "volume": Decimal("500")})()
     from core.domain.market_models import MarketState
+    observations = {
+        "bbw_window": (0.30, 0.20, 0.10), "volume_window": (100.0, 100.0, 500.0),
+        "basis": Decimal("1.0"), "put_iv": Decimal("0.15"), "call_iv": Decimal("0.20"),
+        "poc_price": Decimal("495"), "bid_qtys": (Decimal("100"),) * 5,
+        "ask_qtys": (Decimal("1"),) * 5, "active_vol": Decimal("0.20"),
+        "base_vol": Decimal("0.20"),
+    }
+    market = MarketSnapshot("REGRESSION", as_of, AnalyticsProvenance("regression"), None, observations)
+    keys = (
+        ("volatility.bbw", ("bbw_window",)), ("volume.z_score", ("volume_window",)),
+        ("microstructure.obi", ("bid_qtys", "ask_qtys")), ("futures.basis", ("basis",)),
+        ("options.put_iv", ("put_iv",)), ("options.call_iv", ("call_iv",)),
+        ("volume_profile.poc", ("poc_price",)), ("volatility.active", ("active_vol",)),
+        ("volatility.base", ("base_vol",)),
+    )
+    requests = tuple(AnalyticsRequest(k, "tick", 20, d, 1.0, "authoritative", "1") for k, d in keys)
+    analytics = AnalyticsEngine(build_track2_evaluators()).evaluate(market, requests)
     return StrategyContext(
         market_state=MarketState(as_of=as_of, ticks={"KOSPI200": tick}, quality={}),
-        strategy_id="track2_asymmetric_trap",
-        input=StrategyInput(common=CommonStrategyInput(as_of=as_of, current_price=Decimal("500")),
-                            payload=track2_inputs()),
+        strategy_id="track2_asymmetric_trap", analytics=analytics,
     )
-
-
 def track4_data(**kwargs) -> Track4MarketInput:
     values = dict(
         observed_at=datetime(2026, 9, 18, 10, 0), current_price=Decimal("350"),
@@ -69,11 +74,6 @@ def test_track2_low_and_high_vol_trap_composition_is_preserved():
 
 def test_track2_trigger_filters_and_runtime_signal_keep_proposal():
     strategy = Track2AsymmetricTrap()
-    assert strategy.check_market_trigger((0.3, 0.2, 0.1), (100, 100, 500))
-    assert strategy.validate_whipsaw_filters(
-        Decimal("500"), tuple(Decimal("100") for _ in range(5)),
-        tuple(Decimal("1") for _ in range(5)), Decimal("1"), Decimal("0.15"),
-        Decimal("0.20"), Decimal("495"))
     signal = strategy.evaluate(track2_context())[0]
     assert signal.reason == "ASYMMETRIC_TRAP_ENTRY"
     assert signal.execution_proposal is not None
@@ -85,7 +85,7 @@ def test_track2_cutoff_and_cooldown_fail_closed():
     context = track2_context()
     late = StrategyContext(market_state=context.market_state.__class__(
         as_of=datetime(2026, 9, 18, 15, 15), ticks=context.market_state.ticks, quality={}),
-        strategy_id=context.strategy_id, input=context.input)
+        strategy_id=context.strategy_id, analytics=context.analytics)
     assert strategy.evaluate(late) == ()
     strategy._last_loss_at = datetime(2026, 9, 18, 10, 0)
     assert strategy.evaluate(context) == ()
