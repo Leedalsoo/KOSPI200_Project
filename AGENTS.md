@@ -19,6 +19,7 @@ Strategy는 `AnalyticsSnapshot`과 명시된 Strategy Plugin Contract를 통해 
 Strategy 고유 진입·청산·헤지·상태 전이·포지션 규칙은 Strategy에 남긴다.
 공통 계산의 authoritative source가 없으면 임의 계산·고정값·0/False·synthetic 값으로 대체하지 않고 `UNAVAILABLE` 또는 `BLOCKED`로 종료한다.
 AnalyticsSnapshot은 immutable 경계를 유지하고 source/provenance를 보존한다.
+
 ## 4. authoritative source와 fail-closed
 코드·문서의 존재만으로 PASS를 선언하지 않는다. 실제 실행·통합 검증 증거를 기준으로 판정한다.
 authoritative source가 없으면 `BLOCKED`, `UNAVAILABLE`, `NotImplemented` 중 실제 상태를 명시한다.
@@ -38,7 +39,6 @@ quote/mark와 fill price의 의미를 혼용하지 않는다.
 `tests/` → 실행 가능한 회귀·통합 검증
 Legacy 구현을 새 표준 경로에 다시 연결하지 않는다.
 필요한 기능은 현재 표준 경계로 명시적으로 이관하고, 이관이 끝난 미사용 Legacy 코드는 제거한다.
-
 ## 6. 거래소·증권사·Broker API 경계
 실제 환경: KRX 실제 거래소 → KIS 실제 증권사 → KIS API → Option Program
 Virtual 환경: Virtual Exchange (KRX-like) → Virtual Broker (KIS-like) → Virtual Broker API → Option Program
@@ -50,6 +50,7 @@ Option Program은 거래소나 증권사의 내부 구현을 직접 호출하지
 Virtual Position provenance는 lot 단위로 유지하고 run_id, instrument identity, strategy/group/leg, client_order_id, execution_id, position role, remaining quantity를 보존한다.
 partial close는 FIFO, reversal은 기존 lot 소진 후 초과분만 신규 lot로 처리한다.
 Insurance role은 `NONE / OVERNIGHT_INSURANCE / EVENT_INSURANCE / REHEDGE_INSURANCE` 중 명시적으로 부여한다.
+
 ## 8. 시장데이터·Historical·Replay
 시장데이터 경계는 KIS Provider / Historical Provider / Other Provider → MarketDataHub → Runtime / Strategy이다.
 Virtual 시장 데이터는 KRX 데이터 수집/정규화 → Historical Market Store → Virtual Exchange → Virtual Broker → Virtual Broker API → Option Program 경계를 따른다.
@@ -63,15 +64,24 @@ VTS에서는 `H0IOASP0` 지원 범위를 실제 수신 증거로 확인하며 We
 Live 시장데이터 PASS에는 Live 자격증명과 실제 market-data frame 수신 증거가 모두 필요하다.
 Live 검증 전까지 시장데이터 수신과 Virtual Execution을 주문 없이 검증한다.
 
-## 10. Runtime Input과 Strategy 정의
+## 10. VTS 실데이터 수집·Replay·E2E 검증
+모의계좌에서 수집한 실제 시장데이터는 VTS E2E 검증용 원본 데이터 자산으로 축적할 수 있다.
+수집 데이터와 Replay 데이터의 source/provenance 및 원본/가공 여부를 명확히 보존한다.
+수집과 검증은 병행하며, 새 데이터가 들어오면 기존 데이터셋과 함께 회귀 검증에 재사용한다.
+원본 데이터는 실제 시간 흐름의 1배속 Replay로 먼저 검증하고, 이후 시간 압축 가속 Replay로 장시간 운용을 단시간에 반복 검증한다.
+원본 데이터를 가공·변형하여 다양한 가격·변동성·호가·체결 패턴을 구성할 수 있으며, 변형 데이터는 실제 시장 원본과 명확히 구분한다.
+등속과 가속 Replay를 모두 사용하고, 반복 실행마다 독립 Run ID와 상태를 사용한다.
+VTS 검증은 Live 주문 검증이 아니며 실제 KIS 주문을 실행하지 않는다.
+VTS 결과가 실제 Live E2E PASS를 의미하지 않으며, Live PASS에는 실제 Live credential과 실제 market-data frame 증거가 별도로 필요하다.
+
+## 11. Runtime Input과 Strategy 정의
 전략별 정의는 Notion의 사용자 요구사항과 실제 strategy 구현을 대조한다.
 초기 진입 leg 방향, 사다리 조건, 만기 제한, 수량/자본 규칙, 필요한 Runtime Input을 각각 확인한다.
 Runtime Input은 authoritative source에서 공급되어야 하며 source 계약과 provenance를 보존한다.
 Common Analytics가 소유하는 값은 Strategy에서 중복 산출하지 않는다.
 source가 없으면 정상 runtime을 가장하지 않고 fail-closed 한다.
 Track별 완료·BLOCKED 상태와 입력 목록은 최신 Notion 작업 기록을 기준으로 확인한다.
-
-## 11. Hub 경계
+## 12. Hub 경계
 Strategy Hub는 Strategy Registry/Orchestrator와 strategy selection/lifecycle을 담당한다.
 Runtime Hub는 Runtime loop와 Strategy → Decision → Risk → OMS/Router 연결을 소유한다.
 Environment Hub는 Environment Bundle lifecycle을 담당한다.
@@ -80,18 +90,19 @@ Control Tower Hub는 UI/API에 runtime status, environment 정보, 운영 명령
 전략은 StrategyContext를 사용하며 KIS, VirtualBroker, Control Tower, Scenario Store를 직접 호출하지 않는다.
 Hub 간 통신은 공개 `contracts/` 또는 명시된 application port를 사용하고 private attribute 의존을 새로 만들지 않는다.
 
-## 12. 반복 실행 격리
+## 13. 반복 실행 격리
 반복 테스트는 매 실행마다 독립된 Run ID와 새 Environment Bundle/VSSF account/position/execution/strategy state를 사용한다.
 이전 run의 주문·체결·포지션·PnL·strategy state를 다음 run에 재사용하지 않는다.
 현재 테스트 숫자, 특정 checkpoint, 완료 Track 목록, 임시 우선순위는 이 문서에 고정하지 않고 Notion 상태 기록에서 확인한다.
-## 13. Source → Runtime → Execution 검증
+
+## 14. Source → Runtime → Execution 검증
 Authoritative source 연결은 source 계약 → composition → runtime 소비 → 실행 경계 순으로 확인한다.
 Option Master, Quote, OrderBook, Execution의 계약단위와 instrument identity는 동일한 authoritative contract identity를 사용해야 한다.
 Virtual Runtime에서 실제 source 연결과 Multi-Leg 실행 경계를 검증하며, source가 없는 leg는 fail-closed 한다.
 Execution 결과가 없는 상태에서 Position/PnL을 추정하지 않는다.
 Live credential이 준비되지 않은 경우 Live runtime evidence는 `BLOCKED`이며 Virtual 검증 결과로 대체하지 않는다.
 
-## 14. 검증 절차
+## 15. 검증 절차
 작업 시작 시 지정된 Notion 작업 기록, 원격 `Project200` 실제 코드, 로컬 working tree를 확인한다.
 작업 전후 `git status`와 변경 파일을 확인한다.
 영향 범위 확인 → focused pytest → 필요한 Virtual E2E → `py -m pytest -q` → `git diff --check` → project200_gate → `git status` → 원격 HEAD 확인 → Notion 기록 순으로 진행한다.
@@ -99,7 +110,7 @@ Python은 Windows launcher `py`로 실행한다.
 실제 명령·출력·exit code를 기준으로 PASS / FAIL / BLOCKED를 판정한다.
 FAIL 또는 BLOCKED를 PASS처럼 표현하지 않는다.
 
-## 15. 문서·Git 관리
+## 16. 문서·Git 관리
 Notion `질문과답변`은 작업 연속성의 기준 기록이다.
 의미 있는 구현·정리·검증은 `[No.xxx 답변내용요약]` 페이지에 목적, 변경 내용, 검증 명령/결과, exit code, commit SHA, push 상태, 남은 BLOCKED 사항을 기록한다.
 AGENTS.md와 PROJECT_STATUS.md에는 테스트 숫자, 특정 checkpoint, 완료 Track 목록, 임시 우선순위를 고정하지 않는다.
@@ -109,8 +120,7 @@ AGENTS.md와 PROJECT_STATUS.md에는 테스트 숫자, 특정 checkpoint, 완료
 commit/push는 변경 범위가 의도한 상태이고 검증이 PASS일 때 수행한다.
 단, project200_gate의 다른 모든 항목이 PASS이고 runtime_evidence_probe만 Live credential 미완비로 BLOCKED인 경우는 예외로 commit/push할 수 있다.
 Push 후 원격 `Project200` HEAD가 해당 commit SHA를 가리키는지 확인한다.
-
-## 16. 절대 금지
+## 17. 절대 금지
 실제 KIS 주문 실행
 Live credential 또는 market-data frame이 없는 상태에서 Live E2E PASS 선언
 authoritative source가 없는 값을 임의 fallback으로 정상 runtime에 주입
