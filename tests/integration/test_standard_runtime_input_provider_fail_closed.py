@@ -112,10 +112,12 @@ def test_standard_runtime_input_provider_blocks_track5_and_track6_when_volatilit
     market._recent_ticks.clear()
     try:
         contexts = provider.build(tick, state, account)
-        for strategy_id in ("track5_gap_divergence", "track6_daily_tail_insurance"):
-            payload = contexts[strategy_id].input.payload
-            assert payload.__class__.__name__ == "UnavailableStrategyPayload"
-            assert "active_vol" in contexts[strategy_id].input.data_status or "base_vol" in contexts[strategy_id].input.data_status
+        track5_context = contexts["track5_gap_divergence"]
+        assert track5_context.analytics is not None
+        assert track5_context.analytics.get("volatility.expected_move").value is None
+        track6_payload = contexts["track6_daily_tail_insurance"].input.payload
+        assert track6_payload.__class__.__name__ == "UnavailableStrategyPayload"
+        assert "active_vol" in contexts["track6_daily_tail_insurance"].input.data_status or "base_vol" in contexts["track6_daily_tail_insurance"].input.data_status
     finally:
         market._recent_ticks.extend(original)
 
