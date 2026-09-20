@@ -18,6 +18,9 @@ class ExecutionEngine:
             strategy_id=getattr(command, "strategy_id", ""),
             group_id=getattr(command, "group_id", ""),
             leg_id=getattr(command, "leg_id", ""),
+            instrument_id=getattr(command, "instrument_id", ""),
+            contract_multiplier=getattr(command, "contract_multiplier", None),
+            identity_source=getattr(command, "identity_source", ""),
         )
         self.reports.append(rep)
         return rep

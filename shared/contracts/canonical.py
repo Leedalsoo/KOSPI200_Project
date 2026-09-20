@@ -16,7 +16,7 @@ class CanonicalOrderCommand:
 
 @dataclass(frozen=True)
 class CanonicalExecutionReport:
- exec_id:str; client_order_id:str; track_id:str; asset_type:CanonicalAssetType; side:CanonicalOrderSide; executed_qty:int; executed_price:float; fee:float; slippage:float; timestamp:str; symbol:str="KOSPI200"; option_type:Optional[CanonicalOptionType]=None; strike:float=0.0; expiry:str=""; strategy_id:str=""; group_id:str=""; leg_id:str=""
+ exec_id:str; client_order_id:str; track_id:str; asset_type:CanonicalAssetType; side:CanonicalOrderSide; executed_qty:int; executed_price:float; fee:float; slippage:float; timestamp:str; symbol:str="KOSPI200"; option_type:Optional[CanonicalOptionType]=None; strike:float=0.0; expiry:str=""; strategy_id:str=""; group_id:str=""; leg_id:str=""; instrument_id:str=""; contract_multiplier:float|None=None; identity_source:str=""
 
 @dataclass
 class CanonicalAccountSummary:

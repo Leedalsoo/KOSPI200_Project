@@ -58,3 +58,25 @@ def test_real_vms_vssf_adapter_end_to_end():
     assert account is not None
     assert positions[identity.symbol].side == "BUY"
     assert positions[identity.symbol].qty == 2
+
+
+def test_authoritative_option_identity_is_preserved_into_execution_report():
+    from datetime import datetime, timezone
+    from environments.virtual.authoritative_vssf.execution_engine import ExecutionEngine
+    from shared.contracts.canonical import CanonicalAssetType, CanonicalOrderSide, CanonicalOptionType, CanonicalOrderCommand
+
+    command = CanonicalOrderCommand(
+        client_order_id="ORD-IDENTITY-1", track_id="TRACK-IDENTITY-1",
+        asset_type=CanonicalAssetType.OPTION, side=CanonicalOrderSide.BUY,
+        qty=1, price=1.25, option_type=CanonicalOptionType.CALL, strike=350.0,
+        symbol="201T3500", expiry="202610", instrument_id="201T3500",
+        contract_multiplier=250000.0, identity_source="OPTION_MASTER",
+    )
+
+    report = ExecutionEngine().execute_order(
+        command, 1.25, 1, timestamp=datetime(2026, 9, 18, tzinfo=timezone.utc)
+    )
+
+    assert report.instrument_id == command.instrument_id
+    assert report.contract_multiplier == command.contract_multiplier
+    assert report.identity_source == command.identity_source
