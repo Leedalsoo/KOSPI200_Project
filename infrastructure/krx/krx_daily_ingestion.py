@@ -77,6 +77,33 @@ class KRXDailyHistoricalIngestor:
         }
 
     @staticmethod
+    def _session(row: dict[str, Any], *, kind: str) -> str | None:
+        if kind == "futures":
+            return str(row.get("MKT_NM", "")).strip() or None
+        if kind == "option":
+            name = str(row.get("ISU_NM", "")).strip()
+            if name.endswith("(\uC815\uADDC)"):
+                return "REGULAR"
+            if name.endswith("(\uC57C\uAC04)"):
+                return "NIGHT"
+        return None
+
+    @classmethod
+    def _select_regular_rows(cls, rows: list[dict[str, Any]], *, kind: str) -> list[dict[str, Any]]:
+        by_code: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for row in rows:
+            by_code[str(row.get("ISU_CD", "")).strip()].append(row)
+        selected: list[dict[str, Any]] = []
+        for group in by_code.values():
+            regular_marker = "REGULAR" if kind == "option" else "정규"
+            regular = [row for row in group if cls._session(row, kind=kind) == regular_marker]
+            if len(regular) == 1:
+                selected.extend(regular)
+            else:
+                selected.extend(group)
+        return selected
+
+    @staticmethod
     def _canonical_key(record: HistoricalDailyOHLC) -> tuple[str, str, str]:
         return record.symbol, record.trading_date.isoformat(), record.source
 
@@ -85,7 +112,7 @@ class KRXDailyHistoricalIngestor:
         endpoint = self.OPTION_ENDPOINT if kind == "option" else self.FUTURES_ENDPOINT if kind == "futures" else ""
         if not endpoint:
             raise KRXDailyIngestionError("KRX_DAILY_KIND_INVALID")
-        rows = self._rows(path)
+        rows = self._select_regular_rows(self._rows(path), kind=kind)
         candidates: list[tuple[HistoricalDailyOHLC, dict[str, str]]] = []
         blocked = 0
         reasons: dict[str, int] = {}
