@@ -1,5 +1,6 @@
 .env
 .env.*
+!.env.example
 credentials/
 data/
 logs/
@@ -13,4 +14,6 @@ node_modules/
 test_session_data.json
 mock_ws_server_refactored.py
 scratch/
-verification/*_report.json\n.pytest_cache/\n
+verification/*_report.json
+.pytest_cache/
+*.mst

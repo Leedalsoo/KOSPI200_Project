@@ -1,37 +1,66 @@
-name: Project200 Deterministic Gate
+name: Project200 Verification
 
 on:
   push:
     branches: [Project200]
   pull_request:
     branches: [Project200]
+  workflow_dispatch:
 
 jobs:
-  project200-gate:
+  full-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
           pip install pytest
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           if [ -f pyproject.toml ]; then pip install -e .; fi
+      - name: Full test suite
+        run: python -m pytest -q tests/unit tests/control_tower tests/integration verification
 
+  deterministic-gate:
+    needs: full-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f pyproject.toml ]; then pip install -e .; fi
       - name: Deterministic Project200 Gate
         run: python verification/project200_gate.py
-
-      - name: Full test suite
-        run: python -m pytest -q tests/unit tests/control_tower verification
-
       - name: Upload gate report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: project200-gate-report
           path: verification/project200_gate_report.json
+
+  runtime-evidence:
+    needs: full-tests
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f pyproject.toml ]; then pip install -e .; fi
+      - name: Authoritative runtime evidence probe
+        run: python verification/project200_runtime_evidence_probe.py
