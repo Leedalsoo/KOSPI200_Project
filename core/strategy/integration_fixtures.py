@@ -10,7 +10,6 @@ from core.strategy.track3_statistical_arbitrage import Track3MarketInput
 from core.strategy.track4_gamma_scalping import Track4MarketInput
 from core.strategy.track5_gap_divergence import Track5MarketInput
 from core.strategy.track6_daily_tail_insurance import Track6ExecutionInput
-from core.strategy.track7_volatility_skew_weekly_insurance import Track7MarketInput
 from core.strategy.track8_macro_regime_monthly_strangle import Track8MarketInput
 from core.strategy.track9_event_overnight_insurance import Track9MarketInput
 from contracts.analytics import AnalyticsProvenance, AnalyticsRequest, MarketSnapshot
@@ -92,19 +91,7 @@ def payloads():
             listed_call_strike=Decimal("362.5"),
             contract_multiplier=Decimal("250000"),
         ),
-        "track7_volatility_skew_weekly_insurance": Track7MarketInput(
-            strategy_id="track7_volatility_skew_weekly_insurance",
-            current_price=PRICE,
-            budget=Decimal("1000000"),
-            date_str=DATE,
-            is_new_week_start=False,
-            active_vol=Decimal("1"),
-            call_iv=Decimal("1"),
-            put_iv=Decimal("1"),
-            time_str="10:00:00",
-            is_expiry_day=False,
-            is_week_end=False,
-        ),
+        "track7_volatility_skew_weekly_insurance": None,
         "track8_macro_regime_monthly_strangle": Track8MarketInput(
             strategy_id="track8_macro_regime_monthly_strangle",
             dte=Decimal("20"),

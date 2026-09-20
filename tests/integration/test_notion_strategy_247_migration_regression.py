@@ -8,7 +8,8 @@ from application.composition.track4_analytics_provider import build_track4_analy
 from core.strategy.contracts import StrategyContext, StrategyInput
 from core.strategy.track2_asymmetric_trap import Track2AsymmetricTrap
 from core.strategy.track4_gamma_scalping import Track4GammaScalping, Track4MarketInput
-from core.strategy.track7_volatility_skew_weekly_insurance import Track7MarketInput, Track7VolatilitySkewWeeklyInsurance
+from application.composition.track7_analytics_provider import build_track7_analytics_snapshot
+from core.strategy.track7_volatility_skew_weekly_insurance import Track7VolatilitySkewWeeklyInsurance
 
 
 def track2_context() -> StrategyContext:
@@ -27,12 +28,6 @@ def track4_data(**kwargs) -> Track4MarketInput:
     values = dict(observed_at=datetime(2026, 9, 18, 10, 0), current_price=Decimal("350"), active_vol=Decimal("1"), base_vol=Decimal("1"), time_str="10:00:00", current_delta=Decimal("0"), current_gamma=Decimal("0"), current_pnl=Decimal("0"), current_equity=Decimal("1000000"), price_history=(Decimal("350"), Decimal("351")), current_theta=Decimal("-0.07"))
     values.update(kwargs)
     return Track4MarketInput(**values)
-
-
-def track7_data(**kwargs) -> Track7MarketInput:
-    values = dict(strategy_id="track7_volatility_skew_weekly_insurance", current_price=Decimal("350"), budget=Decimal("350000"), date_str="2026-09-18", is_new_week_start=True, active_vol=Decimal("1.0"))
-    values.update(kwargs)
-    return Track7MarketInput(**values)
 
 
 def _track4_context(data):
@@ -99,33 +94,41 @@ def test_track4_equity_unwind_and_trailing_reset():
     assert strategy.state.active_hedge_qty == 0
 
 
-def test_track7_weekly_insurance_and_skew_entry_fallback():
+def track7_context(**observations) -> StrategyContext:
+    as_of = observations.pop("as_of", datetime(2026, 9, 18, 10, 0))
+    values = dict(
+        price=Decimal("350"), option_iv=Decimal("10"), put_iv=Decimal("10"),
+        ma_1m=Decimal("350"), ma_3m=Decimal("350"), ma_5m=Decimal("350"), ma_10m=Decimal("350"),
+        support=Decimal("348.35"), resistance=Decimal("356.65"),
+        is_new_week_start=False, is_expiry_day=False, is_week_end=False, order_timeout=False,
+    )
+    values.update(observations)
+    data = type("RuntimeData", (), values)()
+    return StrategyContext(strategy_id="track7_volatility_skew_weekly_insurance", input=StrategyInput(),
+                           analytics=build_track7_analytics_snapshot(data, run_id="regression", as_of=as_of))
+
+
+def test_track7_weekly_insurance_fails_closed_and_skew_uses_common_analytics():
     strategy = Track7VolatilitySkewWeeklyInsurance()
-    insurance = strategy.evaluate_insurance_buy(track7_data())
-    assert insurance and insurance[0].direction == "BUY_LIMIT_WEEKLY_INSURANCE"
-    strategy.reset()
-    entry = strategy.evaluate_skew_arbitrage(track7_data(call_iv=Decimal("10"), put_iv=Decimal("13")))
+    assert strategy.evaluate(track7_context(is_new_week_start=True)) == ()
+    entry = strategy.evaluate(track7_context(option_iv=Decimal("10"), put_iv=Decimal("13")))
     assert entry and entry[0].direction == "ENTER_SKEW_ARB_LIMIT"
-    fallback = strategy.evaluate_skew_arbitrage(track7_data(call_iv=Decimal("10"), put_iv=Decimal("13"), skew_limit_timeout=True))
+    fallback = strategy.evaluate(track7_context(option_iv=Decimal("10"), put_iv=Decimal("13"), order_timeout=True))
     assert fallback and fallback[0].direction == "ENTER_SKEW_ARB_FALLBACK_MARKET"
 
 
 def test_track7_skew_exit_stop_and_expiry_cutoff():
     strategy = Track7VolatilitySkewWeeklyInsurance()
-    strategy.evaluate_skew_arbitrage(track7_data(call_iv=Decimal("10"), put_iv=Decimal("13")))
-    assert strategy.evaluate_skew_arbitrage(track7_data(call_iv=Decimal("10"), put_iv=Decimal("19")))[0].direction == "CLOSE_SKEW_ARB_STOP_LOSS"
-    strategy.evaluate_skew_arbitrage(track7_data(call_iv=Decimal("10"), put_iv=Decimal("13")))
-    assert strategy.evaluate_skew_arbitrage(track7_data(call_iv=Decimal("10"), put_iv=Decimal("10.4")))[0].direction == "CLOSE_SKEW_ARB_LIMIT"
-    strategy.reset()
-    strategy.evaluate_insurance_buy(track7_data())
-    assert strategy.evaluate_expiry_cutoff(track7_data(time_str="15:05:00", is_expiry_day=True))[0].direction == "CLOSE_WEEKLY_INSURANCE_LIMIT"
-    strategy.reset()
-    strategy.evaluate_insurance_buy(track7_data())
-    assert strategy.evaluate_expiry_cutoff(track7_data(time_str="15:15:00", is_expiry_day=True))[0].direction == "CLOSE_WEEKLY_INSURANCE_FALLBACK_MARKET"
+    strategy.evaluate(track7_context(option_iv=Decimal("10"), put_iv=Decimal("13")))
+    assert strategy.evaluate(track7_context(option_iv=Decimal("10"), put_iv=Decimal("19")))[0].direction == "CLOSE_SKEW_ARB_STOP_LOSS"
+    strategy.evaluate(track7_context(option_iv=Decimal("10"), put_iv=Decimal("13")))
+    assert strategy.evaluate(track7_context(option_iv=Decimal("10"), put_iv=Decimal("10.4")))[0].direction == "CLOSE_SKEW_ARB_LIMIT"
+    strategy.state = strategy.state.__class__(insurance_active=True)
+    assert strategy.evaluate_expiry_cutoff(track7_context(is_expiry_day=True, as_of=datetime(2026, 9, 18, 15, 5)))[0].direction == "CLOSE_WEEKLY_INSURANCE_LIMIT"
+    strategy.state = strategy.state.__class__(insurance_active=True)
+    assert strategy.evaluate_expiry_cutoff(track7_context(is_expiry_day=True, as_of=datetime(2026, 9, 18, 15, 15)))[0].direction == "CLOSE_WEEKLY_INSURANCE_FALLBACK_MARKET"
 
 
-def test_track7_missing_optional_ma_does_not_fabricate_take_profit():
+def test_track7_strategy_is_fail_closed_without_contract_identity():
     strategy = Track7VolatilitySkewWeeklyInsurance()
-    strategy.evaluate_insurance_buy(track7_data())
-    assert strategy.evaluate_preemptive_take_profit(track7_data()) == ()
-    assert strategy.evaluate(track7_data(strategy_id="other")) == ()
+    assert strategy.evaluate(track7_context(is_new_week_start=True)) == ()

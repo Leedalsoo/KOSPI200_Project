@@ -16,7 +16,6 @@ from core.strategy.track1_tail_defense import Track1Input
 from application.composition.track3_runtime_input_provider import Track3RuntimeInputProvider
 from core.strategy.track4_gamma_scalping import Track4MarketInput
 from core.strategy.track6_daily_tail_insurance import Track6ExecutionInput
-from core.strategy.track7_volatility_skew_weekly_insurance import Track7MarketInput
 from core.strategy.track8_macro_regime_monthly_strangle import Track8MarketInput
 from core.strategy.track9_event_overnight_insurance import Track9MarketInput
 from contracts.option_expiry_source import OptionExpirySource
@@ -33,6 +32,7 @@ from application.composition.track2_analytics_provider import build_track2_analy
 from application.composition.track4_analytics_provider import build_track4_analytics_snapshot
 from application.composition.track5_analytics_provider import build_track5_analytics_snapshot
 from application.composition.track6_analytics_provider import build_track6_analytics_snapshot
+from application.composition.track7_analytics_provider import build_track7_analytics_snapshot
 
 
 class StandardRuntimeInputProvider:
@@ -236,10 +236,7 @@ class StandardRuntimeInputProvider:
                     ),
                 )
 
-        # Track7 may consume CALL/PUT IV already projected from the injected
-        # authoritative Track2/KIS IV source. Do not report IV as missing when
-        # both observations are actually available; the remaining dedicated
-        # sources still keep the whole Track7 payload fail-closed.
+        # Track7 consumes canonical analytics only when every required source is available.
         track7_missing_sources: list[str] = []
         if d.option_iv is None or d.put_iv is None:
             track7_missing_sources.append("option_iv_chain")
@@ -249,27 +246,20 @@ class StandardRuntimeInputProvider:
             track7_missing_sources.append("expiry_calendar")
         if d.order_timeout is None:
             track7_missing_sources.append("order_timeout")
-        if d.status.get("track7_support_resistance") is None or not d.status["track7_support_resistance"].available:
+        support_status = d.status.get("track7_support_resistance")
+        if support_status is None or not support_status.available:
             track7_missing_sources.append("support_resistance")
-        if "support_resistance" not in track7_missing_sources and not track7_missing_sources:
-            contexts["track7_volatility_skew_weekly_insurance"] = StrategyContext(
-                market_state, "track7_volatility_skew_weekly_insurance", StrategyInput(
-                    common, Track7MarketInput(
-                        "track7_volatility_skew_weekly_insurance", d.price, common.budget,
-                        d.as_of.date().isoformat(), bool(d.is_new_week_start), d.active_vol,
-                        call_iv=d.option_iv, put_iv=d.put_iv, skew_limit_timeout=False,
-                        ma_1m=d.ma_1m, ma_3m=d.ma_3m, ma_5m=d.ma_5m, ma_10m=d.ma_10m,
-                        support=d.support, resistance=d.resistance,
-                        time_str=d.as_of.strftime("%H:%M:%S"),
-                        is_expiry_day=bool(d.is_expiry_day), is_week_end=bool(d.is_week_end),
-                    )
-                )
+        if track7_missing_sources:
+            contexts["track7_volatility_skew_weekly_insurance"] = self._unavailable(
+                "track7_volatility_skew_weekly_insurance", tuple(track7_missing_sources),
+                "TRACK7_REQUIRED_AUTHORITATIVE_SOURCES_UNAVAILABLE",
             )
         else:
-            contexts["track7_volatility_skew_weekly_insurance"] = self._unavailable(
-                "track7_volatility_skew_weekly_insurance",
-                tuple(track7_missing_sources),
-                "TRACK7_REQUIRED_AUTHORITATIVE_SOURCES_UNAVAILABLE",
+            contexts["track7_volatility_skew_weekly_insurance"] = StrategyContext(
+                market_state, "track7_volatility_skew_weekly_insurance", StrategyInput(common),
+                analytics=build_track7_analytics_snapshot(
+                    d, run_id=self.run_id or "virtual", as_of=d.as_of
+                ),
             )
 
         # Track8: DTE cannot be derived from YYYYMM alone. Fees, margin and risk
