@@ -105,7 +105,7 @@ class VirtualMultiLegExecutionBridge:
             expiry=identity.expiry.replace("-", "")[:6],
             option_type=identity.option_type,
             strike=identity.strike,
-            contract_multiplier=identity.contract_multiplier,
+            contract_multiplier=Decimal(str(identity.contract_multiplier)),
             identity_source="OPTION_MASTER",
         )
 
@@ -122,7 +122,19 @@ class VirtualMultiLegExecutionBridge:
             client_order_id = f"{plan.group_id}-{leg.leg_id}"
             vssf = self.bundle.execution._authoritative_execute.__self__.vssf_runtime
             option_quotes = getattr(self.bundle.market, "option_quotes", {})
-            quote_key = (identity.option_type, float(identity.strike), identity.expiry)
+            quote_key = next(
+                (
+                    key
+                    for key in option_quotes
+                    if isinstance(key, tuple)
+                    and len(key) == 3
+                    and str(key[0]).upper() == identity.option_type
+                    and float(key[1]) == float(identity.strike)
+                    and str(key[2]).replace("-", "")[:6]
+                    == identity.expiry.replace("-", "")[:6]
+                ),
+                None,
+            )
             quote = option_quotes.get(quote_key)
             if quote is None:
                 raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_QUOTE_NOT_FOUND")
@@ -130,7 +142,7 @@ class VirtualMultiLegExecutionBridge:
             if authoritative is None or authoritative.contract_multiplier is None:
                 raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_MULTIPLIER_REQUIRED")
             quote_multiplier = quote.get("contract_multiplier")
-            if quote_multiplier is None or Decimal(str(quote_multiplier)) != authoritative.contract_multiplier:
+            if quote_multiplier is None or Decimal(str(quote_multiplier)) != Decimal(str(authoritative.contract_multiplier)):
                 raise ValueError("MULTI_LEG_OPTION_CONTRACT_MULTIPLIER_MISMATCH")
             bid = Decimal(str(quote.get("bid", "0")))
             ask = Decimal(str(quote.get("ask", "0")))
@@ -280,7 +292,19 @@ class VirtualMultiLegExecutionBridge:
                 continue
             direction = 1.0 if leg.side == "BUY" else -1.0
             identity = self.identity_for_leg(plan, leg)
-            quote = option_quotes.get((identity.option_type, float(identity.strike), identity.expiry))
+            quote = next(
+                (
+                    value
+                    for key, value in option_quotes.items()
+                    if isinstance(key, tuple)
+                    and len(key) == 3
+                    and str(key[0]).upper() == identity.option_type
+                    and float(key[1]) == float(identity.strike)
+                    and str(key[2]).replace("-", "")[:6]
+                    == identity.expiry.replace("-", "")[:6]
+                ),
+                None,
+            )
             if quote is None or quote.get("last") is None:
                 raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_MARK_NOT_FOUND")
             current = float(quote["last"])
