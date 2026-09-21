@@ -1,5 +1,5 @@
 ﻿from collections.abc import Iterable
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 from contracts.types import MarketObservation
 from environments.virtual.market.canonical import ReferenceCanonicalMarketTick
@@ -76,6 +76,22 @@ class HistoricalReplayEngine:
             expiry=observation.contract.expiry or "",
             symbol=observation.contract.symbol,
         )
+
+    def replay(self, *, speed: float = 1.0, sleep: Callable[[float], None] | None = None) -> list[ReferenceCanonicalMarketTick]:
+        if speed <= 0:
+            raise ValueError("REPLAY_SPEED_MUST_BE_POSITIVE")
+        events = []
+        previous = None
+        for tick in self._ticks:
+            if sleep is not None and previous is not None:
+                from datetime import datetime
+                delta = (datetime.fromisoformat(tick.timestamp) - datetime.fromisoformat(previous.timestamp)).total_seconds()
+                if delta > 0:
+                    sleep(delta / speed)
+            events.append(tick)
+            previous = tick
+            self._cursor += 1
+        return events
 
     def next_tick(self) -> Optional[ReferenceCanonicalMarketTick]:
         if self.exhausted:
