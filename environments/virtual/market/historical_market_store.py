@@ -136,12 +136,13 @@ class HistoricalMarketStore:
 
     def append_raw_record(self, *, raw_id: str, source: str, provider: str, endpoint: str, tr_id: str,
                           collected_at: datetime, run_id: str, request_metadata: dict[str, Any],
-                          response_metadata: dict[str, Any], payload: dict[str, Any], http_status: int) -> None:
+                          response_metadata: dict[str, Any], payload: dict[str, Any], http_status: int,
+                          content_hash: str | None = None) -> None:
         record = {
             "schema": "kis-rest-raw-market-response-v1", "raw_id": raw_id, "source": source,
             "provider": provider, "endpoint": endpoint, "tr_id": tr_id, "collected_at": collected_at,
             "run_id": run_id, "request_metadata": request_metadata, "response_metadata": response_metadata,
-            "payload": payload, "http_status": http_status,
+            "payload": payload, "http_status": http_status, "content_hash": content_hash,
         }
         if self._contains_credential_key(record):
             raise ValueError("RAW_MARKET_DATA_CREDENTIAL_FORBIDDEN")
