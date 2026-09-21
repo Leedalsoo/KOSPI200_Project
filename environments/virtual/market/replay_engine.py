@@ -1,6 +1,7 @@
 ﻿from collections.abc import Iterable
 from typing import List, Optional
 
+from contracts.types import MarketObservation
 from environments.virtual.market.canonical import ReferenceCanonicalMarketTick
 from environments.virtual.market.historical_market_store import HistoricalMarketStore
 
@@ -13,6 +14,13 @@ class HistoricalReplayEngine:
     @classmethod
     def from_store(cls, store: HistoricalMarketStore, *, source: str | None = None) -> "HistoricalReplayEngine":
         return cls(store.load_ticks(source=source))
+
+    @classmethod
+    def from_observation_store(cls, store: HistoricalMarketStore, *, source: str | None = None) -> "HistoricalReplayEngine":
+        observations = store.load_observations()
+        if source is not None:
+            observations = [item for item in observations if item.source == source]
+        return cls(cls.project_observation(item) for item in observations)
 
     @property
     def active(self) -> bool:
@@ -39,6 +47,35 @@ class HistoricalReplayEngine:
 
     def reset(self) -> None:
         self._cursor = 0
+
+    @staticmethod
+    def project_observation(observation: MarketObservation) -> ReferenceCanonicalMarketTick:
+        quote = observation.quote
+        if (
+            quote.last is None
+            or quote.bid is None
+            or quote.ask is None
+            or quote.volume is None
+            or observation.contract.strike is None
+            or observation.contract.option_type is None
+        ):
+            raise ValueError("LEGACY_TICK_REQUIRED_MARKET_VALUE_MISSING")
+        replay_time = observation.observed_at or observation.collected_at
+        return ReferenceCanonicalMarketTick(
+            timestamp=replay_time.isoformat(),
+            strike_price=float(observation.contract.strike),
+            option_type=observation.contract.option_type,
+            contract_multiplier=(
+                float(observation.contract.contract_multiplier)
+                if observation.contract.contract_multiplier is not None else None
+            ),
+            bid_price=float(quote.bid),
+            ask_price=float(quote.ask),
+            last_price=float(quote.last),
+            volume=int(quote.volume) if quote.volume is not None else 0,
+            expiry=observation.contract.expiry or "",
+            symbol=observation.contract.symbol,
+        )
 
     def next_tick(self) -> Optional[ReferenceCanonicalMarketTick]:
         if self.exhausted:

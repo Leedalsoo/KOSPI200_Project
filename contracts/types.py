@@ -234,3 +234,85 @@ __all__: Sequence[str] = (
     "ProviderHealth",
 )
 
+
+
+@dataclass(frozen=True)
+class OrderBookLevel:
+    level: int
+    price: Decimal | None = None
+    quantity: Decimal | None = None
+
+
+@dataclass(frozen=True)
+class MarketQuote:
+    last: Decimal | None = None
+    bid: Decimal | None = None
+    ask: Decimal | None = None
+    volume: Decimal | None = None
+
+
+@dataclass(frozen=True)
+class MarketOrderBook:
+    bids: Sequence[OrderBookLevel] = ()
+    asks: Sequence[OrderBookLevel] = ()
+    total_bid_quantity: Decimal | None = None
+    total_ask_quantity: Decimal | None = None
+
+
+@dataclass(frozen=True)
+class MarketAnalytics:
+    implied_volatility: Decimal | None = None
+    delta: Decimal | None = None
+    gamma: Decimal | None = None
+    theta: Decimal | None = None
+    vega: Decimal | None = None
+
+
+@dataclass(frozen=True)
+class MarketDataProvenance:
+    endpoints: Sequence[str] = ()
+    tr_ids: Sequence[str] = ()
+    source_timestamps: Sequence[str] = ()
+    metadata: Sequence[tuple[str, str]] = ()
+
+
+@dataclass(frozen=True)
+class RawMarketDataReference:
+    raw_id: str
+    content_hash: str | None = None
+
+
+@dataclass(frozen=True)
+class MarketObservation:
+    observation_id: str
+    observed_at: datetime | None
+    collected_at: datetime
+    source: str
+    provider: str
+    schema_version: str
+    run_id: str
+    contract: OptionInstrumentIdentity
+    quote: MarketQuote
+    order_book: MarketOrderBook
+    analytics: MarketAnalytics
+    provenance: MarketDataProvenance
+    raw_reference: RawMarketDataReference | None = None
+
+    def __post_init__(self) -> None:
+        if not self.observation_id:
+            raise ValueError("MARKET_OBSERVATION_CONTRACT_ID_REQUIRED")
+        if not self.contract.instrument_id or not self.contract.symbol:
+            raise ValueError("MARKET_OBSERVATION_CONTRACT_ID_REQUIRED")
+        if not self.source or not self.provider or not self.schema_version or not self.run_id:
+            raise ValueError("MARKET_OBSERVATION_METADATA_REQUIRED")
+
+
+__all__ += (
+    "MarketAnalytics",
+    "MarketDataProvenance",
+    "MarketObservation",
+    "MarketOrderBook",
+    "MarketQuote",
+    "OrderBookLevel",
+    "RawMarketDataReference",
+)
