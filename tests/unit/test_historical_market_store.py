@@ -47,3 +47,9 @@ def test_historical_market_store_requires_explicit_source(tmp_path):
         assert str(exc) == "MARKET_DATA_SOURCE_REQUIRED"
     else:
         raise AssertionError("missing source must fail closed")
+
+
+def test_for_trading_date_selects_date_partition(tmp_path):
+    from environments.virtual.market.historical_market_store import HistoricalMarketStore
+    store = HistoricalMarketStore.for_trading_date(tmp_path, "2026-09-22")
+    assert store.path == tmp_path / "2026-09-22" / "historical_market_observations.jsonl"

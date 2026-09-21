@@ -7,7 +7,10 @@ import logging
 import logging.handlers
 import os
 import shutil
+import urllib.parse
+import urllib.request
 from collections import Counter
+from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -15,6 +18,15 @@ from pathlib import Path
 from infrastructure.kis.auth import KISAuthManager
 from infrastructure.kis.futures_market_transport import KISFuturesMarketTransport
 from infrastructure.kis.kis_realtime_collector import KISRealtimeCollector
+from infrastructure.kis.kis_rest_market_observation_collector import (
+    CollectionTarget,
+    KISRestMarketObservationCollector,
+    KISRestMarketObservationTransport,
+)
+from environments.virtual.market.historical_market_store import HistoricalMarketStore
+from infrastructure.kis.holiday_provider import KISHolidayProvider
+from infrastructure.kis.trading_calendar import ProductionTradingCalendar
+from infrastructure.krx.krx_marketplace_master import load_option_master
 from infrastructure.kis.kis_vts_collection_diagnostic import diagnose_collection, write_human_report, write_report
 from infrastructure.kis.kis_weekday_collection_plan import (
     CollectionPlan,
@@ -283,5 +295,348 @@ def main() -> None:
     asyncio.run(run())
 
 
+# Date-independent daily REST-first orchestration additions.
+
+
+class TradingDayStatus:
+    TRADING = "TRADING"
+    NO_TRADING_SESSION = "NO_TRADING_SESSION"
+    UNKNOWN = "UNKNOWN"
+
+
+@dataclass
+class DateSessionManifest:
+    schema_version: str
+    trading_date: str
+    session_status: str
+    run_id: str
+    collectors: dict[str, dict[str, object]] = field(default_factory=dict)
+    targets: list[dict[str, object]] = field(default_factory=list)
+    counts: dict[str, int] = field(default_factory=lambda: {"SUCCESS": 0, "DUPLICATE": 0, "BLOCKED": 0})
+    files: list[dict[str, str]] = field(default_factory=list)
+    started_at: str = ""
+    ended_at: str | None = None
+    end_reason: str | None = None
+
+    @classmethod
+    def new(cls, day: date, run_id: str, status: str) -> "DateSessionManifest":
+        return cls(
+            schema_version="project200-kis-market-day-v1",
+            trading_date=day.isoformat(), session_status=status, run_id=run_id,
+            started_at=datetime.now(KST).isoformat(),
+            collectors={"rest": {"status": "NOT_STARTED"}, "websocket": {"status": "NOT_STARTED"}},
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "schema_version": self.schema_version, "trading_date": self.trading_date,
+            "session_status": self.session_status, "run_id": self.run_id,
+            "collectors": self.collectors, "targets": self.targets, "counts": self.counts,
+            "files": self.files, "started_at": self.started_at, "ended_at": self.ended_at,
+            "end_reason": self.end_reason,
+        }
+
+    def write(self, day_dir: Path) -> Path:
+        day_dir.mkdir(parents=True, exist_ok=True)
+        path = day_dir / "manifest.json"
+        path.write_text(json.dumps(self.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+        return path
+
+    @classmethod
+    def read(cls, path: Path) -> "DateSessionManifest":
+        return cls(**json.loads(path.read_text(encoding="utf-8")))
+
+
+class DailySessionOrchestrator:
+    """Date-independent KST session controller; REST is the primary collector."""
+
+    kst = KST
+    open_time = time(8, 30)
+    close_time = time(16, 0)
+
+    def __init__(self, market_data_root: str | Path, calendar: object, *, rest_collector=None):
+        self.market_data_root = Path(market_data_root)
+        self.calendar = calendar
+        self.rest_collector = rest_collector
+
+    def day_dir(self, day: date) -> Path:
+        return self.market_data_root / day.isoformat()
+
+    def store_for(self, day: date) -> HistoricalMarketStore:
+        return HistoricalMarketStore(self.day_dir(day) / "historical_market_observations.jsonl")
+
+    def classify(self, day: date) -> str:
+        try:
+            return TradingDayStatus.TRADING if self.calendar.is_trading_day(day) else TradingDayStatus.NO_TRADING_SESSION
+        except Exception:
+            return TradingDayStatus.UNKNOWN
+
+    def prepare_day(self, day: date, *, run_id: str) -> DateSessionManifest:
+        status = self.classify(day)
+        manifest = DateSessionManifest.new(day, run_id, status)
+        if status == TradingDayStatus.NO_TRADING_SESSION:
+            manifest.collectors["rest"] = {"status": "NOT_RUN", "reason": "NO_TRADING_SESSION"}
+            manifest.collectors["websocket"] = {"status": "NOT_RUN", "reason": "NO_TRADING_SESSION"}
+        elif status == TradingDayStatus.UNKNOWN:
+            manifest.collectors["calendar"] = {"status": "UNKNOWN", "reason": "AUTHORITATIVE_CALENDAR_UNAVAILABLE"}
+        manifest.write(self.day_dir(day))
+        self._write_status(day, manifest)
+        return manifest
+
+    def _write_status(self, day: date, manifest: DateSessionManifest) -> None:
+        self.day_dir(day).mkdir(parents=True, exist_ok=True)
+        (self.day_dir(day) / "daily_status.json").write_text(
+            json.dumps({"trading_date": manifest.trading_date, "session_status": manifest.session_status,
+                        "run_id": manifest.run_id, "reason": manifest.end_reason}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    def is_before_open(self, now: datetime) -> bool:
+        return now.astimezone(self.kst).time() < self.open_time
+
+    def is_after_close(self, now: datetime) -> bool:
+        return now.astimezone(self.kst).time() >= self.close_time
+
+    def record_rest_results(self, manifest: DateSessionManifest, results: tuple[object, ...]) -> None:
+        for result in results:
+            status = str(getattr(result, "status", "BLOCKED"))
+            manifest.counts[status] = manifest.counts.get(status, 0) + 1
+        manifest.collectors["rest"] = {"status": "RUNNING", "last_result_count": len(results)}
+
+    def finalize(self, manifest: DateSessionManifest, *, end_reason: str) -> None:
+        manifest.ended_at = datetime.now(KST).isoformat()
+        manifest.end_reason = end_reason
+        day_dir = self.market_data_root / manifest.trading_date
+        files: list[dict[str, str]] = []
+        for path in sorted(day_dir.rglob("*")):
+            if path.is_file() and path.name != "manifest.json":
+                files.append({"path": str(path.relative_to(day_dir)), "sha256": _sha256_file(path)})
+        manifest.files = files
+        manifest.write(day_dir)
+        self._write_status(manifest_day := date.fromisoformat(manifest.trading_date), manifest)
+
+
+MARKET_DATA_ROOT = ROOT / "data" / "kis_market_data"
+REST_CYCLE_INTERVAL_SECONDS = 30
+REST_ROUND_REQUESTS_PER_TARGET = 2
+
+
+def build_daily_targets(day: date) -> tuple[CollectionTarget, ...]:
+    plan = build_plan_for_day(day)
+    targets: list[CollectionTarget] = []
+    seen: set[str] = set()
+    identity_source = load_option_master((ROOT / "data_2801_20260919.xlsx",))
+    for strike in plan.monthly_strikes:
+        for option_type in ("PUT", "CALL"):
+            matches = [identity for identity in identity_source.identities.values()
+                       if identity.expiry == plan.monthly_expiry and identity.option_type == option_type
+                       and identity.strike == strike and identity.contract_multiplier == Decimal("250000")]
+            if len(matches) != 1:
+                raise ValueError(f"AUTHORITATIVE_OPTION_IDENTITY_REQUIRED:{plan.monthly_expiry}:{option_type}:{strike}")
+            identity = KISRestMarketObservationCollector._coerce_identity(matches[0])
+            if identity is None:
+                raise ValueError(f"AUTHORITATIVE_OPTION_IDENTITY_REQUIRED:{plan.monthly_expiry}:{option_type}:{strike}")
+            targets.append(CollectionTarget(identity=identity))
+    center = sum((Decimal(str(target.identity.strike)) for target in targets), Decimal("0")) / len(targets)
+    targets.sort(key=lambda target: (abs(Decimal(str(target.identity.strike)) - center), str(target.identity.option_type), str(getattr(target.identity, "shrn_iscd", ""))))
+    return tuple(targets)
+
+
+def build_plan_for_day(day: date) -> CollectionPlan:
+    reference_price = _latest_krx_spot_price()
+    return build_collection_plan(
+        reference_price=Decimal(reference_price),
+        option_master_paths=(ROOT / "data_2801_20260919.xlsx",),
+        weekly_master_paths=(ROOT / "data_2923_20260919.xlsx", ROOT / "data_2935_20260919.xlsx"),
+        standard_futures_symbol="A01609", mini_futures_symbol="A05609", as_of=day,
+    )
+
+
+def _daily_run_id(day: date) -> str:
+    return f"vts-rest-daily-{day.isoformat()}"
+
+
+def _manifest_target_rows(targets: tuple[CollectionTarget, ...]) -> list[dict[str, object]]:
+    return [{
+        "symbol": getattr(target.identity, "shrn_iscd", getattr(target.identity, "symbol", "")), "expiry": target.identity.expiry,
+        "strike": str(target.identity.strike), "option_type": target.identity.option_type,
+        "selection_source": "OPTION_MASTER", "selection_reason": "MONTHLY_ATM_PLUS_MINUS_15_POINTS",
+    } for target in targets]
+
+
+def _rest_collector_for_day(day: date, store: HistoricalMarketStore):
+    auth = KISAuthManager.from_env(
+        is_vts=True, env_file=str(ROOT / ".env"),
+        cache_file_path=str(ROOT / "data" / ".kis_token_cache_vts.json"),
+    )
+    if not auth.has_credentials():
+        raise RuntimeError("KIS_VTS_CREDENTIALS_REQUIRED")
+    transport = KISRestMarketObservationTransport(auth)
+    return KISRestMarketObservationCollector(
+        identity_source=load_option_master((ROOT / "data_2801_20260919.xlsx",)).identities,
+        transport=transport, store=store,
+    )
+
+
+def run_rest_cycle_for_day(day: date, manifest: DateSessionManifest, *, cycle_id: str) -> tuple[object, ...]:
+    store = HistoricalMarketStore.for_trading_date(MARKET_DATA_ROOT, day)
+    try:
+        targets = build_daily_targets(day)
+        manifest.targets = _manifest_target_rows(targets)
+        collector = _rest_collector_for_day(day, store)
+    except Exception as exc:
+        manifest.collectors["rest"] = {"status": "BLOCKED", "reason": str(exc)}
+        manifest.counts["BLOCKED"] += len(manifest.targets) or 1
+        return ()
+    started = _now_kst()
+    results = collector.collect_cycle(list(targets), run_id=manifest.run_id, cycle_id=cycle_id)
+    ended = _now_kst()
+    manifest.collectors["rest"] = {
+        "status": "RUNNING", "target_count": len(targets),
+        "round_started_at": started.isoformat(), "round_ended_at": ended.isoformat(),
+        "round_duration_seconds": max(0.0, (ended - started).total_seconds()),
+        "request_budget_seconds": len(targets) * REST_ROUND_REQUESTS_PER_TARGET,
+        "rate_limit_seconds_per_request": 1.0,
+    }
+    orchestrator = DailySessionOrchestrator(MARKET_DATA_ROOT, object())
+    orchestrator.record_rest_results(manifest, results)
+    return results
+
+
+def _write_json_line(path: Path, payload: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str) + "\n")
+
+
+def collect_underlying_futures_observation(day: date, manifest: DateSessionManifest, *, symbol: str = "A01609") -> str:
+    """Record the VTS capability boundary without calling an unconfirmed VTS endpoint."""
+    status = "BLOCKED"
+    reason = "FHPIF05030000_VTS_SUPPORT_NOT_ESTABLISHED"
+    manifest.collectors["futures_underlying_rest"] = {
+        "status": status, "reason": reason, "tr_id": "FHPIF05030000", "symbol": symbol,
+    }
+    manifest.counts[status] = manifest.counts.get(status, 0) + 1
+    return status
+
+
+def authoritative_calendar_for_today(day: date):
+    provider = KISHolidayProvider(
+        auth_manager=KISAuthManager.from_env(
+            is_vts=False, env_file=str(ROOT / ".env"),
+            cache_file_path=str(ROOT / "data" / ".kis_token_cache_real.json"),
+        ),
+        auto_load=True, target_year=day.year, strict_mode=True,
+    )
+    return ProductionTradingCalendar(provider)
+
+
+def pre_open_smoke(day: date, *, market_data_root: Path = MARKET_DATA_ROOT) -> DateSessionManifest:
+    """Pre-open readiness check: credentials, Option Master target selection, dated manifest."""
+    calendar = authoritative_calendar_for_today(day)
+    orchestrator = DailySessionOrchestrator(market_data_root, calendar)
+    manifest = orchestrator.prepare_day(day, run_id=_daily_run_id(day))
+    try:
+        targets = build_daily_targets(day)
+        manifest.targets = _manifest_target_rows(targets)
+        auth = KISAuthManager.from_env(
+            is_vts=True, env_file=str(ROOT / ".env"),
+            cache_file_path=str(ROOT / "data" / ".kis_token_cache_vts.json"),
+        )
+        if not auth.has_credentials():
+            raise RuntimeError("KIS_VTS_CREDENTIALS_REQUIRED")
+        auth.get_access_token()
+        manifest.collectors["rest"] = {"status": "READY", "target_count": len(targets), "rate_limit_seconds": 1.0}
+        manifest.collectors["websocket"] = {"status": "DEGRADED_REST_PRIMARY", "reason": "REST_IS_PRIMARY; WS_FRAME_EVIDENCE_NOT_REQUIRED_FOR_REST"}
+        manifest.end_reason = "PRE_OPEN_SMOKE_PASS"
+    except Exception as exc:
+        manifest.collectors["rest"] = {"status": "BLOCKED", "reason": str(exc)}
+        manifest.end_reason = "PRE_OPEN_SMOKE_BLOCKED"
+    manifest.write(orchestrator.day_dir(day))
+    orchestrator._write_status(day, manifest)
+    return manifest
+
+
+def run_daily_once(now: datetime | None = None, *, market_data_root: Path = MARKET_DATA_ROOT) -> DateSessionManifest:
+    current = (now or _now_kst()).astimezone(KST)
+    day = current.date()
+    calendar = authoritative_calendar_for_today(day)
+    orchestrator = DailySessionOrchestrator(market_data_root, calendar)
+    manifest = orchestrator.prepare_day(day, run_id=_daily_run_id(day))
+    if manifest.session_status == TradingDayStatus.NO_TRADING_SESSION:
+        orchestrator.finalize(manifest, end_reason="NO_TRADING_SESSION")
+        return manifest
+    if current.time() < orchestrator.open_time:
+        return pre_open_smoke(day, market_data_root=market_data_root)
+    if current.time() >= orchestrator.close_time:
+        orchestrator.finalize(manifest, end_reason="SESSION_ALREADY_CLOSED")
+        return manifest
+    manifest.collectors["websocket"] = {"status": "DEGRADED_REST_PRIMARY", "reason": "REST_CONTINUES_INDEPENDENTLY_OF_WS"}
+    run_rest_cycle_for_day(day, manifest, cycle_id="cycle-0001")
+    collect_underlying_futures_observation(day, manifest)
+    orchestrator.finalize(manifest, end_reason="SINGLE_CYCLE_COMPLETE")
+    return manifest
+
+
+async def run_daily_forever() -> None:
+    active_day: date | None = None
+    manifest: DateSessionManifest | None = None
+    cycle_number = 0
+    smoke_done = False
+    while True:
+        now = _now_kst()
+        if active_day != now.date():
+            active_day = now.date()
+            cycle_number = 0
+            smoke_done = False
+            try:
+                calendar = authoritative_calendar_for_today(active_day)
+                orchestrator = DailySessionOrchestrator(MARKET_DATA_ROOT, calendar)
+                manifest = orchestrator.prepare_day(active_day, run_id=_daily_run_id(active_day))
+                if manifest.session_status == TradingDayStatus.NO_TRADING_SESSION:
+                    orchestrator.finalize(manifest, end_reason="NO_TRADING_SESSION")
+                    manifest = None
+            except Exception as exc:
+                LOGGER.exception("DAILY_SESSION_ERROR date=%s error=%s", active_day, exc)
+                manifest = None
+        if manifest is not None:
+            if now.time() < DailySessionOrchestrator.open_time:
+                if not smoke_done:
+                    pre_open_smoke(active_day)
+                    smoke_done = True
+            elif now.time() < DailySessionOrchestrator.close_time:
+                cycle_number += 1
+                run_rest_cycle_for_day(active_day, manifest, cycle_id=f"cycle-{cycle_number:04d}")
+                collect_underlying_futures_observation(active_day, manifest)
+                manifest.write(MARKET_DATA_ROOT / active_day.isoformat())
+                _write_json_line(MARKET_DATA_ROOT / active_day.isoformat() / "heartbeat.jsonl", {
+                    "trading_date": active_day.isoformat(), "run_id": manifest.run_id,
+                    "heartbeat_at": now.isoformat(), "cycle_id": f"cycle-{cycle_number:04d}",
+                    "rest_status": manifest.collectors.get("rest", {}).get("status"),
+                })
+            else:
+                DailySessionOrchestrator(MARKET_DATA_ROOT, object()).finalize(manifest, end_reason="SESSION_END")
+                manifest = None
+        await asyncio.sleep(30)
+
+
+def daily_main() -> None:
+    import argparse
+    parser = argparse.ArgumentParser(description="Project200 KIS daily REST-first collector")
+    parser.add_argument("--once", action="store_true")
+    parser.add_argument("--smoke", action="store_true")
+    args = parser.parse_args()
+    configure_logging()
+    if args.smoke:
+        result = pre_open_smoke(_now_kst().date())
+        print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+        return
+    if args.once:
+        result = run_daily_once()
+        print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+        return
+    asyncio.run(run_daily_forever())
+
+
 if __name__ == "__main__":
-    main()
+    daily_main()

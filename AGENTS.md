@@ -54,7 +54,9 @@ Insurance role은 `NONE / OVERNIGHT_INSURANCE / EVENT_INSURANCE / REHEDGE_INSURA
 ## 8. 시장데이터·Historical·Replay
 시장데이터 경계는 KIS Provider / Historical Provider / Other Provider → MarketDataHub → Runtime / Strategy이다.
 Virtual 시장 데이터는 KRX 데이터 수집/정규화 → Historical Market Store → Virtual Exchange → Virtual Broker → Virtual Broker API → Option Program 경계를 따른다.
-Historical Store의 source/provenance를 유지한다.
+Historical Store의 source/provenance를 유지하고 거래일별 partition을 사용할 수 있어야 한다.
+현재 일별 시장데이터 root는 `data/kis_market_data/YYYY-MM-DD/`이며 manifest와 상태 파일은 거래일·휴장일 모두 생성한다.
+휴장일에는 시장데이터 JSONL을 생성하지 않는다.
 Replay/Scenario/Synthetic 결과를 실제 KRX 데이터와 혼동하지 않는다.
 실제 KRX Historical 데이터셋이 없으면 해당 실데이터 검증은 `BLOCKED`이다.
 
@@ -66,8 +68,13 @@ Live 검증 전까지 시장데이터 수신과 Virtual Execution을 주문 없�
 
 ## 10. VTS 실데이터 수집·Replay·E2E 검증
 모의계좌에서 수집한 실제 시장데이터는 VTS E2E 검증용 원본 데이터 자산으로 축적할 수 있다.
+일별 수집은 `infrastructure/kis/kis_vts_weekday_collector.py`의 Daily Session Orchestrator가 관리하며 REST 시장관측 수집기를 주 수집 경계로 사용한다.
+`infrastructure/kis/kis_rest_market_observation_collector.py`는 Option Master의 `shrn_iscd`를 authoritative identity로 사용하여 Price/OrderBook을 수집한다.
+`infrastructure/kis/kis_realtime_collector.py`는 WebSocket raw frame 경계이며 REST 수집과 독립적으로 동작한다. WS 연결 성공만으로 frame 수신 PASS를 선언하지 않는다.
+WS가 실패하거나 approval-key timeout이 발생해도 REST 수집은 계속할 수 있으며 manifest에 `DEGRADED_REST_PRIMARY` 상태를 기록한다.
 수집 데이터와 Replay 데이터의 source/provenance 및 원본/가공 여부를 명확히 보존한다.
-수집과 검증은 병행하며, 새 데이터가 들어오면 기존 데이터셋과 함께 회귀 검증에 재사용한다.
+거래일과 휴장일은 `data/kis_market_data/YYYY-MM-DD/`로 분리하며, authoritative calendar 조회 실패는 휴장으로 추정하지 않고 `UNKNOWN`으로 기록한다.
+UNKNOWN 상태에서는 주문 endpoint를 호출하지 않고 read-only 시장데이터 경계만 시도할 수 있다.
 원본 데이터는 실제 시간 흐름의 1배속 Replay로 먼저 검증하고, 이후 시간 압축 가속 Replay로 장시간 운용을 단시간에 반복 검증한다.
 원본 데이터를 가공·변형하여 다양한 가격·변동성·호가·체결 패턴을 구성할 수 있으며, 변형 데이터는 실제 시장 원본과 명확히 구분한다.
 등속과 가속 Replay를 모두 사용하고, 반복 실행마다 독립 Run ID와 상태를 사용한다.
@@ -102,15 +109,26 @@ Virtual Runtime에서 실제 source 연결과 Multi-Leg 실행 경계를 검증�
 Execution 결과가 없는 상태에서 Position/PnL을 추정하지 않는다.
 Live credential이 준비되지 않은 경우 Live runtime evidence는 `BLOCKED`이며 Virtual 검증 결과로 대체하지 않는다.
 
-## 15. 검증 절차
+## 15. 일별 수집 운영 기준
+Daily Session Orchestrator는 KST 날짜를 기준으로 거래일·휴장일을 분리하고 `data/kis_market_data/YYYY-MM-DD/`에 날짜별 상태와 데이터를 저장한다.
+거래일에는 장 시작 전 readiness/smoke를 수행하고, 장중 REST 수집을 계속하며 heartbeat를 기록한다.
+휴장일에는 manifest와 상태만 생성하고 시장데이터 파일은 만들지 않는다.
+동일 날짜 재시작은 기존 저장분을 보존하고 이어쓰기하며, 날짜 전환 시 새 Run ID와 날짜 partition을 사용한다.
+REST 수집은 1 req/sec 제한을 준수하고 대상 계약별 결과와 라운드 소요시간을 manifest에 기록한다.
+WebSocket은 보조 raw-frame 경계이며 실패·approval-key timeout이 REST 수집을 중단시키지 않는다.
+토큰 값·credential 값은 로그, manifest, Notion, Git에 기록하지 않는다.
+캘린더 조회 실패 또는 판정 불가를 휴장으로 단정하지 않고 `UNKNOWN`으로 기록한다.
+UNKNOWN 상태에서 가능한 read-only 시장데이터 수집은 수행할 수 있으나 주문 endpoint는 호출하지 않는다.
+
+## 16. 검증 절차
 작업 시작 시 지정된 Notion 작업 기록, 원격 `Project200` 실제 코드, 로컬 working tree를 확인한다.
 작업 전후 `git status`와 변경 파일을 확인한다.
-영향 범위 확인 → focused pytest → 필요한 Virtual E2E → `py -m pytest -q` → `git diff --check` → project200_gate → `git status` → 원격 HEAD 확인 → Notion 기록 순으로 진행한다.
+TDD 변경은 테스트 작성/실패 관찰 → 최소 구현 → focused pytest → 필요한 Virtual E2E → `py -m pytest -q` → `git diff --check` → project200_gate → `git status` → 원격 HEAD 확인 → Notion 기록 순으로 진행한다.
 Python은 Windows launcher `py`로 실행한다.
 실제 명령·출력·exit code를 기준으로 PASS / FAIL / BLOCKED를 판정한다.
 FAIL 또는 BLOCKED를 PASS처럼 표현하지 않는다.
 
-## 16. 문서·Git 관리
+## 17. 문서·Git 관리
 Notion `질문과답변`은 작업 연속성의 기준 기록이다.
 의미 있는 구현·정리·검증은 `[No.xxx 답변내용요약]` 페이지에 목적, 변경 내용, 검증 명령/결과, exit code, commit SHA, push 상태, 남은 BLOCKED 사항을 기록한다.
 AGENTS.md와 PROJECT_STATUS.md에는 테스트 숫자, 특정 checkpoint, 완료 Track 목록, 임시 우선순위를 고정하지 않는다.

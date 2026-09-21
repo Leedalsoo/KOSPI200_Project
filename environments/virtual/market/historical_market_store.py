@@ -2,7 +2,7 @@
 
 import json
 from dataclasses import asdict
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Iterable, Iterator
@@ -30,6 +30,12 @@ class HistoricalMarketStore:
 
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
+
+    @classmethod
+    def for_trading_date(cls, market_data_root: str | Path, trading_date: str | date) -> "HistoricalMarketStore":
+        value = trading_date.isoformat() if isinstance(trading_date, date) else str(trading_date)
+        parsed = datetime.strptime(value, "%Y-%m-%d").date()
+        return cls(Path(market_data_root) / parsed.isoformat() / "historical_market_observations.jsonl")
 
     def append(self, tick: ReferenceCanonicalMarketTick, *, source: str) -> None:
         source = str(source).strip()
