@@ -21,13 +21,16 @@ class LiveBrokerAdapter:
         self.connected = bool(self.transport.authenticate())
         return self.connected
 
-    def submit(self, command: BrokerOrderCommand, identity: OrderIdentity, account_age_seconds: float) -> BrokerOrderResponse:
+    def submit(self, command: BrokerOrderCommand, identity: OrderIdentity, account_age_seconds: float, *, health: TradingHealthSnapshot | None = None, daily_pnl: Decimal | None = None, current_position_quantity: int | None = None) -> BrokerOrderResponse:
         if not self.connected:
             raise RuntimeError("live broker is disconnected")
         if not self.idempotency.reserve(identity):
             raise RuntimeError("duplicate client order identity")
 
-        gate = self.gate.evaluate(command.quantity, account_age_seconds)
+        if hasattr(self.gate, "risk_guard"):
+            gate = self.gate.evaluate(command.quantity, account_age_seconds, health=health, daily_pnl=daily_pnl, current_position_quantity=current_position_quantity, side=command.side, order_purpose=command.order_purpose, position_role=command.position_role)
+        else:
+            gate = self.gate.evaluate(command.quantity, account_age_seconds)
         if not gate.allowed:
             raise RuntimeError(gate.reason)
 

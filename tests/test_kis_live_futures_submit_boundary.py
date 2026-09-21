@@ -15,7 +15,7 @@ class StubTransport:
 
 class StubGate:
     def __init__(self, allowed=True): self.allowed = allowed; self.calls = []
-    def evaluate(self, quantity, account_age_seconds):
+    def evaluate(self, quantity, account_age_seconds, **kwargs):
         self.calls.append((quantity, account_age_seconds)); return type("GateResult", (), {"allowed": self.allowed, "reason": "blocked"})()
 
 class StubSymbolSource:

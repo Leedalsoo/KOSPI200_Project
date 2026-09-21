@@ -11,6 +11,7 @@ import os
 from typing import Any
 
 from core.oms.oms_fsm import OrderStateMachine
+from core.risk.risk_guard import RiskGuard
 from application.composition.live_runtime_lifecycle_coordinator import LiveRuntimeLifecycleCoordinator
 from application.composition.live_runtime_production_factory import create_live_runtime_lifecycle_coordinator
 from application.market_data_hub import MarketDataHub
@@ -141,7 +142,14 @@ def create_authoritative_kis_live_runtime_composition(
         max_daily_loss=10_000_000.0,
         max_position_quantity=5,
     )
-    gate = LiveSafetyGate(policy=policy)
+    gate = LiveSafetyGate(
+        policy=policy,
+        risk_guard=RiskGuard(),
+        sensor_max_delay_seconds=30.0,
+        approval_validity_seconds=900.0,
+        now=lambda: datetime.now(timezone.utc),
+        allow_liquidation_reduction=True,
+    )
     idempotency = IdempotencyRegistry()
     broker = LiveBrokerAdapter(
         transport=resolved_order_transport,
