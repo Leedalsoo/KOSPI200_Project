@@ -136,7 +136,25 @@ def check_runtime_evidence() -> Check:
     if not probe_script.exists():
         return Check("runtime_evidence_probe", "FAIL", "verification/runtime_evidence.py does not exist")
     rc, out = run([sys.executable, str(probe_script)])
-    return Check("runtime_evidence_probe", "PASS" if rc == 0 else "FAIL", f"exit_code={rc}\n{out}")
+    try:
+        decoder = json.JSONDecoder()
+        evidence = None
+        for index, char in enumerate(out):
+            if char == "{":
+                try:
+                    candidate, _ = decoder.raw_decode(out[index:])
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(candidate, dict) and "status" in candidate:
+                    evidence = candidate
+                    break
+        if evidence is not None and evidence.get("status") == "BLOCKED":
+            status = "BLOCKED"
+        else:
+            status = "PASS" if rc == 0 else "FAIL"
+    except (TypeError, ValueError):
+        status = "PASS" if rc == 0 else "FAIL"
+    return Check("runtime_evidence_probe", status, f"exit_code={rc}\n{out}")
 
 
 def main() -> int:

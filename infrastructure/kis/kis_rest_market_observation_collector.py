@@ -216,29 +216,34 @@ class KISRestMarketObservationCollector:
                 raw_hash = self._raw_hash(price, order_book)
                 raw_id = f"{run_id}:{cycle_id}:{symbol}:{raw_hash[:16]}"
 
-                if any(record.get("content_hash") == raw_hash for record in self.store.raw_records()):
-                    results.append(CollectionResult(
-                        status="DUPLICATE", symbol=symbol, run_id=run_id, cycle_id=cycle_id
-                    ))
-                    continue
-
-                self.store.append_raw_record(
-                    raw_id=raw_id,
-                    source="kis_vts_rest",
-                    provider="KISOptionRestAdapter",
-                    endpoint="price+orderbook",
-                    tr_id="FHMIF10000000+FHMIF10010000",
-                    collected_at=collected_at,
-                    run_id=run_id,
-                    request_metadata={"symbol": symbol, "cycle_id": cycle_id},
-                    response_metadata={
-                        "price_rt_cd": price.get("rt_cd"),
-                        "order_book_rt_cd": order_book.get("rt_cd"),
-                    },
-                    payload={"price": price, "order_book": order_book},
-                    http_status=200,
-                    content_hash=raw_hash,
+                existing_raw = next(
+                    (record for record in self.store.raw_records()
+                     if record.get("content_hash") == raw_hash),
+                    None,
                 )
+
+                if existing_raw is None:
+                    self.store.append_raw_record(
+                        raw_id=raw_id,
+                        source="kis_vts_rest",
+                        provider="KISOptionRestAdapter",
+                        endpoint="price+orderbook",
+                        tr_id="FHMIF10000000+FHMIF10010000",
+                        collected_at=collected_at,
+                        run_id=run_id,
+                        request_metadata={"symbol": symbol, "cycle_id": cycle_id},
+                        response_metadata={
+                            "price_rt_cd": price.get("rt_cd"),
+                            "order_book_rt_cd": order_book.get("rt_cd"),
+                        },
+                        payload={"price": price, "order_book": order_book},
+                        http_status=200,
+                        content_hash=raw_hash,
+                    )
+                    raw_reference_id = raw_id
+                else:
+                    raw_reference_id = str(existing_raw["raw_id"])
+
                 observation = self.normalizer.normalize(
                     price_response=price,
                     asking_price_response=order_book,
@@ -251,11 +256,11 @@ class KISRestMarketObservationCollector:
                     raise ValueError("REQUIRED_MARKET_VALUE_MISSING")
                 observation = MarketObservation(
                     **{**observation.__dict__,
-                       "raw_reference": RawMarketDataReference(raw_id=raw_id, content_hash=raw_hash)}
+                       "raw_reference": RawMarketDataReference(raw_id=raw_reference_id, content_hash=raw_hash)}
                 )
                 self.store.append_observation(observation)
                 results.append(CollectionResult(
-                    status="SUCCESS",
+                    status="SUCCESS" if existing_raw is None else "DUPLICATE",
                     observation_id=observation.observation_id,
                     symbol=symbol,
                     run_id=run_id,

@@ -262,7 +262,10 @@ def test_duplicate_raw_payload_is_not_promoted_twice(tmp_path):
 
     assert first[0].status == "SUCCESS"
     assert second[0].status == "DUPLICATE"
-    assert len(store.load_observations()) == 1
+    observations = store.load_observations()
+    assert len(observations) == 2
+    assert observations[0].collected_at != observations[1].collected_at
+    assert observations[0].raw_reference == observations[1].raw_reference
     assert len(store.raw_records()) == 1
 
 
