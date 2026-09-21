@@ -52,6 +52,10 @@ class VirtualMarketSimulatorRuntime:
         """Load canonical historical events for Virtual Exchange replay."""
         self.replay.load_store(store, source=source)
 
+    def load_historical_observation_store(self, store, *, source: str | None = None) -> None:
+        """Load authoritative REST market observations for Virtual Exchange replay."""
+        self.replay = HistoricalReplayEngine.from_observation_store(store, source=source)
+
     def replay_next(self):
         """Publish one historical event through the Virtual Exchange subscriber boundary."""
         tick = self.replay.next_tick()
