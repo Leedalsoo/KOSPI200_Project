@@ -121,19 +121,40 @@ class KISRestMarketObservationCollector:
         self.limiter = limiter or RateLimiter(1.0, self.clock)
         self.normalizer = normalizer or KISRestMarketObservationNormalizer(self)
     
+    @staticmethod
+    def _coerce_identity(value: Any) -> OptionInstrumentIdentity | None:
+        if value is None:
+            return None
+        if isinstance(value, OptionInstrumentIdentity):
+            return value
+        symbol = getattr(value, "symbol", None) or getattr(value, "shrn_iscd", None)
+        instrument_id = getattr(value, "instrument_id", None) or symbol
+        if not instrument_id or not symbol:
+            return None
+        return OptionInstrumentIdentity(
+            instrument_id=str(instrument_id),
+            symbol=str(symbol),
+            expiry=getattr(value, "expiry", None),
+            option_type=getattr(value, "option_type", None),
+            strike=getattr(value, "strike", None),
+            contract_multiplier=getattr(value, "contract_multiplier", None),
+            identity_source=getattr(value, "identity_source", None) or "OPTION_MASTER",
+        )
+
     def get_contract_identity(self, symbol: str) -> OptionInstrumentIdentity | None:
         if isinstance(self.identity_source, Mapping):
-            return self.identity_source.get(symbol)
+            return self._coerce_identity(self.identity_source.get(symbol))
         getter = getattr(self.identity_source, "get_contract_identity", None)
-        if getter is None:
-            return None
-        return getter(symbol)
+        if getter is not None:
+            return self._coerce_identity(getter(symbol))
+        identities = getattr(self.identity_source, "identities", None)
+        if isinstance(identities, Mapping):
+            return self._coerce_identity(identities.get(symbol))
+        return None
 
     def _resolve_target(self, target: CollectionTarget) -> OptionInstrumentIdentity | None:
         identity = self.get_contract_identity(target.identity.symbol)
-        if identity is None:
-            return None
-        if not identity.instrument_id or not identity.symbol:
+        if identity is None or not identity.instrument_id or not identity.symbol:
             return None
         if identity.symbol != target.identity.symbol:
             return None

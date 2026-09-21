@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 
@@ -116,6 +117,35 @@ def test_price_and_orderbook_requests_respect_one_second_interval(tmp_path):
     assert result[0].status == "SUCCESS"
     assert transport.calls == [("price", "B01610C41"), ("order_book", "B01610C41")]
     assert clock.sleeps == [1.0]
+
+
+def test_authoritative_master_identity_is_coerced_from_kis_master_shape(tmp_path):
+    price, asking = responses("B01610A29")
+    identity_record = SimpleNamespace(
+        shrn_iscd="B01610A29",
+        expiry="2026-10-08",
+        option_type="PUT",
+        strike=Decimal("1075.0"),
+        contract_multiplier=Decimal("250000"),
+    )
+    class MasterStub:
+        identities = {"B01610A29": identity_record}
+
+    transport = FakeTransport(price, asking)
+    store = HistoricalMarketStore(tmp_path / "market.jsonl")
+    collector = KISRestMarketObservationCollector(
+        identity_source=MasterStub(),
+        transport=transport,
+        store=store,
+    )
+    target = CollectionTarget(identity("B01610A29"))
+
+    result = collector.collect_cycle(
+        [target], run_id="run-1", cycle_id="cycle-master"
+    )
+
+    assert result[0].status == "SUCCESS"
+    assert result[0].symbol == "B01610A29"
 
 
 def test_missing_identity_is_blocked_without_rest_request(tmp_path):
