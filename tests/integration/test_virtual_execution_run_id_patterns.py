@@ -16,7 +16,8 @@ DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "historical_market_ob
 
 
 def actual_observations():
-    return HistoricalMarketStore(DATA_PATH).load_observations()
+    return [o for o in HistoricalMarketStore(DATA_PATH).load_observations()
+            if o.run_id == "vts-rest-20260921"]
 
 
 def master_for(obs):
@@ -82,6 +83,12 @@ def execute_one(tmp_path, observations, master, scenario, run_id, transform):
     assert lot.client_order_id == report.client_order_id
     assert lot.instrument_id == "C01610A29"
     assert lot.instrument_identity.identity_source == "OPTION_MASTER"
+    snapshot = bridge.position_groups.snapshot(plan.group_id)
+    assert snapshot is not None
+    assert snapshot.legs[0].run_id == run_id
+    assert snapshot.legs[0].client_order_id == report.client_order_id
+    assert snapshot.legs[0].execution_id == report.execution_id
+    assert snapshot.legs[0].identity_source == "OPTION_MASTER"
     assert bundle.position.snapshot()
     bundle.stop()
     return Decimal(str(report.execution_price))

@@ -48,6 +48,9 @@ class PositionGroupLegPnL:
     avg_price: float
     current_price: float
     pnl: float
+    run_id: str
+    client_order_id: str
+    execution_id: str
 
 
 @dataclass(frozen=True)

@@ -324,7 +324,8 @@ class VirtualMultiLegExecutionBridge:
                 PositionGroupLegPnL(
                     leg.leg_id, plan.group_id, identity.instrument_id, rep.filled_quantity,
                     multiplier, identity.identity_source or "",
-                    float(rep.execution_price), current, float(pnl)
+                    float(rep.execution_price), current, float(pnl),
+                    self.run_id, rep.client_order_id, rep.execution_id or ""
                 )
             )
         snapshot = PositionGroupSnapshot(plan.group_id, plan.strategy_id, group.is_complete, tuple(pnl_legs), sum(x.pnl for x in pnl_legs))
