@@ -49,7 +49,8 @@ class VirtualSecuritiesFirmRuntime:
         self.metrics["market_ticks"] += 1
         self._market_time = datetime.fromisoformat(tick.timestamp)
         self.order_book.update_bid_ask(tick.bid_price, tick.ask_price, instrument_id=getattr(tick, "instrument_id", None))
-        self.account.update_tick_price(tick.underlying_price)
+        if tick.underlying_price is not None:
+            self.account.update_tick_price(tick.underlying_price)
         self.process_pending_orders()
 
     def process_order(self, command):
