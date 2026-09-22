@@ -93,6 +93,12 @@ class KISRestMarketObservationNormalizer:
         if price_timestamp and asking_timestamp and price_timestamp != asking_timestamp:
             raise ValueError("KIS_REST_SOURCE_TIMESTAMP_MISMATCH")
         source_timestamp = price_timestamp or asking_timestamp
+        underlying_row = self._output(price_response, "output3")
+        underlying_code = str(underlying_row.get("bstp_cls_code") or "").strip()
+        underlying_symbol = str(underlying_row.get("hts_kor_isnm") or "").strip()
+        underlying_price = self._decimal(underlying_row.get("bstp_nmix_prpr"))
+        if underlying_code != "2001" or underlying_symbol != "KOSPI200" or underlying_price is None:
+            raise ValueError("AUTHORITATIVE_KOSPI200_UNDERLYING_REQUIRED")
         tr_ids = (self.PRICE_TR_ID, self.ASKING_PRICE_TR_ID)
         seed = f"kis_vts_rest|{run_id}|{symbol}|{collected_at.isoformat()}|{tr_ids}"
         observation_id = sha256(seed.encode("utf-8")).hexdigest()[:24]
@@ -133,4 +139,8 @@ class KISRestMarketObservationNormalizer:
                 source_timestamps=(source_timestamp,) if source_timestamp else (),
             ),
             raw_reference=None,
+            underlying_price=underlying_price,
+            underlying_symbol=underlying_symbol,
+            underlying_observed_hour=source_timestamp,
+            underlying_source='kis_vts_rest:price.output3',
         )

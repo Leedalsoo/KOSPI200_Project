@@ -38,6 +38,10 @@ class HistoricalMarketDataProvider:
             volume=Decimal(str(tick.volume)) if tick.volume is not None else None,
             source_sequence=tick.seq_id or None,
             seq_id=tick.seq_id or None,
+            underlying_price=Decimal(str(tick.underlying_price)) if tick.underlying_price is not None else None,
+            underlying_symbol=tick.underlying_symbol,
+            underlying_observed_hour=tick.underlying_observed_hour,
+            underlying_source=tick.underlying_source,
         )
         self._ticks[instrument_id] = canonical
         self._quality[instrument_id] = DataQuality(

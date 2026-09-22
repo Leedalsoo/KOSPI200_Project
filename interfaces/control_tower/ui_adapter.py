@@ -165,7 +165,8 @@ class ControlTowerUIAdapter:
                     raw_ticks = getattr(market, "recent_ticks", None)
                     if raw_ticks is not None:
                         for raw_tick in raw_ticks:
-                            price_val = float(getattr(raw_tick, "underlying_price", getattr(raw_tick, "price", 0)))
+                            raw_underlying = getattr(raw_tick, "underlying_price", None)
+                            price_val = float(raw_underlying if raw_underlying is not None else getattr(raw_tick, "price", 0))
                             time_str = getattr(raw_tick, "timestamp", getattr(raw_tick, "observed_at", None))
                             ticks.append({
                                 "code": getattr(raw_tick, "symbol", getattr(raw_tick, "instrument_id", "KOSPI200_VIRTUAL")),
@@ -176,7 +177,8 @@ class ControlTowerUIAdapter:
                             })
                     last_tick = getattr(market, "last_tick", None)
                     if last_tick is not None:
-                        underlying_price = float(getattr(last_tick, "underlying_price", getattr(last_tick, "price", 0)))
+                        raw_underlying = getattr(last_tick, "underlying_price", None)
+                        underlying_price = float(raw_underlying if raw_underlying is not None else getattr(last_tick, "price", 0))
                         last_time = getattr(last_tick, "timestamp", getattr(last_tick, "observed_at", None))
                         if not ticks:
                             ticks.append({

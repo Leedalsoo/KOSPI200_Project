@@ -20,7 +20,7 @@ class HistoricalReplayEngine:
         observations = store.load_observations()
         if source is not None:
             observations = [item for item in observations if item.source == source]
-        return cls(cls.project_observation(item) for item in observations)
+        return cls(cls.project_observation(item, seq_id=index) for index, item in enumerate(observations, start=1))
 
     @property
     def active(self) -> bool:
@@ -49,7 +49,7 @@ class HistoricalReplayEngine:
         self._cursor = 0
 
     @staticmethod
-    def project_observation(observation: MarketObservation) -> ReferenceCanonicalMarketTick:
+    def project_observation(observation: MarketObservation, *, seq_id: int = 0) -> ReferenceCanonicalMarketTick:
         quote = observation.quote
         if (
             quote.last is None
@@ -73,8 +73,15 @@ class HistoricalReplayEngine:
             ask_price=float(quote.ask),
             last_price=float(quote.last),
             volume=int(quote.volume) if quote.volume is not None else 0,
+            seq_id=seq_id,
             expiry=observation.contract.expiry or "",
             symbol=observation.contract.symbol,
+            underlying_price=float(observation.underlying_price) if observation.underlying_price is not None else None,
+            underlying_symbol=observation.underlying_symbol,
+            underlying_observed_hour=observation.underlying_observed_hour,
+            underlying_source=observation.underlying_source,
+            option_observed_hour=(observation.provenance.source_timestamps[0] if observation.provenance.source_timestamps else ""),
+            option_source=observation.source,
         )
 
     def replay(self, *, speed: float = 1.0, sleep: Callable[[float], None] | None = None) -> list[ReferenceCanonicalMarketTick]:

@@ -117,12 +117,17 @@ class HistoricalMarketStore:
             raw_reference = value.get("raw_reference")
             raw_ref = RawMarketDataReference(**raw_reference) if raw_reference else None
             observed_at = datetime.fromisoformat(value["observed_at"]) if value.get("observed_at") else None
+            underlying_price = self._decimal(value.get("underlying_price"))
             collected_at = datetime.fromisoformat(value["collected_at"])
             observations.append(MarketObservation(
                 observation_id=value["observation_id"], observed_at=observed_at, collected_at=collected_at,
                 source=value["source"], provider=value["provider"], schema_version=value["schema_version"],
                 run_id=value["run_id"], contract=contract, quote=quote, order_book=order_book,
                 analytics=analytics, provenance=provenance, raw_reference=raw_ref,
+                underlying_price=underlying_price,
+                underlying_symbol=str(value.get("underlying_symbol") or ""),
+                underlying_observed_hour=str(value.get("underlying_observed_hour") or ""),
+                underlying_source=str(value.get("underlying_source") or ""),
             ))
         return observations
 

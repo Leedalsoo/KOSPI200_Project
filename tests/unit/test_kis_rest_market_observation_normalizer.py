@@ -16,6 +16,10 @@ PRICE = {
         "delta_val": "0.0185", "gama": "0.0002", "theta": "-0.2423", "vega": "0.1072",
         "hts_ints_vltl": "57.1599", "acpr": "1595.00",
     },
+    "output3": {
+        "bstp_cls_code": "2001", "hts_kor_isnm": "KOSPI200",
+        "bstp_nmix_prpr": "1130.63",
+    },
 }
 
 ASK = {
@@ -65,6 +69,10 @@ def test_normalizer_preserves_quote_orderbook_identity_and_analytics():
     assert observation.order_book.bids[0].quantity == Decimal("2740")
     assert observation.analytics.implied_volatility == Decimal("57.1599")
     assert observation.analytics.delta == Decimal("0.0185")
+    assert observation.underlying_price == Decimal("1130.63")
+    assert observation.underlying_symbol == "KOSPI200"
+    assert observation.underlying_observed_hour == "122603"
+    assert observation.underlying_source == "kis_vts_rest:price.output3"
     assert observation.provenance.tr_ids == (
         "FHMIF10000000",
         "FHMIF10010000",
@@ -83,6 +91,19 @@ def test_normalizer_does_not_invent_observed_at_when_rest_has_no_timestamp():
 
     assert observation.observed_at is None
     assert "122603" in observation.provenance.source_timestamps
+
+
+def test_normalizer_fails_closed_without_authoritative_underlying():
+    normalizer = KISRestMarketObservationNormalizer(IdentityLookup())
+    price = {**PRICE, "output3": {"bstp_cls_code": "2001", "hts_kor_isnm": "KOSPI200"}}
+
+    with pytest.raises(ValueError, match="AUTHORITATIVE_KOSPI200_UNDERLYING_REQUIRED"):
+        normalizer.normalize(
+            price_response=price,
+            asking_price_response=ASK,
+            collected_at=datetime.now(timezone.utc),
+            run_id="run-1",
+        )
 
 
 def test_normalizer_fails_closed_for_unknown_contract():

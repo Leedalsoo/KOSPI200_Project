@@ -27,6 +27,8 @@ def make_observation() -> MarketObservation:
         ),
         quote=MarketQuote(last=Decimal("0.08"), bid=Decimal("0.08"), ask=Decimal("0.09"), volume=Decimal("1232")),
         order_book=MarketOrderBook(), analytics=MarketAnalytics(), provenance=MarketDataProvenance(),
+        underlying_price=Decimal("1130.63"), underlying_symbol="KOSPI200",
+        underlying_observed_hour="122603", underlying_source="kis_vts_rest:price.output3",
     )
 
 
@@ -39,8 +41,11 @@ def test_observation_round_trips_store_replay_and_hub_without_kis_fields(tmp_pat
     provider = HistoricalMarketDataProvider(replay)
     hub = MarketDataHub({"historical": provider}, active="historical")
 
-    assert provider.replay_next().instrument_id == "B01610C41"
-    assert store.load_observations()[0].contract.strike == Decimal("1595")
+    tick = provider.replay_next()
+    assert tick.instrument_id == "B01610C41"
+    assert tick.underlying_price == Decimal("1130.63")
+    assert tick.underlying_symbol == "KOSPI200"
+    assert store.load_observations()[0].underlying_price == Decimal("1130.63")
     state = hub.snapshot()
-    assert state.ticks["B01610C41"].price == Decimal("0.08")
+    assert state.ticks["B01610C41"].price == Decimal("1130.63")
     assert not hasattr(state.ticks["B01610C41"], "optn_prpr")

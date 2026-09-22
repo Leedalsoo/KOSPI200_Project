@@ -14,6 +14,10 @@ class CanonicalMarketTick:
     volume: Decimal | None = None
     source_sequence: int | None = None
     seq_id: int | None = None
+    underlying_price: Decimal | None = None
+    underlying_symbol: str = ""
+    underlying_observed_hour: str = ""
+    underlying_source: str = ""
 
 
 @dataclass(frozen=True)
@@ -297,6 +301,10 @@ class MarketObservation:
     analytics: MarketAnalytics
     provenance: MarketDataProvenance
     raw_reference: RawMarketDataReference | None = None
+    underlying_price: Decimal | None = None
+    underlying_symbol: str = ""
+    underlying_observed_hour: str = ""
+    underlying_source: str = ""
 
     def __post_init__(self) -> None:
         if not self.observation_id:
