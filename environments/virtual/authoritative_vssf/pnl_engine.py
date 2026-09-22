@@ -15,6 +15,10 @@ class PnLEngine:
         total = Decimal("0")
         for position in positions.values():
             avg_price = self._decimal(position["avg_price"])
+            mark_price = position.get("mark_price", current_price)
+            if mark_price is None:
+                raise ValueError("PNL_MARK_PRICE_REQUIRED")
+            current = self._decimal(mark_price)
             quantity = self._decimal(position["qty"])
             side = str(position["side"])
             if side == "BUY":

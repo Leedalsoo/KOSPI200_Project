@@ -21,3 +21,4 @@ class ReferenceCanonicalMarketTick:
     option_observed_hour: str = ""
     option_source: str = ""
     underlying_sequence: int = 0
+    instrument_id: str = ""

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import deque
+from dataclasses import replace
 from datetime import datetime, timedelta
 from math import erf, exp, log, sqrt
 from decimal import Decimal
@@ -61,6 +62,12 @@ class VirtualMarketSimulatorRuntime:
         tick = self.replay.next_tick()
         if tick is None:
             return None
+        if self.option_master is not None and tick.instrument_id and tick.symbol and tick.expiry and tick.option_type:
+            identity = self.option_master.find_contract_identity(tick.expiry, tick.option_type, Decimal(str(tick.strike_price)))
+            if identity is not None:
+                authoritative_id = identity.stnd_iscd or identity.shrn_iscd
+                if authoritative_id:
+                    tick = replace(tick, instrument_id=authoritative_id)
         self.last_tick = tick
         self._recent_ticks.append(tick)
         if tick.underlying_price is not None:

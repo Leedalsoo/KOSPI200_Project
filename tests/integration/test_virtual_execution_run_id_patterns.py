@@ -1,23 +1,40 @@
 from dataclasses import replace
+from datetime import datetime, timezone
 from decimal import Decimal
-from pathlib import Path
 
 from application.composition.concrete_virtual_environment_builder import ConcreteVirtualEnvironmentBuilder
 from application.composition.virtual_composition_dependencies import VirtualCompositionDependencies
 from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
 from application.environment_hub.contracts import EnvironmentConfig, EnvironmentType, RuntimePolicy
 from application.market_observation_scenario import ScenarioObservationTransformer
-from contracts.types import ExecutionLeg, MultiLegExecutionPlan, OptionInstrumentIdentity
+from contracts.types import (
+    ExecutionLeg, MarketAnalytics, MarketDataProvenance, MarketObservation,
+    MarketOrderBook, MarketQuote, MultiLegExecutionPlan, OptionInstrumentIdentity,
+)
 from core.option.option_master import InMemoryOptionContractMaster, KisOptionContractIdentity
 from environments.virtual.execution.vssf_command_context_provider import CanonicalVSSFCommandContextProvider
 from environments.virtual.market.historical_market_store import HistoricalMarketStore
 
-DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "historical_market_observations.jsonl"
-
-
-def actual_observations():
-    return [o for o in HistoricalMarketStore(DATA_PATH).load_observations()
-            if o.run_id == "vts-rest-20260921"]
+def fixture_observations():
+    """Build four canonical observations for isolated-run regression coverage."""
+    identity = OptionInstrumentIdentity(
+        instrument_id="C01610A29", symbol="C01610A29", expiry="2026-10-08",
+        option_type="PUT", strike=Decimal("1075"),
+        contract_multiplier=Decimal("250000"), identity_source="OPTION_MASTER",
+    )
+    observations = []
+    for index, last in enumerate((Decimal("23.45"),) * 4, start=1):
+        observations.append(MarketObservation(
+            observation_id=f"fixture-{index}", observed_at=None,
+            collected_at=datetime(2026, 9, 21, 12, 26, index, tzinfo=timezone.utc),
+            source="kis_vts_rest", provider="KISOptionRestAdapter",
+            schema_version="canonical-market-observation-v1", run_id="vts-rest-fixture",
+            contract=identity,
+            quote=MarketQuote(last=last, bid=last, ask=last, volume=Decimal("100")),
+            order_book=MarketOrderBook(), analytics=MarketAnalytics(),
+            provenance=MarketDataProvenance(tr_ids=("FHMIF10000000", "FHMIF10010000")),
+        ))
+    return observations
 
 
 def master_for(obs):
@@ -95,7 +112,7 @@ def execute_one(tmp_path, observations, master, scenario, run_id, transform):
 
 
 def test_actual_rest_four_records_repeat_across_isolated_runs_and_patterns(tmp_path):
-    observations = actual_observations()
+    observations = fixture_observations()
     assert len(observations) == 4
     assert {o.contract.instrument_id for o in observations} == {"C01610A29"}
     assert {o.contract.identity_source for o in observations} == {"OPTION_MASTER"}
@@ -126,7 +143,7 @@ def test_actual_rest_four_records_repeat_across_isolated_runs_and_patterns(tmp_p
         "price_down": Decimal("21.45"), "wide_spread": Decimal("27.00"),
     }
 def test_second_run_starts_without_first_run_execution_state(tmp_path):
-    observations = actual_observations()
+    observations = fixture_observations()
     master = master_for(observations[0])
     store_a = scenario_store(
         tmp_path, observations, "baseline", "RUN-A", lambda o: o

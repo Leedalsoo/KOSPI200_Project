@@ -49,8 +49,9 @@ class VirtualSecuritiesFirmRuntime:
         self.metrics["market_ticks"] += 1
         self._market_time = datetime.fromisoformat(tick.timestamp)
         self.order_book.update_bid_ask(tick.bid_price, tick.ask_price, instrument_id=getattr(tick, "instrument_id", None))
-        if tick.underlying_price is not None:
-            self.account.update_tick_price(tick.underlying_price)
+        mark_price = getattr(tick, "last_price", None)
+        if mark_price is not None and float(mark_price) > 0:
+            self.account.update_tick_price(mark_price, getattr(tick, "symbol", None) or getattr(tick, "instrument_id", None))
         self.process_pending_orders()
 
     def process_order(self, command):
@@ -87,7 +88,7 @@ class VirtualSecuritiesFirmRuntime:
         submitted_at = self._submitted_at.setdefault(command.client_order_id, now)
         rep = self.execution_engine.execute_order(command, price, command.qty, timestamp=now)
         self.account.apply_execution(rep)
-        self.account.update_tick_price(price)
+        self.account.update_tick_price(price, getattr(command, "symbol", None))
         self.metrics["executions_issued"] += 1
         if self.timeout_source is not None:
             self.timeout_source.observe(command.client_order_id, now, "FILLED")

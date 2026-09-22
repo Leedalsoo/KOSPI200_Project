@@ -76,6 +76,7 @@ class HistoricalReplayEngine:
             seq_id=seq_id,
             expiry=observation.contract.expiry or "",
             symbol=observation.contract.symbol,
+            instrument_id=observation.contract.instrument_id,
             underlying_price=float(observation.underlying_price) if observation.underlying_price is not None else None,
             underlying_symbol=observation.underlying_symbol,
             underlying_observed_hour=observation.underlying_observed_hour,

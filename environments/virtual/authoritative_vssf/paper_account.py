@@ -14,7 +14,9 @@ class PaperTradingAccount:
     def get_canonical_summary(self):
         total=self.balance+self.realized_pnl+self.unrealized_pnl
         return CanonicalAccountSummary('ACC-VSSF-001',total,self.realized_pnl,self.unrealized_pnl,self.used_margin,self.free_margin,datetime.now().strftime('%Y-%m-%d %H:%M:%S'),positions={k:dict(v) for k,v in self.positions.items()})
-    def update_tick_price(self, price):
+    def update_tick_price(self, price, instrument_id=None):
+        if instrument_id is not None:
+            self.position_mgr.update_market_price(str(instrument_id), price)
         self.unrealized_pnl=self.pnl_engine.calculate_unrealized(self.positions,price); self.used_margin=self.margin_engine.calculate_used_margin(self.positions); equity=self.balance+self.realized_pnl+self.unrealized_pnl; self.free_margin=self.margin_engine.calculate_free_margin(equity,self.used_margin)
     def apply_execution(self, rep):
         pnl=self.position_mgr.update_position(rep.symbol,rep.side.value if hasattr(rep.side,'value') else str(rep.side),rep.executed_qty,rep.executed_price); self.pnl_engine.add_realized(pnl); self.realized_pnl=self.pnl_engine.realized_pnl; self.balance-=Decimal(str(rep.fee)); self.ledger_engine.transactions.append({'exec_id':rep.exec_id})

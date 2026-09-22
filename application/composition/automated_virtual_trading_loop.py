@@ -112,7 +112,7 @@ class AutomatedVirtualTradingLoop:
         for canonical in commands:
             broker_command = BrokerOrderCommand(
                 client_order_id=canonical.client_order_id,
-                instrument_id=canonical.symbol or "KOSPI200",
+                instrument_id=canonical.instrument_id or canonical.symbol or "KOSPI200",
                 side=canonical.side.value,
                 quantity=canonical.qty,
                 order_type="LIMIT",
@@ -139,6 +139,8 @@ class AutomatedVirtualTradingLoop:
             routed += 1
             report = self.broker_adapter.last_report
             broker_id = f"VIRTUAL-{report.execution_id}"
+            if report.status not in {"PARTIALLY_FILLED", "FILLED"}:
+                continue
             self.fsm.apply_execution(ExecutionReport(
                 client_order_id=report.client_order_id,
                 broker_order_id=broker_id,

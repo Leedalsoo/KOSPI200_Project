@@ -2,6 +2,11 @@ class PositionManager:
     def __init__(self):
         self.positions = {}
 
+    def update_market_price(self, symbol, price):
+        position = self.positions.get(symbol)
+        if position is not None:
+            position["mark_price"] = price
+
     def update_position(self, symbol, side, qty, price, **kwargs):
         p = self.positions.get(symbol, {"qty": 0, "avg_price": 0.0, "side": side})
         if p["qty"] == 0 or p["side"] == side:
@@ -9,6 +14,7 @@ class PositionManager:
             p["avg_price"] = (p["avg_price"] * p["qty"] + price * qty) / total
             p["qty"] = total
             p["side"] = side
+            p.pop("mark_price", None)
             self.positions[symbol] = p
             return 0.0
         close = min(p["qty"], qty)

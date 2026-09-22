@@ -48,6 +48,11 @@ def responses(symbol="B01610C41", ts="122603"):
             "theta_val": "-0.02",
             "vega_val": "0.11",
         },
+        "output3": {
+            "bstp_cls_code": "2001",
+            "hts_kor_isnm": "KOSPI200",
+            "bstp_nmix_prpr": "1114.5",
+        },
     }
     asking = {
         "rt_cd": "0",

@@ -58,6 +58,9 @@ def test_market_tick_to_strategy_orchestrator_oms_virtual_execution_and_control_
     assert len(loop.fee_ledger.query(run_id="TEST-RUN-AUTOMATED")) == 1
     assert result.rejected == 0
     assert result.execution_ids
+    broker_command = loop.fsm.command_for(next(iter(bundle.execution.reports())).client_order_id)
+    assert broker_command.instrument_id == "KOSPI200"
+    assert broker_command.instrument_identity.instrument_id == broker_command.instrument_id
     assert bundle.execution.reports()
     assert bundle.position.snapshot()
 
