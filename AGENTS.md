@@ -69,7 +69,7 @@ Live 검증 전까지 시장데이터 수신과 Virtual Execution을 주문 없�
 ## 10. VTS 실데이터 수집·Replay·E2E 검증
 모의계좌에서 수집한 실제 시장데이터는 VTS E2E 검증용 원본 데이터 자산으로 축적할 수 있다.
 일별 수집은 `infrastructure/kis/kis_vts_weekday_collector.py`의 Daily Session Orchestrator가 관리하며 REST 시장관측 수집기를 주 수집 경계로 사용한다.
-`infrastructure/kis/kis_rest_market_observation_collector.py`는 Option Master의 `shrn_iscd`를 authoritative identity로 사용하여 Price/OrderBook을 수집한다.
+`infrastructure/kis/kis_rest_market_observation_collector.py`는 KRX 계약 identity를 보존하고 KIS 지수옵션 종목마스터의 `stnd_iscd`로 broker `shrn_iscd`를 authoritative하게 reconcile한 뒤 Price/OrderBook을 수집한다. KRX Marketplace는 계약 선택의 authoritative source이고 KIS Index Option Master는 broker symbol의 authoritative source다.
 `infrastructure/kis/kis_realtime_collector.py`는 WebSocket raw frame 경계이며 REST 수집과 독립적으로 동작한다. WS 연결 성공만으로 frame 수신 PASS를 선언하지 않는다.
 WS가 실패하거나 approval-key timeout이 발생해도 REST 수집은 계속할 수 있으며 manifest에 `DEGRADED_REST_PRIMARY` 상태를 기록한다.
 수집 데이터와 Replay 데이터의 source/provenance 및 원본/가공 여부를 명확히 보존한다.

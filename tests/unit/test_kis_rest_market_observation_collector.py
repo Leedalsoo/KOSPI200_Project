@@ -355,3 +355,33 @@ def test_http_failure_is_blocked_without_observation(tmp_path):
     assert result[0].status == "BLOCKED"
     assert result[0].reason == "KIS_REST_HTTP_ERROR"
     assert store.load_observations() == []
+
+
+def test_krx_target_resolves_to_kis_broker_symbol_before_rest_requests(tmp_path):
+    from infrastructure.kis.krx_kis_option_identity_resolver import KRXKISOptionIdentityResolver
+    from core.option.option_master import KisOptionContractIdentity
+
+    krx = KisOptionContractIdentity(
+        "B016AA41", "KR4B016AA412", "2026-10-08", "CALL", Decimal("1097.5"),
+        "KRX_MARKETPLACE", Decimal("250000"),
+    )
+    kis = KisOptionContractIdentity(
+        "B01610A41", "KR4B016AA412", "202610", "CALL", Decimal("1097.5"),
+        "KIS_INDEX_OPTION_MASTER", Decimal("250000"),
+    )
+    resolver = KRXKISOptionIdentityResolver({kis.shrn_iscd: kis})
+    resolved = resolver.get_contract_identity(krx.shrn_iscd, krx)
+    assert resolved is not None
+    price, asking = responses("B01610A41")
+    transport = FakeTransport(price, asking)
+    collector = KISRestMarketObservationCollector(
+        identity_source={resolved.symbol: resolved}, transport=transport,
+        store=HistoricalMarketStore(tmp_path / "market.jsonl"),
+    )
+
+    result = collector.collect_cycle(
+        [CollectionTarget(resolved)], run_id="run-1", cycle_id="cycle-map"
+    )
+
+    assert result[0].status == "SUCCESS"
+    assert transport.calls == [("price", "B01610A41"), ("order_book", "B01610A41")]

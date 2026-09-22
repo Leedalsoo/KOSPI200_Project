@@ -18,6 +18,7 @@ from pathlib import Path
 from infrastructure.kis.auth import KISAuthManager
 from infrastructure.kis.futures_market_transport import KISFuturesMarketTransport
 from infrastructure.kis.kis_realtime_collector import KISRealtimeCollector
+from infrastructure.kis.krx_kis_option_identity_resolver import load_kis_index_option_master, KRXKISOptionIdentityResolver
 from infrastructure.kis.kis_rest_market_observation_collector import (
     CollectionTarget,
     KISRestMarketObservationCollector,
@@ -419,28 +420,37 @@ class DailySessionOrchestrator:
 MARKET_DATA_ROOT = ROOT / "data" / "kis_market_data"
 REST_CYCLE_INTERVAL_SECONDS = 30
 REST_ROUND_REQUESTS_PER_TARGET = 2
+_KIS_OPTION_RESOLVER_CACHE: dict[date, KRXKISOptionIdentityResolver] = {}
+
+
+def _kis_option_resolver_for_day(day: date) -> KRXKISOptionIdentityResolver:
+    resolver = _KIS_OPTION_RESOLVER_CACHE.get(day)
+    if resolver is None:
+        resolver = KRXKISOptionIdentityResolver(load_kis_index_option_master())
+        _KIS_OPTION_RESOLVER_CACHE[day] = resolver
+    return resolver
 
 
 def build_daily_targets(day: date) -> tuple[CollectionTarget, ...]:
     plan = build_plan_for_day(day)
     targets: list[CollectionTarget] = []
-    seen: set[str] = set()
-    identity_source = load_option_master((ROOT / "data_2801_20260919.xlsx",))
+    krx_master = load_option_master((ROOT / "data_2801_20260919.xlsx",))
+    resolver = _kis_option_resolver_for_day(day)
     for strike in plan.monthly_strikes:
         for option_type in ("PUT", "CALL"):
-            matches = [identity for identity in identity_source.identities.values()
+            matches = [identity for identity in krx_master.identities.values()
                        if identity.expiry == plan.monthly_expiry and identity.option_type == option_type
                        and identity.strike == strike and identity.contract_multiplier == Decimal("250000")]
             if len(matches) != 1:
                 raise ValueError(f"AUTHORITATIVE_OPTION_IDENTITY_REQUIRED:{plan.monthly_expiry}:{option_type}:{strike}")
-            identity = KISRestMarketObservationCollector._coerce_identity(matches[0])
-            if identity is None:
-                raise ValueError(f"AUTHORITATIVE_OPTION_IDENTITY_REQUIRED:{plan.monthly_expiry}:{option_type}:{strike}")
-            targets.append(CollectionTarget(identity=identity))
+            krx_identity = matches[0]
+            resolved = resolver.get_contract_identity(krx_identity.shrn_iscd, krx_identity)
+            if resolved is None:
+                raise ValueError(f"KIS_BROKER_SYMBOL_RECONCILIATION_REQUIRED:{krx_identity.shrn_iscd}")
+            targets.append(CollectionTarget(identity=resolved))
     center = sum((Decimal(str(target.identity.strike)) for target in targets), Decimal("0")) / len(targets)
-    targets.sort(key=lambda target: (abs(Decimal(str(target.identity.strike)) - center), str(target.identity.option_type), str(getattr(target.identity, "shrn_iscd", ""))))
+    targets.sort(key=lambda target: (abs(Decimal(str(target.identity.strike)) - center), str(target.identity.option_type), target.identity.symbol))
     return tuple(targets)
-
 
 def build_plan_for_day(day: date) -> CollectionPlan:
     reference_price = _latest_krx_spot_price()
@@ -458,11 +468,13 @@ def _daily_run_id(day: date) -> str:
 
 def _manifest_target_rows(targets: tuple[CollectionTarget, ...]) -> list[dict[str, object]]:
     return [{
-        "symbol": getattr(target.identity, "shrn_iscd", getattr(target.identity, "symbol", "")), "expiry": target.identity.expiry,
+        "symbol": target.identity.symbol,
+        "krx_isu_cd": getattr(target.identity, "instrument_id", ""),
+        "expiry": target.identity.expiry,
         "strike": str(target.identity.strike), "option_type": target.identity.option_type,
-        "selection_source": "OPTION_MASTER", "selection_reason": "MONTHLY_ATM_PLUS_MINUS_15_POINTS",
+        "selection_source": "KRX_MARKETPLACE+KIS_INDEX_OPTION_MASTER",
+        "selection_reason": "MONTHLY_ATM_PLUS_MINUS_15_POINTS",
     } for target in targets]
-
 
 def _rest_collector_for_day(day: date, store: HistoricalMarketStore):
     auth = KISAuthManager.from_env(
@@ -472,11 +484,11 @@ def _rest_collector_for_day(day: date, store: HistoricalMarketStore):
     if not auth.has_credentials():
         raise RuntimeError("KIS_VTS_CREDENTIALS_REQUIRED")
     transport = KISRestMarketObservationTransport(auth)
+    targets = build_daily_targets(day)
+    identity_source = {target.identity.symbol: target.identity for target in targets}
     return KISRestMarketObservationCollector(
-        identity_source=load_option_master((ROOT / "data_2801_20260919.xlsx",)).identities,
-        transport=transport, store=store,
+        identity_source=identity_source, transport=transport, store=store,
     )
-
 
 def run_rest_cycle_for_day(day: date, manifest: DateSessionManifest, *, cycle_id: str) -> tuple[object, ...]:
     store = HistoricalMarketStore.for_trading_date(MARKET_DATA_ROOT, day)
