@@ -101,7 +101,10 @@ class HistoricalMarketStore:
             if record.get("schema") != "canonical-market-observation-v1":
                 raise ValueError("UNSUPPORTED_MARKET_OBSERVATION_SCHEMA")
             value = record["observation"]
-            contract = OptionInstrumentIdentity(**value["contract"])
+            contract_value = dict(value["contract"])
+            contract_value["strike"] = self._decimal(contract_value.get("strike"))
+            contract_value["contract_multiplier"] = self._decimal(contract_value.get("contract_multiplier"))
+            contract = OptionInstrumentIdentity(**contract_value)
             quote = MarketQuote(**{k: self._decimal(v) for k, v in value["quote"].items()})
             order_book = MarketOrderBook(
                 bids=tuple(OrderBookLevel(**{k: self._decimal(v) if k != "level" else v for k, v in level.items()}) for level in value["order_book"]["bids"]),

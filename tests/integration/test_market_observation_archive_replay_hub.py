@@ -40,6 +40,7 @@ def test_observation_round_trips_store_replay_and_hub_without_kis_fields(tmp_pat
     hub = MarketDataHub({"historical": provider}, active="historical")
 
     assert provider.replay_next().instrument_id == "B01610C41"
+    assert store.load_observations()[0].contract.strike == Decimal("1595")
     state = hub.snapshot()
     assert state.ticks["B01610C41"].price == Decimal("0.08")
     assert not hasattr(state.ticks["B01610C41"], "optn_prpr")
