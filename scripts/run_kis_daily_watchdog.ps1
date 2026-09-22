@@ -1,5 +1,6 @@
 $ErrorActionPreference = 'Continue'
 $ProjectRoot = 'C:\Users\white\Desktop\MovingProject\KOSPI200_Project'
+$env:PROJECT200_MARKET_DATA_DIR = 'kis_market_data_restart'
 $LogPath = Join-Path $ProjectRoot 'data\kis_realtime\watchdog.log'
 $Python = 'C:\WINDOWS\py.exe'
 $Module = 'infrastructure.kis.kis_vts_weekday_collector'
