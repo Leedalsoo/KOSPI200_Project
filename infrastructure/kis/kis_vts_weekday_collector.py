@@ -28,6 +28,11 @@ from environments.virtual.market.historical_market_store import HistoricalMarket
 from infrastructure.kis.holiday_provider import KISHolidayProvider
 from infrastructure.kis.trading_calendar import ProductionTradingCalendar
 from infrastructure.krx.krx_marketplace_master import load_option_master
+from infrastructure.krx.krx_option_master_store import (
+    KRXOptionMasterRefreshRequired,
+    discover_master_snapshot_dates,
+    resolve_option_master_paths_for_day,
+)
 from infrastructure.kis.kis_vts_collection_diagnostic import diagnose_collection, write_human_report, write_report
 from infrastructure.kis.kis_weekday_collection_plan import (
     CollectionPlan,
@@ -98,15 +103,7 @@ def _latest_krx_spot_price() -> str:
 
 
 def build_plan() -> CollectionPlan:
-    reference_price = _latest_krx_spot_price()
-    return build_collection_plan(
-        reference_price=Decimal(reference_price),
-        option_master_paths=(ROOT / "data_2801_20260919.xlsx",),
-        weekly_master_paths=(ROOT / "data_2923_20260919.xlsx", ROOT / "data_2935_20260919.xlsx"),
-        standard_futures_symbol="A01609",
-        mini_futures_symbol="A05609",
-        as_of=WINDOW.start,
-    )
+    return build_plan_for_day(WINDOW.start)
 
 
 def write_daily_collection_diagnostic(day: date, plan: CollectionPlan) -> dict[str, Path]:
@@ -434,7 +431,8 @@ def _kis_option_resolver_for_day(day: date) -> KRXKISOptionIdentityResolver:
 def build_daily_targets(day: date) -> tuple[CollectionTarget, ...]:
     plan = build_plan_for_day(day)
     targets: list[CollectionTarget] = []
-    krx_master = load_option_master((ROOT / "data_2801_20260919.xlsx",))
+    monthly_paths, _ = resolve_option_master_paths_for_day(ROOT, day)
+    krx_master = load_option_master(monthly_paths)
     resolver = _kis_option_resolver_for_day(day)
     for strike in plan.monthly_strikes:
         for option_type in ("PUT", "CALL"):
@@ -454,12 +452,21 @@ def build_daily_targets(day: date) -> tuple[CollectionTarget, ...]:
 
 def build_plan_for_day(day: date) -> CollectionPlan:
     reference_price = _latest_krx_spot_price()
-    return build_collection_plan(
-        reference_price=Decimal(reference_price),
-        option_master_paths=(ROOT / "data_2801_20260919.xlsx",),
-        weekly_master_paths=(ROOT / "data_2923_20260919.xlsx", ROOT / "data_2935_20260919.xlsx"),
-        standard_futures_symbol="A01609", mini_futures_symbol="A05609", as_of=day,
-    )
+    monthly_paths, weekly_paths = resolve_option_master_paths_for_day(ROOT, day)
+    try:
+        return build_collection_plan(
+            reference_price=Decimal(reference_price),
+            option_master_paths=monthly_paths,
+            weekly_master_paths=weekly_paths,
+            standard_futures_symbol="A01609", mini_futures_symbol="A05609", as_of=day,
+        )
+    except ValueError as exc:
+        if str(exc) != "NO_LISTED_OPTION_EXPIRY_AVAILABLE":
+            raise
+        snapshots = discover_master_snapshot_dates(ROOT, day)
+        raise KRXOptionMasterRefreshRequired(
+            f"KRX_OPTION_MASTER_REFRESH_REQUIRED:expiry:{day.isoformat()}:snapshots={snapshots}"
+        ) from exc
 
 
 def _daily_run_id(day: date) -> str:

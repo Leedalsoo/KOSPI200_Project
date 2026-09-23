@@ -110,7 +110,7 @@ def build_collection_plan(
     weekly_identities = tuple(weekly_master.identities.values())
 
     monthly_expiry = _next_expiry(monthly_identities, as_of)
-    weekly_expiry = _next_expiry(weekly_identities, as_of, strictly_after=True)
+    weekly_expiry = _next_expiry(weekly_identities, as_of)
 
     atm = _nearest_strike(Decimal(reference_price))
     monthly_strikes = tuple(atm + offset for offset in STRATEGY_MONTHLY_OFFSETS)
