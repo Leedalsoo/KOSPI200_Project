@@ -1,6 +1,8 @@
 """Authoritative composition for automated Virtual strategy execution."""
 from __future__ import annotations
 
+from datetime import datetime
+
 from application.composition.automated_virtual_trading_loop import AutomatedVirtualTradingLoop
 from application.composition.standard_runtime_input_provider import StandardRuntimeInputProvider
 from application.composition.option_expiry_source import KisOptionMasterExpirySource
@@ -17,12 +19,12 @@ from application.strategy_hub.hub import StrategyHub
 from core.strategy.standard_registry import STANDARD_STRATEGY_KEYS, build_standard_strategy_registry
 
 
-def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_history_path=None, run_id=None):
+def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_history_path=None, run_id=None, historical_observation_option_source=None):
     """Attach all nine Standard strategies to the RuntimeController-owned VMS."""
     selected_keys = tuple(strategy_keys) if strategy_keys else STANDARD_STRATEGY_KEYS
     strategy_hub = StrategyHub(build_standard_strategy_registry(), selected_keys)
     expiry_source = KisOptionMasterExpirySource(bootstrap.bundle.option_master)
-    track2_option_iv_source = KISTrack2OptionIVSource(bootstrap.bundle.option_master)
+    track2_option_iv_source = historical_observation_option_source or KISTrack2OptionIVSource(bootstrap.bundle.option_master)
     track9_iv_history_source = (
         KISTrack9IVObservationHistoryStore(track9_iv_history_path)
         if track9_iv_history_path else None
@@ -51,6 +53,7 @@ def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_h
         trading_calendar=getattr(bootstrap.bundle.option_master, "calendar", None),
         option_master=bootstrap.bundle.option_master,
         track2_option_iv_source=track2_option_iv_source,
+        option_orderbook_source=historical_observation_option_source,
         track9_iv_event_materializer=track9_iv_event_materializer,
         track9_atm_iv_source=track9_atm_iv_source,
         track7_order_timeout_source=getattr(bootstrap.bundle, "track7_order_timeout_source", None),
@@ -82,12 +85,17 @@ def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_h
             identity_source="OPTION_MASTER",
         )
 
+    def context_builder(tick, state):
+        if historical_observation_option_source is not None:
+            historical_observation_option_source.set_as_of(datetime.fromisoformat(tick.timestamp))
+        return provider.build(tick, state, bootstrap.bundle.account)
+
     loop = AutomatedVirtualTradingLoop(
         bundle=bootstrap.bundle,
         strategy_hub=strategy_hub,
         run_id=run_id,
         fee_ledger=fee_ledger,
-        context_builder=lambda tick, state: provider.build(tick, state, bootstrap.bundle.account),
+        context_builder=context_builder,
         identity_provider=identity,
     )
     bootstrap.bundle.market.subscribe(loop.on_tick)

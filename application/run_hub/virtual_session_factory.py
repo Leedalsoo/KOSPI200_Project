@@ -23,6 +23,7 @@ from core.risk.risk_config import RiskConfig
 from core.risk.risk_engine import RiskEngine
 from environments.virtual.execution.vssf_command_context_provider import CanonicalVSSFCommandContextProvider
 from infrastructure.kis.track2_option_iv_source import KISTrack2OptionIVSource
+from infrastructure.kis.historical_observation_sources import HistoricalObservationOptionSource
 from application.composition.track7_support_resistance_source import Track7AuthoritativeSupportResistanceSource
 from interfaces.control_tower.ui_adapter import ControlTowerUIAdapter
 from interfaces.control_tower.virtual_test_controller import VirtualTestController
@@ -60,6 +61,13 @@ def create_virtual_run_session(context: RunContext, option_master: Any) -> RunSe
             else:
                 store = HistoricalMarketStore(historical_path)
                 bundle.market.load_historical_store(store, source=context.historical_source)
+    historical_observation_option_source = None
+    if context.historical_store_path and Path(context.historical_store_path).name.endswith(".observations.jsonl"):
+        base_path = Path(str(context.historical_store_path)[: -len(".observations.jsonl")])
+        if base_path.is_file():
+            from environments.virtual.market.historical_market_store import HistoricalMarketStore
+            historical_observation_option_source = HistoricalObservationOptionSource(HistoricalMarketStore(base_path).load_observations())
+
     if context.historical_daily_store_path:
         daily_path = Path(context.historical_daily_store_path)
         if daily_path.is_file():
@@ -91,6 +99,7 @@ def create_virtual_run_session(context: RunContext, option_master: Any) -> RunSe
         strategy_keys=context.strategy_keys,
         track9_iv_history_path=context.track9_iv_history_path,
         run_id=context.run_id,
+        historical_observation_option_source=historical_observation_option_source,
     )
     strategy_hub = loop.strategy_hub
     runtime_hub = RuntimeHub(loop)
