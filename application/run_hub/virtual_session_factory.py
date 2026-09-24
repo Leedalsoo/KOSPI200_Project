@@ -53,8 +53,13 @@ def create_virtual_run_session(context: RunContext, option_master: Any) -> RunSe
         historical_path = Path(context.historical_store_path)
         if historical_path.is_file():
             from environments.virtual.market.historical_market_store import HistoricalMarketStore
-            store = HistoricalMarketStore(historical_path)
-            bundle.market.load_historical_store(store, source=context.historical_source)
+            if historical_path.name.endswith(".observations.jsonl"):
+                base_path = Path(str(historical_path)[: -len(".observations.jsonl")])
+                store = HistoricalMarketStore(base_path)
+                bundle.market.load_historical_observation_store(store, source=context.historical_source)
+            else:
+                store = HistoricalMarketStore(historical_path)
+                bundle.market.load_historical_store(store, source=context.historical_source)
     if context.historical_daily_store_path:
         daily_path = Path(context.historical_daily_store_path)
         if daily_path.is_file():
