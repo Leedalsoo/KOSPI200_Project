@@ -165,3 +165,13 @@ Legacy 경로를 새 표준 경계에 재연결
 Multi-Broker 설계 문서의 구현은 사용자 명시 승인 후에만 시작한다.
 LS증권 실제 연동, credential 처리, 네트워크 호출은 승인 전 금지한다.
 구현 시에도 broker별 실제 capability와 공식 문서 증거를 먼저 확인하고, 확인되지 않은 항목은 UNKNOWN/BLOCKED로 유지한다.
+## 21. 현재 KRX Master 및 VTS 기준자료
+루트에는 KRX authoritative Master 기준자료가 실제로 존재한다.
+- KRX 옵션 Master: KOSPI200 월물 옵션 Master Excel
+- KRX 선물 Master: KOSPI200 표준 선물 Master Excel
+- KRX Weekly 옵션 Master: 목요일 Weekly 옵션 및 월요일 Weekly 옵션 Master Excel
+- 기존 코드에서도 위 KRX Excel Master 파일들을 사용한다.
+
+현재 실데이터 검증의 기준일은 2026-09-22이다.
+2026-09-22의 KIS VTS 수집기 실제 수집 데이터를 현재 기준 데이터셋으로 사용한다. 해당 데이터는 실제 수집 원본이며 Replay/Virtual/Strategy 검증의 기준으로 삼는다.
+현재 KRX Master의 최신 파일 부재 사유와 공급 경계는 Notion에 이미 확정 기록되어 있으므로, 이를 다시 추적하거나 임의의 미래 snapshot으로 대체하지 않는다.
