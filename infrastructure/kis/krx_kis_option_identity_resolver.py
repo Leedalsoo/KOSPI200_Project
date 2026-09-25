@@ -121,3 +121,63 @@ class KRXKISOptionIdentityResolver:
             contract_multiplier=kis.contract_multiplier,
             identity_source="KIS_INDEX_OPTION_MASTER",
         )
+
+class KISOptionIdentityResolver:
+    """Resolve development identity directly from KIS master data.
+
+    KRX remains available as a separate validation source; this resolver does not
+    require KRX data at runtime.
+    """
+
+    def __init__(self, kis_master: Mapping[str, KisOptionContractIdentity]) -> None:
+        self._by_short = dict(kis_master)
+        self._by_standard: dict[str, KisOptionContractIdentity] = {}
+        for identity in self._by_short.values():
+            if not identity.stnd_iscd:
+                continue
+            existing = self._by_standard.get(identity.stnd_iscd)
+            if existing is not None and existing != identity:
+                raise ValueError(
+                    f"AMBIGUOUS_KIS_STANDARD_CODE:{identity.stnd_iscd}"
+                )
+            self._by_standard[identity.stnd_iscd] = identity
+
+    def get_contract_identity(self, symbol: str) -> OptionInstrumentIdentity | None:
+        kis = self._by_short.get(symbol.strip())
+        if kis is None or not kis.shrn_iscd:
+            return None
+        if not kis.expiry or not kis.option_type or kis.strike is None:
+            return None
+        return OptionInstrumentIdentity(
+            instrument_id=kis.shrn_iscd,
+            symbol=kis.shrn_iscd,
+            expiry=kis.expiry,
+            option_type=kis.option_type,
+            strike=kis.strike,
+            contract_multiplier=kis.contract_multiplier,
+            identity_source="KIS_INDEX_OPTION_MASTER",
+        )
+
+    def get_by_standard_code(
+        self, standard_code: str
+    ) -> OptionInstrumentIdentity | None:
+        identity = self._by_standard.get(standard_code.strip())
+        if identity is None:
+            return None
+        return self.get_contract_identity(identity.shrn_iscd)
+
+    def find_contract_identity(
+        self, expiry: str, option_type: str, strike: Decimal
+    ) -> OptionInstrumentIdentity | None:
+        target_expiry = expiry.replace("-", "")[:6]
+        target_type = option_type.upper()
+        target_strike = Decimal(str(strike))
+        matches = [
+            identity for identity in self._by_short.values()
+            if identity.expiry.replace("-", "")[:6] == target_expiry
+            and identity.option_type == target_type
+            and identity.strike == target_strike
+        ]
+        if len(matches) != 1:
+            return None
+        return self.get_contract_identity(matches[0])
