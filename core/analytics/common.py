@@ -35,6 +35,8 @@ _COMMON = (
     ("volatility.ratio", "ratio", ("active_vol", "base_vol"), ("active_vol", "base_vol")),
     ("portfolio.total_fees", "currency", ("total_fees",), ("total_fees",)),
     ("portfolio.margin_ratio", "ratio", ("margin_ratio",), ("margin_ratio",)),
+    ("portfolio.current_pnl", "currency", ("current_pnl",), ("current_pnl",)),
+    ("portfolio.net_pnl", "currency", ("current_pnl", "total_fees"), ("current_pnl", "total_fees")),
 )
 
 COMMON_METRIC_CONTRACTS = {
@@ -95,6 +97,20 @@ def _ratio(snapshot, request):
         return _metric(request, snapshot, None, "ratio", available=False)
     return _metric(request, snapshot, active_value / base_value, "ratio")
 
+
+def _net_pnl(snapshot, request):
+    current_pnl = snapshot.observations.get("current_pnl")
+    total_fees = snapshot.observations.get("total_fees")
+    if current_pnl is None or total_fees is None:
+        return _metric(request, snapshot, None, "currency", available=False)
+    return _metric(
+        request,
+        snapshot,
+        Decimal(str(current_pnl)) - Decimal(str(total_fees)),
+        "currency",
+    )
+
+
 _EVALUATORS: Mapping[str, Callable] = {
     "price.last": _passthrough("current_price", "index-points"),
     "volatility.active": _passthrough("active_vol", "decimal"),
@@ -102,6 +118,8 @@ _EVALUATORS: Mapping[str, Callable] = {
     "volatility.ratio": _ratio,
     "portfolio.total_fees": _passthrough("total_fees", "currency"),
     "portfolio.margin_ratio": _passthrough("margin_ratio", "ratio"),
+    "portfolio.current_pnl": _passthrough("current_pnl", "currency"),
+    "portfolio.net_pnl": _net_pnl,
 }
 
 

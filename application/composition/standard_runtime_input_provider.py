@@ -81,7 +81,9 @@ class StandardRuntimeInputProvider:
         snapshot = self._account_snapshot(account)
         balances = getattr(snapshot, "balances", {}) if snapshot is not None else {}
         budget = balances.get("available_cash")
-        pnl = balances.get("realized_pnl")
+        realized_pnl = balances.get("realized_pnl")
+        unrealized_pnl = balances.get("unrealized_pnl")
+        pnl = (Decimal(str(realized_pnl)) + Decimal(str(unrealized_pnl))) if realized_pnl is not None and unrealized_pnl is not None else None
         return CommonStrategyInput(
             as_of=d.as_of,
             current_price=d.price,

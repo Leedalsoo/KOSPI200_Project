@@ -95,6 +95,8 @@ def test_promotable_contracts_are_authoritative_and_canonical():
     expected = {
         "portfolio.total_fees": ("currency", ("total_fees",)),
         "portfolio.margin_ratio": ("ratio", ("margin_ratio",)),
+        "portfolio.current_pnl": ("currency", ("current_pnl",)),
+        "portfolio.net_pnl": ("currency", ("current_pnl", "total_fees")),
     }
     for key, (unit, source) in expected.items():
         contract = COMMON_METRIC_CONTRACTS[key]
@@ -125,6 +127,24 @@ def test_promotable_common_metrics_fail_closed_when_authoritative_source_missing
 def test_unresolved_metrics_are_not_promoted():
     assert "options.call_iv" not in COMMON_METRIC_CONTRACTS
     assert "options.put_iv" not in COMMON_METRIC_CONTRACTS
-    assert "portfolio.current_pnl" not in COMMON_METRIC_CONTRACTS
-    assert "portfolio.net_pnl" not in COMMON_METRIC_CONTRACTS
     assert "risk.guard_active" not in COMMON_METRIC_CONTRACTS
+
+
+def test_current_pnl_and_net_pnl_use_canonical_account_pnl_projection():
+    analytics = build_common_analytics_snapshot(
+        _market(current_pnl=Decimal("1500"), total_fees=Decimal("100")),
+        ("portfolio.current_pnl", "portfolio.net_pnl"),
+    )
+    assert analytics.get("portfolio.current_pnl").value == Decimal("1500")
+    assert analytics.get("portfolio.net_pnl").value == Decimal("1400")
+
+
+def test_current_pnl_and_net_pnl_fail_closed_when_required_authoritative_inputs_missing():
+    analytics = build_common_analytics_snapshot(
+        _market(current_pnl=None, total_fees=Decimal("100")),
+        ("portfolio.current_pnl", "portfolio.net_pnl"),
+    )
+    assert analytics.get("portfolio.current_pnl").status is AnalyticsStatus.UNAVAILABLE
+    assert analytics.get("portfolio.current_pnl").value is None
+    assert analytics.get("portfolio.net_pnl").status is AnalyticsStatus.UNAVAILABLE
+    assert analytics.get("portfolio.net_pnl").value is None

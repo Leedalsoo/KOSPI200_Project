@@ -74,3 +74,42 @@ def test_standard_runtime_injects_authoritative_fee_and_margin_metrics():
     assert context.analytics.get("portfolio.total_fees").value == Decimal("1234")
     assert context.analytics.get("portfolio.total_fees").provenance[0].source == "common-analytics.canonical"
     assert context.analytics.get("portfolio.margin_ratio").value == Decimal("0.2")
+
+
+def test_standard_runtime_current_pnl_is_realized_plus_unrealized_and_net_pnl_subtracts_fees():
+    from decimal import Decimal
+    from contracts.types import AccountSnapshot
+
+    class AccountSource:
+        def snapshot(self):
+            return AccountSnapshot(
+                as_of=datetime.fromisoformat("2026-09-26T10:00:00"),
+                balances={
+                    "cash": Decimal("1000000"),
+                    "available_cash": Decimal("800000"),
+                    "realized_pnl": Decimal("1200"),
+                    "unrealized_pnl": Decimal("300"),
+                },
+                freshness=DataQuality(True, True, True),
+            )
+
+    class FeeLedger:
+        def total(self, *, run_id, start=None, end=None):
+            return Decimal("100")
+
+    bootstrap = create_virtual_runtime_bootstrap()
+    market = bootstrap.bundle.market
+    tick = next(market.generate_tick_stream(total_days=1, ticks_per_day=1))
+    state = MarketState(
+        as_of=datetime.fromisoformat(tick.timestamp),
+        ticks={"KOSPI200": tick},
+        quality={"KOSPI200": DataQuality(True, True, True)},
+    )
+    provider = StandardRuntimeInputProvider(
+        market, track9_fee_ledger=FeeLedger(), run_id="RUN-PNL"
+    )
+    context = provider.build(tick, state, AccountSource())["track5_gap_divergence"]
+    assert context.analytics.get("portfolio.current_pnl").value == Decimal("1500")
+    assert context.analytics.get("portfolio.net_pnl").value == Decimal("1400")
+    assert context.analytics.get("portfolio.current_pnl").provenance[0].source == "common-analytics.canonical"
+    assert context.analytics.get("portfolio.net_pnl").provenance[0].source == "common-analytics.canonical"
