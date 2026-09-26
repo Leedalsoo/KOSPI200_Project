@@ -175,3 +175,25 @@ LS증권 실제 연동, credential 처리, 네트워크 호출은 승인 전 금
 현재 실데이터 검증의 기준일은 2026-09-22이다.
 2026-09-22의 KIS VTS 수집기 실제 수집 데이터를 현재 기준 데이터셋으로 사용한다. 해당 데이터는 실제 수집 원본이며 Replay/Virtual/Strategy 검증의 기준으로 삼는다.
 현재 KRX Master의 최신 파일 부재 사유와 공급 경계는 Notion에 이미 확정 기록되어 있으므로, 이를 다시 추적하거나 임의의 미래 snapshot으로 대체하지 않는다.
+
+
+## 22. Graft 보조 코드 탐색·영향 분석
+Graft는 GitHub·Notion·RDC를 대체하지 않는 보조 코드 탐색 및 영향 분석 도구로 사용한다.
+Graft의 결과는 코드 자체, AGENTS.md, Notion 작업 기록 및 실제 실행 검증을 대체하는 authoritative evidence가 아니다.
+
+코드 작업 전에는 가능한 경우 Graft index를 최신 코드 상태로 갱신하고 다음 순서로 영향 범위를 확인한다.
+1. `graft check`로 Graft graph가 현재 코드와 동기화되어 있는지 확인한다.
+2. `graft ask`로 작업 대상의 관련 파일·심볼·계약을 빠르게 탐색한다.
+3. `graft callers`로 대상 심볼의 호출자를 확인하고, 필요하면 `--direction out` 및 `--depth all`로 호출/의존 관계와 전이 영향 범위를 확인한다.
+4. `graft grep`로 계약명·클래스·필드·핵심 식별자의 전체 사용처를 확인한다.
+5. `graft skeleton`으로 변경 대상 파일의 public API/시그니처를 확인하고, `graft map`으로 관련 영역과 주요 hub를 파악한다.
+특히 `contracts/`, `core/strategy/`, `application/composition/`, `core/oms/`, `core/risk/`, `environments/virtual/`, `infrastructure/kis/` 사이의 계약 연결과 영향 범위를 사전 확인한다.
+
+코드 변경 후에는 `graft blast`로 실제 diff의 영향 범위를 확인하고, `graft check`로 graph freshness를 재확인한다.
+Graft 결과에서 발견된 영향 대상은 실제 코드 검토 및 필요한 focused test/E2E 검증 대상에 반영한다.
+Graft의 자연어 질의는 현재 graph의 lexical/symbol 검색 특성상 실제 코드 식별자·영문 용어를 포함하여 작성한다.
+Graft가 설치되어 있지 않거나 graph가 stale/실패 상태인 경우에도 작업을 중단하지 않고 직접 코드 탐색·Git diff·테스트로 검증하되, Graft가 제공하지 못한 분석은 PASS 근거로 간주하지 않는다.
+Graft가 생성하는 `graft/` 캐시 및 일회성 분석 산출물은 저장소에 commit하지 않는다.
+
+표준 작업 흐름은 다음과 같다.
+Notion 작업 기록 확인 → 원격/로컬 코드 확인 → Graft 사전 영향 분석 → 변경 범위 확정 → 코드 수정 → Graft blast/재검사 → 실제 테스트(RDC, `py`) → git diff/status 검증 → commit/push → 원격 HEAD 확인 → Notion `[No.xxx 답변내용요약]` 기록.
