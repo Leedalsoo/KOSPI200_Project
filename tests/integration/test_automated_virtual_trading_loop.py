@@ -12,10 +12,11 @@ from application.strategy_hub.hub import StrategyHub
 from core.strategy.track1_tail_defense import Track1Input
 from interfaces.control_tower.ui_adapter import ControlTowerUIAdapter
 from tests.support import build_test_option_master
+from tests.risk_guard_test_support import allow_risk_guard
 
 
 def test_market_tick_to_strategy_orchestrator_oms_virtual_execution_and_control_tower():
-    bootstrap = create_virtual_runtime_bootstrap(initial_capital=250_000_000.0, option_master=build_test_option_master())
+    bootstrap = create_virtual_runtime_bootstrap(initial_capital=250_000_000.0, option_master=build_test_option_master(), risk_guard_status_source=allow_risk_guard())
     bundle = bootstrap.bundle
     registry = build_standard_strategy_registry()
     strategy_hub = StrategyHub(registry, (("TRACK1_TAIL_DEFENSE", "1.1.0"),))
@@ -41,7 +42,7 @@ def test_market_tick_to_strategy_orchestrator_oms_virtual_execution_and_control_
     loop = AutomatedVirtualTradingLoop(
         bundle=bundle, strategy_hub=strategy_hub, run_id="TEST-RUN-AUTOMATED",
         fee_ledger=VirtualTrack9FeeLedger(),
-        context_builder=contexts, identity_provider=identity,
+        context_builder=contexts, identity_provider=identity, risk_guard_status_source=allow_risk_guard(),
     )
     bundle.market.subscribe(loop.on_tick)
     tick = next(bundle.market.generate_tick_stream(total_days=1, ticks_per_day=1))

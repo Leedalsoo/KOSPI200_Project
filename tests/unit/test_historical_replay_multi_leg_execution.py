@@ -10,6 +10,7 @@ from environments.virtual.execution.vssf_command_context_provider import Canonic
 from environments.virtual.market.canonical import ReferenceCanonicalMarketTick
 from environments.virtual.market.historical_market_store import HistoricalMarketStore
 from interfaces.control_tower.ui_adapter import ControlTowerUIAdapter
+from tests.risk_guard_test_support import allow_risk_guard
 
 
 def _bundle(tmp_path):
@@ -78,7 +79,7 @@ def test_historical_replay_flows_through_broker_api_and_multi_leg_execution(tmp_
     assert quote["contract_multiplier"] == 250000.0
 
     bridge = VirtualMultiLegExecutionBridge(
-        bundle=bundle, run_id="TEST-RUN", option_master=bundle.option_master
+        bundle=bundle, run_id="TEST-RUN", option_master=bundle.option_master, risk_guard_status_source=allow_risk_guard()
     )
     plan = MultiLegExecutionPlan(
         group_id="HIST-E2E-G1",
@@ -127,7 +128,7 @@ def test_historical_replay_rejects_multiplier_mismatch(tmp_path):
         {"bid": 3.20, "ask": 3.30, "last": 3.25,
          "timestamp": "2026-10-15T10:00:00.123", "contract_multiplier": 50000},
     )
-    bridge = VirtualMultiLegExecutionBridge(bundle=bundle, run_id="TEST-RUN", option_master=bundle.option_master)
+    bridge = VirtualMultiLegExecutionBridge(bundle=bundle, run_id="TEST-RUN", option_master=bundle.option_master, risk_guard_status_source=allow_risk_guard())
     plan = MultiLegExecutionPlan(
         group_id="HIST-MISMATCH-G1", strategy_id="HIST-MISMATCH-S1",
         legs=(ExecutionLeg("call", "BUY", 1, "CALL", Decimal("510")),),
@@ -169,7 +170,7 @@ def test_two_leg_historical_replay_preserves_group_identity_and_pnl(tmp_path):
         option_type="PUT", strike=510.0, expiry="202610"
     )["contract_multiplier"] == 250000.0
 
-    bridge = VirtualMultiLegExecutionBridge(bundle=bundle, run_id="TEST-RUN", option_master=bundle.option_master)
+    bridge = VirtualMultiLegExecutionBridge(bundle=bundle, run_id="TEST-RUN", option_master=bundle.option_master, risk_guard_status_source=allow_risk_guard())
     plan = MultiLegExecutionPlan(
         group_id="HIST-2LEG-G1", strategy_id="HIST-2LEG-S1",
         purpose="HISTORICAL_REPLAY_2LEG",
@@ -263,7 +264,7 @@ def test_four_leg_historical_replay_risk_provenance_broker_api_and_control_tower
         )
         assert quote["contract_multiplier"] == 250000.0
 
-    bridge = VirtualMultiLegExecutionBridge(bundle=bundle, run_id="TEST-RUN", option_master=master)
+    bridge = VirtualMultiLegExecutionBridge(bundle=bundle, run_id="TEST-RUN", option_master=master, risk_guard_status_source=allow_risk_guard())
     plan = MultiLegExecutionPlan(
         group_id="HIST-4LEG-G1", strategy_id="HIST-4LEG-S1",
         purpose="HISTORICAL_REPLAY_4LEG",

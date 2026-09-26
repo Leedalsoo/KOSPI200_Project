@@ -19,6 +19,7 @@ from core.strategy.contracts import CommonStrategyInput, StrategyContext, Strate
 from core.strategy.track3_statistical_arbitrage import Track3MarketInput, Track3StatisticalArbitrage
 from core.runtime.reference_execution_pipeline import approved_signal_to_command, DecisionCommandContext
 from core.domain.market_models import MarketState
+from tests.risk_guard_test_support import allow_risk_guard
 
 
 def _identity(product_type):
@@ -85,8 +86,8 @@ def test_track3_strategy_decision_command_and_virtual_execution_e2e():
         strategy_id=signal.track_id, group_id="T3-RUN-G1", side=signal.side.value,
         quantity=signal.qty, identity=identity,
     )
-    bridge = VirtualFuturesExecutionBridge(bundle=create_virtual_runtime_bootstrap(initial_capital=250_000_000.0).bundle,
-                                           run_id="T3-RUN", identity=identity)
+    bridge = VirtualFuturesExecutionBridge(bundle=create_virtual_runtime_bootstrap(initial_capital=250_000_000.0, risk_guard_status_source=allow_risk_guard()).bundle,
+                                           run_id="T3-RUN", identity=identity, risk_guard_status_source=allow_risk_guard())
     executed = bridge.execute(plan)
     assert executed.group_complete
     assert executed.reports[0].status == "FILLED"
@@ -102,8 +103,8 @@ def test_track3_strategy_decision_command_and_virtual_execution_e2e():
 def test_track3_mini_futures_virtual_execution_uses_krx_multiplier():
     identity = _identity(FuturesProductType.MINI)
     bridge = VirtualFuturesExecutionBridge(
-        bundle=create_virtual_runtime_bootstrap(initial_capital=250_000_000.0).bundle,
-        run_id="T3-MINI-RUN", identity=identity,
+        bundle=create_virtual_runtime_bootstrap(initial_capital=250_000_000.0, risk_guard_status_source=allow_risk_guard()).bundle,
+        run_id="T3-MINI-RUN", identity=identity, risk_guard_status_source=allow_risk_guard(),
     )
     plan = Track3FuturesExecutionPlanAdapter().build_plan(
         strategy_id="Strategy_3_StatArb", group_id="T3-MINI-G1", side="SELL", quantity=1, identity=identity,

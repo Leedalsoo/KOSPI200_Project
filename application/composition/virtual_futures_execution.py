@@ -6,6 +6,7 @@ from typing import Any
 
 from application.composition.runtime_authoritative_risk_router_adapter import RiskRouterContext, route_from_runtime_authoritative_sources
 from contracts.position_provenance import PositionLotProvenance, PositionRole
+from contracts.risk_guard import RiskGuardStatusSource
 from contracts.types import BrokerOrderCommand, ExecutionReport, MultiLegExecutionPlan
 from core.oms.order_router import StandardOrderRouter
 from core.oms.oms_fsm import OrderStateMachine
@@ -43,7 +44,7 @@ class _AckAdapter:
 class VirtualFuturesExecutionBridge:
     """Single-leg Track3 Futures bridge through Risk -> OMS -> Virtual Broker/VSSF."""
 
-    def __init__(self, *, bundle: Any, run_id: str, identity: Any, risk_config: RiskConfig | None = None) -> None:
+    def __init__(self, *, bundle: Any, run_id: str, identity: Any, risk_config: RiskConfig | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None) -> None:
         if not run_id.strip():
             raise ValueError("FUTURES_RUN_ID_REQUIRED")
         self.bundle = bundle
@@ -56,7 +57,7 @@ class VirtualFuturesExecutionBridge:
         self._ack = _AckAdapter(bundle.broker)
         self._router = StandardOrderRouter(order_state_machine=self._fsm, broker_adapter=self._ack)
         vssf = bundle.execution._authoritative_execute.__self__.vssf_runtime
-        self._risk_gate = RiskGate(RiskEngine(risk_config or RiskConfig(), margin_engine=vssf.margin_engine))
+        self._risk_gate = RiskGate(RiskEngine(risk_config or RiskConfig(), margin_engine=vssf.margin_engine), risk_guard_status_source=risk_guard_status_source)
         self._context = CanonicalVSSFCommandContextProvider()
         self.risk_approvals: list[Any] = []
 

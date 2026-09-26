@@ -6,6 +6,7 @@ from core.risk.risk_config import RiskConfig
 from core.risk.risk_engine import RiskEngine, RiskGate
 from core.risk.risk_input import RiskAccountInput, RiskPosition, RiskPositionInput
 from core.risk.risk_sensor import RiskSensorSnapshot
+from tests.risk_guard_test_support import StaticRiskGuardStatusSource, allow_risk_guard
 
 @dataclass(frozen=True)
 class Command:
@@ -46,7 +47,15 @@ def test_margin_diet_blocks_non_hedge_but_allows_risk_hedge():
 def test_allow_issues_standard_token_without_legacy_dependency():
     r=RiskEngine(margin_engine=Margin()).evaluate_order(Command(),account()); assert r.is_approved and r.decision=="ALLOW" and isinstance(r.token,RiskApprovalToken) and isinstance(r.token.order_id,UUID) and r.reduced_command is None
 def test_risk_gate_preserves_last_result_and_returns_token():
-    g=RiskGate(RiskEngine(margin_engine=Margin())); a,t,reason=g.admit_order(Command(),account()); assert a and t is not None and reason is None and g.last_evaluation_result is not None
+    g=RiskGate(RiskEngine(margin_engine=Margin()), risk_guard_status_source=allow_risk_guard()); a,t,reason=g.admit_order(Command(),account()); assert a and t is not None and reason is None and g.last_evaluation_result is not None
+
+
+def test_risk_gate_denies_when_risk_guard_blocks():
+    g=RiskGate(RiskEngine(margin_engine=Margin()), risk_guard_status_source=StaticRiskGuardStatusSource(False, "KILL_SWITCH")); a,t,reason=g.admit_order(Command(),account()); assert not a and t is None and reason == "RISK_GUARD_BLOCKED:KILL_SWITCH"
+
+
+def test_risk_gate_fails_closed_when_risk_guard_status_is_unavailable():
+    g=RiskGate(RiskEngine(margin_engine=Margin()), risk_guard_status_source=StaticRiskGuardStatusSource(None)); a,t,reason=g.admit_order(Command(),account()); assert not a and t is None and reason == "RISK_GUARD_STATUS_UNAVAILABLE"
 def test_expected_position_preserves_reference_side_qty_rules():
     e=RiskEngine(margin_engine=Margin()); p=RiskPositionInput({"OPTION_X":RiskPosition("BUY",3)}); assert e.calculate_expected_position(Command(qty=2,side="BUY"),p)["qty"]==5; assert e.calculate_expected_position(Command(qty=2,side="SELL"),p)["qty"]==1; assert e.calculate_expected_position(Command(qty=3,side="SELL"),p)=={"instrument_key":"OPTION_X","side":"FLAT","qty":0}; assert e.calculate_expected_position(Command(qty=5,side="SELL"),p)=={"instrument_key":"OPTION_X","side":"SELL","qty":2}
 

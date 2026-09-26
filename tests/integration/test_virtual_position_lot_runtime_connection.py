@@ -6,6 +6,7 @@ from application.composition.virtual_multi_leg_execution import VirtualMultiLegE
 from tests.unit.test_historical_replay_multi_leg_execution import _bundle
 from environments.virtual.market.canonical import ReferenceCanonicalMarketTick
 from environments.virtual.market.historical_market_store import HistoricalMarketStore
+from tests.risk_guard_test_support import allow_risk_guard
 
 
 def test_virtual_multileg_execution_populates_track9_lot_read_models(tmp_path):
@@ -25,7 +26,7 @@ def test_virtual_multileg_execution_populates_track9_lot_read_models(tmp_path):
     assert bundle.market.replay_next() is not None
     assert bundle.market.replay_next() is not None
     bridge = VirtualMultiLegExecutionBridge(
-        bundle=bundle, run_id="RUNTIME-PROV-1", option_master=bundle.option_master
+        bundle=bundle, run_id="RUNTIME-PROV-1", option_master=bundle.option_master, risk_guard_status_source=allow_risk_guard()
     )
     plan = MultiLegExecutionPlan(
         group_id="RUNTIME-PROV-G1", strategy_id="TRACK9",
@@ -67,7 +68,7 @@ def test_repeated_bridge_executions_consume_fifo_and_create_reversal_lot(tmp_pat
     bundle.market.load_historical_store(store, source="KIS:H0IOCNT0")
     assert bundle.market.replay_next() is not None
     bridge = VirtualMultiLegExecutionBridge(
-        bundle=bundle, run_id="RUNTIME-FIFO-1", option_master=bundle.option_master
+        bundle=bundle, run_id="RUNTIME-FIFO-1", option_master=bundle.option_master, risk_guard_status_source=allow_risk_guard()
     )
 
     def execute(group, side, qty, strategy, role=PositionRole.NONE):

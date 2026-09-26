@@ -5,6 +5,7 @@ import pytest
 
 from application.bootstrap import create_virtual_runtime_bootstrap
 from application.composition.track2_execution_plan_adapter import Track2ExecutionPlanAdapter
+from tests.risk_guard_test_support import allow_risk_guard
 from application.composition.runtime_strategy_result_collection_adapter import RuntimeStrategyResultCollectionAdapter
 from application.composition.runtime_strategy_to_decision_adapter import RuntimeStrategyToDecisionAdapter
 from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
@@ -135,7 +136,7 @@ def test_track2_e2e_authoritative_input_to_execution_and_run_isolation():
     assert {leg.side for leg in plan.legs} == {"BUY", "SELL"}
 
     bridge = VirtualMultiLegExecutionBridge(
-        bundle=bundle, run_id="T2-RUN-A", option_master=bundle.option_master
+        bundle=bundle, run_id="T2-RUN-A", option_master=bundle.option_master, risk_guard_status_source=allow_risk_guard()
     )
     executed = bridge.execute(plan)
     assert executed.group_complete

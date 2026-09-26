@@ -102,6 +102,7 @@ from contracts.types import AccountSnapshot, DataQuality
 from core.risk.risk_config import RiskConfig
 from core.risk.risk_engine import RiskEngine, RiskGate
 from core.runtime.reference_execution_pipeline import route_from_authoritative_sources
+from tests.risk_guard_test_support import allow_risk_guard
 
 
 class PositionManager:
@@ -137,7 +138,8 @@ def gate(max_position):
         RiskEngine(
             config=RiskConfig(max_position_per_instrument=max_position),
             margin_engine=MarginCalculator(),
-        )
+        ),
+        risk_guard_status_source=allow_risk_guard(),
     )
 
 

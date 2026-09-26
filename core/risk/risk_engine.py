@@ -11,6 +11,7 @@ from contracts.risk import RiskApprovalToken, RiskEvaluationResult
 from core.risk.risk_config import RiskConfig
 from core.risk.risk_input import RiskAccountInput, RiskPositionInput
 from core.risk.risk_sensor import RiskSensor, RiskSensorSnapshot
+from contracts.risk_guard import RiskGuardStatusSource
 
 logger = logging.getLogger(__name__)
 
@@ -141,10 +142,26 @@ class RiskEngine:
         return RiskEvaluationResult(True, decision, original_qty, effective_cmd.qty, None, required_margin, estimated_ratio, token, effective_cmd if is_reduced else None)
 
 class RiskGate:
-    def __init__(self, risk_engine: RiskEngine):
+    def __init__(self, risk_engine: RiskEngine, *, risk_guard_status_source: Optional[RiskGuardStatusSource] = None):
         self.engine = risk_engine
+        self.risk_guard_status_source = risk_guard_status_source
         self.last_evaluation_result: Optional[RiskEvaluationResult] = None
+
+    def _check_risk_guard(self) -> Optional[str]:
+        if self.risk_guard_status_source is None:
+            return "RISK_GUARD_STATUS_UNAVAILABLE"
+        snapshot = self.risk_guard_status_source.snapshot()
+        if snapshot is None:
+            return "RISK_GUARD_STATUS_UNAVAILABLE"
+        if not snapshot.admission_allowed:
+            return f"RISK_GUARD_BLOCKED:{snapshot.reason}"
+        return None
+
     def admit_order(self, command: RiskOrderCommand, account: RiskAccountInput, positions: Optional[RiskPositionInput] = None, sensor_snapshot: Optional[RiskSensorSnapshot] = None, allow_reduction: bool = False) -> tuple[bool, Optional[RiskApprovalToken], Optional[str]]:
+        guard_reason = self._check_risk_guard()
+        if guard_reason is not None:
+            self.last_evaluation_result = RiskEvaluationResult(False, "DENY", command.qty, 0, guard_reason)
+            return False, None, guard_reason
         result = self.engine.evaluate_order(command, account, positions, sensor_snapshot, allow_reduction=allow_reduction)
         self.last_evaluation_result = result
         if result.is_approved and result.token is not None:

@@ -11,6 +11,7 @@ from core.analytics.track6 import build_track6_evaluators
 from core.domain.market_models import MarketState
 from core.strategy.contracts import StrategyContext, StrategyInput
 from core.strategy.track6_daily_tail_insurance import Track6DailyTailInsurance, Track6ExecutionInput
+from tests.risk_guard_test_support import allow_risk_guard
 
 
 def _master():
@@ -59,7 +60,7 @@ def test_track6_pair_plan_executes_two_listed_legs_with_provenance():
     market = bootstrap.bundle.market
     market._option_quotes[("PUT", 337.5, "202609")] = {"bid": 1.0, "ask": 1.1, "last": 1.05, "contract_multiplier": Decimal("250000"), "shrn_iscd": "T6-P-337.5"}
     market._option_quotes[("CALL", 362.5, "202609")] = {"bid": 1.2, "ask": 1.3, "last": 1.25, "contract_multiplier": Decimal("250000"), "shrn_iscd": "T6-C-362.5"}
-    bridge = VirtualMultiLegExecutionBridge(bundle=bootstrap.bundle, run_id="T6-RUN", option_master=master)
+    bridge = VirtualMultiLegExecutionBridge(bundle=bootstrap.bundle, run_id="T6-RUN", option_master=master, risk_guard_status_source=allow_risk_guard())
     result = bridge.execute(plan)
     assert result.group_complete is True
     assert result.planned_legs == 2

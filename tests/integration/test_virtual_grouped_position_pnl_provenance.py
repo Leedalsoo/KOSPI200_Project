@@ -5,6 +5,7 @@ from contracts.types import ExecutionLeg, MultiLegExecutionPlan
 from environments.virtual.market.canonical import ReferenceCanonicalMarketTick
 from environments.virtual.market.historical_market_store import HistoricalMarketStore
 from tests.unit.test_historical_replay_multi_leg_execution import _bundle
+from tests.risk_guard_test_support import allow_risk_guard
 
 
 def test_virtual_fill_position_grouped_pnl_preserves_authoritative_multiplier_and_identity(tmp_path):
@@ -25,7 +26,7 @@ def test_virtual_fill_position_grouped_pnl_preserves_authoritative_multiplier_an
     for _ in events:
         assert bundle.market.replay_next() is not None
 
-    bridge = VirtualMultiLegExecutionBridge(bundle=bundle, run_id="TEST-RUN", option_master=bundle.option_master)
+    bridge = VirtualMultiLegExecutionBridge(bundle=bundle, run_id="TEST-RUN", option_master=bundle.option_master, risk_guard_status_source=allow_risk_guard())
     plan = MultiLegExecutionPlan(
         group_id="GROUP-POSITION-PROV-1",
         strategy_id="STRATEGY-POSITION-PROV-1",

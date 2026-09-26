@@ -8,6 +8,7 @@ from contracts.types import OrderIntent
 from core.risk.multi_leg_risk import MultiLegRiskError, admit_multi_leg_intents
 from core.risk.risk_engine import RiskGate
 from core.risk.risk_input import RiskAccountInput, RiskPositionInput
+from tests.risk_guard_test_support import allow_risk_guard
 
 
 @dataclass
@@ -60,7 +61,7 @@ def gate():
     from core.risk.risk_config import RiskConfig
     return RiskGate(__import__("core.risk.risk_engine", fromlist=["RiskEngine"]).RiskEngine(
         config=RiskConfig(max_order_qty=50), margin_engine=Margin()
-    ))
+    ), risk_guard_status_source=allow_risk_guard())
 
 
 def factory(i):

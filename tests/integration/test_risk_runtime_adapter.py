@@ -6,6 +6,7 @@ import pytest
 from contracts.types import AccountSnapshot, DataQuality
 from core.risk.risk_engine import RiskEngine, RiskGate
 from core.risk.risk_config import RiskConfig
+from tests.risk_guard_test_support import allow_risk_guard
 from core.risk.risk_runtime_adapter import (
 build_risk_runtime_inputs,
 validate_risk_order_command,
@@ -88,7 +89,8 @@ def test_adapter_inputs_can_be_passed_to_standard_risk_gate_without_reconstructi
         RiskEngine(
             config=RiskConfig(max_position_per_instrument=100),
             margin_engine=MarginCalculator(),
-        )
+        ),
+        risk_guard_status_source=allow_risk_guard(),
     )
 
     approved, token, reason = gate.admit_order(
@@ -116,7 +118,8 @@ def test_risk_gate_reduce_quantity_becomes_authoritative_effective_command():
         RiskEngine(
             config=RiskConfig(max_position_per_instrument=3),
             margin_engine=MarginCalculator(),
-        )
+        ),
+        risk_guard_status_source=allow_risk_guard(),
     )
 
     approved, token, reason = gate.admit_order(

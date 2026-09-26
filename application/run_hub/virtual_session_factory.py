@@ -19,6 +19,7 @@ from application.runtime_controller.controller import RuntimeController
 from application.composition.option_expiry_source import KisOptionMasterExpirySource
 from application.composition.standard_runtime_input_provider import StandardRuntimeInputProvider
 from contracts.types import EnvironmentType
+from contracts.risk_guard import RiskGuardStatusSource
 from core.risk.risk_config import RiskConfig
 from core.risk.risk_engine import RiskEngine
 from environments.virtual.execution.vssf_command_context_provider import CanonicalVSSFCommandContextProvider
@@ -29,7 +30,7 @@ from interfaces.control_tower.ui_adapter import ControlTowerUIAdapter
 from interfaces.control_tower.virtual_test_controller import VirtualTestController
 
 
-def create_virtual_run_session(context: RunContext, option_master: Any) -> RunSession:
+def create_virtual_run_session(context: RunContext, option_master: Any, risk_guard_status_source: RiskGuardStatusSource | None = None) -> RunSession:
     dependencies = VirtualCompositionDependencies(
         contract_registry=None,
         option_master=option_master,
@@ -86,7 +87,7 @@ def create_virtual_run_session(context: RunContext, option_master: Any) -> RunSe
             scenario_engine.set_scenario(context.scenario)
     vssf = bundle.execution._authoritative_execute.__self__.vssf_runtime
     risk_engine = RiskEngine(config=RiskConfig(), margin_engine=vssf.margin_engine)
-    bridge = VirtualMultiLegExecutionBridge(bundle=bundle, run_id=context.run_id, option_master=bundle.option_master, risk_config=RiskConfig())
+    bridge = VirtualMultiLegExecutionBridge(bundle=bundle, run_id=context.run_id, option_master=bundle.option_master, risk_config=RiskConfig(), risk_guard_status_source=risk_guard_status_source)
     bundle.broker_api.attach_group_read_model(
         snapshot_reader=bridge.position_groups.snapshot,
         reports_reader=bridge.group_reports,
@@ -100,6 +101,7 @@ def create_virtual_run_session(context: RunContext, option_master: Any) -> RunSe
         track9_iv_history_path=context.track9_iv_history_path,
         run_id=context.run_id,
         historical_observation_option_source=historical_observation_option_source,
+        risk_guard_status_source=risk_guard_status_source,
     )
     strategy_hub = loop.strategy_hub
     runtime_hub = RuntimeHub(loop)

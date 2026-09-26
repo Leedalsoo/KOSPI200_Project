@@ -13,6 +13,7 @@ from core.strategy.standard_registry import build_standard_strategy_registry
 from core.strategy.track1_tail_defense import Track1Input
 from core.option.option_master import InMemoryOptionContractMaster, KisOptionContractIdentity
 from interfaces.control_tower.virtual_test_controller import VirtualTestController
+from tests.risk_guard_test_support import allow_risk_guard
 
 
 def test_next_tick_runs_standard_strategy_loop_through_controller_to_virtual_execution_position_pnl():
@@ -23,7 +24,7 @@ def test_next_tick_runs_standard_strategy_loop_through_controller_to_virtual_exe
                 shrn_iscd=f"TEST-{option_type[0]}-{strike}", stnd_iscd=None, expiry="202609",
                 option_type=option_type, strike=Decimal(str(strike)), contract_multiplier=Decimal("250000"),
             ))
-    bootstrap = create_virtual_runtime_bootstrap(option_master=master)
+    bootstrap = create_virtual_runtime_bootstrap(option_master=master, risk_guard_status_source=allow_risk_guard())
     bundle = bootstrap.bundle
     strategy_hub = StrategyHub(
         build_standard_strategy_registry(),
@@ -59,7 +60,7 @@ def test_next_tick_runs_standard_strategy_loop_through_controller_to_virtual_exe
 
     loop = AutomatedVirtualTradingLoop(
         bundle=bundle, strategy_hub=strategy_hub, run_id="TEST-RUN-NEXT-TICK",
-        context_builder=contexts, identity_provider=identity,
+        context_builder=contexts, identity_provider=identity, risk_guard_status_source=allow_risk_guard(),
     )
     runtime_hub = RuntimeHub(loop)
     controller = VirtualTestController(market=bundle.market, tick_handler=runtime_hub.on_tick)

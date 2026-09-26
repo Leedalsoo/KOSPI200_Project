@@ -13,6 +13,7 @@ from application.composition.runtime_decision_command_adapter import RuntimeDeci
 from application.composition.runtime_strategy_result_collection_adapter import RuntimeStrategyResultCollectionAdapter
 from application.composition.runtime_strategy_to_decision_adapter import RuntimeStrategyToDecisionAdapter
 from contracts.types import BrokerOrderCommand, BrokerOrderResponse, ExecutionReport, OptionInstrumentIdentity
+from contracts.risk_guard import RiskGuardStatusSource
 from contracts.track9_fee_ledger import Track9FeeRecord, Track9FeeLedger
 from core.decision.decision_arbiter import DecisionArbiter
 from core.oms.oms_fsm import OrderStateMachine
@@ -58,7 +59,7 @@ class AutomatedVirtualTradingLoop:
     def __init__(self, *, bundle, strategy_hub: StrategyHubPort, run_id: str, fee_ledger: Track9FeeLedger | None = None,
                  context_builder: Callable[[object, MarketState], dict[str, StrategyContext]],
                  identity_provider: Callable[[object], OptionInstrumentIdentity],
-                 risk_config: RiskConfig | None = None) -> None:
+                 risk_config: RiskConfig | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None) -> None:
         if not run_id.strip():
             raise ValueError("AUTOMATED_RUNTIME_RUN_ID_REQUIRED")
         self.bundle = bundle
@@ -74,7 +75,7 @@ class AutomatedVirtualTradingLoop:
         self.broker_adapter = _VirtualBrokerAckAdapter(bundle.broker)
         self.router = StandardOrderRouter(order_state_machine=self.fsm, broker_adapter=self.broker_adapter)
         vssf = bundle.execution._authoritative_execute.__self__.vssf_runtime
-        self.risk_gate = RiskGate(RiskEngine(risk_config or RiskConfig(), margin_engine=vssf.margin_engine))
+        self.risk_gate = RiskGate(RiskEngine(risk_config or RiskConfig(), margin_engine=vssf.margin_engine), risk_guard_status_source=risk_guard_status_source)
         self._last_result: AutomatedTickResult | None = None
 
     @property

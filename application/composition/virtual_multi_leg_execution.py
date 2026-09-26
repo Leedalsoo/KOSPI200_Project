@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import Any, Callable
 
 from contracts.types import BrokerOrderCommand, ExecutionReport, MultiLegExecutionPlan, OptionInstrumentIdentity
+from contracts.risk_guard import RiskGuardStatusSource
 from core.option.option_master import IOptionContractMaster
 from core.decision.decision_arbiter import DecisionArbiter
 from core.oms.oms_fsm import OrderStateMachine
@@ -56,14 +57,14 @@ class _AckAdapter:
 class VirtualMultiLegExecutionBridge:
     """Preserve group/leg identity while routing every leg through Risk -> OMS -> VSSF."""
 
-    def __init__(self, *, bundle: Any, run_id: str, option_master: IOptionContractMaster | None = None, risk_config: RiskConfig | None = None) -> None:
+    def __init__(self, *, bundle: Any, run_id: str, option_master: IOptionContractMaster | None = None, risk_config: RiskConfig | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None) -> None:
         self.bundle = bundle
         self.option_master = option_master or getattr(bundle, "option_master", None)
         self.fsm = OrderStateMachine()
         self.ack = _AckAdapter(bundle.broker)
         self.router = StandardOrderRouter(order_state_machine=self.fsm, broker_adapter=self.ack)
         vssf = bundle.execution._authoritative_execute.__self__.vssf_runtime
-        self.risk_gate = RiskGate(RiskEngine(risk_config or RiskConfig(), margin_engine=vssf.margin_engine))
+        self.risk_gate = RiskGate(RiskEngine(risk_config or RiskConfig(), margin_engine=vssf.margin_engine), risk_guard_status_source=risk_guard_status_source)
         self.risk_approval_read_model = RiskApprovalReadModel()
         self.command_context = CanonicalVSSFCommandContextProvider()
         self.groups: dict[str, list[ExecutionReport]] = {}

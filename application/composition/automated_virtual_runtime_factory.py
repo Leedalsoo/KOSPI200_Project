@@ -16,10 +16,11 @@ from contracts.track9_iv_event_materializer import Track9IVEventMaterializer
 from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
 from environments.virtual.account.track9_margin_read_model import VSSFTrack9MarginReadModel
 from application.strategy_hub.hub import StrategyHub
+from contracts.risk_guard import RiskGuardStatusSource
 from core.strategy.standard_registry import STANDARD_STRATEGY_KEYS, build_standard_strategy_registry
 
 
-def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_history_path=None, run_id=None, historical_observation_option_source=None):
+def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_history_path=None, run_id=None, historical_observation_option_source=None, risk_guard_status_source: RiskGuardStatusSource | None = None):
     """Attach all nine Standard strategies to the RuntimeController-owned VMS."""
     selected_keys = tuple(strategy_keys) if strategy_keys else STANDARD_STRATEGY_KEYS
     strategy_hub = StrategyHub(build_standard_strategy_registry(), selected_keys)
@@ -97,6 +98,7 @@ def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_h
         fee_ledger=fee_ledger,
         context_builder=context_builder,
         identity_provider=identity,
+        risk_guard_status_source=risk_guard_status_source,
     )
     bootstrap.bundle.market.subscribe(loop.on_tick)
     return loop

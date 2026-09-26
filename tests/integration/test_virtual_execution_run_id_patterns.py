@@ -14,6 +14,7 @@ from contracts.types import (
 from core.option.option_master import InMemoryOptionContractMaster, KisOptionContractIdentity
 from environments.virtual.execution.vssf_command_context_provider import CanonicalVSSFCommandContextProvider
 from environments.virtual.market.historical_market_store import HistoricalMarketStore
+from tests.risk_guard_test_support import allow_risk_guard
 
 def fixture_observations():
     """Build four canonical observations for isolated-run regression coverage."""
@@ -81,7 +82,7 @@ def execute_one(tmp_path, observations, master, scenario, run_id, transform):
         assert bundle.market.replay_next() is not None
 
     bridge = VirtualMultiLegExecutionBridge(
-        bundle=bundle, run_id=run_id, option_master=master
+        bundle=bundle, run_id=run_id, option_master=master, risk_guard_status_source=allow_risk_guard()
     )
     plan = MultiLegExecutionPlan(
         group_id=f"{run_id}-G1", strategy_id="RUN_PATTERN_STRATEGY",
@@ -157,7 +158,7 @@ def test_second_run_starts_without_first_run_execution_state(tmp_path):
     for _ in observations:
         assert first.market.replay_next() is not None
     bridge_a = VirtualMultiLegExecutionBridge(
-        bundle=first, run_id="RUN-A", option_master=master
+        bundle=first, run_id="RUN-A", option_master=master, risk_guard_status_source=allow_risk_guard()
     )
     plan = MultiLegExecutionPlan(
         group_id="RUN-A-G1", strategy_id="ISO",
@@ -176,7 +177,7 @@ def test_second_run_starts_without_first_run_execution_state(tmp_path):
     assert second.account.snapshot().balances["available_cash"] == Decimal("250000000.0")
     assert second.market.replay.cursor == 0
     bridge_b = VirtualMultiLegExecutionBridge(
-        bundle=second, run_id="RUN-B", option_master=master
+        bundle=second, run_id="RUN-B", option_master=master, risk_guard_status_source=allow_risk_guard()
     )
     assert bridge_b.position_lot_store.history() == ()
     second.stop()

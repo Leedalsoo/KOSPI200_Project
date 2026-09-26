@@ -19,6 +19,7 @@ from core.strategy.track1_tail_defense import Track1Input
 from core.domain.market_models import MarketState
 from interfaces.control_tower.ui_adapter import ControlTowerUIAdapter
 from tests.support import build_test_option_master
+from tests.risk_guard_test_support import allow_risk_guard
 
 
 class BrokerAckAdapter:
@@ -38,7 +39,7 @@ class BrokerAckAdapter:
 
 def test_actual_strategy_orchestrator_to_virtual_broker_position_pnl_control_tower_loop():
     # Authoritative Virtual Runtime composition: VMS -> VSSF -> Broker/Execution.
-    bootstrap = create_virtual_runtime_bootstrap(initial_capital=250_000_000.0, option_master=build_test_option_master())
+    bootstrap = create_virtual_runtime_bootstrap(initial_capital=250_000_000.0, option_master=build_test_option_master(), risk_guard_status_source=allow_risk_guard())
     bundle = bootstrap.bundle
     tick = next(bundle.market.generate_tick_stream(total_days=1, ticks_per_day=1))
     as_of = datetime.fromisoformat(tick.timestamp)
@@ -111,7 +112,7 @@ def test_actual_strategy_orchestrator_to_virtual_broker_position_pnl_control_tow
     fsm = OrderStateMachine()
     router = StandardOrderRouter(order_state_machine=fsm, broker_adapter=ack_adapter)
     vssf = bundle.execution._authoritative_execute.__self__.vssf_runtime
-    risk_gate = RiskGate(RiskEngine(RiskConfig(), margin_engine=vssf.margin_engine))
+    risk_gate = RiskGate(RiskEngine(RiskConfig(), margin_engine=vssf.margin_engine), risk_guard_status_source=allow_risk_guard())
     routed = route_from_runtime_authoritative_sources(
         canonical,
         risk_gate=risk_gate,
