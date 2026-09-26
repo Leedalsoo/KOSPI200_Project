@@ -95,6 +95,8 @@ def test_promotable_contracts_are_authoritative_and_canonical():
     expected = {
         "portfolio.total_fees": ("currency", ("total_fees",)),
         "portfolio.margin_ratio": ("ratio", ("margin_ratio",)),
+        "options.call_iv": ("iv-points", ("call_iv",)),
+        "options.put_iv": ("iv-points", ("put_iv",)),
         "portfolio.current_pnl": ("currency", ("current_pnl",)),
         "portfolio.net_pnl": ("currency", ("current_pnl", "total_fees")),
     }
@@ -125,9 +127,18 @@ def test_promotable_common_metrics_fail_closed_when_authoritative_source_missing
 
 
 def test_unresolved_metrics_are_not_promoted():
-    assert "options.call_iv" not in COMMON_METRIC_CONTRACTS
-    assert "options.put_iv" not in COMMON_METRIC_CONTRACTS
     assert "risk.guard_active" not in COMMON_METRIC_CONTRACTS
+
+
+def test_kis_h0iocnt0_iv_is_canonicalized_as_percentage_points_without_decimal_conversion():
+    analytics = build_common_analytics_snapshot(
+        _market(call_iv=Decimal("34.0221"), put_iv=Decimal("31.8457")),
+        ("options.call_iv", "options.put_iv"),
+    )
+    assert analytics.get("options.call_iv").value == Decimal("34.0221")
+    assert analytics.get("options.put_iv").value == Decimal("31.8457")
+    assert analytics.get("options.call_iv").unit == "iv-points"
+    assert analytics.get("options.put_iv").unit == "iv-points"
 
 
 def test_current_pnl_and_net_pnl_use_canonical_account_pnl_projection():

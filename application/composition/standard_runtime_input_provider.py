@@ -124,6 +124,8 @@ class StandardRuntimeInputProvider:
                 "current_price": d.price,
                 "active_vol": d.active_vol,
                 "base_vol": d.base_vol,
+                "call_iv": d.option_iv,
+                "put_iv": d.put_iv,
                 "current_pnl": common.current_pnl,
                 "total_fees": common.total_fees,
                 "margin_ratio": self.track9_margin_ratio,

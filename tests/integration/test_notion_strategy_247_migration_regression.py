@@ -16,7 +16,7 @@ def track2_context() -> StrategyContext:
     as_of = datetime(2026, 9, 18, 10, 0)
     tick = type("Tick", (), {"instrument_id": "KOSPI200", "observed_at": as_of, "price": Decimal("500"), "volume": Decimal("500")})()
     from core.domain.market_models import MarketState
-    observations = {"bbw_window": (0.30, 0.20, 0.10), "volume_window": (100.0, 100.0, 500.0), "basis": Decimal("1.0"), "put_iv": Decimal("0.15"), "call_iv": Decimal("0.20"), "poc_price": Decimal("495"), "bid_qtys": (Decimal("100"),) * 5, "ask_qtys": (Decimal("1"),) * 5, "active_vol": Decimal("0.20"), "base_vol": Decimal("0.20")}
+    observations = {"bbw_window": (0.30, 0.20, 0.10), "volume_window": (100.0, 100.0, 500.0), "basis": Decimal("1.0"), "put_iv": Decimal("15.0"), "call_iv": Decimal("20.0"), "poc_price": Decimal("495"), "bid_qtys": (Decimal("100"),) * 5, "ask_qtys": (Decimal("1"),) * 5, "active_vol": Decimal("0.20"), "base_vol": Decimal("0.20")}
     market = MarketSnapshot("REGRESSION", as_of, AnalyticsProvenance("regression"), None, observations)
     keys = (("volatility.bbw", ("bbw_window",)), ("volume.z_score", ("volume_window",)), ("microstructure.obi", ("bid_qtys", "ask_qtys")), ("futures.basis", ("basis",)), ("options.put_iv", ("put_iv",)), ("options.call_iv", ("call_iv",)), ("volume_profile.poc", ("poc_price",)), ("volatility.active", ("active_vol",)), ("volatility.base", ("base_vol",)))
     requests = tuple(AnalyticsRequest(k, "tick", 20, d, 1.0, "authoritative", "1") for k, d in keys)

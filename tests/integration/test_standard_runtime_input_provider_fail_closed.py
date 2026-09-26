@@ -51,7 +51,7 @@ def test_track7_consumes_authoritative_call_put_iv_without_unblocking_missing_so
 
     class AuthoritativeIVSource:
         def get_iv(self, *, expiry, option_type, strike):
-            return {"CALL": Decimal("0.20"), "PUT": Decimal("0.25")}[option_type]
+            return {"CALL": Decimal("20.0"), "PUT": Decimal("25.0")}[option_type]
 
     provider = StandardRuntimeInputProvider(
         market, track2_option_iv_source=AuthoritativeIVSource()
