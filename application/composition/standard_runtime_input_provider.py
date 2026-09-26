@@ -254,7 +254,7 @@ class StandardRuntimeInputProvider:
         else:
             try:
                 selection = self.track6_option_contract_source.select(
-                    expiry=getattr(tick, "expiry", ""), current_price=d.price
+                    expiry=getattr(tick, "expiry", ""), current_price=(Decimal(str(getattr(tick, "underlying_price"))) if getattr(tick, "underlying_price", None) is not None else None)
                 )
                 multiplier = Decimal(str(selection.put.contract_multiplier))
                 call_multiplier = Decimal(str(selection.call.contract_multiplier))
