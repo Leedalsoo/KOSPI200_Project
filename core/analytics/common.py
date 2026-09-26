@@ -33,6 +33,8 @@ _COMMON = (
     ("volatility.active", "decimal", ("active_vol",), ("active_vol",)),
     ("volatility.base", "decimal", ("base_vol",), ("base_vol",)),
     ("volatility.ratio", "ratio", ("active_vol", "base_vol"), ("active_vol", "base_vol")),
+    ("portfolio.total_fees", "currency", ("total_fees",), ("total_fees",)),
+    ("portfolio.margin_ratio", "ratio", ("margin_ratio",), ("margin_ratio",)),
 )
 
 COMMON_METRIC_CONTRACTS = {
@@ -98,6 +100,8 @@ _EVALUATORS: Mapping[str, Callable] = {
     "volatility.active": _passthrough("active_vol", "decimal"),
     "volatility.base": _passthrough("base_vol", "decimal"),
     "volatility.ratio": _ratio,
+    "portfolio.total_fees": _passthrough("total_fees", "currency"),
+    "portfolio.margin_ratio": _passthrough("margin_ratio", "ratio"),
 }
 
 

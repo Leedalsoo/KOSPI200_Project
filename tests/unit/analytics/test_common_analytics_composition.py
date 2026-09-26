@@ -88,3 +88,43 @@ def test_merge_rejects_duplicate_common_metric():
     duplicate = build_common_analytics_snapshot(_market(current_price=Decimal("501")), ("price.last",))
     with pytest.raises(ValueError, match="overlap"):
         merge_analytics_snapshots(common, duplicate)
+
+
+
+def test_promotable_contracts_are_authoritative_and_canonical():
+    expected = {
+        "portfolio.total_fees": ("currency", ("total_fees",)),
+        "portfolio.margin_ratio": ("ratio", ("margin_ratio",)),
+    }
+    for key, (unit, source) in expected.items():
+        contract = COMMON_METRIC_CONTRACTS[key]
+        assert contract.canonical_unit == unit
+        assert contract.source_observation == source
+        assert contract.authoritative_source_required is True
+
+
+def test_promotable_common_metrics_evaluate_from_authoritative_observations():
+    analytics = build_common_analytics_snapshot(
+        _market(total_fees=Decimal("10000"), margin_ratio=Decimal("0.20")),
+        ("portfolio.total_fees", "portfolio.margin_ratio"),
+    )
+    assert analytics.get("portfolio.total_fees").value == Decimal("10000")
+    assert analytics.get("portfolio.margin_ratio").value == Decimal("0.20")
+
+
+def test_promotable_common_metrics_fail_closed_when_authoritative_source_missing():
+    analytics = build_common_analytics_snapshot(
+        _market(total_fees=None, margin_ratio=None),
+        ("portfolio.total_fees", "portfolio.margin_ratio"),
+    )
+    for key in ("portfolio.total_fees", "portfolio.margin_ratio"):
+        assert analytics.get(key).status is AnalyticsStatus.UNAVAILABLE
+        assert analytics.get(key).value is None
+
+
+def test_unresolved_metrics_are_not_promoted():
+    assert "options.call_iv" not in COMMON_METRIC_CONTRACTS
+    assert "options.put_iv" not in COMMON_METRIC_CONTRACTS
+    assert "portfolio.current_pnl" not in COMMON_METRIC_CONTRACTS
+    assert "portfolio.net_pnl" not in COMMON_METRIC_CONTRACTS
+    assert "risk.guard_active" not in COMMON_METRIC_CONTRACTS
