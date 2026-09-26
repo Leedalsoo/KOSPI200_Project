@@ -22,6 +22,7 @@ class Track3RuntimeInputProvider:
         market_state: MarketState,
         *,
         account: Any | None = None,
+        common_snapshot=None,
     ) -> StrategyContext:
         observed_at = market_state.as_of
         symbol = self._symbol(market_state)
@@ -77,7 +78,11 @@ class Track3RuntimeInputProvider:
             date_str=observed_at.date().isoformat(),
         )
         analytics = build_track3_analytics_snapshot(
-            data, run_id=f"{self.strategy_id}:{observed_at.isoformat()}", current_pnl=float(pnl) if pnl is not None else None, as_of=observed_at
+            data,
+            run_id=common_snapshot.run_id if common_snapshot is not None else f"{self.strategy_id}:{observed_at.isoformat()}",
+            current_pnl=float(pnl) if pnl is not None else None,
+            as_of=observed_at,
+            common_snapshot=common_snapshot,
         )
         return StrategyContext(
             market_state=market_state,

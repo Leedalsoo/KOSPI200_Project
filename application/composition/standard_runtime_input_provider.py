@@ -16,6 +16,8 @@ from core.strategy.track1_tail_defense import Track1Input
 from application.composition.track3_runtime_input_provider import Track3RuntimeInputProvider
 from core.strategy.track4_gamma_scalping import Track4MarketInput
 from core.strategy.track6_daily_tail_insurance import Track6ExecutionInput
+from contracts.analytics import AnalyticsProvenance, MarketSnapshot
+from core.analytics.common import COMMON_METRIC_CONTRACTS, build_common_analytics_snapshot
 from application.composition.track9_analytics_provider import build_track9_analytics_snapshot
 from contracts.option_expiry_source import OptionExpirySource
 from contracts.option_orderbook_source import OptionOrderBookSource
@@ -110,6 +112,26 @@ class StandardRuntimeInputProvider:
             snapshot = self.track9_margin_read_model.snapshot(run_id=self.run_id)
             if snapshot is not None:
                 self.track9_margin_ratio = snapshot.used_margin / snapshot.total_balance
+
+        common_market_snapshot = MarketSnapshot(
+            run_id=self.run_id or "virtual",
+            as_of=d.as_of,
+            provenance=AnalyticsProvenance(source="standard-runtime.common"),
+            instrument_identity=None,
+            observations={
+                "current_price": d.price,
+                "active_vol": d.active_vol,
+                "base_vol": d.base_vol,
+                "current_pnl": common.current_pnl,
+                "total_fees": common.total_fees,
+                "margin_ratio": self.track9_margin_ratio,
+                "risk_guard_active": None,
+            },
+        )
+        common_analytics = build_common_analytics_snapshot(
+            common_market_snapshot,
+            tuple(COMMON_METRIC_CONTRACTS),
+        )
         contexts: dict[str, StrategyContext] = {}
 
         # Track1 now receives exact expiry from the Option Master source. The
@@ -155,11 +177,15 @@ class StandardRuntimeInputProvider:
             else:
                 contexts["track2_asymmetric_trap"] = StrategyContext(
                     market_state, "track2_asymmetric_trap", StrategyInput(common),
-                    analytics=build_track2_analytics_snapshot(d, run_id=self.run_id or "virtual"),
+                    analytics=build_track2_analytics_snapshot(
+                        d, run_id=self.run_id or "virtual", common_snapshot=common_analytics
+                    ),
                 )
 
         # Track3 is materialized only through its authoritative source seam.
-        contexts["Strategy_3_StatArb"] = self.track3.build(market_state, account=account)
+        contexts["Strategy_3_StatArb"] = self.track3.build(
+            market_state, account=account, common_snapshot=common_analytics
+        )
 
         # Track4 consumes canonical analytics. Same-tick Greeks remain authoritative
         # inputs when supplied; optional attribution metrics remain unavailable without
@@ -188,7 +214,10 @@ class StandardRuntimeInputProvider:
                 market_state,
                 "track4_gamma_scalping",
                 StrategyInput(common, track4_payload),
-                analytics=build_track4_analytics_snapshot(track4_payload, run_id=self.run_id or "virtual", as_of=d.as_of),
+                analytics=build_track4_analytics_snapshot(
+                    track4_payload, run_id=self.run_id or "virtual", as_of=d.as_of,
+                    common_snapshot=common_analytics,
+                ),
             )
 
         # Track5 always receives the canonical AnalyticsSnapshot. Missing
@@ -199,7 +228,8 @@ class StandardRuntimeInputProvider:
             "track5_gap_divergence",
             StrategyInput(common),
             analytics=build_track5_analytics_snapshot(
-                d, run_id=self.run_id or "virtual", as_of=d.as_of
+                d, run_id=self.run_id or "virtual", as_of=d.as_of,
+                common_snapshot=common_analytics,
             ),
         )
 
@@ -232,7 +262,8 @@ class StandardRuntimeInputProvider:
                 contexts["track6_daily_tail_insurance"] = StrategyContext(
                     market_state, "track6_daily_tail_insurance", StrategyInput(common, execution_input),
                     analytics=build_track6_analytics_snapshot(
-                        d, run_id=self.run_id or "virtual", as_of=d.as_of
+                        d, run_id=self.run_id or "virtual", as_of=d.as_of,
+                        common_snapshot=common_analytics,
                     ),
                 )
 
@@ -258,7 +289,8 @@ class StandardRuntimeInputProvider:
             contexts["track7_volatility_skew_weekly_insurance"] = StrategyContext(
                 market_state, "track7_volatility_skew_weekly_insurance", StrategyInput(common),
                 analytics=build_track7_analytics_snapshot(
-                    d, run_id=self.run_id or "virtual", as_of=d.as_of
+                    d, run_id=self.run_id or "virtual", as_of=d.as_of,
+                    common_snapshot=common_analytics,
                 ),
             )
 
@@ -278,7 +310,8 @@ class StandardRuntimeInputProvider:
             contexts["track8_macro_regime_monthly_strangle"] = StrategyContext(
                 market_state, "track8_macro_regime_monthly_strangle", StrategyInput(common),
                 analytics=build_track8_analytics_snapshot(
-                    d, run_id=self.run_id or "virtual", as_of=d.as_of
+                    d, run_id=self.run_id or "virtual", as_of=d.as_of,
+                    common_snapshot=common_analytics,
                 ),
             )
 
@@ -291,6 +324,10 @@ class StandardRuntimeInputProvider:
                 track9_selection = None
         contexts["track9_event_overnight_insurance"] = StrategyContext(
             market_state, "track9_event_overnight_insurance", StrategyInput(common),
-            analytics=build_track9_analytics_snapshot(d, run_id=self.run_id or "virtual", as_of=d.as_of, total_fees=common.total_fees, margin_ratio=self.track9_margin_ratio, option_contract_selection=track9_selection),
+            analytics=build_track9_analytics_snapshot(
+                d, run_id=self.run_id or "virtual", as_of=d.as_of,
+                total_fees=common.total_fees, margin_ratio=self.track9_margin_ratio,
+                option_contract_selection=track9_selection, common_snapshot=common_analytics,
+            ),
         )
         return contexts

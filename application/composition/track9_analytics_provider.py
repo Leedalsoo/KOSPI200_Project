@@ -6,6 +6,7 @@ from decimal import Decimal
 from contracts.analytics import AnalyticsProvenance, AnalyticsRequest, MarketSnapshot
 from core.analytics.engine import AnalyticsEngine
 from core.analytics.track9 import build_track9_evaluators
+from core.analytics.common import COMMON_METRIC_CONTRACTS, merge_analytics_snapshots
 
 
 def build_track9_analytics_snapshot(
@@ -16,6 +17,7 @@ def build_track9_analytics_snapshot(
     total_fees=None,
     margin_ratio=None,
     option_contract_selection=None,
+    common_snapshot=None,
 ):
     """Build only from injected authoritative sources and observed runtime data."""
     observations = {
@@ -65,7 +67,12 @@ def build_track9_analytics_snapshot(
         AnalyticsRequest(key, "tick", 1, dependencies, 1.0, "authoritative", "1")
         for key, dependencies in definitions.items()
     )
-    return AnalyticsEngine(build_track9_evaluators()).evaluate(market, requests)
+    common_keys = set(COMMON_METRIC_CONTRACTS) if common_snapshot is not None else set()
+    requests = tuple(request for request in requests if request.metric_key not in common_keys)
+    if not requests:
+        return common_snapshot
+    strategy_snapshot = AnalyticsEngine(build_track9_evaluators()).evaluate(market, requests)
+    return merge_analytics_snapshots(common_snapshot, strategy_snapshot) if common_snapshot is not None else strategy_snapshot
 
 
 __all__ = ("build_track9_analytics_snapshot",)

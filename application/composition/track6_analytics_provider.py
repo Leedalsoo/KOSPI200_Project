@@ -4,9 +4,10 @@ from __future__ import annotations
 from contracts.analytics import AnalyticsProvenance, AnalyticsRequest, MarketSnapshot
 from core.analytics.engine import AnalyticsEngine
 from core.analytics.track6 import build_track6_evaluators
+from core.analytics.common import COMMON_METRIC_CONTRACTS, merge_analytics_snapshots
 
 
-def build_track6_analytics_snapshot(data, *, run_id: str, as_of):
+def build_track6_analytics_snapshot(data, *, run_id: str, as_of, common_snapshot=None):
     observations = {
         "current_price": data.price,
         "active_vol": data.active_vol,
@@ -31,7 +32,12 @@ def build_track6_analytics_snapshot(data, *, run_id: str, as_of):
         AnalyticsRequest(key, "tick", 1, dependencies, 1.0, "authoritative", "1")
         for key, dependencies in keys
     )
-    return AnalyticsEngine(build_track6_evaluators()).evaluate(snapshot, requests)
+    common_keys = set(COMMON_METRIC_CONTRACTS) if common_snapshot is not None else set()
+    requests = tuple(request for request in requests if request.metric_key not in common_keys)
+    if not requests:
+        return common_snapshot
+    strategy_snapshot = AnalyticsEngine(build_track6_evaluators()).evaluate(snapshot, requests)
+    return merge_analytics_snapshots(common_snapshot, strategy_snapshot) if common_snapshot is not None else strategy_snapshot
 
 
 __all__ = ("build_track6_analytics_snapshot",)

@@ -4,9 +4,10 @@ from __future__ import annotations
 from contracts.analytics import AnalyticsProvenance, AnalyticsRequest, MarketSnapshot
 from core.analytics.engine import AnalyticsEngine
 from core.analytics.track7 import build_track7_evaluators
+from core.analytics.common import COMMON_METRIC_CONTRACTS, merge_analytics_snapshots
 
 
-def build_track7_analytics_snapshot(data, *, run_id: str, as_of):
+def build_track7_analytics_snapshot(data, *, run_id: str, as_of, common_snapshot=None):
     observations = {
         "current_price": data.price,
         "call_iv": data.option_iv,
@@ -40,7 +41,12 @@ def build_track7_analytics_snapshot(data, *, run_id: str, as_of):
         ("execution.order_timeout", ("order_timeout",)),
     )
     requests = tuple(AnalyticsRequest(k, "tick", 1, d, 1.0, "authoritative", "1") for k, d in keys)
-    return AnalyticsEngine(build_track7_evaluators()).evaluate(market, requests)
+    common_keys = set(COMMON_METRIC_CONTRACTS) if common_snapshot is not None else set()
+    requests = tuple(request for request in requests if request.metric_key not in common_keys)
+    if not requests:
+        return common_snapshot
+    strategy_snapshot = AnalyticsEngine(build_track7_evaluators()).evaluate(market, requests)
+    return merge_analytics_snapshots(common_snapshot, strategy_snapshot) if common_snapshot is not None else strategy_snapshot
 
 
 __all__ = ("build_track7_analytics_snapshot",)

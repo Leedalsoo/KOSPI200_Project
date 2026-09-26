@@ -20,6 +20,8 @@ def test_standard_runtime_materializes_track5_analytics_snapshot():
     assert context.analytics.run_id == "virtual"
     assert context.analytics.get("price.gap") is not None
     assert context.analytics.get("stats.z_score") is not None
+    assert context.analytics.get("price.last").provenance[0].source == "common-analytics.canonical"
+    assert context.analytics.get("volatility.active").provenance[0].source == "common-analytics.canonical"
 
 
 def test_standard_runtime_track5_fails_closed_when_volatility_is_missing():

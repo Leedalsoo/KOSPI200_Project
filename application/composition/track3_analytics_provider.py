@@ -6,9 +6,10 @@ from datetime import datetime
 from contracts.analytics import AnalyticsProvenance, AnalyticsRequest, MarketSnapshot
 from core.analytics.engine import AnalyticsEngine
 from core.analytics.track3 import build_track3_evaluators
+from core.analytics.common import COMMON_METRIC_CONTRACTS, merge_analytics_snapshots
 
 
-def build_track3_analytics_snapshot(data, *, run_id: str, current_pnl: float | None = None, as_of):
+def build_track3_analytics_snapshot(data, *, run_id: str, current_pnl: float | None = None, as_of, common_snapshot=None):
     observations = {
         "spread_history": data.spread_history,
         "active_vol": data.active_vol,
@@ -41,5 +42,9 @@ def build_track3_analytics_snapshot(data, *, run_id: str, current_pnl: float | N
         ("portfolio.options_pnl", ("options_legs",)),
         ("portfolio.premium_spent", ("premium_spent",)),
     )
-    requests = tuple(AnalyticsRequest(k, "tick", 20, d, 1.0, "authoritative", "1") for k, d in keys)
-    return AnalyticsEngine(build_track3_evaluators()).evaluate(snapshot, requests)
+    common_keys = set(COMMON_METRIC_CONTRACTS) if common_snapshot is not None else set()
+    requests = tuple(AnalyticsRequest(k, "tick", 1 if common_snapshot is not None else 20, d, 1.0, "authoritative", "1") for k, d in keys if k not in common_keys)
+    if not requests:
+        return common_snapshot
+    strategy_snapshot = AnalyticsEngine(build_track3_evaluators()).evaluate(snapshot, requests)
+    return merge_analytics_snapshots(common_snapshot, strategy_snapshot) if common_snapshot is not None else strategy_snapshot

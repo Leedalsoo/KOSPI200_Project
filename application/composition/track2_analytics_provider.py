@@ -4,9 +4,10 @@ from __future__ import annotations
 from contracts.analytics import AnalyticsProvenance, AnalyticsRequest, MarketSnapshot
 from core.analytics.engine import AnalyticsEngine
 from core.analytics.track2 import build_track2_evaluators
+from core.analytics.common import COMMON_METRIC_CONTRACTS, merge_analytics_snapshots
 
 
-def build_track2_analytics_snapshot(data, *, run_id: str):
+def build_track2_analytics_snapshot(data, *, run_id: str, common_snapshot=None):
     observations = {
         "bbw_window": data.bbw_window,
         "volume_window": data.volume_window,
@@ -43,7 +44,7 @@ def build_track2_analytics_snapshot(data, *, run_id: str):
         AnalyticsRequest(
             metric_key=key,
             timeframe="tick",
-            window=20,
+            window=1 if common_snapshot is not None else 20,
             dependencies=deps,
             freshness_seconds=1.0,
             source_requirement="authoritative",
@@ -51,4 +52,9 @@ def build_track2_analytics_snapshot(data, *, run_id: str):
         )
         for key, deps in keys
     )
-    return AnalyticsEngine(build_track2_evaluators()).evaluate(snapshot, requests)
+    common_keys = set(COMMON_METRIC_CONTRACTS) if common_snapshot is not None else set()
+    requests = tuple(request for request in requests if request.metric_key not in common_keys)
+    if not requests:
+        return common_snapshot
+    strategy_snapshot = AnalyticsEngine(build_track2_evaluators()).evaluate(snapshot, requests)
+    return merge_analytics_snapshots(common_snapshot, strategy_snapshot) if common_snapshot is not None else strategy_snapshot

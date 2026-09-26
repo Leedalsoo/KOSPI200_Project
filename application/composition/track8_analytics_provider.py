@@ -3,9 +3,10 @@ from __future__ import annotations
 from contracts.analytics import AnalyticsProvenance, AnalyticsRequest, MarketSnapshot
 from core.analytics.engine import AnalyticsEngine
 from core.analytics.track8 import build_track8_evaluators
+from core.analytics.common import COMMON_METRIC_CONTRACTS, merge_analytics_snapshots
 
 
-def build_track8_analytics_snapshot(data, *, run_id: str, as_of):
+def build_track8_analytics_snapshot(data, *, run_id: str, as_of, common_snapshot=None):
     observations = {
         "current_price": data.price, "dte": data.days_to_expiry, "current_regime": data.macro_regime,
         "active_vol": data.active_vol, "current_pnl": getattr(data, "current_pnl", None), "total_fees": getattr(data, "total_fees", None),
@@ -30,7 +31,12 @@ def build_track8_analytics_snapshot(data, *, run_id: str, as_of):
         "risk.guard_active": ("risk_guard_active",),
     }
     requests = tuple(AnalyticsRequest(k, "tick", 1, deps, 1.0, "authoritative", "1") for k, deps in defs.items())
-    return AnalyticsEngine(build_track8_evaluators()).evaluate(market, requests)
+    common_keys = set(COMMON_METRIC_CONTRACTS) if common_snapshot is not None else set()
+    requests = tuple(request for request in requests if request.metric_key not in common_keys)
+    if not requests:
+        return common_snapshot
+    strategy_snapshot = AnalyticsEngine(build_track8_evaluators()).evaluate(market, requests)
+    return merge_analytics_snapshots(common_snapshot, strategy_snapshot) if common_snapshot is not None else strategy_snapshot
 
 
 __all__ = ("build_track8_analytics_snapshot",)
