@@ -4,7 +4,38 @@ from decimal import Decimal
 
 from application.bootstrap import create_virtual_runtime_bootstrap
 from application.composition.standard_runtime_input_provider import StandardRuntimeInputProvider
+from contracts.trading_state import SensorLevel, SensorSnapshot, TradingHealthSnapshot
 from contracts.types import DataQuality, MarketState
+from core.risk.risk_guard import RiskGuard
+
+
+def test_standard_runtime_input_provider_consumes_authoritative_risk_guard_status():
+    bootstrap = create_virtual_runtime_bootstrap()
+    market = bootstrap.bundle.market
+    account = bootstrap.bundle.account
+    tick = next(market.generate_tick_stream(total_days=1, ticks_per_day=1))
+    state = MarketState(
+        as_of=datetime.fromisoformat(tick.timestamp),
+        ticks={"KOSPI200": tick},
+        quality={"KOSPI200": DataQuality(True, True, True)},
+    )
+    guard = RiskGuard()
+    guard.evaluate(
+        health=TradingHealthSnapshot.from_sensors(
+            [SensorSnapshot("MARKET_DATA", SensorLevel.GREEN, reason="fresh")]
+        ),
+        kill_switch_engaged=False,
+    )
+
+    contexts = StandardRuntimeInputProvider(
+        market, risk_guard_status_source=guard
+    ).build(tick, state, account)
+    metric = contexts["track9_event_overnight_insurance"].analytics.get("risk.guard_active")
+
+    assert metric is not None
+    assert metric.value is True
+    assert metric.status.value == "AVAILABLE"
+    assert metric.provenance[0].source == "risk-guard.authoritative"
 
 
 def test_standard_runtime_input_provider_never_fabricates_blocked_fields():

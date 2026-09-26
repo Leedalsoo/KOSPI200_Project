@@ -39,6 +39,7 @@ _COMMON = (
     ("portfolio.margin_ratio", "ratio", ("margin_ratio",), ("margin_ratio",)),
     ("portfolio.current_pnl", "currency", ("current_pnl",), ("current_pnl",)),
     ("portfolio.net_pnl", "currency", ("current_pnl", "total_fees"), ("current_pnl", "total_fees")),
+    ("risk.guard_active", "bool", ("risk_guard_status",), ("risk_guard_status",)),
 )
 
 COMMON_METRIC_CONTRACTS = {
@@ -100,6 +101,28 @@ def _ratio(snapshot, request):
     return _metric(request, snapshot, active_value / base_value, "ratio")
 
 
+def _risk_guard_active(snapshot, request):
+    status = snapshot.observations.get("risk_guard_status")
+    if status is None:
+        return _metric(request, snapshot, None, "bool", available=False)
+    value = getattr(status, "admission_allowed", None)
+    if value is None:
+        return _metric(request, snapshot, None, "bool", available=False)
+    return AnalyticsMetric(
+        request.metric_key,
+        bool(value),
+        AnalyticsStatus.AVAILABLE,
+        "bool",
+        snapshot.as_of,
+        request.analytics_version,
+        (AnalyticsProvenance(
+            source="risk-guard.authoritative",
+            dependencies=("risk_guard_status",),
+            source_as_of=getattr(status, "observed_at", None),
+        ),),
+    )
+
+
 def _net_pnl(snapshot, request):
     current_pnl = snapshot.observations.get("current_pnl")
     total_fees = snapshot.observations.get("total_fees")
@@ -124,6 +147,7 @@ _EVALUATORS: Mapping[str, Callable] = {
     "portfolio.margin_ratio": _passthrough("margin_ratio", "ratio"),
     "portfolio.current_pnl": _passthrough("current_pnl", "currency"),
     "portfolio.net_pnl": _net_pnl,
+    "risk.guard_active": _risk_guard_active,
 }
 
 

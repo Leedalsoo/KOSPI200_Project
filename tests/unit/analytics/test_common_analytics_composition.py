@@ -126,8 +126,11 @@ def test_promotable_common_metrics_fail_closed_when_authoritative_source_missing
         assert analytics.get(key).value is None
 
 
-def test_unresolved_metrics_are_not_promoted():
-    assert "risk.guard_active" not in COMMON_METRIC_CONTRACTS
+def test_risk_guard_metric_is_promoted_only_through_authoritative_status():
+    contract = COMMON_METRIC_CONTRACTS["risk.guard_active"]
+    assert contract.canonical_unit == "bool"
+    assert contract.source_observation == ("risk_guard_status",)
+    assert contract.authoritative_source_required is True
 
 
 def test_kis_h0iocnt0_iv_is_canonicalized_as_percentage_points_without_decimal_conversion():

@@ -17,6 +17,7 @@ from application.composition.track3_runtime_input_provider import Track3RuntimeI
 from core.strategy.track4_gamma_scalping import Track4MarketInput
 from core.strategy.track6_daily_tail_insurance import Track6ExecutionInput
 from contracts.analytics import AnalyticsProvenance, MarketSnapshot
+from contracts.risk_guard import RiskGuardStatusSource
 from core.analytics.common import COMMON_METRIC_CONTRACTS, build_common_analytics_snapshot
 from application.composition.track9_analytics_provider import build_track9_analytics_snapshot
 from contracts.option_expiry_source import OptionExpirySource
@@ -40,7 +41,8 @@ from application.composition.track8_analytics_provider import build_track8_analy
 class StandardRuntimeInputProvider:
     """Build standard inputs from observable VMS/VSSF sources only."""
 
-    def __init__(self, market: Any, *, track9_fee_ledger: Track9FeeLedger | None = None, track9_margin_read_model: Track9MarginReadModel | None = None, run_id: str | None = None, track7_order_timeout_source: Any | None = None, track7_support_resistance_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None, track6_option_contract_source: Track6OptionContractSource | None = None) -> None:
+    def __init__(self, market: Any, *, track9_fee_ledger: Track9FeeLedger | None = None, track9_margin_read_model: Track9MarginReadModel | None = None, run_id: str | None = None, track7_order_timeout_source: Any | None = None, track7_support_resistance_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None, track6_option_contract_source: Track6OptionContractSource | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None) -> None:
+        self.risk_guard_status_source = risk_guard_status_source
         self.track9_fee_ledger = track9_fee_ledger
         self.track9_margin_read_model = track9_margin_read_model
         self.run_id = run_id
@@ -115,6 +117,10 @@ class StandardRuntimeInputProvider:
             if snapshot is not None:
                 self.track9_margin_ratio = snapshot.used_margin / snapshot.total_balance
 
+        risk_guard_status = (
+            self.risk_guard_status_source.snapshot()
+            if self.risk_guard_status_source is not None else None
+        )
         common_market_snapshot = MarketSnapshot(
             run_id=self.run_id or "virtual",
             as_of=d.as_of,
@@ -129,7 +135,11 @@ class StandardRuntimeInputProvider:
                 "current_pnl": common.current_pnl,
                 "total_fees": common.total_fees,
                 "margin_ratio": self.track9_margin_ratio,
-                "risk_guard_active": None,
+                "risk_guard_active": (
+                    risk_guard_status.admission_allowed
+                    if risk_guard_status is not None else None
+                ),
+                "risk_guard_status": risk_guard_status,
             },
         )
         common_analytics = build_common_analytics_snapshot(
