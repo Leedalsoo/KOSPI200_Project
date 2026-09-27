@@ -6,6 +6,7 @@ from contracts.types import OptionInstrumentIdentity
 from contracts.futures_identity_source_port import FuturesInstrumentIdentity
 from core.decision.decision_arbiter import ArbitrationResult, DecisionArbiter
 from core.strategy.canonical_signal_adapter import RuntimeSignalContext, signal_to_canonical
+from core.strategy.contracts import SignalKind
 from shared.contracts.canonical import CanonicalStrategySignal
 
 InstrumentIdentityProvider = Callable[[RuntimeStrategyEvaluation, Any], OptionInstrumentIdentity | FuturesInstrumentIdentity | None]
@@ -24,8 +25,11 @@ class RuntimeStrategyToDecisionAdapter:
         seen_signal_ids: set[str] = set()
         for evaluation in evaluations:
             signal = evaluation.result
-            if getattr(signal, "execution_proposal", None) is None:
+            kind = SignalKind(getattr(signal, "kind", SignalKind.EXECUTION))
+            if kind is SignalKind.NON_EXECUTION:
                 continue
+            if getattr(signal, "execution_proposal", None) is None:
+                raise ValueError("EXECUTION_PROPOSAL_REQUIRED")
             track_id = str(getattr(evaluation.context, "strategy_id", "") or "").strip()
             if not track_id:
                 raise ValueError("RUNTIME_TRACK_ID_REQUIRED")

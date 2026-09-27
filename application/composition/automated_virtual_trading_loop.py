@@ -95,7 +95,7 @@ class AutomatedVirtualTradingLoop:
         contexts = self.context_builder(tick, state)
         strategy_result = self.strategy_hub.run(contexts)
         evaluations = self.strategy_results.collect(
-            tick_sequence=tick.seq_id, context=next(iter(contexts.values())), result=strategy_result
+            tick_sequence=tick.seq_id, context=contexts, result=strategy_result
         )
         decision = self.strategy_to_decision.arbitrate(
             evaluations, price=tick.ask_price, timestamp=tick.timestamp,

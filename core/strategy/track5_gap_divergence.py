@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Sequence
 
 from contracts.analytics import AnalyticsSnapshot, AnalyticsStatus
-from core.strategy.contracts import Signal, StrategyContext, StrategyFeatureRequirement
+from core.strategy.contracts import NonExecutionEvent, Signal, SignalKind, StrategyContext, StrategyFeatureRequirement
 
 
 @dataclass(frozen=True)
@@ -99,6 +99,12 @@ class Track5GapDivergence:
             strategy_id=self.strategy_id, direction=direction,
             confidence=float(min(Decimal("1"), abs(z_score) / Decimal("4"))),
             reason=f"GAP:{gap};GAP_Z_SCORE:{z_score:.4f};ENTRY:{open_price};TARGET:{previous_close};STOP:{stop}",
+            kind=SignalKind.NON_EXECUTION,
+            non_execution_event=NonExecutionEvent(
+                "TRACK5_GAP_DETECTED",
+                "Authoritative execution quantity/contract metadata is not available in the Track5 analytics contract",
+                {"direction": direction, "entry_price": str(open_price), "target_price": str(previous_close), "stop_price": str(stop)},
+            ),
         ),)
 
     def evaluate_mean_reversion(self, current_price: Decimal) -> Sequence[Signal]:
@@ -112,13 +118,13 @@ class Track5GapDivergence:
         trail_reversal = max(Decimal("0.1"), state.expected_move_pts * Decimal("0.1"))
         if (direction == "SHORT" and current_price <= state.target_price) or (direction == "LONG" and current_price >= state.target_price):
             self.reset()
-            return (Signal(self.strategy_id, "CLOSE", 1.0, f"MEAN_REVERSION_TARGET:{state.target_price};PNL:{pnl}"),)
+            return (Signal(self.strategy_id, "CLOSE", 1.0, f"MEAN_REVERSION_TARGET:{state.target_price};PNL:{pnl}", kind=SignalKind.NON_EXECUTION, non_execution_event=NonExecutionEvent("TRACK5_MEAN_REVERSION_EXIT", "Track5 has no authoritative execution contract", {"target_price": str(state.target_price), "pnl": str(pnl)})),)
         if (direction == "SHORT" and current_price >= state.stop_loss_price) or (direction == "LONG" and current_price <= state.stop_loss_price):
             self.reset()
-            return (Signal(self.strategy_id, "CLOSE", 1.0, f"DYNAMIC_STOP:{state.stop_loss_price};PNL:{pnl}"),)
+            return (Signal(self.strategy_id, "CLOSE", 1.0, f"DYNAMIC_STOP:{state.stop_loss_price};PNL:{pnl}", kind=SignalKind.NON_EXECUTION, non_execution_event=NonExecutionEvent("TRACK5_STOP_EXIT", "Track5 has no authoritative execution contract", {"stop_price": str(state.stop_loss_price), "pnl": str(pnl)})),)
         if state.open_ticks >= 30:
             self.reset()
-            return (Signal(self.strategy_id, "CLOSE", 1.0, f"TIMEOUT_15M;PNL:{pnl}"),)
+            return (Signal(self.strategy_id, "CLOSE", 1.0, f"TIMEOUT_15M;PNL:{pnl}", kind=SignalKind.NON_EXECUTION, non_execution_event=NonExecutionEvent("TRACK5_TIMEOUT_EXIT", "Track5 has no authoritative execution contract", {"pnl": str(pnl)})),)
 
         trailing_active = state.trailing_active or pnl >= trail_threshold
         pnl_ratio = pnl / max(Decimal("0.1"), state.expected_move_pts)
@@ -127,13 +133,23 @@ class Track5GapDivergence:
         state = replace(state, trailing_active=trailing_active)
         if trailing_active and state.peak_pnl - pnl >= effective_reversal:
             self.reset()
-            return (Signal(self.strategy_id, "CLOSE", 1.0, f"TRAILING_LOCK;PEAK:{state.peak_pnl};REVERSAL:{effective_reversal};PNL:{pnl}"),)
+            return (Signal(self.strategy_id, "CLOSE", 1.0, f"TRAILING_LOCK;PEAK:{state.peak_pnl};REVERSAL:{effective_reversal};PNL:{pnl}", kind=SignalKind.NON_EXECUTION, non_execution_event=NonExecutionEvent("TRACK5_TRAILING_EXIT", "Track5 has no authoritative execution contract", {"peak_pnl": str(state.peak_pnl), "pnl": str(pnl)})),)
         if pnl >= trail_threshold * Decimal("0.75") and state.liquidity_stage == 0:
             self.state = replace(state, liquidity_stage=1)
-            return (Signal(self.strategy_id, "LIQUIDITY", 0.7, f"LIQUIDITY_STAGE_1;PRICE:{current_price};PNL:{pnl}"),)
+            return (Signal(
+                self.strategy_id, "LIQUIDITY", 0.7,
+                f"LIQUIDITY_STAGE_1;PRICE:{current_price};PNL:{pnl}",
+                kind=SignalKind.NON_EXECUTION,
+                non_execution_event=NonExecutionEvent("LIQUIDITY_STAGE", "Strategy liquidity state update", {"stage": 1}),
+            ),)
         if pnl >= trail_threshold * Decimal("1.5") and state.liquidity_stage == 1:
             self.state = replace(state, liquidity_stage=2)
-            return (Signal(self.strategy_id, "LIQUIDITY", 0.8, f"LIQUIDITY_STAGE_2;PRICE:{current_price};PNL:{pnl}"),)
+            return (Signal(
+                self.strategy_id, "LIQUIDITY", 0.8,
+                f"LIQUIDITY_STAGE_2;PRICE:{current_price};PNL:{pnl}",
+                kind=SignalKind.NON_EXECUTION,
+                non_execution_event=NonExecutionEvent("LIQUIDITY_STAGE", "Strategy liquidity state update", {"stage": 2}),
+            ),)
         self.state = state
         return ()
 

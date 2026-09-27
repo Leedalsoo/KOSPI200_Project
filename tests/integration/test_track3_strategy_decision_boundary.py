@@ -115,15 +115,15 @@ def test_track3_signal_without_execution_proposal_remains_fail_closed():
         context=_context(_entry_data()),
         result=broken_result,
     )
-    decision = RuntimeStrategyToDecisionAdapter(DecisionArbiter()).arbitrate(
-        evaluations,
-        price=500.0,
-        timestamp="2026-09-18T10:00:00",
-        account={"available_cash": 250_000_000},
-    )
+    import pytest
 
-    assert decision.canonical_signals == ()
-    assert decision.arbitration.approved_signals == []
+    with pytest.raises(ValueError, match="EXECUTION_PROPOSAL_REQUIRED"):
+        RuntimeStrategyToDecisionAdapter(DecisionArbiter()).arbitrate(
+            evaluations,
+            price=500.0,
+            timestamp="2026-09-18T10:00:00",
+            account={"available_cash": 250_000_000},
+        )
 
 
 

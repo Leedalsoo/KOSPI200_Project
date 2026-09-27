@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
 from decimal import Decimal
 from typing import Mapping, Protocol, Sequence, runtime_checkable
 
@@ -51,6 +52,28 @@ class StrategyContext:
     analytics: AnalyticsSnapshot | None = None
 
 
+class SignalKind(str, Enum):
+    """Explicitly distinguishes execution intent from non-execution events."""
+
+    EXECUTION = "EXECUTION"
+    NON_EXECUTION = "NON_EXECUTION"
+
+
+@dataclass(frozen=True)
+class NonExecutionEvent:
+    """Structured event that must never be converted into an order."""
+
+    event_type: str
+    reason: str
+    payload: Mapping[str, object] | None = None
+
+    def __post_init__(self) -> None:
+        if not self.event_type.strip():
+            raise ValueError("NON_EXECUTION_EVENT_TYPE_REQUIRED")
+        if not self.reason.strip():
+            raise ValueError("NON_EXECUTION_EVENT_REASON_REQUIRED")
+
+
 @dataclass(frozen=True)
 class Signal:
     strategy_id: str
@@ -61,6 +84,18 @@ class Signal:
     option_type_override: str | None = None
     strike_override: Decimal | None = None
     execution_proposal: "StrategyExecutionProposal | None" = None
+    kind: SignalKind = SignalKind.EXECUTION
+    non_execution_event: NonExecutionEvent | None = None
+
+    def __post_init__(self) -> None:
+        kind = SignalKind(self.kind)
+        if kind is SignalKind.EXECUTION and self.non_execution_event is not None:
+            raise ValueError("SIGNAL_EXECUTION_EVENT_CONFLICT")
+        if kind is SignalKind.NON_EXECUTION:
+            if self.execution_proposal is not None:
+                raise ValueError("SIGNAL_EXECUTION_EVENT_CONFLICT")
+            if self.non_execution_event is None:
+                raise ValueError("NON_EXECUTION_EVENT_REQUIRED")
 
 
 @dataclass(frozen=True)

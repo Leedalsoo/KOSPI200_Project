@@ -52,6 +52,8 @@ def track5_snapshot(current_price="354", gap="4", z_score="2.0", regime="NORMAL"
 def test_track5_entry_is_fail_closed_without_execution_metadata():
     signal = Track5GapDivergence().evaluate(StrategyContext(strategy_id="track5_gap_divergence", analytics=track5_snapshot()))[0]
     assert signal.execution_proposal is None
+    assert signal.kind.value == "NON_EXECUTION"
+    assert signal.non_execution_event is not None
 
 
 def test_track5_entry_consumes_common_analytics():

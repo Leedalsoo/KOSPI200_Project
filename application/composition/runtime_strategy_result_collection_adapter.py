@@ -33,15 +33,23 @@ class RuntimeStrategyResultCollectionAdapter:
         if signals is None:
             raise TypeError("RUNTIME_STRATEGY_SIGNAL_COLLECTION_REQUIRED")
 
-        return tuple(
-            RuntimeStrategyEvaluation(
-                context=context,
-                result=signal,
-                local_sequence=local_sequence,
-                runtime_context=RuntimeExecutionContext(
-                    tick_sequence=tick_sequence,
+        evaluations: list[RuntimeStrategyEvaluation] = []
+        for local_sequence, signal in enumerate(tuple(signals), start=1):
+            signal_strategy_id = str(getattr(signal, "strategy_id", "") or "").strip()
+            signal_context = context
+            if isinstance(context, dict):
+                signal_context = context.get(signal_strategy_id)
+                if signal_context is None:
+                    raise ValueError("RUNTIME_SIGNAL_CONTEXT_REQUIRED")
+            evaluations.append(
+                RuntimeStrategyEvaluation(
+                    context=signal_context,
+                    result=signal,
                     local_sequence=local_sequence,
-                ),
+                    runtime_context=RuntimeExecutionContext(
+                        tick_sequence=tick_sequence,
+                        local_sequence=local_sequence,
+                    ),
+                )
             )
-            for local_sequence, signal in enumerate(tuple(signals), start=1)
-        )
+        return tuple(evaluations)

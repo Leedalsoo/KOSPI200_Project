@@ -11,7 +11,7 @@ RuntimeStrategyToDecisionAdapter,
 )
 from core.decision.decision_arbiter import DecisionArbiter
 from core.runtime.runtime_execution_context import RuntimeExecutionContext
-from core.strategy.contracts import Signal
+from core.strategy.contracts import NonExecutionEvent, Signal, SignalKind
 from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
 
 
@@ -84,3 +84,21 @@ def test_missing_runtime_track_identity_fails_closed():
     )
     with pytest.raises(ValueError, match="RUNTIME_TRACK_ID_REQUIRED"):
         adapter.arbitrate([bad], price=351.10, timestamp="2026-09-06T10:00:00", account=None)
+
+
+def test_proposalless_execution_signal_fails_closed():
+    adapter = RuntimeStrategyToDecisionAdapter(DecisionArbiter())
+    signal = Signal("Track5", "LONG", 1.0, "ENTRY_WITHOUT_PROPOSAL")
+    with pytest.raises(ValueError, match="EXECUTION_PROPOSAL_REQUIRED"):
+        adapter.arbitrate([evaluation(1, signal)], price=351.10, timestamp="2026-09-06T10:00:00", account=None)
+
+
+def test_non_execution_event_is_not_converted_to_order():
+    adapter = RuntimeStrategyToDecisionAdapter(DecisionArbiter())
+    signal = Signal(
+        "Track5", "LIQUIDITY", 0.7, "LIQUIDITY_STAGE_1",
+        kind=SignalKind.NON_EXECUTION,
+        non_execution_event=NonExecutionEvent("LIQUIDITY_STAGE", "state update"),
+    )
+    result = adapter.arbitrate([evaluation(1, signal)], price=351.10, timestamp="2026-09-06T10:00:00", account=None)
+    assert result.canonical_signals == ()
