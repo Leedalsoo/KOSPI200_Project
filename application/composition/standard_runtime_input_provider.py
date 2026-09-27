@@ -333,7 +333,14 @@ class StandardRuntimeInputProvider:
         track9_selection = None
         if self.track6_option_contract_source is not None:
             try:
-                track9_selection = self.track6_option_contract_source.select(expiry=getattr(tick, "expiry", ""), current_price=d.price)
+                track9_selection = self.track6_option_contract_source.select(
+                    expiry=getattr(tick, "expiry", ""),
+                    current_price=(
+                        Decimal(str(getattr(tick, "underlying_price")))
+                        if getattr(tick, "underlying_price", None) is not None
+                        else None
+                    ),
+                )
             except (ValueError, TypeError, AttributeError):
                 track9_selection = None
         contexts["track9_event_overnight_insurance"] = StrategyContext(
