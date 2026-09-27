@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Awaitable, Callable
 
 from contracts.kis_index_futures_market_ws_adapter import (
@@ -32,11 +33,19 @@ class KISIndexFuturesMarketConsumer:
             await self._transport.subscribe(self.QUOTE_TR_ID, symbol)
 
     async def receive_once(self) -> KisIndexFuturesMarketObservation:
-        observation = self._adapter.adapt(await self._transport.recv())
-        result = self._on_observation(observation)
-        if result is not None:
-            await result
-        return observation
+        while True:
+            frame = await self._transport.recv()
+            try:
+                control = json.loads(frame)
+            except (TypeError, json.JSONDecodeError):
+                control = None
+            if isinstance(control, dict) and "header" in control and "body" in control:
+                continue
+            observation = self._adapter.adapt(frame)
+            result = self._on_observation(observation)
+            if result is not None:
+                await result
+            return observation
 
     async def close(self) -> None:
         await self._transport.close()

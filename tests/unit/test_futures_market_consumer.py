@@ -1,4 +1,5 @@
 import asyncio
+import json
 
 from contracts.kis_index_futures_market_ws_adapter import KISIndexFuturesMarketWebSocketAdapter
 from infrastructure.kis.futures_market_consumer import KISIndexFuturesMarketConsumer
@@ -34,6 +35,26 @@ def _trade_frame():
     values[35] = "350.20"
     values[36] = "350.00"
     return "0|H0IFCNT0|37|" + "^".join(values)
+
+
+def test_consumer_skips_subscription_control_frame_before_trade():
+    class ControlThenTradeTransport(FakeTransport):
+        def __init__(self):
+            super().__init__(json.dumps({"header": {"tr_id": "H0IFCNT0"}, "body": {"msg1": "SUBSCRIBE SUCCESS"}}))
+            self.frames = [self.frame, _trade_frame()]
+
+        async def recv(self):
+            return self.frames.pop(0)
+
+    transport = ControlThenTradeTransport()
+    received = []
+    consumer = KISIndexFuturesMarketConsumer(transport, KISIndexFuturesMarketWebSocketAdapter(), received.append)
+
+    asyncio.run(consumer.start("101S12"))
+    observation = asyncio.run(consumer.receive_once())
+
+    assert observation.shrn_iscd == "101S12"
+    assert received == [observation]
 
 
 def test_consumer_connects_subscribes_and_adapts_trade_frame():
