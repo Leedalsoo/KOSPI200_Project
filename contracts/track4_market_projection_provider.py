@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Callable, Sequence
 
 from .track4_kis_greeks_provider import Track4KisGreeksProvider
+from .track4_attribution_provider import Track4AttributionProvider
 
 from core.sensor.market_condition_sensor import MarketConditionSnapshot
 
@@ -22,10 +23,12 @@ class Track4MarketProjectionProvider(Track4RuntimeInputProvider):
         snapshot_supplier: Callable[[], MarketConditionSnapshot | None],
         price_history_supplier: Callable[[str], Sequence[float]] | None = None,
         greeks_provider: Track4KisGreeksProvider | None = None,
+        attribution_provider: Track4AttributionProvider | None = None,
     ) -> None:
         self._snapshot_supplier = snapshot_supplier
         self._price_history_supplier = price_history_supplier
         self._greeks_provider = greeks_provider
+        self._attribution_provider = attribution_provider
 
     def _snapshot(self) -> MarketConditionSnapshot:
         snapshot = self._snapshot_supplier()
@@ -83,10 +86,16 @@ class Track4MarketProjectionProvider(Track4RuntimeInputProvider):
         return self._greeks_provider.current_gamma()
 
     def premium_spent(self) -> Decimal:
-        raise Track4InputSourceUnavailable("attribution source is unavailable")
+        if self._attribution_provider is None:
+            raise Track4InputSourceUnavailable("attribution source is unavailable")
+        return self._attribution_provider.premium_spent()
 
     def accumulated_gamma_profit(self) -> Decimal:
-        raise Track4InputSourceUnavailable("attribution source is unavailable")
+        if self._attribution_provider is None:
+            raise Track4InputSourceUnavailable("attribution source is unavailable")
+        return self._attribution_provider.accumulated_gamma_profit()
 
     def theta_decay_cost(self) -> Decimal:
-        raise Track4InputSourceUnavailable("attribution source is unavailable")
+        if self._attribution_provider is None:
+            raise Track4InputSourceUnavailable("attribution source is unavailable")
+        return self._attribution_provider.theta_decay_cost()

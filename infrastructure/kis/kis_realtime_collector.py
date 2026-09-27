@@ -24,6 +24,7 @@ class KISRealtimeCollector:
         *,
         max_reconnects: int = 1,
         clock: Callable[[], datetime] | None = None,
+        frame_observer: Callable[[str, datetime], None] | None = None,
     ) -> None:
         if max_reconnects < 0:
             raise ValueError("MAX_RECONNECTS_MUST_BE_NON_NEGATIVE")
@@ -31,6 +32,7 @@ class KISRealtimeCollector:
         self._raw_store = raw_store
         self._max_reconnects = max_reconnects
         self._clock = clock or (lambda: datetime.now(timezone.utc))
+        self._frame_observer = frame_observer
         self._trading_date: str | None = None
         self._subscriptions: list[tuple[str, str]] = []
         self._sequence = 0
@@ -83,14 +85,18 @@ class KISRealtimeCollector:
         if not symbol:
             raise ValueError("RAW_FRAME_SYMBOL_REQUIRED")
         self._sequence += 1
-        return self._raw_store.append(
-            received_at=self._clock(),
+        received_at = self._clock()
+        record = self._raw_store.append(
+            received_at=received_at,
             trading_date=self._trading_date,
             instrument=symbol,
             tr_id=tr_id,
             payload=payload,
             sequence=self._sequence,
         )
+        if self._frame_observer is not None:
+            self._frame_observer(payload, received_at)
+        return record
 
     async def close(self) -> None:
         await self._transport.close()

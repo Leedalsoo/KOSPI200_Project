@@ -4,6 +4,7 @@ from typing import Callable, Sequence
 
 from contracts.track4_composite_runtime_input_provider import Track4CompositeRuntimeInputProvider
 from contracts.track4_kis_greeks_provider import Track4KisGreeksProvider
+from contracts.track4_attribution_provider import Track4AttributionProvider
 from contracts.track4_market_projection_provider import Track4MarketProjectionProvider
 from contracts.track4_runtime_input_provider import Track4RuntimeInputProvider
 from contracts.track4_vssf_account_projection_provider import Track4VSSFAccountProjectionProvider
@@ -26,11 +27,13 @@ class Track4RuntimeInputProviderFactory:
         price_history_supplier: Callable[[str], Sequence[float]],
         account_provider: AccountProvider,
         greeks_provider: Track4KisGreeksProvider | None = None,
+        attribution_provider: Track4AttributionProvider | None = None,
     ) -> Track4RuntimeInputProvider:
         market_provider = Track4MarketProjectionProvider(
             snapshot_supplier=snapshot_supplier,
             price_history_supplier=price_history_supplier,
             greeks_provider=greeks_provider,
+            attribution_provider=attribution_provider,
         )
         account_projection = Track4VSSFAccountProjectionProvider(account_provider)
         return Track4CompositeRuntimeInputProvider(market_provider, account_projection)

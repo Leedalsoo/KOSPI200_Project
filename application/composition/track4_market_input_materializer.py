@@ -41,6 +41,10 @@ class Track4RuntimeInputMaterializer:
         history = tuple(self._runtime_provider.price_history())
         if not history:
             raise Track4InputSourceUnavailable("TRACK4_HISTORY_SOURCE_UNAVAILABLE")
+        try:
+            premium_spent = self._runtime_provider.premium_spent()
+        except Track4InputSourceUnavailable:
+            premium_spent = None
 
         return Track4MarketInput(
             observed_at=tick_observed_at,
@@ -53,7 +57,7 @@ class Track4RuntimeInputMaterializer:
             current_pnl=self._runtime_provider.current_pnl(),
             current_equity=self._runtime_provider.current_equity(),
             price_history=history,
-            premium_spent=None,
+            premium_spent=premium_spent,
             accumulated_gamma_profit=None,
             theta_decay_cost=None,
             current_theta=self._greeks_provider.current_theta(),

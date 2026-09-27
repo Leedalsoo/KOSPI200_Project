@@ -115,3 +115,30 @@ def test_raw_store_writes_manifest_with_file_hash(tmp_path):
     assert manifest["tr_ids"] == ["H0IFCNT0"]
     assert len(manifest["file_sha256"]) == 64
     assert Path(manifest["manifest_path"]).exists()
+
+
+def test_collector_observes_frame_after_raw_persistence(tmp_path):
+    transport = FakeTransport()
+    values = [""] * 58
+    values[0] = "201S11305"
+    values[28] = "0.5"
+    values[29] = "0.01"
+    values[31] = "-0.03"
+    values[33] = "0.25"
+    transport.frames = [f"0|H0IOCNT0|58|{'^'.join(values)}"]
+    store = KISRealtimeRawStore(tmp_path / "raw.jsonl")
+    observed = []
+    collector = KISRealtimeCollector(
+        transport,
+        store,
+        clock=lambda: datetime(2026, 9, 21, 0, 1, 2, tzinfo=timezone.utc),
+        frame_observer=lambda payload, received_at: observed.append((payload, received_at)),
+    )
+
+    import asyncio
+    asyncio.run(collector.start("2026-09-21", [("H0IOCNT0", "201S11305")]))
+    asyncio.run(collector.capture_one())
+
+    assert store.count() == 1
+    assert len(observed) == 1
+    assert observed[0][0].startswith("0|H0IOCNT0|58|")
