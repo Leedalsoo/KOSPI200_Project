@@ -98,6 +98,23 @@ class MultiLegExecutionPlan:
 
 
 @dataclass(frozen=True)
+class MultiLegDecision:
+    """Approved Decision transport for one strategy-owned multi-leg plan."""
+
+    signal_id: str
+    strategy_id: str
+    plan: MultiLegExecutionPlan
+
+    def __post_init__(self) -> None:
+        if not self.signal_id:
+            raise ValueError("MULTI_LEG_SIGNAL_ID_REQUIRED")
+        if not self.strategy_id:
+            raise ValueError("MULTI_LEG_STRATEGY_ID_REQUIRED")
+        if self.plan.strategy_id != self.strategy_id:
+            raise ValueError("MULTI_LEG_STRATEGY_ID_MISMATCH")
+
+
+@dataclass(frozen=True)
 class OrderIntent:
     """Environment-neutral instruction emitted by Core/OMS.
 
@@ -230,6 +247,7 @@ __all__: Sequence[str] = (
     "ExecutionReport",
     "ExecutionLeg",
     "MultiLegExecutionPlan",
+    "MultiLegDecision",
     "OrderAckEvent",
     "MarketState",
     "OrderIntent",

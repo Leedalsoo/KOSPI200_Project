@@ -12,6 +12,7 @@ RuntimeStrategyToDecisionAdapter,
 from core.decision.decision_arbiter import DecisionArbiter
 from core.runtime.runtime_execution_context import RuntimeExecutionContext
 from core.strategy.contracts import NonExecutionEvent, Signal, SignalKind
+from contracts.types import ExecutionLeg, MultiLegExecutionPlan
 from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
 
 
@@ -102,3 +103,62 @@ def test_non_execution_event_is_not_converted_to_order():
     )
     result = adapter.arbitrate([evaluation(1, signal)], price=351.10, timestamp="2026-09-06T10:00:00", account=None)
     assert result.canonical_signals == ()
+
+
+def make_plan(strategy_id: str = "Track4") -> MultiLegExecutionPlan:
+    return MultiLegExecutionPlan(
+        group_id="G-1",
+        strategy_id=strategy_id,
+        purpose="TEST_MULTI_LEG",
+        legs=(
+            ExecutionLeg("LEG-1", "BUY", 1, position_role="NONE"),
+            ExecutionLeg("LEG-2", "SELL", 1, position_role="NONE"),
+        ),
+    )
+
+
+def test_approved_signal_can_carry_a_strategy_owned_multi_leg_decision():
+    adapter = RuntimeStrategyToDecisionAdapter(DecisionArbiter())
+    result = adapter.arbitrate(
+        [evaluation(1, make_signal())],
+        price=351.10,
+        timestamp="2026-09-06T10:00:00",
+        account=None,
+        multi_leg_plan_resolver=lambda _evaluation, _canonical: make_plan(),
+    )
+    assert len(result.multi_leg_decisions) == 1
+    decision = result.multi_leg_decisions[0]
+    assert decision.signal_id == "SIG-77-Track4-1"
+    assert decision.strategy_id == "Track4"
+    assert decision.plan.group_id == "G-1"
+    assert [leg.leg_id for leg in decision.plan.legs] == ["LEG-1", "LEG-2"]
+
+
+def test_multi_leg_plan_is_not_attached_to_rejected_signal():
+    adapter = RuntimeStrategyToDecisionAdapter(DecisionArbiter())
+    calls = []
+    result = adapter.arbitrate(
+        [evaluation(1, make_signal(side="BUY")), evaluation(2, make_signal(side="SELL"))],
+        price=351.10,
+        timestamp="2026-09-06T10:00:00",
+        account=None,
+        multi_leg_plan_resolver=lambda evaluation, _canonical: (
+            calls.append(evaluation.runtime_context.local_sequence) or make_plan()
+        ),
+    )
+    assert len(result.arbitration.approved_signals) == 1
+    assert calls == [1]
+    assert len(result.multi_leg_decisions) == 1
+    assert result.multi_leg_decisions[0].signal_id == "SIG-77-Track4-1"
+
+
+def test_multi_leg_plan_strategy_mismatch_fails_closed():
+    adapter = RuntimeStrategyToDecisionAdapter(DecisionArbiter())
+    with pytest.raises(ValueError, match="MULTI_LEG_STRATEGY_ID_MISMATCH"):
+        adapter.arbitrate(
+            [evaluation(1, make_signal())],
+            price=351.10,
+            timestamp="2026-09-06T10:00:00",
+            account=None,
+            multi_leg_plan_resolver=lambda _evaluation, _canonical: make_plan("OtherStrategy"),
+        )

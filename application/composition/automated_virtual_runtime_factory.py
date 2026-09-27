@@ -16,6 +16,10 @@ from contracts.track9_iv_event_materializer import Track9IVEventMaterializer
 from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
 from environments.virtual.account.track9_margin_read_model import VSSFTrack9MarginReadModel
 from application.strategy_hub.hub import StrategyHub
+from application.composition.track2_execution_plan_adapter import Track2ExecutionPlanAdapter
+from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
+from contracts.types import MultiLegExecutionPlan
+from decimal import Decimal
 from contracts.risk_guard import RiskGuardStatusSource
 from core.strategy.standard_registry import STANDARD_STRATEGY_KEYS, build_standard_strategy_registry
 
@@ -23,7 +27,8 @@ from core.strategy.standard_registry import STANDARD_STRATEGY_KEYS, build_standa
 def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_history_path=None, run_id=None, historical_observation_option_source=None, risk_guard_status_source: RiskGuardStatusSource | None = None):
     """Attach all nine Standard strategies to the RuntimeController-owned VMS."""
     selected_keys = tuple(strategy_keys) if strategy_keys else STANDARD_STRATEGY_KEYS
-    strategy_hub = StrategyHub(build_standard_strategy_registry(), selected_keys)
+    registry = build_standard_strategy_registry()
+    strategy_hub = StrategyHub(registry, selected_keys)
     expiry_source = KisOptionMasterExpirySource(bootstrap.bundle.option_master)
     track2_option_iv_source = historical_observation_option_source or KISTrack2OptionIVSource(bootstrap.bundle.option_master)
     track9_iv_history_source = (
@@ -91,6 +96,39 @@ def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_h
             historical_observation_option_source.set_as_of(datetime.fromisoformat(tick.timestamp))
         return provider.build(tick, state, bootstrap.bundle.account)
 
+    track2_plan_adapter = Track2ExecutionPlanAdapter()
+    multi_leg_bridge = VirtualMultiLegExecutionBridge(
+        bundle=bootstrap.bundle,
+        run_id=run_id,
+        option_master=bootstrap.bundle.option_master,
+        risk_guard_status_source=risk_guard_status_source,
+    )
+
+    def multi_leg_plan_resolver(evaluation, canonical):
+        strategy_id = str(getattr(evaluation.context, "strategy_id", "") or "")
+        group_id = f"{run_id}-{canonical.signal_id}"
+        if strategy_id == "track2_asymmetric_trap":
+            analytics = evaluation.context.analytics
+            if analytics is None:
+                raise ValueError("TRACK2_MULTI_LEG_ANALYTICS_REQUIRED")
+            active = analytics.get("volatility.active")
+            base = analytics.get("volatility.base")
+            if active is None or base is None or getattr(active, "value", None) is None or getattr(base, "value", None) is None:
+                raise ValueError("TRACK2_MULTI_LEG_VOLATILITY_REQUIRED")
+            return track2_plan_adapter.build_plan(
+                approved_signal=canonical,
+                strategy=registry.get(strategy_id, "1.0"),
+                current_atm=Decimal(str(getattr(evaluation.context.market_state, "ticks", {}).get("KOSPI200").price if getattr(evaluation.context, "market_state", None) else canonical.price)),
+                active_vol=float(active.value),
+                base_vol=float(base.value),
+                group_id=group_id,
+            )
+        if strategy_id == "track6_daily_tail_insurance":
+            return registry.get(strategy_id, "1.0").build_execution_plan(group_id)
+        if strategy_id == "track8_macro_regime_monthly_strangle":
+            return registry.get(strategy_id, "2.0").build_execution_plan(group_id)
+        return None
+
     loop = AutomatedVirtualTradingLoop(
         bundle=bootstrap.bundle,
         strategy_hub=strategy_hub,
@@ -98,6 +136,8 @@ def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_h
         fee_ledger=fee_ledger,
         context_builder=context_builder,
         identity_provider=identity,
+        multi_leg_plan_resolver=multi_leg_plan_resolver,
+        multi_leg_executor=multi_leg_bridge.execute,
         risk_guard_status_source=risk_guard_status_source,
     )
     bootstrap.bundle.market.subscribe(loop.on_tick)

@@ -12,7 +12,7 @@ from application.composition.runtime_authoritative_risk_router_adapter import (
 from application.composition.runtime_decision_command_adapter import RuntimeDecisionCommandAdapter
 from application.composition.runtime_strategy_result_collection_adapter import RuntimeStrategyResultCollectionAdapter
 from application.composition.runtime_strategy_to_decision_adapter import RuntimeStrategyToDecisionAdapter
-from contracts.types import BrokerOrderCommand, BrokerOrderResponse, ExecutionReport, OptionInstrumentIdentity
+from contracts.types import BrokerOrderCommand, BrokerOrderResponse, ExecutionReport, OptionInstrumentIdentity, MultiLegExecutionPlan, MultiLegDecision
 from contracts.risk_guard import RiskGuardStatusSource
 from contracts.track9_fee_ledger import Track9FeeRecord, Track9FeeLedger
 from core.decision.decision_arbiter import DecisionArbiter
@@ -59,6 +59,8 @@ class AutomatedVirtualTradingLoop:
     def __init__(self, *, bundle, strategy_hub: StrategyHubPort, run_id: str, fee_ledger: Track9FeeLedger | None = None,
                  context_builder: Callable[[object, MarketState], dict[str, StrategyContext]],
                  identity_provider: Callable[[object], OptionInstrumentIdentity],
+                 multi_leg_plan_resolver: Callable[[object, object], MultiLegExecutionPlan | None] | None = None,
+                 multi_leg_executor: Callable[[MultiLegExecutionPlan], object] | None = None,
                  risk_config: RiskConfig | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None) -> None:
         if not run_id.strip():
             raise ValueError("AUTOMATED_RUNTIME_RUN_ID_REQUIRED")
@@ -68,6 +70,8 @@ class AutomatedVirtualTradingLoop:
         self.strategy_hub = strategy_hub
         self.context_builder = context_builder
         self.identity_provider = identity_provider
+        self.multi_leg_plan_resolver = multi_leg_plan_resolver
+        self.multi_leg_executor = multi_leg_executor
         self.strategy_results = RuntimeStrategyResultCollectionAdapter()
         self.strategy_to_decision = RuntimeStrategyToDecisionAdapter(DecisionArbiter())
         self.decision_to_command = RuntimeDecisionCommandAdapter()
@@ -102,13 +106,27 @@ class AutomatedVirtualTradingLoop:
             account=self.bundle.account.snapshot(),
             instrument_identity_provider=self.identity_provider,
             market_tick=tick,
+            multi_leg_plan_resolver=self.multi_leg_plan_resolver,
         )
         approved = tuple(decision.arbitration.approved_signals[:1])
-        commands = self.decision_to_command.build_commands(evaluations, approved)
+        multi_leg_signal_ids = {item.signal_id for item in decision.multi_leg_decisions}
+        approved_single_leg = tuple(signal for signal in approved if signal.signal_id not in multi_leg_signal_ids)
+        commands = self.decision_to_command.build_commands(evaluations, approved_single_leg)
         routed = 0
         filled = 0
         rejected = len(decision.arbitration.rejected_signals)
         execution_ids: list[str] = []
+
+        if decision.multi_leg_decisions:
+            if self.multi_leg_executor is None:
+                raise RuntimeError("MULTI_LEG_EXECUTOR_REQUIRED")
+            for multi_leg in decision.multi_leg_decisions:
+                executed = self.multi_leg_executor(multi_leg.plan)
+                routed += getattr(executed, "routed_legs", 0)
+                filled += getattr(executed, "filled_legs", 0)
+                execution_ids.extend(report.execution_id for report in getattr(executed, "reports", ()) if report.execution_id)
+                if not getattr(executed, "group_complete", False):
+                    rejected += 1
 
         for canonical in commands:
             broker_command = BrokerOrderCommand(
