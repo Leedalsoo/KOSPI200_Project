@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 
 from application.composition.automated_virtual_trading_loop import AutomatedVirtualTradingLoop
 from application.composition.standard_runtime_input_provider import StandardRuntimeInputProvider
@@ -19,6 +20,12 @@ from application.strategy_hub.hub import StrategyHub
 from application.composition.track2_execution_plan_adapter import Track2ExecutionPlanAdapter
 from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
 from contracts.types import MultiLegExecutionPlan
+from contracts.futures_contract_master import KisCurrentFuturesContractSource, parse_kis_futures_contracts
+from contracts.futures_contract_spec import FuturesProductType
+from application.composition.futures_identity_source import KisFuturesIdentitySource
+from application.composition.futures_target_configuration import FuturesTargetConfiguration
+from application.composition.track3_hedge_identity_source import Track3HedgeIdentitySource
+from application.composition.track3_multi_leg_execution_plan_adapter import Track3MultiLegExecutionPlanAdapter
 from decimal import Decimal
 from contracts.risk_guard import RiskGuardStatusSource
 from core.strategy.standard_registry import STANDARD_STRATEGY_KEYS, build_standard_strategy_registry
@@ -72,6 +79,10 @@ def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_h
         proposal = evaluation.result.execution_proposal
         if proposal is None:
             return None
+        if str(proposal.asset_type) == "FUTURES":
+            if futures_identity_source is None:
+                raise ValueError("VIRTUAL_AUTHORITATIVE_FUTURES_IDENTITY_SOURCE_REQUIRED")
+            return futures_identity_source.current_identity()
         if tick is None or not tick.expiry or not proposal.option_type or proposal.strike is None:
             raise ValueError("VIRTUAL_AUTHORITATIVE_OPTION_IDENTITY_INPUT_REQUIRED")
         identity = bootstrap.bundle.option_master.find_contract_identity(
@@ -97,10 +108,24 @@ def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_h
         return provider.build(tick, state, bootstrap.bundle.account)
 
     track2_plan_adapter = Track2ExecutionPlanAdapter()
+    track3_plan_adapter = Track3MultiLegExecutionPlanAdapter()
+    futures_master_path = Path(__file__).resolve().parents[2] / "fo_idx_code_mts.mst"
+    futures_identity_source = None
+    if futures_master_path.is_file():
+        raw = futures_master_path.read_bytes().decode("cp949", errors="replace")
+        futures_master = KisCurrentFuturesContractSource(parse_kis_futures_contracts(raw))
+        futures_identity_source = KisFuturesIdentitySource(
+            futures_master,
+            FuturesTargetConfiguration(
+                underlying_short_code="2001",
+                product_type=FuturesProductType.STANDARD,
+            ),
+        )
     multi_leg_bridge = VirtualMultiLegExecutionBridge(
         bundle=bootstrap.bundle,
         run_id=run_id,
         option_master=bootstrap.bundle.option_master,
+        futures_identity_source=futures_identity_source,
         risk_guard_status_source=risk_guard_status_source,
     )
 
@@ -122,6 +147,18 @@ def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_h
                 active_vol=float(active.value),
                 base_vol=float(base.value),
                 group_id=group_id,
+            )
+        if strategy_id == "Strategy_3_StatArb":
+            if futures_identity_source is None:
+                raise ValueError("TRACK3_HEDGE_IDENTITY_SOURCE_REQUIRED")
+            identity = futures_identity_source.current_identity()
+            return track3_plan_adapter.build_plan(
+                strategy_id=strategy_id,
+                group_id=group_id,
+                side=canonical.side.value,
+                quantity=canonical.qty,
+                identity=identity,
+                hedge_identity_source=Track3HedgeIdentitySource(futures_identity_source),
             )
         if strategy_id == "track6_daily_tail_insurance":
             return registry.get(strategy_id, "1.0").build_execution_plan(group_id)

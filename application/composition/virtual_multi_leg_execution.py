@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import Any, Callable
 
 from contracts.types import BrokerOrderCommand, ExecutionReport, MultiLegExecutionPlan, OptionInstrumentIdentity
+from contracts.futures_identity_source_port import FuturesIdentitySourcePort, FuturesInstrumentIdentity, require_futures_identity
 from contracts.risk_guard import RiskGuardStatusSource
 from core.option.option_master import IOptionContractMaster
 from core.decision.decision_arbiter import DecisionArbiter
@@ -57,9 +58,10 @@ class _AckAdapter:
 class VirtualMultiLegExecutionBridge:
     """Preserve group/leg identity while routing every leg through Risk -> OMS -> VSSF."""
 
-    def __init__(self, *, bundle: Any, run_id: str, option_master: IOptionContractMaster | None = None, risk_config: RiskConfig | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None) -> None:
+    def __init__(self, *, bundle: Any, run_id: str, option_master: IOptionContractMaster | None = None, futures_identity_source: FuturesIdentitySourcePort | None = None, risk_config: RiskConfig | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None) -> None:
         self.bundle = bundle
         self.option_master = option_master or getattr(bundle, "option_master", None)
+        self.futures_identity_source = futures_identity_source
         self.fsm = OrderStateMachine()
         self.ack = _AckAdapter(bundle.broker)
         self.router = StandardOrderRouter(order_state_machine=self.fsm, broker_adapter=self.ack)
@@ -79,7 +81,9 @@ class VirtualMultiLegExecutionBridge:
         self.provenance: dict[str, dict[str, str]] = {}
         self.leg_positions: dict[str, Any] = {}
 
-    def identity_for_leg(self, plan: MultiLegExecutionPlan, leg) -> OptionInstrumentIdentity:
+    def identity_for_leg(self, plan: MultiLegExecutionPlan, leg) -> OptionInstrumentIdentity | FuturesInstrumentIdentity:
+        if leg.option_type is None and plan.strategy_id == "Strategy_3_StatArb":
+            return require_futures_identity(self.futures_identity_source)
         if leg.option_type not in {"CALL", "PUT"} or leg.strike is None:
             raise ValueError("MULTI_LEG_OPTION_IDENTITY_REQUIRED")
         if self.option_master is None:
@@ -122,32 +126,41 @@ class VirtualMultiLegExecutionBridge:
             identity = self.identity_for_leg(plan, leg)
             client_order_id = f"{plan.group_id}-{leg.leg_id}"
             vssf = self.bundle.execution._authoritative_execute.__self__.vssf_runtime
-            option_quotes = getattr(self.bundle.market, "option_quotes", {})
-            quote_key = next(
-                (
-                    key
-                    for key in option_quotes
-                    if isinstance(key, tuple)
-                    and len(key) == 3
-                    and str(key[0]).upper() == identity.option_type
-                    and float(key[1]) == float(identity.strike)
-                    and str(key[2]).replace("-", "")[:6]
-                    == identity.expiry.replace("-", "")[:6]
-                ),
-                None,
-            )
-            quote = option_quotes.get(quote_key)
-            if quote is None:
-                raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_QUOTE_NOT_FOUND")
-            authoritative = self.option_master.get_contract_identity(identity.instrument_id)
-            if authoritative is None or authoritative.contract_multiplier is None:
-                raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_MULTIPLIER_REQUIRED")
-            quote_multiplier = quote.get("contract_multiplier")
-            if quote_multiplier is None or Decimal(str(quote_multiplier)) != Decimal(str(authoritative.contract_multiplier)):
-                raise ValueError("MULTI_LEG_OPTION_CONTRACT_MULTIPLIER_MISMATCH")
-            bid = Decimal(str(quote.get("bid", "0")))
-            ask = Decimal(str(quote.get("ask", "0")))
-            execution_reference = ask if leg.side == "BUY" else bid
+            is_futures = isinstance(identity, FuturesInstrumentIdentity)
+            quote = None
+            if is_futures:
+                futures_price = Decimal(str(getattr(self.bundle.market, "futures_price", "0")))
+                if futures_price <= 0:
+                    raise ValueError("MULTI_LEG_AUTHORITATIVE_FUTURES_QUOTE_REQUIRED")
+                bid = ask = futures_price
+                execution_reference = futures_price
+            else:
+                option_quotes = getattr(self.bundle.market, "option_quotes", {})
+                quote_key = next(
+                    (
+                        key
+                        for key in option_quotes
+                        if isinstance(key, tuple)
+                        and len(key) == 3
+                        and str(key[0]).upper() == identity.option_type
+                        and float(key[1]) == float(identity.strike)
+                        and str(key[2]).replace("-", "")[:6]
+                        == identity.expiry.replace("-", "")[:6]
+                    ),
+                    None,
+                )
+                quote = option_quotes.get(quote_key)
+                if quote is None:
+                    raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_QUOTE_NOT_FOUND")
+                authoritative = self.option_master.get_contract_identity(identity.instrument_id)
+                if authoritative is None or authoritative.contract_multiplier is None:
+                    raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_MULTIPLIER_REQUIRED")
+                quote_multiplier = quote.get("contract_multiplier")
+                if quote_multiplier is None or Decimal(str(quote_multiplier)) != Decimal(str(authoritative.contract_multiplier)):
+                    raise ValueError("MULTI_LEG_OPTION_CONTRACT_MULTIPLIER_MISMATCH")
+                bid = Decimal(str(quote.get("bid", "0")))
+                ask = Decimal(str(quote.get("ask", "0")))
+                execution_reference = ask if leg.side == "BUY" else bid
             if execution_reference <= 0:
                 raise ValueError("MULTI_LEG_OPTION_QUOTE_INVALID")
             broker_command = BrokerOrderCommand(
@@ -158,7 +171,7 @@ class VirtualMultiLegExecutionBridge:
                 order_type="LIMIT",
                 broker_symbol=identity.symbol,
                 instrument_identity=identity,
-                asset_type="OPTION",
+                asset_type="FUTURES" if is_futures else "OPTION",
                 requested_price=execution_reference,
                 strategy_id=plan.strategy_id,
                 order_purpose=plan.purpose or "MULTI_LEG",
@@ -258,10 +271,11 @@ class VirtualMultiLegExecutionBridge:
             VirtualPositionFillAdapter(leg_position).apply(broker_command, report)
             self.provenance[report.execution_id or client_order_id] = {
                 "strategy_id": plan.strategy_id, "group_id": plan.group_id,
-                "leg_id": leg.leg_id, "execution_id": report.execution_id or "",
+                "leg_id": leg.leg_id, "client_order_id": client_order_id,
+                "execution_id": report.execution_id or "",
                 "instrument_id": identity.instrument_id, "symbol": identity.symbol,
-                "expiry": identity.expiry or "", "option_type": identity.option_type or "",
-                "strike": str(identity.strike),
+                "expiry": getattr(identity, "expiry", "") or "", "option_type": getattr(identity, "option_type", "") or "",
+                "strike": str(getattr(identity, "strike", "") or ""),
                 "contract_multiplier": str(identity.contract_multiplier),
                 "identity_source": identity.identity_source or "",
             }
@@ -293,31 +307,37 @@ class VirtualMultiLegExecutionBridge:
                 continue
             direction = 1.0 if leg.side == "BUY" else -1.0
             identity = self.identity_for_leg(plan, leg)
-            quote = next(
-                (
-                    value
-                    for key, value in option_quotes.items()
-                    if isinstance(key, tuple)
-                    and len(key) == 3
-                    and str(key[0]).upper() == identity.option_type
-                    and float(key[1]) == float(identity.strike)
-                    and str(key[2]).replace("-", "")[:6]
-                    == identity.expiry.replace("-", "")[:6]
-                ),
-                None,
-            )
-            if quote is None or quote.get("last") is None:
-                raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_MARK_NOT_FOUND")
-            current = float(quote["last"])
+            if isinstance(identity, FuturesInstrumentIdentity):
+                current = current_futures
+            else:
+                quote = next(
+                    (
+                        value
+                        for key, value in option_quotes.items()
+                        if isinstance(key, tuple)
+                        and len(key) == 3
+                        and str(key[0]).upper() == identity.option_type
+                        and float(key[1]) == float(identity.strike)
+                        and str(key[2]).replace("-", "")[:6]
+                        == identity.expiry.replace("-", "")[:6]
+                    ),
+                    None,
+                )
+                if quote is None or quote.get("last") is None:
+                    raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_MARK_NOT_FOUND")
+                current = float(quote["last"])
             position_state = self.leg_positions.get(identity.instrument_id)
             if position_state is None:
                 raise ValueError("MULTI_LEG_POSITION_STATE_REQUIRED")
             position_snapshot = position_state.snapshot().get(identity.instrument_id)
-            if position_snapshot is None or position_snapshot.contract_multiplier is None:
-                raise ValueError("MULTI_LEG_POSITION_CONTRACT_MULTIPLIER_REQUIRED")
-            multiplier = position_snapshot.contract_multiplier
-            if position_snapshot.identity_source != identity.identity_source:
-                raise ValueError("MULTI_LEG_POSITION_IDENTITY_PROVENANCE_MISMATCH")
+            if isinstance(identity, FuturesInstrumentIdentity):
+                multiplier = identity.contract_multiplier
+            else:
+                if position_snapshot is None or position_snapshot.contract_multiplier is None:
+                    raise ValueError("MULTI_LEG_POSITION_CONTRACT_MULTIPLIER_REQUIRED")
+                multiplier = position_snapshot.contract_multiplier
+                if position_snapshot.identity_source != identity.identity_source:
+                    raise ValueError("MULTI_LEG_POSITION_IDENTITY_PROVENANCE_MISMATCH")
             pnl = (
                 Decimal(str(current)) - Decimal(str(rep.execution_price))
             ) * Decimal(str(rep.filled_quantity)) * Decimal(str(direction)) * multiplier
