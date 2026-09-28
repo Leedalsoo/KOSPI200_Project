@@ -20,7 +20,8 @@ from core.oms.oms_fsm import OrderStateMachine
 from core.oms.order_router import StandardOrderRouter
 from core.risk.risk_engine import RiskEngine, RiskGate
 from core.risk.risk_config import RiskConfig
-from core.strategy.contracts import StrategyContext
+from core.strategy.contracts import SignalKind, StrategyContext
+from contracts.strategy_runtime_status import StrategyRuntimeStatus
 from application.strategy_hub.contracts import StrategyHubPort
 from application.strategy_hub.hub import StrategyHub
 from core.domain.market_models import MarketState
@@ -36,6 +37,7 @@ class AutomatedTickResult:
     filled: int
     rejected: int
     execution_ids: tuple[str, ...]
+    strategy_status: tuple[StrategyRuntimeStatus, ...] = ()
 
 
 class _VirtualBrokerAckAdapter:
@@ -81,10 +83,15 @@ class AutomatedVirtualTradingLoop:
         vssf = bundle.execution._authoritative_execute.__self__.vssf_runtime
         self.risk_gate = RiskGate(RiskEngine(risk_config or RiskConfig(), margin_engine=vssf.margin_engine), risk_guard_status_source=risk_guard_status_source)
         self._last_result: AutomatedTickResult | None = None
+        self._last_strategy_status: tuple[StrategyRuntimeStatus, ...] = ()
 
     @property
     def last_result(self) -> AutomatedTickResult | None:
         return self._last_result
+
+    @property
+    def last_strategy_status(self) -> tuple[StrategyRuntimeStatus, ...]:
+        return self._last_strategy_status
 
     def on_tick(self, tick) -> AutomatedTickResult:
         as_of = datetime.fromisoformat(tick.timestamp)
@@ -101,6 +108,26 @@ class AutomatedVirtualTradingLoop:
         evaluations = self.strategy_results.collect(
             tick_sequence=tick.seq_id, context=contexts, result=strategy_result
         )
+        status_by_strategy = {
+            strategy_id: StrategyRuntimeStatus(strategy_id)
+            for strategy_id in contexts
+        }
+        for failure in strategy_result.failures:
+            status = status_by_strategy.get(failure.strategy_id, StrategyRuntimeStatus(failure.strategy_id))
+            unavailable = int(failure.error_type == "UnavailableData" or "UNAVAILABLE" in failure.message)
+            status_by_strategy[failure.strategy_id] = status.add(
+                unavailable=unavailable,
+                runtime_failures=1,
+            )
+        for evaluation in evaluations:
+            strategy_id = str(getattr(evaluation.context, "strategy_id", "") or "")
+            status = status_by_strategy.get(strategy_id, StrategyRuntimeStatus(strategy_id))
+            kind = SignalKind(getattr(evaluation.result, "kind", SignalKind.EXECUTION))
+            status_by_strategy[strategy_id] = status.add(
+                reaction_signals=1,
+                execution_signals=int(kind is SignalKind.EXECUTION),
+                non_execution_signals=int(kind is SignalKind.NON_EXECUTION),
+            )
         decision = self.strategy_to_decision.arbitrate(
             evaluations, price=tick.ask_price, timestamp=tick.timestamp,
             account=self.bundle.account.snapshot(),
@@ -109,6 +136,12 @@ class AutomatedVirtualTradingLoop:
             multi_leg_plan_resolver=self.multi_leg_plan_resolver,
         )
         approved = tuple(decision.arbitration.approved_signals[:1])
+        for canonical in approved:
+            status = status_by_strategy.get(canonical.track_id, StrategyRuntimeStatus(canonical.track_id))
+            status_by_strategy[canonical.track_id] = status.add(approved=1)
+        for canonical, _reason in decision.arbitration.rejected_signals:
+            status = status_by_strategy.get(canonical.track_id, StrategyRuntimeStatus(canonical.track_id))
+            status_by_strategy[canonical.track_id] = status.add(decision_rejected=1)
         multi_leg_signal_ids = {item.signal_id for item in decision.multi_leg_decisions}
         approved_single_leg = tuple(signal for signal in approved if signal.signal_id not in multi_leg_signal_ids)
         commands = self.decision_to_command.build_commands(evaluations, approved_single_leg)
@@ -122,8 +155,13 @@ class AutomatedVirtualTradingLoop:
                 raise RuntimeError("MULTI_LEG_EXECUTOR_REQUIRED")
             for multi_leg in decision.multi_leg_decisions:
                 executed = self.multi_leg_executor(multi_leg.plan)
-                routed += getattr(executed, "routed_legs", 0)
-                filled += getattr(executed, "filled_legs", 0)
+                routed_legs = getattr(executed, "routed_legs", 0)
+                filled_legs = getattr(executed, "filled_legs", 0)
+                routed += routed_legs
+                filled += filled_legs
+                strategy_id = multi_leg.plan.strategy_id
+                status = status_by_strategy.get(strategy_id, StrategyRuntimeStatus(strategy_id))
+                status_by_strategy[strategy_id] = status.add(routed=routed_legs, filled_quantity=filled_legs)
                 execution_ids.extend(report.execution_id for report in getattr(executed, "reports", ()) if report.execution_id)
                 if not getattr(executed, "group_complete", False):
                     rejected += 1
@@ -154,8 +192,12 @@ class AutomatedVirtualTradingLoop:
             )
             if not result.routed or self.broker_adapter.last_report is None:
                 rejected += 1
+                status = status_by_strategy.get(canonical.track_id, StrategyRuntimeStatus(canonical.track_id))
+                status_by_strategy[canonical.track_id] = status.add(risk_rejected=1)
                 continue
             routed += 1
+            status = status_by_strategy.get(canonical.track_id, StrategyRuntimeStatus(canonical.track_id))
+            status_by_strategy[canonical.track_id] = status.add(routed=1)
             report = self.broker_adapter.last_report
             broker_id = f"VIRTUAL-{report.execution_id}"
             if report.status not in {"PARTIALLY_FILLED", "FILLED"}:
@@ -195,11 +237,15 @@ class AutomatedVirtualTradingLoop:
                     )
                 filled += report.filled_quantity
                 execution_ids.append(report.execution_id)
+                status = status_by_strategy.get(canonical.track_id, StrategyRuntimeStatus(canonical.track_id))
+                status_by_strategy[canonical.track_id] = status.add(filled_quantity=report.filled_quantity)
 
+        self._last_strategy_status = tuple(sorted(status_by_strategy.values(), key=lambda item: item.strategy_id))
         self._last_result = AutomatedTickResult(
             tick_sequence=tick.seq_id, signals=len(strategy_result.signals),
             approved=len(approved), routed=routed, filled=filled,
             rejected=rejected, execution_ids=tuple(execution_ids),
+            strategy_status=self._last_strategy_status,
         )
         return self._last_result
 
