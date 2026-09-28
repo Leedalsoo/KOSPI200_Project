@@ -33,6 +33,7 @@ class VirtualMarketSimulatorRuntime:
         self._initial_price = 350.0
         self._subscribers = []
         self._recent_ticks = deque(maxlen=50)
+        self._underlying_history = deque(maxlen=600)
         self.last_tick = None
         self._option_quotes = {}
         self._futures_price = self._price
@@ -40,6 +41,10 @@ class VirtualMarketSimulatorRuntime:
     @property
     def recent_ticks(self):
         return tuple(self._recent_ticks)
+
+    @property
+    def underlying_history(self):
+        return tuple(self._underlying_history)
 
     @property
     def option_quotes(self):
@@ -62,29 +67,7 @@ class VirtualMarketSimulatorRuntime:
         tick = self.replay.next_tick()
         if tick is None:
             return None
-        if self.option_master is not None and tick.instrument_id and tick.symbol and tick.expiry and tick.option_type:
-            identity = self.option_master.find_contract_identity(tick.expiry, tick.option_type, Decimal(str(tick.strike_price)))
-            if identity is not None:
-                authoritative_id = identity.stnd_iscd or identity.shrn_iscd
-                if authoritative_id:
-                    tick = replace(tick, instrument_id=authoritative_id)
-        self.last_tick = tick
-        self._recent_ticks.append(tick)
-        if tick.underlying_price is not None:
-            self._price = tick.underlying_price
-            self._futures_price = self._price + self.config.futures_basis_points
-        if tick.symbol and tick.option_type and tick.expiry and tick.bid_price > 0 and tick.ask_price > 0:
-            quote = {
-                "bid": tick.bid_price,
-                "ask": tick.ask_price,
-                "last": tick.last_price,
-                "timestamp": tick.timestamp,
-                "contract_multiplier": tick.contract_multiplier,
-            }
-            self._option_quotes[(tick.option_type.upper(), float(tick.strike_price), tick.expiry)] = quote
-        for subscriber in tuple(self._subscribers):
-            subscriber(tick)
-        return tick
+        return self.publish_replay_tick(tick)
 
     @staticmethod
     def _norm_cdf(x: float) -> float:
@@ -129,6 +112,53 @@ class VirtualMarketSimulatorRuntime:
         if not callable(callback):
             raise TypeError("VMS_MARKET_SUBSCRIBER_REQUIRED")
         self._subscribers.append(callback)
+
+    def register_replay_option_quote(self, *, symbol: str, option_type: str, strike: float, expiry: str, bid: float, ask: float, last: float, timestamp: str, contract_multiplier: float) -> None:
+        """Register an external replay quote without triggering strategy evaluation."""
+        if not symbol or option_type not in {"CALL", "PUT"} or not expiry:
+            raise ValueError("VMS_REPLAY_OPTION_QUOTE_REQUIRED")
+        self._option_quotes[(option_type.upper(), float(strike), expiry)] = {
+            "bid": float(bid),
+            "ask": float(ask),
+            "last": float(last),
+            "timestamp": timestamp,
+            "contract_multiplier": float(contract_multiplier),
+        }
+
+    def publish_replay_tick(self, tick: ReferenceCanonicalMarketTick):
+        """Publish one externally supplied replay tick through the Virtual Market boundary."""
+        if not isinstance(tick, ReferenceCanonicalMarketTick):
+            raise TypeError("VMS_REPLAY_TICK_REQUIRED")
+        if self.option_master is not None and tick.instrument_id and tick.symbol and tick.expiry and tick.option_type:
+            identity = self.option_master.find_contract_identity(
+                tick.expiry, tick.option_type, Decimal(str(tick.strike_price))
+            )
+            if identity is not None:
+                authoritative_id = identity.stnd_iscd or identity.shrn_iscd
+                if authoritative_id:
+                    tick = replace(tick, instrument_id=authoritative_id)
+        self.last_tick = tick
+        self._recent_ticks.append(tick)
+        if tick.underlying_price is not None:
+            observed_at = datetime.fromisoformat(tick.timestamp)
+            underlying_value = Decimal(str(tick.underlying_price))
+            if not self._underlying_history or self._underlying_history[-1][0] != observed_at:
+                self._underlying_history.append((observed_at, underlying_value))
+            elif self._underlying_history[-1][1] != underlying_value:
+                raise ValueError("VMS_UNDERLYING_SAME_TIMESTAMP_MISMATCH")
+            self._price = tick.underlying_price
+            self._futures_price = self._price + self.config.futures_basis_points
+        if tick.symbol and tick.option_type and tick.expiry and tick.bid_price > 0 and tick.ask_price > 0:
+            self._option_quotes[(tick.option_type.upper(), float(tick.strike_price), tick.expiry)] = {
+                "bid": tick.bid_price,
+                "ask": tick.ask_price,
+                "last": tick.last_price,
+                "timestamp": tick.timestamp,
+                "contract_multiplier": tick.contract_multiplier,
+            }
+        for subscriber in tuple(self._subscribers):
+            subscriber(tick)
+        return tick
 
     def publish_authoritative_option_quote(self, key, quote) -> None:
         """Publish an externally authoritative option quote without synthetic fallback."""
@@ -177,6 +207,12 @@ class VirtualMarketSimulatorRuntime:
             )
             self.last_tick = tick
             self._recent_ticks.append(tick)
+            observed_at = datetime.fromisoformat(tick.timestamp)
+            underlying_value = Decimal(str(tick.underlying_price))
+            if not self._underlying_history or self._underlying_history[-1][0] != observed_at:
+                self._underlying_history.append((observed_at, underlying_value))
+            elif self._underlying_history[-1][1] != underlying_value:
+                raise ValueError("VMS_UNDERLYING_SAME_TIMESTAMP_MISMATCH")
             self._futures_price = tick.underlying_price + self.config.futures_basis_points
             self._refresh_option_quotes(tick, adjustment.volatility_multiplier)
             for subscriber in tuple(self._subscribers):

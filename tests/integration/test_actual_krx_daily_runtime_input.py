@@ -15,7 +15,7 @@ class Calendar:
         return date(2026, 9, 18)
 
 
-def test_actual_krx_daily_store_reaches_track7_runtime_input():
+def test_option_daily_store_does_not_reach_track7_underlying_support_resistance():
     path = Path("data/historical/canonical/20260918_daily_ohlc.jsonl")
     store = HistoricalDailyStore(path)
     records = store.load_records()
@@ -37,7 +37,7 @@ def test_actual_krx_daily_store_reaches_track7_runtime_input():
         market=type("Market", (), {"recent_ticks": (tick,), "scenario": type("Scenario", (), {"active_config": lambda self: {}})()})(),
         track7_support_resistance_source=source,
     ).snapshot(tick)
-    assert data.support is not None
-    assert data.resistance is not None
-    assert data.status["track7_support_resistance"].available is True
-    assert data.status["track7_support_resistance"].source.startswith("HistoricalMarketData/CanonicalDailyOHLC:")
+    assert data.support is None
+    assert data.resistance is None
+    assert data.status["track7_support_resistance"].available is False
+    assert data.status["track7_support_resistance"].reason == "TRACK7_SUPPORT_RESISTANCE_SOURCE_UNAVAILABLE"

@@ -110,28 +110,23 @@ class VirtualRuntimeDataProvider:
             return None
 
     @staticmethod
-    def _time_window_ma(recent: tuple[Any, ...], as_of: datetime, minutes: int) -> Decimal | None:
+    def _time_window_ma(
+        underlying_history: tuple[tuple[datetime, Decimal], ...],
+        as_of: datetime,
+        minutes: int,
+    ) -> Decimal | None:
         cutoff = as_of.timestamp() - minutes * 60
-        points: list[tuple[datetime, Decimal]] = []
-        for item in recent:
-            timestamp = getattr(item, "timestamp", None)
-            last_price = getattr(item, "last_price", None)
-            if timestamp is None or last_price is None:
-                continue
-            observed_at = datetime.fromisoformat(timestamp)
-            if observed_at <= as_of:
-                points.append((observed_at, Decimal(str(last_price))))
-        points.sort()
+        points = [(timestamp, Decimal(str(price))) for timestamp, price in underlying_history if timestamp <= as_of]
         if not points or points[0][0].timestamp() > cutoff:
             return None
         values = [price for timestamp, price in points if timestamp.timestamp() >= cutoff]
         if not values:
             return None
         return sum(values, Decimal("0")) / Decimal(len(values))
-
     def snapshot(self, tick: Any) -> VirtualRuntimeData:
         observed_at = datetime.fromisoformat(tick.timestamp)
         recent = tuple(self.market.recent_ticks[-self.history_size:])
+        underlying_history = tuple(getattr(self.market, "underlying_history", ()))
         prices = tuple(Decimal(str(x.last_price)) for x in recent) or (Decimal(str(tick.last_price)),)
         price = Decimal(str(tick.last_price))
         high = max(prices)
@@ -141,10 +136,10 @@ class VirtualRuntimeDataProvider:
         returns = tuple(abs(prices[i] / prices[i - 1] - 1) for i in range(1, len(prices)) if prices[i - 1])
         active_vol = (sum(returns, Decimal("0")) / Decimal(len(returns))) if returns else None
         base_vol = active_vol
-        ma_1m = self._time_window_ma(recent, observed_at, 1)
-        ma_3m = self._time_window_ma(recent, observed_at, 3)
-        ma_5m = self._time_window_ma(recent, observed_at, 5)
-        ma_10m = self._time_window_ma(recent, observed_at, 10)
+        ma_1m = self._time_window_ma(underlying_history, observed_at, 1)
+        ma_3m = self._time_window_ma(underlying_history, observed_at, 3)
+        ma_5m = self._time_window_ma(underlying_history, observed_at, 5)
+        ma_10m = self._time_window_ma(underlying_history, observed_at, 10)
         strike = Decimal(str(tick.strike_price))
         iv = None
         put_iv = None
@@ -172,7 +167,7 @@ class VirtualRuntimeDataProvider:
             iv_spike, iv_crush = event_values.iv_spike, event_values.iv_crush
         if iv is not None:
             s, k, sigma = float(price), float(tick.strike_price), float(iv)
-            t = max(1.0 / 365.0, (datetime.strptime(tick.expiry, "%Y%m") - observed_at.replace(day=1)).total_seconds() / 31536000.0)
+            t = max(1.0 / 365.0, (datetime.strptime(str(tick.expiry).replace("-", "")[:6], "%Y%m").replace(tzinfo=observed_at.tzinfo) - observed_at.replace(day=1)).total_seconds() / 31536000.0)
             d1 = (log(s / k) + 0.5 * sigma * sigma * t) / (sigma * sqrt(t))
             delta = Decimal(str(round(self._norm_cdf(d1), 8)))
             gamma = Decimal(str(round(exp(-0.5 * d1 * d1) / sqrt(2 * 3.141592653589793) / (s * sigma * sqrt(t)), 8)))
@@ -236,7 +231,7 @@ class VirtualRuntimeDataProvider:
             basis = self.basis_source.get_basis(underlying_key)
             if basis is not None:
                 basis_status = RuntimeDataStatus(
-                    True, True, "KIS:futures-minus-spot"
+                    True, True, getattr(self.basis_source, "source_name", "BasisSource")
                 )
         if self.track2_metrics_source is not None and symbol:
             metrics = self.track2_metrics_source.get_metrics(underlying_key)
@@ -245,7 +240,7 @@ class VirtualRuntimeDataProvider:
                 volume_window = metrics.volume_window
                 metrics_active_vol = metrics.active_vol
                 metrics_base_vol = metrics.base_vol
-                metrics_status = RuntimeDataStatus(True, True, "KIS:H0IFCNT0:Track2Metrics")
+                metrics_status = RuntimeDataStatus(True, True, getattr(self.track2_metrics_source, "source_name", "Track2MarketMetricsSource"))
 
         poc_status = RuntimeDataStatus(
             False, False, "VolumeProfileSource", "VOLUME_PROFILE_SOURCE_UNAVAILABLE"
@@ -254,7 +249,7 @@ class VirtualRuntimeDataProvider:
             poc_price = self.volume_profile_source.get_poc(underlying_key)
             if poc_price is not None:
                 poc_status = RuntimeDataStatus(
-                    True, True, "KIS:H0IFCNT0:volume_profile"
+                    True, True, getattr(self.volume_profile_source, "source_name", "VolumeProfileSource")
                 )
         if self.option_orderbook_source is not None and symbol:
             order_book = self.option_orderbook_source.get_order_book(symbol)
@@ -274,7 +269,7 @@ class VirtualRuntimeDataProvider:
             "track7_moving_average": RuntimeDataStatus(
                 moving_average_available,
                 moving_average_available,
-                "VMS.recent_ticks",
+                "VMS.underlying_history",
                 None if moving_average_available else "TRACK7_MOVING_AVERAGE_HISTORY_COVERAGE_UNAVAILABLE",
             ),
             "iv_greeks": RuntimeDataStatus(iv is not None and put_iv is not None, iv is not None and put_iv is not None, "VMS.option_quotes", "OPTION_CHAIN_UNAVAILABLE" if iv is None or put_iv is None else None),

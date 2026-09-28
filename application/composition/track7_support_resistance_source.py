@@ -26,7 +26,7 @@ class Track7AuthoritativeSupportResistanceSource:
 
     def get(self, *, symbol: str, observed_at: datetime, current_price: Any) -> Track7SupportResistanceObservation | None:
         observation = self._provider.get_support_resistance(
-            symbol=symbol, observed_at=observed_at, current_price=current_price
+            symbol="KOSPI200", observed_at=observed_at, current_price=current_price
         )
         if observation is None:
             return None

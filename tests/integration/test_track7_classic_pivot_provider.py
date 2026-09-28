@@ -15,7 +15,7 @@ class Calendar:
 def _store(tmp_path):
     store = HistoricalDailyStore(tmp_path / "daily.jsonl")
     record = HistoricalDailyOHLC(
-        symbol="B056A960",
+        symbol="KOSPI200",
         trading_date=date(2026, 9, 17),
         open=Decimal("340"), high=Decimal("360"), low=Decimal("340"), close=Decimal("345"),
         observed_at=datetime(2026, 9, 17), source="TEST.HISTORICAL.KRX",
@@ -26,7 +26,7 @@ def _store(tmp_path):
 
 def test_previous_completed_day_ohlc_reads_daily_store(tmp_path):
     provider = HistoricalMarketDailyOHLCProvider(_store(tmp_path), Calendar())
-    result = provider.get_previous_completed_day(symbol="B056A960", observed_at=datetime(2026, 9, 18, 9, 0))
+    result = provider.get_previous_completed_day(symbol="KOSPI200", observed_at=datetime(2026, 9, 18, 9, 0))
     assert result is not None
     assert (result.open, result.high, result.low, result.close) == (Decimal("340"), Decimal("360"), Decimal("340"), Decimal("345"))
     assert result.source == "TEST.HISTORICAL.KRX"

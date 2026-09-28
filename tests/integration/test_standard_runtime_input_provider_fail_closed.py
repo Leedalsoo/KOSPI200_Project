@@ -139,23 +139,29 @@ def test_track7_moving_average_uses_timestamped_vms_history_without_fallback():
     base_tick = next(market.generate_tick_stream(total_days=1, ticks_per_day=1))
     base_time = datetime.fromisoformat(base_tick.timestamp)
     market._recent_ticks.clear()
+    market._underlying_history.clear()
     for index in range(11):
         timestamp = base_time + timedelta(minutes=index)
-        market._recent_ticks.append(
-            replace(base_tick, timestamp=timestamp.isoformat(), last_price=348 + index)
+        market.publish_replay_tick(
+            replace(
+                base_tick,
+                timestamp=timestamp.isoformat(),
+                underlying_price=348 + index,
+                last_price=Decimal(str(999 - index)),
+            )
         )
     tick = market.recent_ticks[-1]
     data = StandardRuntimeInputProvider(market).data.snapshot(tick)
 
     assert data.status["track7_moving_average"].available is True
-    assert data.status["track7_moving_average"].source == "VMS.recent_ticks"
+    assert data.status["track7_moving_average"].source == "VMS.underlying_history"
     assert all(value is not None for value in (data.ma_1m, data.ma_3m, data.ma_5m, data.ma_10m))
     for minutes, actual in ((1, data.ma_1m), (3, data.ma_3m), (5, data.ma_5m), (10, data.ma_10m)):
         cutoff = datetime.fromisoformat(tick.timestamp).timestamp() - minutes * 60
         values = [
-            Decimal(str(item.last_price))
-            for item in market.recent_ticks
-            if cutoff <= datetime.fromisoformat(item.timestamp).timestamp() <= datetime.fromisoformat(tick.timestamp).timestamp()
+            price
+            for timestamp, price in market.underlying_history
+            if cutoff <= timestamp.timestamp() <= datetime.fromisoformat(tick.timestamp).timestamp()
         ]
         assert actual == sum(values, Decimal("0")) / Decimal(len(values))
 

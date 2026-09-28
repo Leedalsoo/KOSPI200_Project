@@ -14,7 +14,8 @@ class Track7ClassicPivotProvider:
     definition = "CLASSIC_FLOOR_PIVOT_PREVIOUS_COMPLETED_DAILY_OHLC"
     window = "PREVIOUS_COMPLETED_TRADING_DAY_1_DAILY_BAR"
     calculation_version = "TRACK7-CLASSIC-PIVOT-v1"
-    source_name = "HistoricalMarketData/CanonicalDailyOHLC"
+    source_name = "KRX:KOSPI200:CanonicalDailyOHLC"
+    underlying_identity = "KOSPI200"
     tick_size = Decimal("0.05")
 
     def __init__(self, historical_ohlc: HistoricalDailyOHLCProvider) -> None:
@@ -39,7 +40,7 @@ class Track7ClassicPivotProvider:
         price = Decimal(str(current_price))
         if price <= 0:
             raise ValueError("TRACK7_CURRENT_PRICE_REQUIRED")
-        bar = self.historical_ohlc.get_previous_completed_day(symbol=symbol, observed_at=observed_at)
+        bar = self.historical_ohlc.get_previous_completed_day(symbol=self.underlying_identity, observed_at=observed_at)
         if bar is None:
             return None
         pivot, r1, s1, r2, s2 = self._levels(bar)
