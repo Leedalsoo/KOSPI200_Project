@@ -6,6 +6,9 @@ from tests.unit.test_track8_common_analytics_strategy import context
 def test_monthly_entry_via_standard_context():
     s=Track8MacroRegimeMonthlyStrangle(); signals=s.evaluate(context())
     assert signals and s.state.call_strike==Decimal("365") and s.state.put_strike==Decimal("335")
+    proposal=signals[0].execution_proposal
+    assert proposal and proposal.asset_type=="OPTION" and proposal.side=="BUY"
+    assert proposal.option_type=="CALL" and proposal.strike==Decimal("365") and proposal.proposed_quantity==1
 
 def test_dte_and_budget_guards():
     s=Track8MacroRegimeMonthlyStrangle(); assert s.evaluate(context(dte=Decimal("14.9")))==()

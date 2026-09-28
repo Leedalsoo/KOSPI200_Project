@@ -3,6 +3,7 @@ from decimal import Decimal
 from typing import Sequence
 from core.strategy.contracts import Signal, StrategyContext
 from core.strategy.multi_leg_plan import build_pair_plan
+from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
 from contracts.types import MultiLegExecutionPlan
 from contracts.analytics import AnalyticsStatus
 
@@ -67,7 +68,19 @@ class Track8MacroRegimeMonthlyStrangle:
         qty_call = 1
         qty_put = int(Decimal(str(qty_call)) * Decimal(str(skew_qty)))
         self.state = replace(self.state, is_active=True, premium_spent=Decimal("0"), call_strike=call, put_strike=put, qty_call=qty_call, qty_put=qty_put, entry_date=context.input.common.date_str)
-        return (Signal(self.strategy_id, "BUY_LIMIT_TRANCHE", 1.0, f"DTE:{dte};CALL:{call};PUT:{put};QTY_CALL:{qty_call};QTY_PUT:{qty_put};PRICING:MID_PRICE_OFFSET"),)
+        return (Signal(
+            self.strategy_id, "BUY_LIMIT_TRANCHE", 1.0,
+            f"DTE:{dte};CALL:{call};PUT:{put};QTY_CALL:{qty_call};QTY_PUT:{qty_put};PRICING:MID_PRICE_OFFSET",
+            execution_proposal=StrategyExecutionProposal(
+                proposed_quantity=qty_call,
+                asset_type="OPTION",
+                side="BUY",
+                track_id=self.strategy_id,
+                tag_id="MONTHLY_STRANGLE_ENTRY",
+                option_type="CALL",
+                strike=call,
+            ),
+        ),)
 
     def evaluate_take_profit(self, context: StrategyContext) -> Sequence[Signal]:
         if not self.state.is_active: return ()
