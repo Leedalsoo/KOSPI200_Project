@@ -12,3 +12,59 @@ scenarios:
     gap_magnitude_percent: [1.2, 2.5]
     shock_interval_days: 3
     trend_drift_range: [-0.35, 0.35]
+  UP_TREND:
+    base_volatility: 1.15
+    biweekly_shock_range: [4.0, 8.0]
+    gap_magnitude_percent: [0.1, 0.4]
+    shock_interval_days: 12
+    trend_drift_range: [0.12, 0.35]
+  DOWN_TREND:
+    base_volatility: 1.15
+    biweekly_shock_range: [4.0, 8.0]
+    gap_magnitude_percent: [0.1, 0.4]
+    shock_interval_days: 12
+    trend_drift_range: [-0.35, -0.12]
+  SIDEWAYS:
+    base_volatility: 0.85
+    biweekly_shock_range: [1.0, 3.0]
+    gap_magnitude_percent: [0.0, 0.2]
+    shock_interval_days: 20
+    trend_drift_range: [-0.03, 0.03]
+  SHARP_UP:
+    base_volatility: 2.0
+    biweekly_shock_range: [12.0, 20.0]
+    gap_magnitude_percent: [1.0, 2.5]
+    shock_interval_days: 3
+    trend_drift_range: [0.35, 0.8]
+  SHARP_DOWN:
+    base_volatility: 2.0
+    biweekly_shock_range: [12.0, 20.0]
+    gap_magnitude_percent: [1.0, 2.5]
+    shock_interval_days: 3
+    trend_drift_range: [-0.8, -0.35]
+  VOL_EXPANSION:
+    base_volatility: 3.5
+    biweekly_shock_range: [18.0, 30.0]
+    gap_magnitude_percent: [1.5, 3.0]
+    shock_interval_days: 2
+    trend_drift_range: [-0.2, 0.2]
+  VOL_CONTRACTION:
+    base_volatility: 0.65
+    biweekly_shock_range: [1.0, 4.0]
+    gap_magnitude_percent: [0.0, 0.15]
+    shock_interval_days: 20
+    trend_drift_range: [-0.05, 0.05]
+  SHOCK_UP:
+    base_volatility: 2.5
+    biweekly_shock_range: [25.0, 40.0]
+    gap_magnitude_percent: [2.0, 4.0]
+    shock_interval_days: 1
+    trend_drift_range: [-0.1, 0.1]
+    shock_direction: 1
+  SHOCK_DOWN:
+    base_volatility: 2.5
+    biweekly_shock_range: [25.0, 40.0]
+    gap_magnitude_percent: [2.0, 4.0]
+    shock_interval_days: 1
+    trend_drift_range: [-0.1, 0.1]
+    shock_direction: -1

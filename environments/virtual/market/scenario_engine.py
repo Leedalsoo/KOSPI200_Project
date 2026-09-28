@@ -48,7 +48,11 @@ class ScenarioEngine:
         interval_ticks = max(1, interval_days * max(1, ticks_per_day))
         if tick_index > 0 and tick_index % interval_ticks == 0:
             magnitude = self._rng.uniform(float(shock_range[0]), float(shock_range[1]))
-            direction = -1.0 if self._rng.random() < 0.5 else 1.0
+            configured_direction = cfg.get("shock_direction")
+            if configured_direction in (-1, 1):
+                direction = float(configured_direction)
+            else:
+                direction = -1.0 if self._rng.random() < 0.5 else 1.0
             shock_delta = magnitude * direction
             gap_pct = self._rng.uniform(float(gap_range[0]), float(gap_range[1])) / 100.0 * direction
         return ScenarioAdjustment(max(0.01, float(cfg.get("base_volatility", 1.0))), drift, gap_pct, shock_delta)
