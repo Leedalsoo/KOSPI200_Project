@@ -46,7 +46,7 @@ def _payload(multiplier):
         active_vol=0.1, base_vol=0.1, bid_ask_spread=0.02, current_price=500.0,
         options_legs=({"strike": 500, "price": 1.0, "current_market_price": 1.0, "qty": 1, "side": "BUY", "type": "CALL", "contract_multiplier": multiplier},),
         contract_multiplier=float(multiplier), market_stable=True, spread_normalizing=True,
-        time_str="10:00:00", date_str="2026-09-18",
+        time_str="10:00:00", date_str="2026-09-18", regime="NORMAL",
     )
 
 

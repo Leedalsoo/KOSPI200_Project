@@ -6,11 +6,12 @@ only Trap-specific rules, state transitions, and execution proposal construction
 """
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import ClassVar, Sequence
 
 from contracts.types import MultiLegExecutionPlan
+from core.market.session_policy import MarketSessionPolicy
 from core.strategy.contracts import Signal, StrategyContext
 from core.strategy.multi_leg_plan import build_trap_plan
 from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
@@ -23,7 +24,6 @@ class Track2AsymmetricTrap:
     ENTRY_QUANTITY: ClassVar[int] = 1
     MAX_DAILY_ENTRIES = 2
     COOLDOWN = timedelta(minutes=15)
-    MARKET_CUTOFF = time(15, 15)
     STOP_LOSS_RATIO = Decimal("-0.30")
 
     def __init__(self) -> None:
@@ -219,7 +219,7 @@ class Track2AsymmetricTrap:
         tick = next(iter(context.market_state.ticks.values()), None) if context.market_state else None
         if tick is None:
             return ()
-        if now.time() >= self.MARKET_CUTOFF or self._daily_entry_count >= self.MAX_DAILY_ENTRIES:
+        if now.time() >= MarketSessionPolicy.MARKET_CUTOFF or self._daily_entry_count >= self.MAX_DAILY_ENTRIES:
             return self.evaluate_trap(tick.price, now)
         if self._last_loss_at is not None and now - self._last_loss_at < self.COOLDOWN:
             return ()

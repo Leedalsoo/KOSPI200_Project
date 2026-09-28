@@ -92,7 +92,7 @@ class Track6DailyTailInsurance:
         base_vol = self._metric(analytics, "volatility.base")
         if not all(isinstance(value, Decimal) for value in (current_price, active_vol, base_vol)):
             return ()
-        if "15:15" <= self._as_time(analytics) < "15:20":
+        if (MarketSessionPolicy.text(MarketSessionPolicy.MARKET_CUTOFF) <= self._as_time(analytics) < MarketSessionPolicy.text(MarketSessionPolicy.PENDING_CANCEL_END)):
             return (Signal(self.strategy_id, "CANCEL", 1.0, "CANCEL_PENDING_TRANCHES_15:15"),)
         if data.contract_multiplier is None or data.contract_multiplier <= 0:
             return ()

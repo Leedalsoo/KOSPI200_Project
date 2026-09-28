@@ -221,7 +221,7 @@ class Track9EventOvernightInsurance:
         common = context.input.common if context.input else None
         if common is None or common.time_str is None:
             return ()
-        if MarketSessionPolicy.text(MarketSessionPolicy.MARKET_CUTOFF) <= common.time_str < "15:20:00":
+        if MarketSessionPolicy.text(MarketSessionPolicy.MARKET_CUTOFF) <= common.time_str < MarketSessionPolicy.text(MarketSessionPolicy.PENDING_CANCEL_END):
             return (Signal(self.strategy_id, "CANCEL_PENDING_TRANCHES", 1.0, "15:15_CANCEL_PENDING_TRANCHES"),)
         return ()
 

@@ -10,6 +10,7 @@ class MarketSessionPolicy:
     ENTRY_WINDOW_END = time(9, 30)
     LIMIT_CUTOFF = time(15, 0)
     MARKET_CUTOFF = time(15, 15)
+    PENDING_CANCEL_END = time(15, 20)
     CLOSE = time(15, 30)
 
     @classmethod

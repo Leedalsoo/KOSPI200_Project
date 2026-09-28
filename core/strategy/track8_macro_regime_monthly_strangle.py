@@ -6,6 +6,7 @@ from core.strategy.multi_leg_plan import build_pair_plan
 from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
 from contracts.types import MultiLegExecutionPlan
 from contracts.analytics import AnalyticsStatus
+from core.market.session_policy import MarketSessionPolicy
 
 @dataclass(frozen=True)
 class Track8State:
@@ -109,7 +110,7 @@ class Track8MacroRegimeMonthlyStrangle:
         if not self.state.is_active: return ()
         a = self._analytics(context); dte = self._m(a, "options.dte") if a else None
         time_str = a.as_of.strftime("%H:%M:%S")
-        if "15:15" <= time_str < "15:20": return (Signal(self.strategy_id, "CANCEL_PENDING_TRANCHES", 1.0, "15:15_CANCEL_PENDING_TRANCHES"),)
+        if MarketSessionPolicy.text(MarketSessionPolicy.MARKET_CUTOFF) <= time_str < MarketSessionPolicy.text(MarketSessionPolicy.PENDING_CANCEL_END): return (Signal(self.strategy_id, "CANCEL_PENDING_TRANCHES", 1.0, "15:15_CANCEL_PENDING_TRANCHES"),)
         if dte is None or dte > Decimal("4"): return ()
         return (Signal(self.strategy_id, "HOLD_LONG_ATTACK", 0.9, "D4_D0_MONEYNESS_OR_IV_EXPANSION"),)
 
