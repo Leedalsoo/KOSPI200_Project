@@ -6,15 +6,15 @@ from core.analytics.track8 import build_track8_evaluators
 from core.analytics.common import COMMON_METRIC_CONTRACTS, merge_analytics_snapshots
 
 
-def build_track8_analytics_snapshot(data, *, run_id: str, as_of, common_snapshot=None):
+def build_track8_analytics_snapshot(data, *, run_id: str, as_of, option_contract_selection=None, common_snapshot=None):
     observations = {
         "current_price": data.price, "dte": data.days_to_expiry, "current_regime": data.macro_regime,
         "active_vol": data.active_vol, "current_pnl": getattr(data, "current_pnl", None), "total_fees": getattr(data, "total_fees", None),
         "margin_ratio": getattr(data, "margin_ratio", None), "risk_guard_active": getattr(data, "risk_guard_active", None),
         "call_iv": data.option_iv, "put_iv": data.put_iv, "atm_iv": data.option_iv,
-        "call_strike": getattr(data, "call_strike", None), "put_strike": getattr(data, "put_strike", None),
-        "call_contract_multiplier": getattr(data, "call_contract_multiplier", None),
-        "put_contract_multiplier": getattr(data, "put_contract_multiplier", None),
+        "call_strike": getattr(option_contract_selection.call, "strike", None) if option_contract_selection is not None else getattr(data, "call_strike", None), "put_strike": getattr(option_contract_selection.put, "strike", None) if option_contract_selection is not None else getattr(data, "put_strike", None),
+        "call_contract_multiplier": getattr(option_contract_selection.call, "contract_multiplier", None) if option_contract_selection is not None else getattr(data, "call_contract_multiplier", None),
+        "put_contract_multiplier": getattr(option_contract_selection.put, "contract_multiplier", None) if option_contract_selection is not None else getattr(data, "put_contract_multiplier", None),
     }
     market = MarketSnapshot(run_id=run_id, as_of=as_of,
         provenance=AnalyticsProvenance(source="standard-runtime.track8"), instrument_identity=None,

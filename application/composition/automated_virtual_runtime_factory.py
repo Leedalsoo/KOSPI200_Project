@@ -10,6 +10,7 @@ from application.composition.option_expiry_source import KisOptionMasterExpirySo
 from application.composition.virtual_track3_runtime_input_source import VirtualTrack3RuntimeInputSource
 from application.composition.track6_option_contract_source import Track6OptionContractSource
 from application.composition.track7_option_contract_source import Track7OptionContractSource
+from application.composition.track8_option_contract_source import Track8OptionContractSource
 from core.strategy.track7_volatility_skew_weekly_insurance import Track7VolatilitySkewWeeklyInsurance
 from contracts.types import OptionInstrumentIdentity
 from infrastructure.kis.track2_option_iv_source import KISTrack2OptionIVSource
@@ -76,6 +77,7 @@ def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_h
         track3_runtime_input_source=track3_source,
         track6_option_contract_source=Track6OptionContractSource(bootstrap.bundle.option_master),
         track7_option_contract_source=Track7OptionContractSource(bootstrap.bundle.option_master),
+        track8_option_contract_source=Track8OptionContractSource(bootstrap.bundle.option_master),
     )
 
     def identity(evaluation, tick):

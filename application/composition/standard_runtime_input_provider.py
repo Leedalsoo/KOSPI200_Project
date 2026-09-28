@@ -32,6 +32,7 @@ from contracts.track9_iv_event_materializer import Track9IVEventMaterializer, Tr
 from contracts.track9_fee_ledger import Track9FeeLedger
 from contracts.track9_margin_read_model import Track9MarginReadModel
 from application.composition.track6_option_contract_source import Track6OptionContractSource
+from application.composition.track8_option_contract_source import Track8OptionContractSource
 from application.composition.track2_analytics_provider import build_track2_analytics_snapshot
 from application.composition.track4_analytics_provider import build_track4_analytics_snapshot
 from application.composition.track5_analytics_provider import build_track5_analytics_snapshot
@@ -43,7 +44,7 @@ from application.composition.track8_analytics_provider import build_track8_analy
 class StandardRuntimeInputProvider:
     """Build standard inputs from observable VMS/VSSF sources only."""
 
-    def __init__(self, market: Any, *, track9_fee_ledger: Track9FeeLedger | None = None, track9_margin_read_model: Track9MarginReadModel | None = None, run_id: str | None = None, track7_order_timeout_source: Any | None = None, track7_support_resistance_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None, track6_option_contract_source: Track6OptionContractSource | None = None, track7_option_contract_source: Track7OptionContractSource | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None) -> None:
+    def __init__(self, market: Any, *, track9_fee_ledger: Track9FeeLedger | None = None, track9_margin_read_model: Track9MarginReadModel | None = None, run_id: str | None = None, track7_order_timeout_source: Any | None = None, track7_support_resistance_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None, track6_option_contract_source: Track6OptionContractSource | None = None, track7_option_contract_source: Track7OptionContractSource | None = None, track8_option_contract_source: Track8OptionContractSource | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None) -> None:
         self.risk_guard_status_source = risk_guard_status_source
         self.track9_fee_ledger = track9_fee_ledger
         self.track9_margin_read_model = track9_margin_read_model
@@ -53,6 +54,7 @@ class StandardRuntimeInputProvider:
         self.track7_support_resistance_source = track7_support_resistance_source
         self.track6_option_contract_source = track6_option_contract_source
         self.track7_option_contract_source = track7_option_contract_source
+        self.track8_option_contract_source = track8_option_contract_source
         self.data = VirtualRuntimeDataProvider(
             market, option_expiry_source=option_expiry_source, track7_order_timeout_source=track7_order_timeout_source, track7_support_resistance_source=track7_support_resistance_source, trading_calendar=trading_calendar, option_master=option_master,
             option_orderbook_source=option_orderbook_source,
@@ -333,16 +335,28 @@ class StandardRuntimeInputProvider:
                 ),
             )
 
+        track8_selection = None
+        if self.track8_option_contract_source is not None:
+            try:
+                expiry = str(d.option_expiry or getattr(tick, "expiry", ""))
+                current_price = Decimal(str(getattr(tick, "underlying_price"))) if getattr(tick, "underlying_price", None) is not None else None
+                track8_selection = self.track8_option_contract_source.select(
+                    expiry=expiry, current_price=current_price
+                )
+            except (ValueError, TypeError, AttributeError):
+                track8_selection = None
+
         # Track8 receives canonical analytics only when the authoritative
         # option contract, fee, margin and risk inputs are all present.
         track8_required = (
             d.days_to_expiry, d.option_iv, d.put_iv, d.macro_regime, common.current_pnl,
             common.total_fees, self.track9_margin_ratio,
         )
-        if not all(value is not None for value in track8_required):
+        if track8_selection is None or not all(value is not None for value in track8_required):
+            missing = ("track8_authoritative_option_contract",) if track8_selection is None else ()
             contexts["track8_macro_regime_monthly_strangle"] = self._unavailable(
                 "track8_macro_regime_monthly_strangle",
-                ("track8_authoritative_option_contract", "fee_ledger", "margin_read_model", "risk_guard"),
+                missing + ("fee_ledger", "margin_read_model", "risk_guard") if track8_selection is None else ("fee_ledger", "margin_read_model", "risk_guard"),
                 "TRACK8_REQUIRED_AUTHORITATIVE_SOURCES_UNAVAILABLE",
             )
         else:
@@ -350,6 +364,7 @@ class StandardRuntimeInputProvider:
                 market_state, "track8_macro_regime_monthly_strangle", StrategyInput(common),
                 analytics=build_track8_analytics_snapshot(
                     d, run_id=self.run_id or "virtual", as_of=d.as_of,
+                    option_contract_selection=track8_selection,
                     common_snapshot=common_analytics,
                 ),
             )
