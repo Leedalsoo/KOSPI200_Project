@@ -19,11 +19,8 @@ def build_track9_analytics_snapshot(
     option_contract_selection=None,
     common_snapshot=None,
 ):
-    """Build only from injected authoritative sources and observed runtime data."""
+    """Build Track9-specific analytics and merge canonical Common Analytics."""
     observations = {
-        "current_pnl": getattr(data, "current_pnl", None),
-        "total_fees": total_fees,
-        "margin_ratio": margin_ratio,
         "iv_spike": getattr(data, "iv_spike", None),
         "iv_crush": getattr(data, "iv_crush", None),
     }
@@ -51,11 +48,6 @@ def build_track9_analytics_snapshot(
         "events.upcoming": ("event_upcoming",),
         "options.iv_spike": ("iv_spike",),
         "options.iv_crush": ("iv_crush",),
-        "portfolio.current_pnl": ("current_pnl",),
-        "portfolio.total_fees": ("total_fees",),
-        "portfolio.net_pnl": ("current_pnl", "total_fees"),
-        "portfolio.margin_ratio": ("margin_ratio",),
-        "risk.guard_active": ("risk_guard_active",),
         "portfolio.event_budget": ("event_budget",),
         "portfolio.estimated_event_cost": ("estimated_event_cost",),
         "options.atm_call_strike": ("atm_call_strike",),

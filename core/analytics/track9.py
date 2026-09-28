@@ -1,7 +1,6 @@
 """Common Analytics evaluators for Strategy 9 event insurance."""
 from __future__ import annotations
 
-from decimal import Decimal
 from typing import Mapping
 
 from contracts.analytics import (
@@ -53,14 +52,6 @@ def _passthrough(observation, unit):
     return evaluate
 
 
-def _net_pnl(snapshot, request):
-    pnl = snapshot.observations.get("current_pnl")
-    fees = snapshot.observations.get("total_fees")
-    if pnl is None or fees is None:
-        return _unavailable(request, snapshot, "currency")
-    return _metric(request, snapshot, Decimal(str(pnl)) - Decimal(str(fees)), "currency")
-
-
 def build_track9_evaluators() -> Mapping[str, object]:
     return {
         "portfolio.active_sell_qty": _passthrough("active_sell_qty", "contracts"),
@@ -68,11 +59,6 @@ def build_track9_evaluators() -> Mapping[str, object]:
         "events.upcoming": _passthrough("event_upcoming", "bool"),
         "options.iv_spike": _passthrough("iv_spike", "percentage-points"),
         "options.iv_crush": _passthrough("iv_crush", "percentage-points"),
-        "portfolio.current_pnl": _passthrough("current_pnl", "currency"),
-        "portfolio.total_fees": _passthrough("total_fees", "currency"),
-        "portfolio.net_pnl": _net_pnl,
-        "portfolio.margin_ratio": _passthrough("margin_ratio", "ratio"),
-        "risk.guard_active": _passthrough("risk_guard_active", "bool"),
         "portfolio.event_budget": _passthrough("event_budget", "currency"),
         "portfolio.estimated_event_cost": _passthrough("estimated_event_cost", "currency"),
         "options.atm_call_strike": _passthrough("atm_call_strike", "index-points"),

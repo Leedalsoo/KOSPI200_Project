@@ -30,6 +30,22 @@ def test_track8_gate_requires_canonical_common_metrics():
     assert "macro_regime" not in required_sources
 
 
+def test_standard_runtime_input_provider_track9_gate_requires_canonical_common_metrics():
+    bootstrap = create_virtual_runtime_bootstrap()
+    market = bootstrap.bundle.market
+    account = bootstrap.bundle.account
+    tick = next(market.generate_tick_stream(total_days=1, ticks_per_day=1))
+    state = MarketState(
+        as_of=datetime.fromisoformat(tick.timestamp),
+        ticks={"KOSPI200": tick},
+        quality={"KOSPI200": DataQuality(True, True, True)},
+    )
+    contexts = StandardRuntimeInputProvider(market).build(tick, state, account)
+    track9 = contexts["track9_event_overnight_insurance"]
+    assert track9.input.payload.__class__.__name__ == "UnavailableStrategyPayload"
+    assert "volatility.active" in track9.input.payload.required_sources
+    assert "portfolio.total_fees" in track9.input.payload.required_sources
+
 def test_standard_runtime_input_provider_consumes_authoritative_risk_guard_status():
     bootstrap = create_virtual_runtime_bootstrap()
     market = bootstrap.bundle.market
@@ -51,12 +67,9 @@ def test_standard_runtime_input_provider_consumes_authoritative_risk_guard_statu
     contexts = StandardRuntimeInputProvider(
         market, risk_guard_status_source=guard
     ).build(tick, state, account)
-    metric = contexts["track9_event_overnight_insurance"].analytics.get("risk.guard_active")
-
-    assert metric is not None
-    assert metric.value is True
-    assert metric.status.value == "AVAILABLE"
-    assert metric.provenance[0].source == "risk-guard.authoritative"
+    track9 = contexts["track9_event_overnight_insurance"]
+    assert track9.input.payload.__class__.__name__ == "UnavailableStrategyPayload"
+    assert "risk.guard_active" not in track9.input.payload.required_sources
 
 
 def test_standard_runtime_input_provider_never_fabricates_blocked_fields():
@@ -85,9 +98,9 @@ def test_standard_runtime_input_provider_never_fabricates_blocked_fields():
         assert all(value == "UNAVAILABLE" for value in contexts[strategy_id].input.data_status.values())
 
     track9 = contexts["track9_event_overnight_insurance"]
-    assert track9.analytics is not None
-    assert track9.analytics.get("events.upcoming").value is None
-    assert track9.analytics.get("risk.guard_active").value is None
+    assert track9.input.payload.__class__.__name__ == "UnavailableStrategyPayload"
+    assert "events.upcoming" in track9.input.payload.required_sources
+    assert "risk.guard_active" in track9.input.payload.required_sources
 
 
 def test_track7_consumes_authoritative_call_put_iv_without_unblocking_missing_sources():

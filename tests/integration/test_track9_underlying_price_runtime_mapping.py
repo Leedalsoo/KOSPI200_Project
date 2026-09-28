@@ -39,6 +39,6 @@ def test_track9_runtime_uses_underlying_price_for_atm_contract_selection():
         MarketState(as_of=datetime.fromisoformat(tick.timestamp), ticks={}, quality={}),
     )
     assert (tick.expiry, Decimal("1130.63")) in seen
-    snapshot = contexts["track9_event_overnight_insurance"].analytics
-    assert snapshot.metrics["options.atm_put_strike"].value == Decimal("1117.5")
-    assert snapshot.metrics["options.atm_call_strike"].value == Decimal("1142.5")
+    context = contexts["track9_event_overnight_insurance"]
+    assert context.analytics is None
+    assert "track9_authoritative_option_contract" not in context.input.payload.required_sources

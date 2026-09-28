@@ -414,7 +414,29 @@ class StandardRuntimeInputProvider:
                 ),
             )
 
-        # Track9 consumes canonical AnalyticsSnapshot. Dedicated event calendar, event budget, premium attribution and risk guard remain unavailable until their authoritative sources are connected.
+        track9_common_required = (
+            "market.current_regime",
+            "volatility.active",
+            "portfolio.current_pnl",
+            "portfolio.total_fees",
+            "portfolio.margin_ratio",
+            "portfolio.net_pnl",
+            "risk.guard_active",
+        )
+        track9_strategy_required = (
+            "portfolio.active_sell_qty",
+            "portfolio.insurance_qty",
+            "events.upcoming",
+            "options.iv_spike",
+            "options.iv_crush",
+            "portfolio.event_budget",
+            "portfolio.estimated_event_cost",
+            "options.atm_call_strike",
+            "options.atm_put_strike",
+            "options.contract_multiplier",
+            "portfolio.premium_spent",
+        )
+        track9_required = track9_common_required + track9_strategy_required
         track9_selection = None
         if self.track6_option_contract_source is not None:
             try:
@@ -428,12 +450,29 @@ class StandardRuntimeInputProvider:
                 )
             except (ValueError, TypeError, AttributeError):
                 track9_selection = None
-        contexts["track9_event_overnight_insurance"] = StrategyContext(
-            market_state, "track9_event_overnight_insurance", StrategyInput(common),
-            analytics=build_track9_analytics_snapshot(
-                d, run_id=self.run_id or "virtual", as_of=d.as_of,
-                total_fees=common.total_fees, margin_ratio=self.track9_margin_ratio,
-                option_contract_selection=track9_selection, common_snapshot=common_analytics,
-            ),
+        track9_analytics = build_track9_analytics_snapshot(
+            d, run_id=self.run_id or "virtual", as_of=d.as_of,
+            option_contract_selection=track9_selection, common_snapshot=common_analytics,
         )
+        track9_missing = tuple(
+            key for key in track9_required
+            if (
+                track9_analytics is None
+                or track9_analytics.get(key) is None
+                or track9_analytics.get(key).status != AnalyticsStatus.AVAILABLE
+            )
+        )
+        if track9_selection is None:
+            track9_missing = tuple(dict.fromkeys(track9_missing + ("track9_authoritative_option_contract",)))
+        if track9_missing:
+            contexts["track9_event_overnight_insurance"] = self._unavailable(
+                "track9_event_overnight_insurance",
+                track9_missing,
+                "TRACK9_REQUIRED_CANONICAL_AND_AUTHORITATIVE_SOURCES_UNAVAILABLE",
+            )
+        else:
+            contexts["track9_event_overnight_insurance"] = StrategyContext(
+                market_state, "track9_event_overnight_insurance", StrategyInput(common),
+                analytics=track9_analytics,
+            )
         return contexts

@@ -46,21 +46,19 @@ def test_track9_plugin_declares_canonical_features():
     } <= keys
 
 
-def test_track9_analytics_calculates_net_pnl_once_and_preserves_unavailable_inputs():
-    market = snapshot(current_pnl=Decimal("120"), total_fees=Decimal("20"))
-    engine = AnalyticsEngine(build_track9_evaluators())
-    result = engine.evaluate(
-        market,
-        (
-            request("portfolio.current_pnl", "current_pnl"),
-            request("portfolio.total_fees", "total_fees"),
-            request("portfolio.net_pnl", "current_pnl", "total_fees"),
-            request("events.upcoming", "event_upcoming"),
-        ),
+def test_track9_analytics_does_not_recreate_common_metrics():
+    evaluators = build_track9_evaluators()
+    assert "portfolio.current_pnl" not in evaluators
+    assert "portfolio.total_fees" not in evaluators
+    assert "portfolio.net_pnl" not in evaluators
+    assert "portfolio.margin_ratio" not in evaluators
+    assert "risk.guard_active" not in evaluators
+
+    result = AnalyticsEngine(evaluators).evaluate(
+        snapshot(current_pnl=Decimal("120"), total_fees=Decimal("20")),
+        (request("portfolio.net_pnl", "current_pnl", "total_fees"),),
     )
-    assert result.get("portfolio.net_pnl").value == Decimal("100")
-    assert result.get("events.upcoming").status is AnalyticsStatus.UNAVAILABLE
-    assert result.get("events.upcoming").value is None
+    assert result.get("portfolio.net_pnl").status is AnalyticsStatus.UNAVAILABLE
 
 
 def test_track9_analytics_exposes_authoritative_contract_values_without_synthesis():
