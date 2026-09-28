@@ -7,6 +7,7 @@ import logging
 import logging.handlers
 import os
 import shutil
+import time as time_module
 import urllib.parse
 import urllib.request
 from collections import Counter
@@ -18,7 +19,7 @@ from pathlib import Path
 from infrastructure.kis.auth import KISAuthManager
 from infrastructure.kis.futures_market_transport import KISFuturesMarketTransport
 from infrastructure.kis.kis_realtime_collector import KISRealtimeCollector
-from infrastructure.kis.krx_kis_option_identity_resolver import load_kis_index_option_master, KISOptionIdentityResolver
+from infrastructure.kis.krx_kis_option_identity_resolver import load_kis_index_option_master, KRXKISOptionIdentityResolver
 from infrastructure.kis.kis_rest_market_observation_collector import (
     CollectionTarget,
     KISRestMarketObservationCollector,
@@ -48,8 +49,8 @@ KST = timezone(timedelta(hours=9))
 LOGGER = logging.getLogger("kis_vts_weekday_collector")
 
 WINDOW = CollectionWindow(start=date(2026, 9, 21), end=date(2026, 9, 23))
-SESSION_START = time(8, 30)
-SESSION_END = time(16, 0)
+SESSION_START = time(8, 29)
+SESSION_END = time(16, 1)
 ALERT_CHECK_TIME = time(9, 10)
 HEARTBEAT_INTERVAL_SECONDS = 60
 RESTART_BACKOFF_INITIAL_SECONDS = 2
@@ -349,8 +350,8 @@ class DailySessionOrchestrator:
     """Date-independent KST session controller; REST is the primary collector."""
 
     kst = KST
-    open_time = time(8, 30)
-    close_time = time(16, 0)
+    open_time = time(8, 29)
+    close_time = time(16, 1)
 
     def __init__(self, market_data_root: str | Path, calendar: object, *, rest_collector=None):
         self.market_data_root = Path(market_data_root)
@@ -414,29 +415,51 @@ class DailySessionOrchestrator:
         self._write_status(manifest_day := date.fromisoformat(manifest.trading_date), manifest)
 
 
-MARKET_DATA_ROOT = ROOT / "data" / "kis_market_data"
+DEFAULT_MARKET_DATA_DIR = "kis_market_data"
+
+
+def market_data_root_from_env() -> Path:
+    configured = os.environ.get("PROJECT200_MARKET_DATA_DIR", DEFAULT_MARKET_DATA_DIR).strip()
+    if not configured:
+        configured = DEFAULT_MARKET_DATA_DIR
+    path = Path(configured).expanduser()
+    return path if path.is_absolute() else ROOT / "data" / path
+
+
+MARKET_DATA_ROOT = market_data_root_from_env()
 REST_CYCLE_INTERVAL_SECONDS = 30
 REST_ROUND_REQUESTS_PER_TARGET = 2
-_KIS_OPTION_RESOLVER_CACHE: dict[date, KISOptionIdentityResolver] = {}
+_KIS_OPTION_RESOLVER_CACHE: dict[date, KRXKISOptionIdentityResolver] = {}
 
 
-def _kis_option_resolver_for_day(day: date) -> KISOptionIdentityResolver:
+def _kis_option_resolver_for_day(day: date) -> KRXKISOptionIdentityResolver:
     resolver = _KIS_OPTION_RESOLVER_CACHE.get(day)
     if resolver is None:
-        resolver = KISOptionIdentityResolver(load_kis_index_option_master())
+        resolver = KRXKISOptionIdentityResolver(load_kis_index_option_master())
         _KIS_OPTION_RESOLVER_CACHE[day] = resolver
     return resolver
 
 
 def build_daily_targets(day: date) -> tuple[CollectionTarget, ...]:
     plan = build_plan_for_day(day)
-    targets: list[CollectionTarget] = []
+    monthly_paths, _ = resolve_option_master_paths_for_day(ROOT, day)
+    krx_master = load_option_master(monthly_paths)
     resolver = _kis_option_resolver_for_day(day)
+    targets: list[CollectionTarget] = []
     for strike in plan.monthly_strikes:
         for option_type in ("PUT", "CALL"):
-            resolved = resolver.find_contract_identity(
-                plan.monthly_expiry, option_type, strike
-            )
+            matches = [
+                identity for identity in krx_master.identities.values()
+                if identity.expiry == plan.monthly_expiry
+                and identity.option_type == option_type
+                and identity.strike == strike
+                and identity.contract_multiplier == Decimal("250000")
+            ]
+            if len(matches) != 1:
+                raise ValueError(
+                    f"AUTHORITATIVE_OPTION_IDENTITY_REQUIRED:{plan.monthly_expiry}:{option_type}:{strike}:{len(matches)}"
+                )
+            resolved = resolver.get_contract_identity(matches[0].shrn_iscd, matches[0])
             if resolved is None:
                 raise ValueError(
                     f"KIS_OPTION_IDENTITY_REQUIRED:{plan.monthly_expiry}:{option_type}:{strike}"
@@ -455,6 +478,7 @@ def build_plan_for_day(day: date) -> CollectionPlan:
             option_master_paths=monthly_paths,
             weekly_master_paths=weekly_paths,
             standard_futures_symbol="A01609", mini_futures_symbol="A05609", as_of=day,
+            include_weekly=False,
         )
     except ValueError as exc:
         if str(exc) != "NO_LISTED_OPTION_EXPIRY_AVAILABLE":
@@ -524,15 +548,107 @@ def _write_json_line(path: Path, payload: dict[str, object]) -> None:
         handle.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str) + "\n")
 
 
-def collect_underlying_futures_observation(day: date, manifest: DateSessionManifest, *, symbol: str = "A01609") -> str:
-    """Record the VTS capability boundary without calling an unconfirmed VTS endpoint."""
-    status = "BLOCKED"
-    reason = "FHPIF05030000_VTS_SUPPORT_NOT_ESTABLISHED"
-    manifest.collectors["futures_underlying_rest"] = {
-        "status": status, "reason": reason, "tr_id": "FHPIF05030000", "symbol": symbol,
-    }
-    manifest.counts[status] = manifest.counts.get(status, 0) + 1
-    return status
+def collect_underlying_futures_observation(day: date, manifest: DateSessionManifest) -> str:
+    """Collect the front KOSPI200 futures contract from the KIS VTS futures board."""
+    auth = KISAuthManager.from_env(
+        is_vts=True,
+        env_file=str(ROOT / ".env"),
+        cache_file_path=str(ROOT / "data" / ".kis_token_cache_vts.json"),
+    )
+    tr_id = "FHPIF05030200"
+    endpoint = "/uapi/domestic-futureoption/v1/quotations/display-board-futures"
+    try:
+        if not auth.has_credentials():
+            raise RuntimeError("KIS_VTS_CREDENTIALS_REQUIRED")
+        # KIS VTS REST limit is 1 request/second; the option cycle has its own limiter.
+        # Keep the futures-board request outside that cycle but still honor the broker limit.
+        time_module.sleep(1.1)
+        query = urllib.parse.urlencode({
+            "FID_COND_MRKT_DIV_CODE": "F",
+            "FID_COND_SCR_DIV_CODE": "20503",
+            "FID_COND_MRKT_CLS_CODE": "MKI",
+        })
+        request = urllib.request.Request(
+            f"{auth.base_url}{endpoint}?{query}",
+            headers=auth.get_auth_headers(tr_id=tr_id),
+            method="GET",
+        )
+        with urllib.request.urlopen(request, timeout=10.0) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        if payload.get("rt_cd") != "0":
+            raise RuntimeError(
+                f"KIS_FUTURES_BOARD_ERROR:{payload.get('msg_cd')}:{payload.get('msg1')}"
+            )
+        rows = payload.get("output")
+        if not isinstance(rows, list) or not rows:
+            raise RuntimeError("KIS_FUTURES_BOARD_EMPTY")
+        current_month = f"{day.year:04d}{day.month:02d}"
+        candidates: list[dict[str, object]] = []
+        for row in rows:
+            name = str(row.get("hts_kor_isnm") or "")
+            match = __import__("re").search(r"(20\d{4})$", name)
+            if not match or match.group(1) < current_month:
+                continue
+            try:
+                price = Decimal(str(row.get("futs_prpr") or ""))
+                volume = Decimal(str(row.get("acml_vol") or ""))
+            except Exception:
+                continue
+            if price <= 0 or volume < 0:
+                continue
+            candidates.append(row)
+        if not candidates:
+            raise RuntimeError("KIS_CURRENT_FUTURES_CONTRACT_NOT_FOUND")
+        selected = min(
+            candidates,
+            key=lambda row: __import__("re").search(
+                r"(20\d{4})$",
+                str(row.get("hts_kor_isnm") or ""),
+            ).group(1),
+        )
+        collected_at = _now_kst().isoformat()
+        day_dir = MARKET_DATA_ROOT / day.isoformat()
+        day_dir.mkdir(parents=True, exist_ok=True)
+        _write_json_line(day_dir / "futures_underlying_rest.jsonl", {
+            "collected_at": collected_at,
+            "source": "KIS_VTS_REST",
+            "tr_id": tr_id,
+            "endpoint": endpoint,
+            "instrument": {
+                "symbol": str(selected.get("futs_shrn_iscd") or ""),
+                "name": str(selected.get("hts_kor_isnm") or ""),
+            },
+            "observation": {
+                "price": str(selected.get("futs_prpr")),
+                "volume": str(selected.get("acml_vol")),
+                "ask_price": str(selected.get("futs_askp")),
+                "bid_price": str(selected.get("futs_bidp")),
+                "high": str(selected.get("futs_hgpr")),
+                "low": str(selected.get("futs_lwpr")),
+                "theoretical_price": str(selected.get("hts_thpr")),
+                "open_interest": str(selected.get("hts_otst_stpl_qty")),
+            },
+            "raw": selected,
+        })
+        manifest.collectors["futures_underlying_rest"] = {
+            "status": "RUNNING",
+            "tr_id": tr_id,
+            "symbol": str(selected.get("futs_shrn_iscd") or ""),
+            "contract_name": str(selected.get("hts_kor_isnm") or ""),
+            "price": str(selected.get("futs_prpr") or ""),
+            "volume": str(selected.get("acml_vol") or ""),
+            "source": "KIS_VTS_REST",
+        }
+        manifest.counts["SUCCESS"] = manifest.counts.get("SUCCESS", 0) + 1
+        return "SUCCESS"
+    except Exception as exc:
+        manifest.collectors["futures_underlying_rest"] = {
+            "status": "BLOCKED",
+            "reason": str(exc),
+            "tr_id": tr_id,
+        }
+        manifest.counts["BLOCKED"] = manifest.counts.get("BLOCKED", 0) + 1
+        return "BLOCKED"
 
 
 def authoritative_calendar_for_today(day: date):
