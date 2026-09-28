@@ -9,6 +9,27 @@ from contracts.types import DataQuality, MarketState
 from core.risk.risk_guard import RiskGuard
 
 
+def test_track8_gate_requires_canonical_common_metrics():
+    bootstrap = create_virtual_runtime_bootstrap()
+    market = bootstrap.bundle.market
+    account = bootstrap.bundle.account
+    tick = next(market.generate_tick_stream(total_days=1, ticks_per_day=1))
+    state = MarketState(
+        as_of=datetime.fromisoformat(tick.timestamp),
+        ticks={"KOSPI200": tick},
+        quality={"KOSPI200": DataQuality(True, True, True)},
+    )
+    provider = StandardRuntimeInputProvider(market)
+    provider.market_condition_sensor.analyze = lambda *_args, **_kwargs: None
+    context = provider.build(tick, state, account)[
+        "track8_macro_regime_monthly_strangle"
+    ]
+    required_sources = context.input.payload.required_sources
+    assert "market.current_regime" in required_sources
+    assert "risk.guard_active" in required_sources
+    assert "macro_regime" not in required_sources
+
+
 def test_standard_runtime_input_provider_consumes_authoritative_risk_guard_status():
     bootstrap = create_virtual_runtime_bootstrap()
     market = bootstrap.bundle.market

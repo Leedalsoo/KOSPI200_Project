@@ -18,7 +18,7 @@ from core.strategy.track4_gamma_scalping import Track4MarketInput
 from core.strategy.track6_daily_tail_insurance import Track6ExecutionInput
 from core.strategy.track7_volatility_skew_weekly_insurance import Track7ExecutionInput
 from application.composition.track7_option_contract_source import Track7OptionContractSource
-from contracts.analytics import AnalyticsProvenance, MarketSnapshot
+from contracts.analytics import AnalyticsProvenance, AnalyticsStatus, MarketSnapshot
 from contracts.risk_guard import RiskGuardStatusSource
 from core.analytics.common import COMMON_METRIC_CONTRACTS, build_common_analytics_snapshot
 from core.sensor.market_condition_sensor import MarketConditionSensor
@@ -362,17 +362,46 @@ class StandardRuntimeInputProvider:
             except (ValueError, TypeError, AttributeError):
                 track8_selection = None
 
-        # Track8 receives canonical analytics only when the authoritative
-        # option contract, fee, margin and risk inputs are all present.
-        track8_required = (
-            d.days_to_expiry, d.option_iv, d.put_iv, d.macro_regime, common.current_pnl,
-            common.total_fees, self.track9_margin_ratio,
+        # Track8 receives canonical common analytics only when every required
+        # source is available. Common metrics are checked by AnalyticsStatus rather
+        # than by the legacy RuntimeInput fields.
+        track8_common_required = (
+            "market.current_regime",
+            "volatility.active",
+            "portfolio.current_pnl",
+            "portfolio.total_fees",
+            "portfolio.margin_ratio",
+            "risk.guard_active",
         )
-        if track8_selection is None or not all(value is not None for value in track8_required):
-            missing = ("track8_authoritative_option_contract",) if track8_selection is None else ()
+        track8_common_missing = tuple(
+            metric_key
+            for metric_key in track8_common_required
+            if (
+                (metric := common_analytics.get(metric_key)) is None
+                or metric.status != AnalyticsStatus.AVAILABLE
+            )
+        )
+        track8_required = (
+            d.days_to_expiry,
+            d.option_iv,
+            d.put_iv,
+            track8_selection,
+            self.track9_margin_ratio,
+        )
+        if not all(value is not None for value in track8_required) or track8_common_missing:
+            missing = []
+            if track8_selection is None:
+                missing.append("track8_authoritative_option_contract")
+            if d.days_to_expiry is None:
+                missing.append("dte")
+            if d.option_iv is None or d.put_iv is None:
+                missing.append("option_iv_chain")
+            if self.track9_margin_ratio is None:
+                missing.append("margin_read_model")
+            missing.extend(track8_common_missing)
             contexts["track8_macro_regime_monthly_strangle"] = self._unavailable(
                 "track8_macro_regime_monthly_strangle",
-                missing + ("fee_ledger", "margin_read_model", "risk_guard") if track8_selection is None else ("fee_ledger", "margin_read_model", "risk_guard"),
+                tuple(dict.fromkeys(missing)),
                 "TRACK8_REQUIRED_AUTHORITATIVE_SOURCES_UNAVAILABLE",
             )
         else:

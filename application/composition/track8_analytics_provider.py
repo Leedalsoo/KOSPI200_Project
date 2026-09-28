@@ -8,9 +8,9 @@ from core.analytics.common import COMMON_METRIC_CONTRACTS, merge_analytics_snaps
 
 def build_track8_analytics_snapshot(data, *, run_id: str, as_of, option_contract_selection=None, common_snapshot=None):
     observations = {
-        "current_price": data.price, "dte": data.days_to_expiry, "current_regime": data.macro_regime,
-        "active_vol": data.active_vol, "current_pnl": getattr(data, "current_pnl", None), "total_fees": getattr(data, "total_fees", None),
-        "margin_ratio": getattr(data, "margin_ratio", None), "risk_guard_active": getattr(data, "risk_guard_active", None),
+        # Common Analytics owns regime, volatility, portfolio/PnL, margin and risk
+        # metrics. Track8 only materializes strategy-specific option inputs here.
+        "current_price": data.price, "dte": data.days_to_expiry,
         "call_iv": data.option_iv, "put_iv": data.put_iv, "atm_iv": data.option_iv,
         "call_strike": getattr(option_contract_selection.call, "strike", None) if option_contract_selection is not None else getattr(data, "call_strike", None), "put_strike": getattr(option_contract_selection.put, "strike", None) if option_contract_selection is not None else getattr(data, "put_strike", None),
         "call_contract_multiplier": getattr(option_contract_selection.call, "contract_multiplier", None) if option_contract_selection is not None else getattr(data, "call_contract_multiplier", None),

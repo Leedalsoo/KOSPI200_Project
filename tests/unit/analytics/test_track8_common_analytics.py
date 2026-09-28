@@ -46,3 +46,20 @@ def test_strategy_has_no_legacy_calculation_constants():
     assert "STRIKE_OFFSET" not in source
     assert "MULTIPLIER =" not in source
     assert "atm_strike" not in source
+
+
+def test_common_regime_volatility_and_risk_metrics_are_authoritative():
+    result = evaluate(snap(current_regime="CRASH", active_vol=Decimal("2.5"), risk_guard_active=True))
+    assert result.get("market.current_regime").value == "CRASH"
+    assert result.get("market.current_regime").provenance[0].source == "common-analytics.track8"
+    assert result.get("volatility.active").value == Decimal("2.5")
+    assert result.get("risk.guard_active").value is True
+
+
+def test_common_metrics_fail_closed_when_authoritative_inputs_are_missing():
+    result = evaluate(snap(current_regime=None, active_vol=None, risk_guard_active=None))
+    for metric_key in ("market.current_regime", "volatility.active", "risk.guard_active"):
+        metric = result.get(metric_key)
+        assert metric is not None
+        assert metric.status is AnalyticsStatus.UNAVAILABLE
+        assert metric.value is None
