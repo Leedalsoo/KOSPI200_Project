@@ -26,6 +26,10 @@ from infrastructure.kis.kis_rest_market_observation_collector import (
     KISRestMarketObservationTransport,
 )
 from environments.virtual.market.historical_market_store import HistoricalMarketStore
+from infrastructure.kis.holiday_fallback_provider import (
+    FallbackHolidayProvider,
+    KRXHolidayProvider,
+)
 from infrastructure.kis.holiday_provider import KISHolidayProvider
 from infrastructure.kis.trading_calendar import ProductionTradingCalendar
 from infrastructure.krx.krx_marketplace_master import load_option_master
@@ -652,12 +656,22 @@ def collect_underlying_futures_observation(day: date, manifest: DateSessionManif
 
 
 def authoritative_calendar_for_today(day: date):
-    provider = KISHolidayProvider(
+    kis_provider = KISHolidayProvider(
         auth_manager=KISAuthManager.from_env(
             is_vts=False, env_file=str(ROOT / ".env"),
             cache_file_path=str(ROOT / "data" / ".kis_token_cache_real.json"),
         ),
-        auto_load=True, target_year=day.year, strict_mode=True,
+        auto_load=False,
+        target_year=day.year,
+        strict_mode=True,
+    )
+    krx_provider = KRXHolidayProvider(
+        cache_dir=ROOT / "data" / "calendar",
+    )
+    provider = FallbackHolidayProvider(
+        kis_provider=kis_provider,
+        krx_provider=krx_provider,
+        enable_kis=True,
     )
     return ProductionTradingCalendar(provider)
 

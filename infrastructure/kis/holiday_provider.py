@@ -74,6 +74,9 @@ class KISHolidayProvider:
     def is_loaded(self) -> bool:
         return bool(self._loaded_years) and self._last_error is None
 
+    def is_year_loaded(self, year: int) -> bool:
+        return year in self._loaded_years and self._last_error is None
+
     @property
     def total_holidays(self) -> int:
         return len(self._holidays)
