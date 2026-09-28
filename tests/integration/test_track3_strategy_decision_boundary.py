@@ -14,6 +14,8 @@ from core.strategy.contracts import (
     StrategyInput,
 )
 from application.composition.track3_analytics_provider import build_track3_analytics_snapshot
+from contracts.analytics import AnalyticsProvenance, MarketSnapshot
+from core.analytics.common import build_common_analytics_snapshot
 from core.strategy.track3_statistical_arbitrage import (
     Track3MarketInput,
     Track3StatisticalArbitrage,
@@ -22,6 +24,23 @@ from core.strategy.track3_statistical_arbitrage import (
 
 def _context(data: Track3MarketInput) -> StrategyContext:
     as_of = datetime(2026, 9, 18, 10, 0)
+    common_snapshot = build_common_analytics_snapshot(
+        MarketSnapshot(
+            run_id="track3-test",
+            as_of=as_of,
+            provenance=AnalyticsProvenance(source="test.common"),
+            instrument_identity=None,
+            observations={
+                "current_price": data.current_price,
+                "active_vol": data.active_vol,
+                "base_vol": data.base_vol,
+                "current_regime": data.regime,
+                "current_pnl": 0.0,
+                "total_fees": 0.0,
+            },
+        ),
+        ("market.current_regime", "volatility.active", "volatility.base", "volatility.ratio", "portfolio.current_pnl", "portfolio.total_fees"),
+    )
     return StrategyContext(
         market_state=MarketState(as_of=as_of, ticks={}, quality={}),
         strategy_id="Strategy_3_StatArb",
@@ -29,7 +48,7 @@ def _context(data: Track3MarketInput) -> StrategyContext:
             common=CommonStrategyInput(as_of=as_of, current_price=500),
             payload=data,
         ),
-        analytics=build_track3_analytics_snapshot(data, run_id="track3-test", current_pnl=0.0, as_of=as_of),
+        analytics=build_track3_analytics_snapshot(data, run_id="track3-test", current_pnl=0.0, as_of=as_of, common_snapshot=common_snapshot),
     )
 
 
@@ -54,6 +73,7 @@ def _entry_data() -> Track3MarketInput:
         ),
         date_str="2026-09-18",
         time_str="10:00:00",
+        regime="NORMAL",
     )
 
 
@@ -136,9 +156,8 @@ def test_track3_strategy_plugin_declares_common_analytics_and_consumes_snapshot(
     assert signals and signals[0].execution_proposal is not None
 
 
-def test_track3_market_regime_logic_remains_strategy_specific():
-    data = _entry_data()
-    data = Track3MarketInput(**{**data.__dict__, "regime": "HIGH_VOLATILITY"})
+def test_track3_market_regime_is_consumed_from_common_analytics_input():
+    data = Track3MarketInput(**{**_entry_data().__dict__, "regime": "HIGH_VOLATILITY"})
     strategy = Track3StatisticalArbitrage()
     assert strategy.detect_market_regime(
         data, vol_ratio=1.0, price_change_rate=0.0, bid_ask_spread=0.02, gap_pct=0.0

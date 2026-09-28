@@ -3,6 +3,7 @@ from decimal import Decimal
 from typing import Sequence
 
 from contracts.analytics import AnalyticsSnapshot, AnalyticsStatus
+from core.market.session_policy import MarketSessionPolicy
 from contracts.types import MultiLegExecutionPlan
 from core.strategy.contracts import Signal, StrategyContext, StrategyFeatureRequirement
 from core.strategy.multi_leg_plan import ExecutionLeg
@@ -226,14 +227,14 @@ class Track7VolatilitySkewWeeklyInsurance:
             return ()
         time_str = analytics.as_of.strftime("%H:%M:%S")
         expiry_active = self._metric(analytics, "calendar.is_expiry_day") is True or self._metric(analytics, "calendar.is_week_end") is True
-        if self.expiry_mode == "D-4" and time_str >= "15:00:00":
+        if self.expiry_mode == "D-4" and time_str >= MarketSessionPolicy.text(MarketSessionPolicy.LIMIT_CUTOFF):
             self.reset()
             return (Signal(self.strategy_id, "CLOSE_WEEKLY_INSURANCE_PREEMPTIVE_D4", 1.0, "D4_PREEMPTIVE_CUTOFF"),)
         if not expiry_active:
             return ()
-        if "15:00:00" <= time_str < "15:15:00":
+        if MarketSessionPolicy.text(MarketSessionPolicy.LIMIT_CUTOFF) <= time_str < MarketSessionPolicy.text(MarketSessionPolicy.MARKET_CUTOFF):
             return (Signal(self.strategy_id, "CLOSE_WEEKLY_INSURANCE_LIMIT", 1.0, "15:00_LIMIT_CUTOFF"),)
-        if time_str >= "15:15:00":
+        if time_str >= MarketSessionPolicy.text(MarketSessionPolicy.MARKET_CUTOFF):
             self.reset()
             return (Signal(self.strategy_id, "CLOSE_WEEKLY_INSURANCE_FALLBACK_MARKET", 1.0, "15:15_FALLBACK_MARKET"),)
         return ()

@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Sequence
 
 from contracts.analytics import AnalyticsSnapshot, AnalyticsStatus
+from core.market.session_policy import MarketSessionPolicy
 from contracts.types import MultiLegExecutionPlan
 from core.strategy.contracts import Signal, StrategyContext, StrategyFeatureRequirement
 from core.strategy.multi_leg_plan import build_pair_plan
@@ -164,9 +165,9 @@ class Track6DailyTailInsurance:
         if not self.state.is_active or context.analytics is None:
             return ()
         time_str = self._as_time(context.analytics)
-        if "15:00:00" <= time_str < "15:15:00":
+        if MarketSessionPolicy.text(MarketSessionPolicy.LIMIT_CUTOFF) <= time_str < MarketSessionPolicy.text(MarketSessionPolicy.MARKET_CUTOFF):
             return (Signal(self.strategy_id, "CLOSE_LIMIT", 1.0, "DAILY_INSURANCE_15:00_CUTOFF"),)
-        if time_str >= "15:15:00":
+        if time_str >= MarketSessionPolicy.text(MarketSessionPolicy.MARKET_CUTOFF):
             self.reset()
             return (Signal(self.strategy_id, "CLOSE_FALLBACK", 1.0, "DAILY_INSURANCE_15:15_FALLBACK"),)
         return ()

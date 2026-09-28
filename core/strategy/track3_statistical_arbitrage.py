@@ -3,6 +3,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from math import isfinite
+
+from core.analytics.execution_cost import estimate_round_trip_cost as common_estimate_round_trip_cost
+from core.market.session_policy import MarketSessionPolicy
 from typing import Mapping
 
 from contracts.analytics import AnalyticsStatus
@@ -90,32 +93,22 @@ class Track3StatisticalArbitrage:
         bid_ask_spread: float,
         gap_pct: float,
     ) -> str:
-        explicit = data.regime
-        if explicit in {"HIGH_VOL", "HIGH_VOLATILITY"}:
-            return "HIGH_VOLATILITY"
-        if explicit in {"EXTREME_MOVE", "CIRCUIT_BREAKER", "CRASH"}:
-            return "EXTREME_MOVE"
-        if explicit in {"GAP", "GAP_OPEN"}:
-            return "GAP"
-        gap = data.is_gap or (data.time_str < "09:05:00" and abs(gap_pct) >= 0.008)
-        if gap:
-            return "GAP"
-        if abs(price_change_rate) >= 0.02 or vol_ratio >= 2.5:
-            return "EXTREME_MOVE"
-        if vol_ratio >= 1.4 or bid_ask_spread > 0.3:
-            return "HIGH_VOLATILITY"
-        return "NORMAL"
+        if data.regime:
+            return data.regime
+        raise ValueError("TRACK3_MARKET_REGIME_COMMON_ANALYTICS_REQUIRED")
 
     def estimate_round_trip_cost(
         self, regime: str, qty: int, *, bid_ask_spread: float, contract_multiplier: float | None
     ) -> float:
-        if contract_multiplier is None or not isfinite(contract_multiplier) or contract_multiplier <= 0:
+        if contract_multiplier is None:
             raise ValueError("TRACK3_CONTRACT_MULTIPLIER_UNAVAILABLE")
-        spread_cost = bid_ask_spread * contract_multiplier
-        fee_per_leg = 3_000.0
-        slippage_ticks = 1.0 if regime == "NORMAL" else 2.0 if regime == "HIGH_VOLATILITY" else 3.0
-        slippage = slippage_ticks * 0.05 * contract_multiplier * qty
-        return (fee_per_leg * 2 * qty) + slippage + (spread_cost * qty) + self.base_round_trip_cost
+        return common_estimate_round_trip_cost(
+            regime=regime,
+            qty=qty,
+            bid_ask_spread=bid_ask_spread,
+            contract_multiplier=contract_multiplier,
+            base_cost=self.base_round_trip_cost,
+        )
 
     def _signal(self, action: str, position: str, reason: str, **details: object) -> Signal:
         payload = {"action": action, "position": position, **details}
@@ -157,6 +150,7 @@ class Track3StatisticalArbitrage:
                 "portfolio.current_pnl",
                 "portfolio.options_pnl",
                 "portfolio.premium_spent",
+                "market.current_regime",
             )
         )
 
@@ -188,7 +182,8 @@ class Track3StatisticalArbitrage:
         bid_ask_spread = float(analytics.get("microstructure.spread").value)
         price_change_rate = float(analytics.get("price.change_rate").value)
         gap_pct = float(analytics.get("market.gap_pct").value)
-        regime = self.detect_market_regime(
+        regime_metric = analytics.get("market.current_regime")
+        regime = str(regime_metric.value) if regime_metric is not None and regime_metric.value is not None else self.detect_market_regime(
             data,
             vol_ratio=vol_ratio,
             price_change_rate=price_change_rate,
@@ -221,7 +216,7 @@ class Track3StatisticalArbitrage:
         signals: list[Signal] = []
 
         if self.active_position is None:
-            if data.time_str >= "15:00:00" or regime == "EXTREME_MOVE" or self.cooldown_ticks > 0:
+            if data.time_str >= MarketSessionPolicy.text(MarketSessionPolicy.LIMIT_CUTOFF) or regime == "EXTREME_MOVE" or self.cooldown_ticks > 0:
                 return Track3Result("ENTRY_BLOCK", regime, z_score)
             if regime == "GAP" and not (data.market_stable and data.spread_normalizing):
                 return Track3Result("GAP_UNSTABLE_HOLD", regime, z_score)
@@ -257,7 +252,7 @@ class Track3StatisticalArbitrage:
 
         self.holding_ticks += 1
         action_type = "CLOSE_SHORT_SPREAD" if self.active_position == "SHORT_SPREAD" else "CLOSE_LONG_SPREAD"
-        if data.time_str >= "15:15:00":
+        if data.time_str >= MarketSessionPolicy.text(MarketSessionPolicy.MARKET_CUTOFF):
             signals.append(self._signal("CLOSE_STAT_ARB", action_type, "15:15 atomic position-group close", group_id=self.active_group_id, qty=1))
             return self._close("MARKET_CLOSE_FLATTEN", z_score, tuple(signals), cooldown=20)
 

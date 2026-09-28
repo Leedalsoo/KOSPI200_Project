@@ -21,6 +21,7 @@ def build_track3_analytics_snapshot(data, *, run_id: str, current_pnl: float | N
         "current_pnl": current_pnl,
         "premium_spent": data.premium_spent,
         "options_legs": data.options_legs,
+        "current_regime": getattr(data, "regime", None),
     }
     observations = {k: v for k, v in observations.items() if v is not None}
     snapshot = MarketSnapshot(
@@ -41,6 +42,7 @@ def build_track3_analytics_snapshot(data, *, run_id: str, current_pnl: float | N
         ("portfolio.current_pnl", ("current_pnl",)),
         ("portfolio.options_pnl", ("options_legs",)),
         ("portfolio.premium_spent", ("premium_spent",)),
+        ("market.current_regime", ("current_regime",)),
     )
     common_keys = set(COMMON_METRIC_CONTRACTS) if common_snapshot is not None else set()
     requests = tuple(AnalyticsRequest(k, "tick", 1 if common_snapshot is not None else 20, d, 1.0, "authoritative", "1") for k, d in keys if k not in common_keys)

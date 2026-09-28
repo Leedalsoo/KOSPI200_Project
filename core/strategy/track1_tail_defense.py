@@ -7,6 +7,8 @@ from typing import Sequence
 
 from core.strategy.contracts import Signal, Strategy, StrategyContext, StrategyPayload
 from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
+from core.instrument.strike_rules import round_to_strike_tick
+from core.risk.delta_hedge_quantity import delta_to_mini_futures_qty
 
 
 @dataclass(frozen=True)
@@ -64,7 +66,7 @@ class Track1TailDefense(Strategy):
 
     @staticmethod
     def _round_strike(price: float) -> float:
-        return round(price / 2.5) * 2.5
+        return float(round_to_strike_tick(price))
 
     @staticmethod
     def _input(context: StrategyContext) -> Track1Input | None:
@@ -171,7 +173,6 @@ class Track1TailDefense(Strategy):
                 self.state.hedge_entry_price = price
                 hedge_qty = 0
                 if track_input.short_option_net_delta is not None:
-                    from core.risk.delta_hedge_quantity import delta_to_mini_futures_qty
                     hedge_qty = delta_to_mini_futures_qty(track_input.short_option_net_delta)
                 if hedge_qty <= 0:
                     self.state.active_hedge = None

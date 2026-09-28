@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Sequence
 
 from contracts.analytics import AnalyticsStatus
+from core.market.session_policy import MarketSessionPolicy
 from core.strategy.contracts import Signal, StrategyContext, StrategyFeatureRequirement
 from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
 
@@ -118,7 +119,7 @@ class Track9EventOvernightInsurance:
         insurance_qty = self._metric(context, "portfolio.insurance_qty")
         if insurance_qty is None:
             return ()
-        if "09:00:00" <= common.time_str <= "09:05:00" and insurance_qty > 0:
+        if MarketSessionPolicy.text(MarketSessionPolicy.OPEN) <= common.time_str <= MarketSessionPolicy.text(MarketSessionPolicy.STABILIZATION_END) and insurance_qty > 0:
             qty = max(1, int(Decimal(str(insurance_qty)) * self.early_profit_take_ratio))
             self.state = replace(
                 self.state,
@@ -129,13 +130,13 @@ class Track9EventOvernightInsurance:
                 self.strategy_id, "EARLY_PROFIT_TAKE", 1.0,
                 f"QTY:{qty};RATIO:{self.early_profit_take_ratio};PRICING:PREEMPTIVE_LIMIT_OR_MARKET",
             ),)
-        if common.time_str > "09:05:00" and not self.state.early_profit_take_executed_today:
+        if common.time_str > MarketSessionPolicy.text(MarketSessionPolicy.STABILIZATION_END) and not self.state.early_profit_take_executed_today:
             self.state = replace(self.state, state="MARKET_STABILIZATION_MONITORING")
         return ()
 
     def evaluate_reentry(self, context: StrategyContext) -> Sequence[Signal]:
         common = context.input.common if context.input else None
-        if common is None or common.time_str is None or common.time_str < "09:30:00":
+        if common is None or common.time_str is None or common.time_str < MarketSessionPolicy.text(MarketSessionPolicy.ENTRY_WINDOW_END):
             return ()
         if self.state.reentry_executed_today:
             return ()
@@ -220,7 +221,7 @@ class Track9EventOvernightInsurance:
         common = context.input.common if context.input else None
         if common is None or common.time_str is None:
             return ()
-        if "15:15:00" <= common.time_str < "15:20:00":
+        if MarketSessionPolicy.text(MarketSessionPolicy.MARKET_CUTOFF) <= common.time_str < "15:20:00":
             return (Signal(self.strategy_id, "CANCEL_PENDING_TRANCHES", 1.0, "15:15_CANCEL_PENDING_TRANCHES"),)
         return ()
 
