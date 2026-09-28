@@ -25,6 +25,12 @@ class ProductionTradingCalendar:
             current -= timedelta(days=1)
         return current
 
+    def holiday_resolution(self, year: int):
+        resolver = getattr(self._holiday_provider, "get_resolution", None)
+        if not callable(resolver):
+            return type("CalendarResolution", (), {"status": "AVAILABLE", "source": "HolidayProvider"})()
+        return resolver(year)
+
     def trading_days_between(self, start: date, end: date) -> int:
         if start == end:
             return 0

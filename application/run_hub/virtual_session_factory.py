@@ -26,6 +26,7 @@ from environments.virtual.execution.vssf_command_context_provider import Canonic
 from infrastructure.kis.track2_option_iv_source import KISTrack2OptionIVSource
 from infrastructure.kis.historical_observation_sources import HistoricalObservationOptionSource
 from application.composition.track7_support_resistance_source import Track7AuthoritativeSupportResistanceSource
+from application.composition.market_calendar_hub import MarketCalendarHub
 from interfaces.control_tower.ui_adapter import ControlTowerUIAdapter
 from interfaces.control_tower.virtual_test_controller import VirtualTestController
 
@@ -69,6 +70,7 @@ def create_virtual_run_session(context: RunContext, option_master: Any, risk_gua
             from environments.virtual.market.historical_market_store import HistoricalMarketStore
             historical_observation_option_source = HistoricalObservationOptionSource(HistoricalMarketStore(base_path).load_observations())
 
+    market_calendar_hub = MarketCalendarHub(getattr(bundle.option_master, "calendar", None))
     if context.historical_daily_store_path:
         daily_path = Path(context.historical_daily_store_path)
         if daily_path.is_file():
@@ -79,7 +81,7 @@ def create_virtual_run_session(context: RunContext, option_master: Any, risk_gua
             calendar = getattr(bundle.option_master, "calendar", None)
             if calendar is not None:
                 bundle.track7_support_resistance_source = Track7AuthoritativeSupportResistanceSource(
-                    Track7ClassicPivotProvider(HistoricalMarketDailyOHLCProvider(daily_store, calendar))
+                    Track7ClassicPivotProvider(HistoricalMarketDailyOHLCProvider(daily_store, market_calendar_hub))
                 )
     if context.scenario:
         scenario_engine = getattr(bundle.market, "scenario", None)
@@ -102,6 +104,7 @@ def create_virtual_run_session(context: RunContext, option_master: Any, risk_gua
         run_id=context.run_id,
         historical_observation_option_source=historical_observation_option_source,
         risk_guard_status_source=risk_guard_status_source,
+        market_calendar_hub=market_calendar_hub,
     )
     strategy_hub = loop.strategy_hub
     runtime_hub = RuntimeHub(loop)

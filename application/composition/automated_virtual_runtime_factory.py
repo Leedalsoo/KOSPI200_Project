@@ -21,6 +21,7 @@ from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTra
 from environments.virtual.account.track9_margin_read_model import VSSFTrack9MarginReadModel
 from application.strategy_hub.hub import StrategyHub
 from application.composition.track2_execution_plan_adapter import Track2ExecutionPlanAdapter
+from application.composition.market_calendar_hub import MarketCalendarHub
 from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
 from contracts.types import MultiLegExecutionPlan
 from contracts.futures_contract_master import KisCurrentFuturesContractSource, parse_kis_futures_contracts
@@ -34,7 +35,7 @@ from contracts.risk_guard import RiskGuardStatusSource
 from core.strategy.standard_registry import STANDARD_STRATEGY_KEYS, build_standard_strategy_registry
 
 
-def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_history_path=None, run_id=None, historical_observation_option_source=None, risk_guard_status_source: RiskGuardStatusSource | None = None):
+def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_history_path=None, run_id=None, historical_observation_option_source=None, risk_guard_status_source: RiskGuardStatusSource | None = None, market_calendar_hub=None):
     """Attach all nine Standard strategies to the RuntimeController-owned VMS."""
     selected_keys = tuple(strategy_keys) if strategy_keys else STANDARD_STRATEGY_KEYS
     registry = build_standard_strategy_registry()
@@ -60,13 +61,16 @@ def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_h
     fee_ledger = VirtualTrack9FeeLedger()
     margin_read_model = VSSFTrack9MarginReadModel(bootstrap.bundle.account)
     run_id = run_id or getattr(getattr(bootstrap, "run_context", None), "run_id", "")
+    market_calendar_hub = market_calendar_hub or MarketCalendarHub(
+        getattr(bootstrap.bundle.option_master, "calendar", None)
+    )
     provider = StandardRuntimeInputProvider(
         bootstrap.bundle.market,
         track9_fee_ledger=fee_ledger,
         track9_margin_read_model=margin_read_model,
         run_id=run_id,
         option_expiry_source=expiry_source,
-        trading_calendar=getattr(bootstrap.bundle.option_master, "calendar", None),
+        trading_calendar=market_calendar_hub,
         option_master=bootstrap.bundle.option_master,
         track2_option_iv_source=track2_option_iv_source,
         option_orderbook_source=historical_observation_option_source,
