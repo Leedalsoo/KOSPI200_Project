@@ -16,6 +16,8 @@ from core.strategy.track1_tail_defense import Track1Input
 from application.composition.track3_runtime_input_provider import Track3RuntimeInputProvider
 from core.strategy.track4_gamma_scalping import Track4MarketInput
 from core.strategy.track6_daily_tail_insurance import Track6ExecutionInput
+from core.strategy.track7_volatility_skew_weekly_insurance import Track7ExecutionInput
+from application.composition.track7_option_contract_source import Track7OptionContractSource
 from contracts.analytics import AnalyticsProvenance, MarketSnapshot
 from contracts.risk_guard import RiskGuardStatusSource
 from core.analytics.common import COMMON_METRIC_CONTRACTS, build_common_analytics_snapshot
@@ -41,7 +43,7 @@ from application.composition.track8_analytics_provider import build_track8_analy
 class StandardRuntimeInputProvider:
     """Build standard inputs from observable VMS/VSSF sources only."""
 
-    def __init__(self, market: Any, *, track9_fee_ledger: Track9FeeLedger | None = None, track9_margin_read_model: Track9MarginReadModel | None = None, run_id: str | None = None, track7_order_timeout_source: Any | None = None, track7_support_resistance_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None, track6_option_contract_source: Track6OptionContractSource | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None) -> None:
+    def __init__(self, market: Any, *, track9_fee_ledger: Track9FeeLedger | None = None, track9_margin_read_model: Track9MarginReadModel | None = None, run_id: str | None = None, track7_order_timeout_source: Any | None = None, track7_support_resistance_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None, track6_option_contract_source: Track6OptionContractSource | None = None, track7_option_contract_source: Track7OptionContractSource | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None) -> None:
         self.risk_guard_status_source = risk_guard_status_source
         self.track9_fee_ledger = track9_fee_ledger
         self.track9_margin_read_model = track9_margin_read_model
@@ -50,6 +52,7 @@ class StandardRuntimeInputProvider:
         self.track7_order_timeout_source = track7_order_timeout_source
         self.track7_support_resistance_source = track7_support_resistance_source
         self.track6_option_contract_source = track6_option_contract_source
+        self.track7_option_contract_source = track7_option_contract_source
         self.data = VirtualRuntimeDataProvider(
             market, option_expiry_source=option_expiry_source, track7_order_timeout_source=track7_order_timeout_source, track7_support_resistance_source=track7_support_resistance_source, trading_calendar=trading_calendar, option_master=option_master,
             option_orderbook_source=option_orderbook_source,
@@ -281,7 +284,8 @@ class StandardRuntimeInputProvider:
                     ),
                 )
 
-        # Track7 consumes canonical analytics only when every required source is available.
+        # Track7 consumes canonical analytics only when every required source and
+        # the authoritative Option Master contract pair are available.
         track7_missing_sources: list[str] = []
         if d.option_iv is None or d.put_iv is None:
             track7_missing_sources.append("option_iv_chain")
@@ -294,14 +298,35 @@ class StandardRuntimeInputProvider:
         support_status = d.status.get("track7_support_resistance")
         if support_status is None or not support_status.available:
             track7_missing_sources.append("support_resistance")
+
+        track7_selection = None
+        if self.track7_option_contract_source is None:
+            track7_missing_sources.append("listed_option_contracts")
+        else:
+            try:
+                track7_selection = self.track7_option_contract_source.select(
+                    expiry=str(getattr(tick, "expiry", "") or ""),
+                    strike=Decimal(str(getattr(tick, "strike_price", ""))),
+                )
+            except (ValueError, TypeError, AttributeError):
+                track7_missing_sources.append("listed_option_contracts")
+
         if track7_missing_sources:
             contexts["track7_volatility_skew_weekly_insurance"] = self._unavailable(
                 "track7_volatility_skew_weekly_insurance", tuple(track7_missing_sources),
                 "TRACK7_REQUIRED_AUTHORITATIVE_SOURCES_UNAVAILABLE",
             )
         else:
+            execution_input = Track7ExecutionInput(
+                strategy_id="track7_volatility_skew_weekly_insurance",
+                expiry=track7_selection.expiry,
+                listed_put_strike=track7_selection.put.strike,
+                listed_call_strike=track7_selection.call.strike,
+                contract_multiplier=track7_selection.contract_multiplier,
+            )
             contexts["track7_volatility_skew_weekly_insurance"] = StrategyContext(
-                market_state, "track7_volatility_skew_weekly_insurance", StrategyInput(common),
+                market_state, "track7_volatility_skew_weekly_insurance",
+                StrategyInput(common, execution_input),
                 analytics=build_track7_analytics_snapshot(
                     d, run_id=self.run_id or "virtual", as_of=d.as_of,
                     common_snapshot=common_analytics,

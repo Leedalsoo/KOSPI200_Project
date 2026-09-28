@@ -94,6 +94,7 @@ def test_track7_consumes_authoritative_call_put_iv_without_unblocking_missing_so
         "order_timeout": "UNAVAILABLE",
         "support_resistance": "UNAVAILABLE",
         "expiry_calendar": "UNAVAILABLE",
+        "listed_option_contracts": "UNAVAILABLE",
     }
     assert context.input.payload.__class__.__name__ == "UnavailableStrategyPayload"
 

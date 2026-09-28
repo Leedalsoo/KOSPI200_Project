@@ -6,12 +6,12 @@ from contracts.analytics import AnalyticsProvenance, AnalyticsRequest, MarketSna
 from core.analytics.engine import AnalyticsEngine
 from core.analytics.track7 import build_track7_evaluators
 from core.strategy.contracts import StrategyContext, StrategyInput
-from core.strategy.track7_volatility_skew_weekly_insurance import Track7VolatilitySkewWeeklyInsurance
+from core.strategy.track7_volatility_skew_weekly_insurance import Track7ExecutionInput, Track7VolatilitySkewWeeklyInsurance
 
 STRATEGY_ID = "track7_volatility_skew_weekly_insurance"
 
 
-def context(**observations):
+def context(with_contract=False, **observations):
     as_of = observations.pop("as_of", datetime(2026, 9, 18, 10, 0))
     keys = tuple(
         (key, (dep,)) for key, dep in (
@@ -36,7 +36,8 @@ def context(**observations):
     snapshot = MarketSnapshot("track7-test", as_of, AnalyticsProvenance("test"), None, fixed)
     requests = tuple(AnalyticsRequest(k, "tick", 1, deps, 1.0, "authoritative", "1") for k, deps in keys)
     analytics = AnalyticsEngine(build_track7_evaluators()).evaluate(snapshot, requests)
-    return StrategyContext(strategy_id=STRATEGY_ID, input=StrategyInput(), analytics=analytics)
+    payload = Track7ExecutionInput(STRATEGY_ID, "202609", Decimal("350"), Decimal("350"), Decimal("250000")) if with_contract else None
+    return StrategyContext(strategy_id=STRATEGY_ID, input=StrategyInput(payload=payload), analytics=analytics)
 
 
 def test_new_week_buy_fails_closed_without_authoritative_contract_selection():
@@ -46,18 +47,18 @@ def test_new_week_buy_fails_closed_without_authoritative_contract_selection():
 
 def test_skew_entry_and_fallback():
     s = Track7VolatilitySkewWeeklyInsurance()
-    signals = s.evaluate(context(call_iv=Decimal("10"), put_iv=Decimal("13")))
+    signals = s.evaluate(context(with_contract=True, call_iv=Decimal("10"), put_iv=Decimal("13")))
     assert signals[0].direction == "ENTER_SKEW_ARB_LIMIT"
-    signals = s.evaluate(context(call_iv=Decimal("10"), put_iv=Decimal("13"), order_timeout=True))
+    signals = s.evaluate(context(with_contract=True, call_iv=Decimal("10"), put_iv=Decimal("13"), order_timeout=True))
     assert any(x.direction == "ENTER_SKEW_ARB_FALLBACK_MARKET" for x in signals)
 
 
 def test_skew_stop_and_normal_exit():
     s = Track7VolatilitySkewWeeklyInsurance()
-    s.evaluate(context(call_iv=Decimal("10"), put_iv=Decimal("13")))
-    assert s.evaluate(context(call_iv=Decimal("10"), put_iv=Decimal("19")))[0].direction == "CLOSE_SKEW_ARB_STOP_LOSS"
-    s.evaluate(context(call_iv=Decimal("10"), put_iv=Decimal("13")))
-    assert s.evaluate(context(call_iv=Decimal("10"), put_iv=Decimal("10.4")))[0].direction == "CLOSE_SKEW_ARB_LIMIT"
+    s.evaluate(context(with_contract=True, call_iv=Decimal("10"), put_iv=Decimal("13")))
+    assert s.evaluate(context(with_contract=True, call_iv=Decimal("10"), put_iv=Decimal("19")))[0].direction == "CLOSE_SKEW_ARB_STOP_LOSS"
+    s.evaluate(context(with_contract=True, call_iv=Decimal("10"), put_iv=Decimal("13")))
+    assert s.evaluate(context(with_contract=True, call_iv=Decimal("10"), put_iv=Decimal("10.4")))[0].direction == "CLOSE_SKEW_ARB_LIMIT"
 
 
 def test_preemptive_take_profit_requires_real_ma_inputs():

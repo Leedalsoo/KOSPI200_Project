@@ -3,7 +3,21 @@ from decimal import Decimal
 from typing import Sequence
 
 from contracts.analytics import AnalyticsSnapshot, AnalyticsStatus
+from contracts.types import MultiLegExecutionPlan
 from core.strategy.contracts import Signal, StrategyContext, StrategyFeatureRequirement
+from core.strategy.multi_leg_plan import ExecutionLeg
+from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
+
+
+@dataclass(frozen=True)
+class Track7ExecutionInput:
+    """Authoritative Option Master selection supplied by composition."""
+
+    strategy_id: str
+    expiry: str
+    listed_put_strike: Decimal
+    listed_call_strike: Decimal
+    contract_multiplier: Decimal
 
 
 @dataclass(frozen=True)
@@ -17,6 +31,7 @@ class Track7State:
     trailing_active: bool = False
     skew_active: bool = False
     skew_limit_pending: bool = False
+    skew_direction: str | None = None
 
 
 class Track7VolatilitySkewWeeklyInsurance:
@@ -60,6 +75,11 @@ class Track7VolatilitySkewWeeklyInsurance:
             return None
         return metric.value
 
+    @staticmethod
+    def _execution_input(context: StrategyContext) -> Track7ExecutionInput | None:
+        payload = getattr(getattr(context, "input", None), "payload", None)
+        return payload if isinstance(payload, Track7ExecutionInput) else None
+
     def evaluate_insurance_buy(self, context: StrategyContext) -> Sequence[Signal]:
         analytics = context.analytics
         if analytics is None or self.state.insurance_active:
@@ -75,28 +95,109 @@ class Track7VolatilitySkewWeeklyInsurance:
 
     def evaluate_skew_arbitrage(self, context: StrategyContext) -> Sequence[Signal]:
         analytics = context.analytics
-        if analytics is None:
+        contract = self._execution_input(context)
+        if analytics is None or contract is None or contract.contract_multiplier <= 0:
             return ()
         skew = self._metric(analytics, "options.skew")
         if not isinstance(skew, Decimal):
             return ()
+
         if not self.state.skew_active:
             if abs(skew) < self.SKEW_ENTRY:
                 return ()
-            self.state = replace(self.state, skew_active=True, skew_limit_pending=True)
             direction = "LONG_PUT_SHORT_CALL" if skew > 0 else "LONG_CALL_SHORT_PUT"
-            return (Signal(self.strategy_id, "ENTER_SKEW_ARB_LIMIT", 1.0, f"TYPE:{direction};SKEW:{skew};QTY:1"),)
+            self.state = replace(
+                self.state, skew_active=True, skew_limit_pending=True, skew_direction=direction,
+                put_strike=contract.listed_put_strike, call_strike=contract.listed_call_strike,
+            )
+            long_type = "PUT" if direction == "LONG_PUT_SHORT_CALL" else "CALL"
+            long_strike = contract.listed_put_strike if long_type == "PUT" else contract.listed_call_strike
+            return (
+                Signal(
+                    self.strategy_id, "ENTER_SKEW_ARB_LIMIT", 1.0,
+                    f"TYPE:{direction};SKEW:{skew};QTY:{self.insurance_qty}",
+                    execution_proposal=StrategyExecutionProposal(
+                        proposed_quantity=self.insurance_qty, asset_type="OPTION", side="BUY",
+                        track_id=self.strategy_id, tag_id="WEEKLY_SKEW_ARB_ENTRY",
+                        option_type=long_type, strike=long_strike,
+                    ),
+                ),
+            )
+
         timeout = self._metric(analytics, "execution.order_timeout")
+        long_type = "PUT" if self.state.skew_direction == "LONG_PUT_SHORT_CALL" else "CALL"
+        long_strike = self.state.put_strike if long_type == "PUT" else self.state.call_strike
         if self.state.skew_limit_pending and timeout is True:
             self.state = replace(self.state, skew_limit_pending=False)
-            return (Signal(self.strategy_id, "ENTER_SKEW_ARB_FALLBACK_MARKET", 1.0, f"SKEW:{skew};QTY:1"),)
+            return (
+                Signal(
+                    self.strategy_id, "ENTER_SKEW_ARB_FALLBACK_MARKET", 1.0,
+                    f"SKEW:{skew};QTY:{self.insurance_qty}",
+                    execution_proposal=StrategyExecutionProposal(
+                        proposed_quantity=self.insurance_qty, asset_type="OPTION", side="BUY",
+                        track_id=self.strategy_id, tag_id="WEEKLY_SKEW_ARB_ENTRY_FALLBACK",
+                        option_type=long_type, strike=long_strike,
+                    ),
+                ),
+            )
         if abs(skew) > self.SKEW_STOP:
             self.state = replace(self.state, skew_active=False, skew_limit_pending=False)
-            return (Signal(self.strategy_id, "CLOSE_SKEW_ARB_STOP_LOSS", 1.0, f"SKEW:{skew};STOP:{self.SKEW_STOP};QTY:1"),)
+            return (
+                Signal(
+                    self.strategy_id, "CLOSE_SKEW_ARB_STOP_LOSS", 1.0,
+                    f"SKEW:{skew};STOP:{self.SKEW_STOP};QTY:1",
+                    execution_proposal=StrategyExecutionProposal(
+                        proposed_quantity=self.insurance_qty, asset_type="OPTION", side="SELL",
+                        track_id=self.strategy_id, tag_id="WEEKLY_SKEW_ARB_STOP",
+                        option_type=long_type, strike=long_strike,
+                    ),
+                ),
+            )
         if abs(skew) <= self.SKEW_EXIT:
             self.state = replace(self.state, skew_active=False, skew_limit_pending=False)
-            return (Signal(self.strategy_id, "CLOSE_SKEW_ARB_LIMIT", 1.0, f"SKEW:{skew};EXIT:{self.SKEW_EXIT};QTY:1"),)
+            return (
+                Signal(
+                    self.strategy_id, "CLOSE_SKEW_ARB_LIMIT", 1.0,
+                    f"SKEW:{skew};EXIT:{self.SKEW_EXIT};QTY:1",
+                    execution_proposal=StrategyExecutionProposal(
+                        proposed_quantity=self.insurance_qty, asset_type="OPTION", side="SELL",
+                        track_id=self.strategy_id, tag_id="WEEKLY_SKEW_ARB_CLOSE",
+                        option_type=long_type, strike=long_strike,
+                    ),
+                ),
+            )
         return ()
+
+    def build_execution_plan(
+        self, group_id: str, *, proposal: StrategyExecutionProposal
+    ) -> MultiLegExecutionPlan:
+        if proposal.option_type not in {"PUT", "CALL"} or proposal.strike is None:
+            raise ValueError("TRACK7_EXECUTION_PROPOSAL_CONTRACT_REQUIRED")
+        if self.state.put_strike <= 0 or self.state.call_strike <= 0:
+            raise ValueError("TRACK7_OPTION_SELECTION_REQUIRED")
+        if self.state.put_strike != self.state.call_strike:
+            raise ValueError("TRACK7_PAIRED_STRIKE_MISMATCH")
+
+        primary_type = str(proposal.option_type).upper()
+        primary_side = str(proposal.side or "").upper()
+        if primary_side not in {"BUY", "SELL"}:
+            raise ValueError("TRACK7_EXECUTION_SIDE_REQUIRED")
+        secondary_type = "CALL" if primary_type == "PUT" else "PUT"
+        secondary_side = "SELL" if primary_side == "BUY" else "BUY"
+        primary_strike = self.state.put_strike if primary_type == "PUT" else self.state.call_strike
+        secondary_strike = self.state.call_strike if secondary_type == "CALL" else self.state.put_strike
+        if Decimal(str(proposal.strike)) != primary_strike:
+            raise ValueError("TRACK7_EXECUTION_STRIKE_MISMATCH")
+
+        return MultiLegExecutionPlan(
+            group_id=group_id,
+            strategy_id=self.strategy_id,
+            purpose="WEEKLY_SKEW_ARBITRAGE",
+            legs=(
+                ExecutionLeg("primary", primary_side, self.insurance_qty, primary_type, primary_strike),
+                ExecutionLeg("secondary", secondary_side, self.insurance_qty, secondary_type, secondary_strike),
+            ),
+        )
 
     def evaluate_preemptive_take_profit(self, context: StrategyContext) -> Sequence[Signal]:
         analytics = context.analytics
