@@ -21,6 +21,7 @@ from application.composition.track7_option_contract_source import Track7OptionCo
 from contracts.analytics import AnalyticsProvenance, MarketSnapshot
 from contracts.risk_guard import RiskGuardStatusSource
 from core.analytics.common import COMMON_METRIC_CONTRACTS, build_common_analytics_snapshot
+from core.sensor.market_condition_sensor import MarketConditionSensor
 from application.composition.track9_analytics_provider import build_track9_analytics_snapshot
 from contracts.option_expiry_source import OptionExpirySource
 from contracts.option_orderbook_source import OptionOrderBookSource
@@ -46,6 +47,7 @@ class StandardRuntimeInputProvider:
 
     def __init__(self, market: Any, *, track9_fee_ledger: Track9FeeLedger | None = None, track9_margin_read_model: Track9MarginReadModel | None = None, run_id: str | None = None, track7_order_timeout_source: Any | None = None, track7_support_resistance_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None, track6_option_contract_source: Track6OptionContractSource | None = None, track7_option_contract_source: Track7OptionContractSource | None = None, track8_option_contract_source: Track8OptionContractSource | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None) -> None:
         self.risk_guard_status_source = risk_guard_status_source
+        self.market_condition_sensor = MarketConditionSensor()
         self.track9_fee_ledger = track9_fee_ledger
         self.track9_margin_read_model = track9_margin_read_model
         self.run_id = run_id
@@ -115,6 +117,19 @@ class StandardRuntimeInputProvider:
 
     def build(self, tick: Any, market_state: MarketState, account: Any | None = None) -> dict[str, StrategyContext]:
         d = self.data.snapshot(tick)
+        instrument_id = (
+            tick.instrument_id
+            if tick.instrument_id in market_state.ticks
+            else next(iter(market_state.ticks), None)
+        )
+        try:
+            condition = (
+                self.market_condition_sensor.analyze(market_state, instrument_id)
+                if instrument_id is not None
+                else None
+            )
+        except (KeyError, ValueError, TypeError):
+            condition = None
         common = self._common(d, account)
         self.track9_margin_ratio = None
         if self.track9_margin_read_model is not None and self.run_id:
@@ -135,6 +150,7 @@ class StandardRuntimeInputProvider:
                 "current_price": d.price,
                 "active_vol": d.active_vol,
                 "base_vol": d.base_vol,
+                "current_regime": condition.current_regime if condition is not None else None,
                 "call_iv": d.option_iv,
                 "put_iv": d.put_iv,
                 "current_pnl": common.current_pnl,

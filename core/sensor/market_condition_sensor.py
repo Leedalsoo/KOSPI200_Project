@@ -24,6 +24,7 @@ class MarketConditionSnapshot:
     liquidity_level: str | None = None
     basis: float | None = None
     oi_trend_alert: bool | None = None
+    current_regime: str | None = None
 
 
 class MarketConditionSensor:
@@ -48,14 +49,31 @@ class MarketConditionSensor:
             return ()
         return tuple(prices)
 
+    @staticmethod
+    def _regime(short_move: float, volatility_ratio: float) -> str:
+        if short_move >= 0.08:
+            return "CIRCUIT_BREAKER"
+        if short_move >= 0.02 or volatility_ratio >= 2.5:
+            return "CRASH"
+        if volatility_ratio >= 1.4:
+            return "HIGH_VOL"
+        return "NORMAL"
+
     def analyze(self, state: MarketState, instrument_id: str) -> MarketConditionSnapshot:
         tick: CanonicalMarketTick = state.ticks[instrument_id]
-        price = float(tick.price)
+        raw_price = getattr(tick, "price", None)
+        if raw_price is None:
+            raw_price = getattr(tick, "underlying_price", None)
+        if raw_price is None:
+            raw_price = getattr(tick, "last_price", None)
+        if raw_price is None:
+            raise ValueError("MARKET_CONDITION_PRICE_REQUIRED")
+        price = float(raw_price)
         prices = self._prices.setdefault(instrument_id, deque(maxlen=self.baseline_window + 1))
         previous = self._previous.get(instrument_id)
         price_change = 0.0 if previous is None else price - previous
         self._previous[instrument_id] = price
-# prices.append(price)
+        prices.append(price)
 
         values = list(prices)
         returns = [math.log(values[i] / values[i - 1]) for i in range(1, len(values)) if values[i - 1] > 0 and values[i] > 0]
@@ -90,4 +108,7 @@ class MarketConditionSensor:
             pass
 # flags.append("DRAWDOWN")
 
-        return MarketConditionSnapshot(state.as_of, instrument_id, price, price_change, volatility, baseline, ratio, drawdown, stress, tuple(flags))
+        return MarketConditionSnapshot(
+            state.as_of, instrument_id, price, price_change, volatility, baseline,
+            ratio, drawdown, stress, tuple(flags), current_regime=self._regime(short_move, ratio)
+        )

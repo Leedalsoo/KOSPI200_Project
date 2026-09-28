@@ -33,6 +33,7 @@ _COMMON = (
     ("volatility.active", "decimal", ("active_vol",), ("active_vol",)),
     ("volatility.base", "decimal", ("base_vol",), ("base_vol",)),
     ("volatility.ratio", "ratio", ("active_vol", "base_vol"), ("active_vol", "base_vol")),
+    ("market.current_regime", "regime", ("current_regime",), ("current_regime",)),
     ("options.call_iv", "iv-points", ("call_iv",), ("call_iv",)),
     ("options.put_iv", "iv-points", ("put_iv",), ("put_iv",)),
     ("portfolio.total_fees", "currency", ("total_fees",), ("total_fees",)),
@@ -90,6 +91,25 @@ def _passthrough(observation: str, unit: str):
     return evaluate
 
 
+def _market_current_regime(snapshot, request):
+    value = snapshot.observations.get("current_regime")
+    if value is None:
+        return _metric(request, snapshot, None, "regime", available=False)
+    return AnalyticsMetric(
+        request.metric_key,
+        value,
+        AnalyticsStatus.AVAILABLE,
+        "regime",
+        snapshot.as_of,
+        request.analytics_version,
+        (AnalyticsProvenance(
+            source="market-condition.authoritative",
+            dependencies=("current_regime",),
+            source_as_of=snapshot.as_of,
+        ),),
+    )
+
+
 def _ratio(snapshot, request):
     active = snapshot.observations.get("active_vol")
     base = snapshot.observations.get("base_vol")
@@ -141,6 +161,7 @@ _EVALUATORS: Mapping[str, Callable] = {
     "volatility.active": _passthrough("active_vol", "decimal"),
     "volatility.base": _passthrough("base_vol", "decimal"),
     "volatility.ratio": _ratio,
+    "market.current_regime": _market_current_regime,
     "options.call_iv": _passthrough("call_iv", "iv-points"),
     "options.put_iv": _passthrough("put_iv", "iv-points"),
     "portfolio.total_fees": _passthrough("total_fees", "currency"),
