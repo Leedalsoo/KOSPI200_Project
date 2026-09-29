@@ -33,14 +33,6 @@ def _spread_std(snapshot, request):
     return _metric(request, snapshot, pstdev(values), "index-points")
 
 
-def _vol_ratio(snapshot, request):
-    active = float(snapshot.observations["active_vol"])
-    base = float(snapshot.observations["base_vol"])
-    if not isfinite(active) or not isfinite(base) or active <= 0 or base <= 0:
-        return AnalyticsMetric(request.metric_key, None, AnalyticsStatus.UNAVAILABLE, "ratio", snapshot.as_of, request.analytics_version, ())
-    return _metric(request, snapshot, active / base, "ratio")
-
-
 def _passthrough(key, unit):
     def evaluator(snapshot, request):
         return _metric(request, snapshot, snapshot.observations[key], unit)
@@ -69,7 +61,6 @@ def build_track3_evaluators() -> Mapping[str, object]:
         "spread.std": _spread_std,
         "volatility.active": _passthrough("active_vol", "decimal"),
         "volatility.base": _passthrough("base_vol", "decimal"),
-        "volatility.ratio": _vol_ratio,
         "price.change_rate": _passthrough("price_change_rate", "ratio"),
         "microstructure.spread": _passthrough("bid_ask_spread", "index-points"),
         "market.gap_pct": _passthrough("gap_pct", "ratio"),

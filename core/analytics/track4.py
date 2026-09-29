@@ -22,14 +22,6 @@ def _passthrough(observation: str, unit: str):
     return evaluator
 
 
-def _volatility_ratio(snapshot: MarketSnapshot, request: AnalyticsRequest) -> AnalyticsMetric:
-    active = Decimal(str(snapshot.observations["active_vol"]))
-    base = Decimal(str(snapshot.observations["base_vol"]))
-    if active <= 0 or base <= 0:
-        return _unavailable(request, snapshot, "ratio")
-    return _metric(request, snapshot, active / base, "ratio")
-
-
 def _tick_deadband(snapshot: MarketSnapshot, request: AnalyticsRequest) -> AnalyticsMetric:
     history = tuple(Decimal(str(value)) for value in snapshot.observations["price_history"])
     if not history:
@@ -48,7 +40,6 @@ def build_track4_evaluators() -> Mapping[str, object]:
     return {
         "volatility.active": _passthrough("active_vol", "decimal"),
         "volatility.base": _passthrough("base_vol", "decimal"),
-        "volatility.ratio": _volatility_ratio,
         "options.delta": _passthrough("current_delta", "delta"),
         "options.gamma": _passthrough("current_gamma", "gamma"),
         "options.theta": _passthrough("current_theta", "theta"),

@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from contracts.analytics import AnalyticsProvenance, AnalyticsRequest, MarketSnapshot
 from core.analytics.engine import AnalyticsEngine
+from core.analytics.common import build_common_analytics_snapshot, merge_analytics_snapshots
 from core.analytics.track6 import build_track6_evaluators
 from core.strategy.contracts import CommonStrategyInput, StrategyContext, StrategyInput
 from core.strategy.track6_daily_tail_insurance import Track6DailyTailInsurance
@@ -26,19 +27,17 @@ def test_track6_common_analytics_provides_required_features():
             ("price.last", ("current_price",)),
             ("volatility.active", ("active_vol",)),
             ("volatility.base", ("base_vol",)),
-            ("volatility.ratio", ("active_vol", "base_vol")),
             ("portfolio.premium_spent", ("premium_spent",)),
         )
     )
-    result = engine.evaluate(
-        snapshot(
-            current_price=Decimal("350"),
-            active_vol=Decimal("1.5"),
-            base_vol=Decimal("1"),
-            premium_spent=Decimal("1000000"),
-        ),
-        requests,
+    market = snapshot(
+        current_price=Decimal("350"),
+        active_vol=Decimal("1.5"),
+        base_vol=Decimal("1"),
+        premium_spent=Decimal("1000000"),
     )
+    common = build_common_analytics_snapshot(market, ("volatility.ratio",))
+    result = merge_analytics_snapshots(common, engine.evaluate(market, requests))
     assert result.get("price.last").value == Decimal("350")
     assert result.get("volatility.active").value == Decimal("1.5")
     assert result.get("volatility.base").value == Decimal("1")
@@ -58,22 +57,25 @@ def test_track6_strategy_declares_common_analytics_features():
 
 
 def test_track6_strategy_consumes_analytics_snapshot():
-    analytics = AnalyticsEngine(build_track6_evaluators()).evaluate(
-        snapshot(
-            current_price=Decimal("350"),
-            active_vol=Decimal("2"),
-            base_vol=Decimal("1"),
-            premium_spent=Decimal("1000000"),
-        ),
-        tuple(
+    market = snapshot(
+        current_price=Decimal("350"),
+        active_vol=Decimal("2"),
+        base_vol=Decimal("1"),
+        premium_spent=Decimal("1000000"),
+    )
+    analytics = merge_analytics_snapshots(
+        build_common_analytics_snapshot(market, ("volatility.ratio",)),
+        AnalyticsEngine(build_track6_evaluators()).evaluate(
+            market,
+            tuple(
             AnalyticsRequest(key, "tick", 1, deps, 1.0, "authoritative", "1")
             for key, deps in (
                 ("price.last", ("current_price",)),
                 ("volatility.active", ("active_vol",)),
                 ("volatility.base", ("base_vol",)),
-                ("volatility.ratio", ("active_vol", "base_vol")),
                 ("portfolio.premium_spent", ("premium_spent",)),
             )
+        ),
         ),
     )
     context = StrategyContext(

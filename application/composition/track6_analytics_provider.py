@@ -4,7 +4,7 @@ from __future__ import annotations
 from contracts.analytics import AnalyticsProvenance, AnalyticsRequest, MarketSnapshot
 from core.analytics.engine import AnalyticsEngine
 from core.analytics.track6 import build_track6_evaluators
-from core.analytics.common import COMMON_METRIC_CONTRACTS, merge_analytics_snapshots
+from core.analytics.common import build_common_analytics_snapshot, merge_analytics_snapshots
 
 
 def build_track6_analytics_snapshot(data, *, run_id: str, as_of, common_snapshot=None):
@@ -32,7 +32,9 @@ def build_track6_analytics_snapshot(data, *, run_id: str, as_of, common_snapshot
         AnalyticsRequest(key, "tick", 1, dependencies, 1.0, "authoritative", "1")
         for key, dependencies in keys
     )
-    common_keys = set(COMMON_METRIC_CONTRACTS) if common_snapshot is not None else set()
+    if common_snapshot is None:
+        common_snapshot = build_common_analytics_snapshot(snapshot, ("volatility.ratio",))
+    common_keys = set(common_snapshot.metrics)
     requests = tuple(request for request in requests if request.metric_key not in common_keys)
     if not requests:
         return common_snapshot
