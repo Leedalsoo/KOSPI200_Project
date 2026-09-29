@@ -57,7 +57,7 @@ Insurance role은 `NONE / OVERNIGHT_INSURANCE / EVENT_INSURANCE / REHEDGE_INSURA
 시장데이터 경계는 Broker Adapter / Historical Provider / Other Provider → MarketDataHub → Runtime / Strategy이다.
 Virtual 시장 데이터는 authoritative source 수집/정규화 → Historical Market Store → Virtual Exchange → Virtual Broker → Virtual Broker API → Option Program 경계를 따른다.
 Historical Store의 source/provenance를 유지하고 거래일별 partition을 사용할 수 있어야 한다.
-Multi-Broker 저장 구조는 `data/<market-data-root>/<broker_id>/YYYY-MM-DD/`를 기본 설계로 하며 broker별 raw/canonical evidence를 분리한다.
+Multi-Broker 저장 구조는 `data/<market-data-root>/<broker_id>/YYYY-MM-DD/`를 기본 설계로 하며 broker별 raw/canonical evidence를 분리한다. **KIS VTS 일별 수집 데이터의 현재 운영 저장 루트는 `data/kis_market_data_restart/YYYY-MM-DD/`로 고정한다.**
 동일 canonical instrument를 여러 broker가 관측하면 broker별 독립 observation으로 보존하며 `canonical_instrument_id`만으로 중복 제거하지 않는다.
 Replay/Scenario/Synthetic 결과를 실제 시장 원본과 혼동하지 않는다.
 실제 authoritative 데이터셋이 없으면 해당 실데이터 검증은 `BLOCKED`이다.
@@ -74,7 +74,7 @@ Live 검증 전까지 시장데이터 수신과 Virtual Execution을 주문 없�
 `infrastructure/kis/kis_rest_market_observation_collector.py`는 KRX 계약 identity를 보존하고 KIS 지수옵션 종목마스터의 `stnd_iscd`로 broker `shrn_iscd`를 authoritative하게 reconcile한 뒤 Price/OrderBook을 수집한다. KRX Marketplace는 계약 선택의 authoritative source이고 KIS Index Option Master는 broker symbol의 authoritative source다.
 `infrastructure/kis/kis_realtime_collector.py`는 WebSocket raw frame 경계이며 REST 수집과 독립적으로 동작한다. WS 연결 성공만으로 frame 수신 PASS를 선언하지 않는다.
 WS가 실패하거나 approval-key timeout이 발생해도 REST 수집은 계속할 수 있으며 manifest에 `DEGRADED_REST_PRIMARY` 상태를 기록한다.
-수집 데이터와 Replay 데이터의 source/provenance 및 원본/가공 여부를 명확히 보존한다.
+수집 데이터와 Replay 데이터의 source/provenance 및 원본/가공 여부를 명확히 보존한다. **KIS VTS 수집/Replay 기준 데이터는 `data/kis_market_data_restart/` 아래의 날짜 partition을 사용하며, 과거 `data/kis_market_data/` 경로를 현재 수집 기준으로 재사용하지 않는다.**
 거래일과 휴장일은 broker별 `data/<market-data-root>/<broker_id>/YYYY-MM-DD/` partition으로 분리하며, authoritative calendar 조회 실패는 휴장으로 추정하지 않고 `UNKNOWN`으로 기록한다.
 UNKNOWN 상태에서는 주문 endpoint를 호출하지 않고 read-only 시장데이터 경계만 시도할 수 있다.
 원본 데이터는 실제 시간 흐름의 1배속 Replay로 먼저 검증하고, 이후 시간 압축 가속 Replay로 장시간 운용을 단시간에 반복 검증한다.
@@ -112,7 +112,7 @@ Execution 결과가 없는 상태에서 Position/PnL을 추정하지 않는다.
 Live credential이 준비되지 않은 경우 Live runtime evidence는 `BLOCKED`이며 Virtual 검증 결과로 대체하지 않는다.
 
 ## 15. 일별 수집 운영 기준
-Daily Session Orchestrator는 KST 날짜를 기준으로 거래일·휴장일을 분리하고 broker별 `data/<market-data-root>/<broker_id>/YYYY-MM-DD/` 저장 구조를 따른다.
+Daily Session Orchestrator는 KST 날짜를 기준으로 거래일·휴장일을 분리한다. **KIS VTS 일별 수집은 `data/kis_market_data_restart/YYYY-MM-DD/`를 기준 저장 구조로 사용한다.** Multi-Broker 일반 설계의 broker별 partition 규칙은 별도로 유지한다.
 거래일에는 장 시작 전 readiness/smoke를 수행하고, broker별 수집 task가 독립 rate limit과 heartbeat를 관리한다.
 휴장일에는 manifest와 상태만 생성하고 시장데이터 파일은 만들지 않는다.
 동일 날짜 재시작은 기존 저장분을 보존하고 이어쓰기하며, 날짜 전환 시 새 Run ID와 날짜 partition을 사용한다.
@@ -172,19 +172,21 @@ LS증권 실제 연동, credential 처리, 네트워크 호출은 승인 전 금
 전략/아키텍처/데이터 기준 변경도 이 최신 사용자 승인 범위에 따라 실행할 수 있으며, 변경 근거와 결과는 Notion 질문과답변에 기록하고 필요하면 결정로그에 남긴다.
 기존의 개별 사전승인 게이트보다 이 항목이 우선한다.
 
-## 22. 현재 KRX Master 및 VTS 기준자료
+## 22. KIS VTS 시장데이터 저장 기준
+KIS VTS 일별 수집 데이터의 운영·검증·Replay 기준 저장 루트는 `data/kis_market_data_restart/YYYY-MM-DD/`이다.
+각 거래일 partition의 `manifest.json`, `daily_status.json`, raw/canonical observation, heartbeat 및 underlying REST evidence를 source/provenance와 함께 보존한다.
+향후 KIS VTS 수집 및 해당 원본을 이용한 Replay/E2E 검증에서는 이 루트를 기준으로 실제 파일과 manifest를 확인한다.
+기존 `data/kis_market_data/` 경로의 과거 데이터는 현재 수집 기준 경로로 재사용하지 않는다.
+구체적인 기준 거래일, 검증 완료 상태 및 임시 실행 우선순위는 Notion 작업 기록에서 관리한다.
+
 루트에는 KRX authoritative Master 기준자료가 실제로 존재한다.
 - KRX 옵션 Master: KOSPI200 월물 옵션 Master Excel
 - KRX 선물 Master: KOSPI200 표준 선물 Master Excel
 - KRX Weekly 옵션 Master: 목요일 Weekly 옵션 및 월요일 Weekly 옵션 Master Excel
 - 기존 코드에서도 위 KRX Excel Master 파일들을 사용한다.
 
-현재 실데이터 검증의 기준일은 2026-09-22이다.
-2026-09-22의 KIS VTS 수집기 실제 수집 데이터를 현재 기준 데이터셋으로 사용한다. 해당 데이터는 실제 수집 원본이며 Replay/Virtual/Strategy 검증의 기준으로 삼는다.
 현재 KRX Master의 최신 파일 부재 사유와 공급 경계는 Notion에 이미 확정 기록되어 있으므로, 이를 다시 추적하거나 임의의 미래 snapshot으로 대체하지 않는다.
-
-
-## 22. Graft 보조 코드 탐색·영향 분석
+## 23. Graft 보조 코드 탐색·영향 분석
 Graft는 GitHub·Notion·RDC를 대체하지 않는 보조 코드 탐색 및 영향 분석 도구로 사용한다.
 Graft의 결과는 코드 자체, AGENTS.md, Notion 작업 기록 및 실제 실행 검증을 대체하는 authoritative evidence가 아니다.
 
