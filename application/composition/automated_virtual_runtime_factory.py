@@ -8,6 +8,7 @@ from application.composition.automated_virtual_trading_loop import AutomatedVirt
 from application.composition.standard_runtime_input_provider import StandardRuntimeInputProvider
 from application.composition.option_expiry_source import KisOptionMasterExpirySource
 from application.composition.virtual_track3_runtime_input_source import VirtualTrack3RuntimeInputSource
+from application.composition.track2_option_contract_source import Track2OptionContractSource
 from application.composition.track6_option_contract_source import Track6OptionContractSource
 from application.composition.track7_option_contract_source import Track7OptionContractSource
 from application.composition.track8_option_contract_source import Track8OptionContractSource
@@ -117,6 +118,7 @@ def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_h
         return provider.build(tick, state, bootstrap.bundle.account)
 
     track2_plan_adapter = Track2ExecutionPlanAdapter()
+    track2_option_contract_source = Track2OptionContractSource(bootstrap.bundle.option_master)
     track3_plan_adapter = Track3MultiLegExecutionPlanAdapter()
     futures_master_path = Path(__file__).resolve().parents[2] / "fo_idx_code_mts.mst"
     futures_identity_source = None
@@ -149,10 +151,18 @@ def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_h
             base = analytics.get("volatility.base")
             if active is None or base is None or getattr(active, "value", None) is None or getattr(base, "value", None) is None:
                 raise ValueError("TRACK2_MULTI_LEG_VOLATILITY_REQUIRED")
+            market_state = evaluation.context.market_state
+            if market_state is None or "KOSPI200" not in market_state.ticks:
+                raise ValueError("TRACK2_UNDERLYING_PRICE_REQUIRED")
+            underlying = Decimal(str(market_state.ticks["KOSPI200"].price))
+            expiry = track2_option_contract_source.nearest_expiry(as_of=market_state.as_of.date())
+            selection = track2_option_contract_source.select(
+                expiry=expiry, current_price=underlying
+            )
             return track2_plan_adapter.build_plan(
                 approved_signal=canonical,
                 strategy=registry.get(strategy_id, "1.0"),
-                current_atm=Decimal(str(getattr(evaluation.context.market_state, "ticks", {}).get("KOSPI200").price if getattr(evaluation.context, "market_state", None) else canonical.price)),
+                current_atm=selection.atm_strike,
                 active_vol=float(active.value),
                 base_vol=float(base.value),
                 group_id=group_id,
