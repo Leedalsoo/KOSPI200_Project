@@ -214,11 +214,11 @@ Notion 작업 기록 확인 → 원격/로컬 코드 확인 → Graft 사전 영
 ## 24. KIS VTS 실제시장 연속 데이터 원칙
 KIS VTS 모의계좌 API를 통해 수집되는 시장데이터는 임의의 Synthetic/Test Dataset이 아니라 실제 시장의 시세를 KIS VTS API에서 매 거래일 연속 수집하여 축적하는 운영 원본 데이터로 취급한다.
 - data/kis_market_data_restart/YYYY-MM-DD/의 날짜별 partition은 서로 독립적인 테스트 데이터셋이 아니라 하나의 연속적인 시장 데이터 스트림의 날짜별 저장 단위다.
-- 2026-09-28 → 2026-09-29 → 이후 거래일 데이터는 동일한 수집 파이프라인에서 이어지는 연속 데이터로 취급한다.
+- REAL_VTS Replay/E2E is a continuously growing stream: 2026-09-28 -> 2026-09-29 -> every subsequent trading day collected by the Collector. Do not freeze the validation scope to 9/28 and 9/29; append each newly collected trading-day partition in timestamp order and keep validating the cumulative stream.
 - 정상적으로 KIS VTS API 수집이 이루어진 데이터에 대해 매 거래일마다 '실제 데이터인지'를 반복적으로 재검증하지 않는다.
 - 일상 운영 검증의 핵심은 데이터의 진위 재검증이 아니라 Collector/API 응답, 수집 연속성, timestamp, 필수 시장데이터 공급, 누락/장애 여부를 확인하는 것이다.
 - 상세 데이터 조사는 수집 장애, 누락, 비정상 응답, 연속성 단절 등 실제 이상 징후가 발견된 경우에 수행한다.
-- Replay/E2E는 이 연속적인 실제 VTS 원본 데이터를 날짜 순서대로 이어서 사용한다. 9/28과 9/29를 각각 독립적인 진위 검증 대상으로 취급하지 않는다.
+- Runtime Input validation uses all continuously collected REAL_VTS source data, not a fixed two-day set. When a new trading day is collected, connect it after the existing cumulative stream without dropping prior dates; judge warm-up and source-supply differences from actual execution evidence.
 - 9/29의 23개 all-zero orderbook observation은 9/29 전체 데이터의 진위를 재검증해야 한다는 의미가 아니다. 해당 시점의 quote/orderbook unavailable 상황과 fail-closed 처리를 검증하는 실제 운영 데이터 사례로 취급한다.
 - session_status=UNKNOWN은 calendar authoritative source의 상태 문제를 나타내는 메타데이터 상태이며, 이미 수집된 실제 VTS 시장데이터 자체를 Synthetic/Test Data로 격하시키지 않는다.
 - KOSPI200 underlying의 authoritative source는 계속 KIS raw price.output3.bstp_nmix_prpr로 유지한다.
