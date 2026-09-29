@@ -121,11 +121,12 @@ class VirtualMultiLegExecutionBridge:
         approved = routed = filled = 0
         account = self.bundle.account.snapshot()
         position = self.bundle.position
+        vssf = self.bundle.execution._authoritative_execute.__self__.vssf_runtime
+        realized_before = Decimal(str(vssf.account.realized_pnl))
 
         for leg in plan.legs:
             identity = self.identity_for_leg(plan, leg)
             client_order_id = f"{plan.group_id}-{leg.leg_id}"
-            vssf = self.bundle.execution._authoritative_execute.__self__.vssf_runtime
             is_futures = isinstance(identity, FuturesInstrumentIdentity)
             quote = None
             if is_futures:
@@ -305,7 +306,6 @@ class VirtualMultiLegExecutionBridge:
             rep = next((r for r in reports if r.leg_id == leg.leg_id), None)
             if rep is None or rep.execution_price is None:
                 continue
-            direction = 1.0 if leg.side == "BUY" else -1.0
             identity = self.identity_for_leg(plan, leg)
             if isinstance(identity, FuturesInstrumentIdentity):
                 current = current_futures
@@ -333,23 +333,39 @@ class VirtualMultiLegExecutionBridge:
             if isinstance(identity, FuturesInstrumentIdentity):
                 multiplier = identity.contract_multiplier
             else:
-                if position_snapshot is None or position_snapshot.contract_multiplier is None:
-                    raise ValueError("MULTI_LEG_POSITION_CONTRACT_MULTIPLIER_REQUIRED")
-                multiplier = position_snapshot.contract_multiplier
-                if position_snapshot.identity_source != identity.identity_source:
-                    raise ValueError("MULTI_LEG_POSITION_IDENTITY_PROVENANCE_MISMATCH")
-            pnl = (
-                Decimal(str(current)) - Decimal(str(rep.execution_price))
-            ) * Decimal(str(rep.filled_quantity)) * Decimal(str(direction)) * multiplier
+                if position_snapshot is None:
+                    multiplier = identity.contract_multiplier
+                else:
+                    if position_snapshot.contract_multiplier is None:
+                        raise ValueError("MULTI_LEG_POSITION_CONTRACT_MULTIPLIER_REQUIRED")
+                    multiplier = position_snapshot.contract_multiplier
+                    if position_snapshot.identity_source != identity.identity_source:
+                        raise ValueError("MULTI_LEG_POSITION_IDENTITY_PROVENANCE_MISMATCH")
+            position_snapshot = vssf.account.positions.get(identity.instrument_id)
+            if position_snapshot is None:
+                leg_unrealized = Decimal("0")
+            else:
+                avg_price = Decimal(str(position_snapshot["avg_price"]))
+                quantity = Decimal(str(position_snapshot["qty"]))
+                side = str(position_snapshot["side"])
+                mark = Decimal(str(current))
+                leg_unrealized = ((mark - avg_price) if side == "BUY" else (avg_price - mark)) * quantity * multiplier
             pnl_legs.append(
                 PositionGroupLegPnL(
                     leg.leg_id, plan.group_id, identity.instrument_id, rep.filled_quantity,
                     multiplier, identity.identity_source or "",
-                    float(rep.execution_price), current, float(pnl),
+                    float(rep.execution_price), current, float(leg_unrealized),
                     self.run_id, rep.client_order_id, rep.execution_id or ""
                 )
             )
-        snapshot = PositionGroupSnapshot(plan.group_id, plan.strategy_id, group.is_complete, tuple(pnl_legs), sum(x.pnl for x in pnl_legs))
+        realized_after = Decimal(str(vssf.account.realized_pnl))
+        realized_pnl = realized_after - realized_before
+        unrealized_pnl = sum(Decimal(str(x.unrealized_pnl)) for x in pnl_legs)
+        total_pnl = realized_pnl + unrealized_pnl
+        snapshot = PositionGroupSnapshot(
+            plan.group_id, plan.strategy_id, group.is_complete, tuple(pnl_legs),
+            float(realized_pnl), float(unrealized_pnl), float(total_pnl)
+        )
         self.position_groups.update_snapshot(snapshot)
         return MultiLegExecutionResult(
             group_id=plan.group_id,

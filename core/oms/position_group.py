@@ -47,7 +47,7 @@ class PositionGroupLegPnL:
     identity_source: str
     avg_price: float
     current_price: float
-    pnl: float
+    unrealized_pnl: float
     run_id: str
     client_order_id: str
     execution_id: str
@@ -59,6 +59,8 @@ class PositionGroupSnapshot:
     strategy_id: str
     complete: bool
     legs: tuple[PositionGroupLegPnL, ...]
+    realized_pnl: float
+    unrealized_pnl: float
     total_pnl: float
 
 

@@ -255,6 +255,8 @@ class ControlTowerUIAdapter:
                             "strategy_id": snap.strategy_id,
                             "group_id": snap.group_id,
                             "complete": bool(snap.complete),
+                            "realized_pnl": float(snap.realized_pnl),
+                            "unrealized_pnl": float(snap.unrealized_pnl),
                             "total_pnl": float(snap.total_pnl),
                             "legs": [
                                 {
@@ -266,7 +268,8 @@ class ControlTowerUIAdapter:
                                     "identity_source": leg.identity_source,
                                     "avg_price": float(leg.avg_price),
                                     "current_price": float(leg.current_price),
-                                    "pnl": float(leg.pnl),
+                                    "pnl": float(leg.unrealized_pnl),
+                                    "unrealized_pnl": float(leg.unrealized_pnl),
                                     "execution_id": report_by_leg.get(leg.leg_id).execution_id if report_by_leg.get(leg.leg_id) else None,
                                     "client_order_id": report_by_leg.get(leg.leg_id).client_order_id if report_by_leg.get(leg.leg_id) else None,
                                     "status": report_by_leg.get(leg.leg_id).status if report_by_leg.get(leg.leg_id) else None,
@@ -317,7 +320,7 @@ class ControlTowerUIAdapter:
                             if authoritative_leg is not None
                             else authoritative_market_price
                         )
-                        pnl_val = float(authoritative_leg.pnl) if authoritative_leg is not None else None
+                        pnl_val = float(authoritative_leg.unrealized_pnl) if authoritative_leg is not None else None
                         if pnl_val is None and avg_val is not None and current_val is not None and multiplier is not None:
                             side = str(getattr(pos, "side", ""))
                             direction = 1.0 if side == "BUY" else -1.0 if side == "SELL" else 0.0
