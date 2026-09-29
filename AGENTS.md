@@ -77,9 +77,12 @@ WS가 실패하거나 approval-key timeout이 발생해도 REST 수집은 계속
 수집 데이터와 Replay 데이터의 source/provenance 및 원본/가공 여부를 명확히 보존한다. **KIS VTS 수집/Replay 기준 데이터는 `data/kis_market_data_restart/` 아래의 날짜 partition을 사용하며, 과거 `data/kis_market_data/` 경로를 현재 수집 기준으로 재사용하지 않는다.**
 거래일과 휴장일은 broker별 `data/<market-data-root>/<broker_id>/YYYY-MM-DD/` partition으로 분리하며, authoritative calendar 조회 실패는 휴장으로 추정하지 않고 `UNKNOWN`으로 기록한다.
 UNKNOWN 상태에서는 주문 endpoint를 호출하지 않고 read-only 시장데이터 경계만 시도할 수 있다.
-원본 데이터는 실제 시간 흐름의 1배속 Replay로 먼저 검증하고, 이후 시간 압축 가속 Replay로 장시간 운용을 단시간에 반복 검증한다.
-원본 데이터를 가공·변형하여 다양한 가격·변동성·호가·체결 패턴을 구성할 수 있으며, 변형 데이터는 실제 시장 원본과 명확히 구분한다.
-등속과 가속 Replay를 모두 사용하고, 반복 실행마다 독립 Run ID와 상태를 사용한다.
+실제 VTS 원본의 기본 Replay E2E 속도는 100배속 이상으로 한다. 1배속은 실제 시간 의존성·타이밍 의미를 별도로 확인해야 하는 경우에만 사용한다.
+가속 Replay에서도 원본 event timestamp의 순서와 시간관계를 보존하며, 벽시계 시간만 압축한다.
+9/28 → 9/29 → 이후 거래일은 날짜별 독립 테스트셋이 아니라 하나의 연속된 실제 VTS 시장데이터 스트림으로 이어서 E2E 검증한다.
+전략 1~9는 가능한 authoritative input 범위에서 각각 실제 source → Runtime Input → Strategy → Decision → Risk → OMS/Router → Virtual Execution → Position/PnL 경계를 독립적으로 검증한다. authoritative source가 없는 입력을 synthetic 값으로 채워 PASS를 만들지 않는다.
+실제 연속 데이터 기준선 E2E가 확보된 뒤에는 동일 원본을 템플릿으로 사용해 가격·변동성·옵션·호가·유동성·데이터 지연/누락 등의 조건을 통제된 방식으로 변형하여 Scenario Dataset을 생성하고, REAL_VTS / DERIVED_SCENARIO / VIRTUAL_EXECUTION provenance를 분리한다.
+Scenario Generator → 100배속~1000배속 Replay → Strategy 1~9 → 자동 PASS/FAIL → 실패 Scenario 보존의 고속 반복 테스트를 수행할 수 있도록 설계한다. 반복 실행마다 독립 Run ID와 상태를 사용한다.
 VTS 검증은 Live 주문 검증이 아니며 실제 KIS 주문을 실행하지 않는다.
 VTS 결과가 실제 Live E2E PASS를 의미하지 않으며, Live PASS에는 실제 Live credential과 실제 market-data frame 증거가 별도로 필요하다.
 
@@ -123,7 +126,8 @@ WebSocket은 보조 raw-frame 경계이며 실패·approval-key timeout이 해�
 UNKNOWN 상태에서 가능한 read-only 시장데이터 수집은 수행할 수 있으나 주문 endpoint는 호출하지 않는다.
 
 ## 16. 검증 절차
-작업 시작 시 지정된 Notion 작업 기록, 원격 `Project200` 실제 코드, 로컬 working tree를 확인한다.
+모든 작업은 임의의 기억, 과거 실행 결과, 페이지 제목 또는 오래된 BLOCKED/PASS 상태만으로 현재 상태를 판단하지 않는다.
+작업 시작 시 최신 관련 Notion `결정로그`/`질문과답변` 기록을 확인하고, 원격 `Project200`의 현재 `AGENTS.md`와 실제 코드, 로컬 working tree, 실제 데이터/source 및 최신 실행 증거를 순서대로 대조한다. 과거 기록은 현재 증거와 일치할 때만 현재 상태의 근거로 재사용한다.
 작업 전후 `git status`와 변경 파일을 확인한다.
 TDD 변경은 테스트 작성/실패 관찰 → 최소 구현 → focused pytest → 필요한 Virtual E2E → `py -m pytest -q` → `git diff --check` → project200_gate → `git status` → 원격 HEAD 확인 → Notion 기록 순으로 진행한다.
 Python은 Windows launcher `py`로 실행한다.
