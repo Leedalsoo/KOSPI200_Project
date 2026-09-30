@@ -13,6 +13,7 @@ from application.composition.virtual_runtime_data_provider import VirtualRuntime
 from core.domain.market_models import MarketState
 from core.strategy.contracts import CommonStrategyInput, StrategyContext, StrategyInput, UnavailableStrategyPayload
 from core.strategy.track1_tail_defense import Track1Input
+from application.composition.track1_runtime_input_provider import Track1RuntimeInputProvider
 from application.composition.track3_runtime_input_provider import Track3RuntimeInputProvider
 from core.strategy.track4_gamma_scalping import Track4MarketInput
 from core.strategy.track6_daily_tail_insurance import Track6ExecutionInput
@@ -68,6 +69,10 @@ class StandardRuntimeInputProvider:
             track9_atm_iv_source=track9_atm_iv_source,
         )
         self.track3 = Track3RuntimeInputProvider(track3_runtime_input_source)
+        self.track1_fence_type_source = None
+        self.track1_position_lot_store = None
+        self.track1_option_delta_source = None
+        self.track1 = Track1RuntimeInputProvider()
 
     @staticmethod
     def _unavailable(strategy_id: str, sources: tuple[str, ...], reason: str) -> StrategyContext:
@@ -169,13 +174,30 @@ class StandardRuntimeInputProvider:
         )
         contexts: dict[str, StrategyContext] = {}
 
-        # Track1 now receives exact expiry from the Option Master source. The
-        # remaining momentum/coverage/position-Greeks sources are still absent.
-        contexts["TRACK1_TAIL_DEFENSE"] = self._unavailable(
-            "TRACK1_TAIL_DEFENSE",
-            ("momentum", "position_coverage", "option_position_greeks"),
-            "TRACK1_REMAINING_AUTHORITATIVE_SOURCES_UNAVAILABLE",
+        # Track1 consumes its strategy-state fence direction plus authoritative
+        # underlying history and execution-created option lots.
+        self.track1.fence_type_source = self.track1_fence_type_source
+        self.track1.position_lot_store = self.track1_position_lot_store
+        self.track1.option_delta_source = self.track1_option_delta_source
+        track1_result = self.track1.build(
+            as_of=d.as_of,
+            active_vol=d.active_vol,
+            base_vol=d.base_vol,
+            days_to_expiry=(float(d.days_to_expiry) if d.days_to_expiry is not None else None),
+            underlying_history=tuple(getattr(self.data.market, "underlying_history", ())),
         )
+        if track1_result.payload is None:
+            contexts["TRACK1_TAIL_DEFENSE"] = self._unavailable(
+                "TRACK1_TAIL_DEFENSE",
+                track1_result.missing_sources,
+                "TRACK1_REQUIRED_AUTHORITATIVE_SOURCES_UNAVAILABLE",
+            )
+        else:
+            contexts["TRACK1_TAIL_DEFENSE"] = StrategyContext(
+                market_state,
+                "TRACK1_TAIL_DEFENSE",
+                StrategyInput(common, track1_result.payload),
+            )
 
         # Track2: IV may exist in the option chain, but POC and order-book
         # quantities must also be authoritative before a typed payload is built.

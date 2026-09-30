@@ -140,6 +140,18 @@ def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_h
         risk_guard_status_source=risk_guard_status_source,
     )
 
+    def track1_fence_type_source():
+        strategy = registry.get("TRACK1_TAIL_DEFENSE", "1.1.0")
+        if strategy.state.active_fence_type in {"PUT", "CALL"}:
+            return strategy.state.active_fence_type
+        if not strategy.state.market_opened:
+            return "PUT"
+        return None
+
+    provider.track1_fence_type_source = track1_fence_type_source
+    provider.track1_position_lot_store = multi_leg_bridge.position_lot_store
+    provider.track1_option_delta_source = historical_observation_option_source
+
     def multi_leg_plan_resolver(evaluation, canonical):
         strategy_id = str(getattr(evaluation.context, "strategy_id", "") or "")
         group_id = f"{run_id}-{canonical.signal_id}"
