@@ -8,6 +8,7 @@ from application.composition.automated_virtual_trading_loop import AutomatedVirt
 from application.composition.standard_runtime_input_provider import StandardRuntimeInputProvider
 from application.composition.option_expiry_source import KisOptionMasterExpirySource
 from application.composition.virtual_track3_runtime_input_source import VirtualTrack3RuntimeInputSource
+from infrastructure.kis.track3_runtime_input_source import KISTrack3RuntimeInputSource
 from application.composition.track2_option_contract_source import Track2OptionContractSource
 from application.composition.track6_option_contract_source import Track6OptionContractSource
 from application.composition.track7_option_contract_source import Track7OptionContractSource
@@ -36,7 +37,7 @@ from contracts.risk_guard import RiskGuardStatusSource
 from core.strategy.standard_registry import STANDARD_STRATEGY_KEYS, build_standard_strategy_registry
 
 
-def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_history_path=None, run_id=None, historical_observation_option_source=None, risk_guard_status_source: RiskGuardStatusSource | None = None, market_calendar_hub=None):
+def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=None, strategy_keys=None, track9_iv_history_path=None, run_id=None, historical_observation_option_source=None, risk_guard_status_source: RiskGuardStatusSource | None = None, market_calendar_hub=None):
     """Attach all nine Standard strategies to the RuntimeController-owned VMS."""
     selected_keys = tuple(strategy_keys) if strategy_keys else STANDARD_STRATEGY_KEYS
     registry = build_standard_strategy_registry()
@@ -53,12 +54,15 @@ def attach_standard_automated_loop(bootstrap, *, strategy_keys=None, track9_iv_h
     )
     track9_iv_event_materializer = Track9IVEventMaterializer() if track9_atm_iv_source is not None else None
     vssf_runtime = bootstrap.bundle.execution._authoritative_execute.__self__.vssf_runtime
-    track3_source = VirtualTrack3RuntimeInputSource(
-        bootstrap.bundle.market,
-        bootstrap.bundle.account,
-        vssf_runtime,
-        bootstrap.bundle.option_master,
-    )
+    if track3_runtime_input_source is not None:
+        track3_source = track3_runtime_input_source
+    else:
+        track3_source = VirtualTrack3RuntimeInputSource(
+            bootstrap.bundle.market,
+            bootstrap.bundle.account,
+            vssf_runtime,
+            bootstrap.bundle.option_master,
+        )
     fee_ledger = VirtualTrack9FeeLedger()
     margin_read_model = VSSFTrack9MarginReadModel(bootstrap.bundle.account)
     run_id = run_id or getattr(getattr(bootstrap, "run_context", None), "run_id", "")

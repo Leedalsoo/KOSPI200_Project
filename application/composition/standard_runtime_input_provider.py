@@ -240,6 +240,18 @@ class StandardRuntimeInputProvider:
                 )
 
         # Track3 is materialized only through its authoritative source seam.
+        if hasattr(self.track3.source, "set_common_analytics") and common_analytics is not None:
+            active_metric = common_analytics.get("volatility.active")
+            base_metric = common_analytics.get("volatility.base")
+            regime_metric = common_analytics.get("market.current_regime")
+            if active_metric is not None and base_metric is not None and regime_metric is not None:
+                if active_metric.value is not None and base_metric.value is not None and regime_metric.value is not None:
+                    self.track3.source.set_common_analytics(
+                        observed_at=market_state.as_of,
+                        active_vol=float(active_metric.value),
+                        base_vol=float(base_metric.value),
+                        current_regime=str(regime_metric.value),
+                    )
         contexts["Strategy_3_StatArb"] = self.track3.build(
             market_state, account=account, common_snapshot=common_analytics
         )
