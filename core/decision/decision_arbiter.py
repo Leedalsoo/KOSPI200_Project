@@ -9,17 +9,19 @@ from typing import Any, List, Tuple
 
 # Reference values: lower number means higher priority.
 STRATEGY_PRIORITY_MAP = {
+    # Canonical hedge strategy IDs.
     "HEDGE_DELTA": 1,
     "HEDGE_TAIL": 1,
-    "Track1": 2,
-    "Track6": 3,
-    "Track9": 3,
-    "Track3": 4,
-    "Track4": 4,
-    "Track7": 5,
-    "Track8": 5,
-    "Track2": 6,
-    "Track5": 6,
+    # Runtime strategy IDs are authoritative at the Decision boundary.
+    "TRACK1_TAIL_DEFENSE": 2,
+    "track6_daily_tail_insurance": 3,
+    "track9_event_overnight_insurance": 3,
+    "Strategy_3_StatArb": 4,
+    "track4_gamma_scalping": 4,
+    "track7_volatility_skew_weekly_insurance": 5,
+    "track8_macro_regime_monthly_strangle": 5,
+    "track2_asymmetric_trap": 6,
+    "track5_gap_divergence": 6,
 }
 
 

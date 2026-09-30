@@ -43,9 +43,9 @@ def test_empty_input_returns_empty_reference_shape():
 
 def test_priority_then_quantity_then_signal_id_is_reference_order():
     signals = [
-        signal("z", "Track2", qty=10),
-        signal("b", "Track1", qty=1),
-        signal("a", "Track1", qty=5),
+        signal("z", "track2_asymmetric_trap", qty=10),
+        signal("b", "TRACK1_TAIL_DEFENSE", qty=1),
+        signal("a", "TRACK1_TAIL_DEFENSE", qty=5),
     ]
     result = DecisionArbiter().arbitrate(signals, account=None)
     assert [item.signal_id for item in result.approved_signals] == ["a", "b", "z"]
@@ -53,20 +53,20 @@ def test_priority_then_quantity_then_signal_id_is_reference_order():
 
 def test_opposite_side_same_instrument_keeps_preceding_signal_and_rejects_later():
     signals = [
-        signal("win", "Track1", qty=5, side=Side.BUY),
-        signal("lose", "Track2", qty=1, side=Side.SELL),
+        signal("win", "TRACK1_TAIL_DEFENSE", qty=5, side=Side.BUY),
+        signal("lose", "track2_asymmetric_trap", qty=1, side=Side.SELL),
     ]
     result = DecisionArbiter().arbitrate(signals, account=None)
     assert [item.signal_id for item in result.approved_signals] == ["win"]
     assert [item[0].signal_id for item in result.rejected_signals] == ["lose"]
-    assert result.rejected_signals[0][1] == "CLASH_NETTING_REJECTED: Subordinate to Track1 (BUY)"
+    assert result.rejected_signals[0][1] == "CLASH_NETTING_REJECTED: Subordinate to TRACK1_TAIL_DEFENSE (BUY)"
     assert len(result.netted_clashes) == 1
 
 
 def test_same_side_signals_are_all_approved_without_quantity_aggregation():
     signals = [
-        signal("one", "Track1", qty=3, side=Side.BUY),
-        signal("two", "Track2", qty=7, side=Side.BUY),
+        signal("one", "TRACK1_TAIL_DEFENSE", qty=3, side=Side.BUY),
+        signal("two", "track2_asymmetric_trap", qty=7, side=Side.BUY),
     ]
     result = DecisionArbiter().arbitrate(signals, account=None)
     assert [item.signal_id for item in result.approved_signals] == ["one", "two"]
@@ -74,18 +74,32 @@ def test_same_side_signals_are_all_approved_without_quantity_aggregation():
     assert result.rejected_signals == []
 
 
+def test_runtime_strategy_ids_use_authoritative_priority_map():
+    expected = {
+        "TRACK1_TAIL_DEFENSE": 2,
+        "track6_daily_tail_insurance": 3,
+        "track9_event_overnight_insurance": 3,
+        "Strategy_3_StatArb": 4,
+        "track4_gamma_scalping": 4,
+        "track7_volatility_skew_weekly_insurance": 5,
+        "track8_macro_regime_monthly_strangle": 5,
+        "track2_asymmetric_trap": 6,
+        "track5_gap_divergence": 6,
+    }
+    assert {key: STRATEGY_PRIORITY_MAP[key] for key in expected} == expected
+
+
 def test_unregistered_track_uses_reference_priority_99():
-    assert STRATEGY_PRIORITY_MAP["Track1"] == 2
     result = DecisionArbiter().arbitrate(
-        [signal("known", "Track1"), signal("unknown", "UnknownTrack")],
+        [signal("known", "TRACK1_TAIL_DEFENSE"), signal("unknown", "UnknownTrack")],
         account=None,
     )
     assert [item.signal_id for item in result.approved_signals] == ["known", "unknown"]
 
 
 def test_option_type_none_is_part_of_instrument_key():
-    buy = signal("buy", "Track1", side=Side.BUY, option_type=None)
-    sell = signal("sell", "Track2", side=Side.SELL, option_type=OptionType.CALL)
+    buy = signal("buy", "TRACK1_TAIL_DEFENSE", side=Side.BUY, option_type=None)
+    sell = signal("sell", "track2_asymmetric_trap", side=Side.SELL, option_type=OptionType.CALL)
     result = DecisionArbiter().arbitrate([buy, sell], account=None)
     assert len(result.approved_signals) == 2
     assert result.rejected_signals == []

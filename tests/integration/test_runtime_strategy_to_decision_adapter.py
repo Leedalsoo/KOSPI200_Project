@@ -65,6 +65,30 @@ def test_runtime_evaluations_use_runtime_owned_ids_then_existing_arbiter():
     assert result.arbitration.approved_signals == list(result.canonical_signals)
 
 
+def test_actual_runtime_strategy_ids_use_priority_on_conflicting_sides():
+    adapter = RuntimeStrategyToDecisionAdapter(DecisionArbiter())
+    winner = RuntimeStrategyEvaluation(
+        context=Context("TRACK1_TAIL_DEFENSE"),
+        result=make_signal(side="BUY"),
+        local_sequence=1,
+        runtime_context=RuntimeExecutionContext(77, 1),
+    )
+    loser = RuntimeStrategyEvaluation(
+        context=Context("track2_asymmetric_trap"),
+        result=make_signal(side="SELL"),
+        local_sequence=2,
+        runtime_context=RuntimeExecutionContext(77, 2),
+    )
+    result = adapter.arbitrate(
+        [loser, winner],
+        price=351.10,
+        timestamp="2026-09-06T10:00:00",
+        account=None,
+    )
+    assert [s.track_id for s in result.arbitration.approved_signals] == ["TRACK1_TAIL_DEFENSE"]
+    assert [s.track_id for s, _ in result.arbitration.rejected_signals] == ["track2_asymmetric_trap"]
+
+
 def test_conflicting_sides_are_resolved_by_existing_arbiter_without_adapter_rewrite():
     adapter = RuntimeStrategyToDecisionAdapter(DecisionArbiter())
     result = adapter.arbitrate(
