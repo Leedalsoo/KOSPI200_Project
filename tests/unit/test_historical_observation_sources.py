@@ -5,7 +5,7 @@ from contracts.types import MarketAnalytics, MarketDataProvenance, MarketObserva
 from infrastructure.kis.historical_observation_sources import HistoricalObservationOptionSource
 
 
-def _observation(symbol, option_type, strike, observed_at, iv):
+def _observation(symbol, option_type, strike, observed_at, iv, expiry="20261008"):
     return MarketObservation(
         observation_id=f"obs-{symbol}-{observed_at.isoformat()}",
         observed_at=observed_at,
@@ -15,7 +15,7 @@ def _observation(symbol, option_type, strike, observed_at, iv):
         schema_version="canonical-market-observation-v1",
         run_id="run-1",
         contract=OptionInstrumentIdentity(
-            instrument_id=symbol, symbol=symbol, expiry="20261008",
+            instrument_id=symbol, symbol=symbol, expiry=expiry,
             option_type=option_type, strike=Decimal(str(strike)),
             contract_multiplier=Decimal("250000"),
         ),
@@ -44,3 +44,11 @@ def test_historical_observation_option_source_never_looks_ahead():
     assert source.get_order_book("B1").bid_quantities == (Decimal("101"), Decimal("102"), Decimal("103"), Decimal("104"), Decimal("105"))
     source.set_as_of(t2)
     assert source.get_iv(expiry="20261008", option_type="CALL", strike=Decimal("1090")) == Decimal("0.35")
+
+def test_historical_observation_option_source_accepts_month_expiry_from_vts_identity():
+    t1 = datetime(2026, 9, 22, 4, 0, tzinfo=timezone.utc)
+    source = HistoricalObservationOptionSource([
+        _observation("B1", "CALL", 1090, t1, Decimal("0.21"), expiry="202610"),
+    ])
+    source.set_as_of(t1)
+    assert source.get_iv(expiry="2026-10-08", option_type="CALL", strike=Decimal("1090")) == Decimal("0.21")

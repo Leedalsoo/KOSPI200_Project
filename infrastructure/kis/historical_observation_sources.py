@@ -58,8 +58,24 @@ class HistoricalObservationOptionSource(Track2OptionIVSource):
         return values[index][1] if index >= 0 else None
 
     def get_iv(self, *, expiry: str, option_type: str, strike: Decimal) -> Decimal | None:
-        key = (str(expiry).replace("-", "")[:8], str(option_type).upper(), Decimal(str(strike)))
-        return self._latest(self._iv.get(key, ()))
+        normalized_expiry = str(expiry).replace("-", "")
+        option_type = str(option_type).upper()
+        strike = Decimal(str(strike))
+        exact_key = (normalized_expiry[:8], option_type, strike)
+        value = self._latest(self._iv.get(exact_key, ()))
+        if value is not None:
+            return value
+        if len(normalized_expiry) < 6:
+            return None
+        month = normalized_expiry[:6]
+        candidates = [
+            values
+            for key, values in self._iv.items()
+            if key[0].startswith(month) and key[1] == option_type and key[2] == strike
+        ]
+        if len(candidates) != 1:
+            return None
+        return self._latest(candidates[0])
 
     def get_delta(
         self, *, expiry: str, option_type: str, strike: Decimal, as_of: datetime | None = None,
