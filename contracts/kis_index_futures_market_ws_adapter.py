@@ -48,7 +48,9 @@ def _decode_fields(frame: str, expected_tr_id: str) -> list[str]:
     except ValueError as exc:
         raise KISIndexFuturesWebSocketAdapterInvalid("invalid KIS field count") from exc
     values = parts[3].split("^")
-    if field_count != len(values):
+    # KIS realtime field 3 is a record count for single-record frames.
+    # Preserve strict validation for multi-record/explicit field-count fixtures.
+    if field_count != len(values) and field_count != 1:
         raise KISIndexFuturesWebSocketAdapterInvalid("KIS field count mismatch")
     return values
 
@@ -69,8 +71,28 @@ class KISIndexFuturesMarketWebSocketAdapter:
             return self._adapt_quote(frame, source=source or "KIS:H0IFASP0")
         raise KISIndexFuturesWebSocketAdapterInvalid("unsupported KIS index-futures TR ID")
 
+    def adapt_many(self, frame: str, *, source: str | None = None) -> tuple[KisIndexFuturesMarketObservation, ...]:
+        parts = frame.split("|")
+        if len(parts) < 4 or parts[1] != self.TRADE_TR_ID:
+            return (self.adapt(frame, source=source),)
+        try:
+            record_count = int(parts[2])
+        except ValueError as exc:
+            raise KISIndexFuturesWebSocketAdapterInvalid("invalid KIS record count") from exc
+        values = parts[3].split("^")
+        width = 50
+        if record_count <= 0 or len(values) != width * record_count:
+            raise KISIndexFuturesWebSocketAdapterInvalid("KIS H0IFCNT0 repeated record layout mismatch")
+        return tuple(
+            self._adapt_trade_values(values[i * width:(i + 1) * width], source=source or "KIS:H0IFCNT0")
+            for i in range(record_count)
+        )
+
     def _adapt_trade(self, frame: str, *, source: str) -> KisIndexFuturesMarketObservation:
         values = _decode_fields(frame, self.TRADE_TR_ID)
+        return self._adapt_trade_values(values, source=source)
+
+    def _adapt_trade_values(self, values: list[str], *, source: str) -> KisIndexFuturesMarketObservation:
         required_max = max(_TRADE_SYMBOL, _TRADE_TIME, _TRADE_PRICE, _TRADE_VOLUME, _TRADE_ASK1, _TRADE_BID1)
         if len(values) <= required_max:
             raise KISIndexFuturesWebSocketAdapterInvalid("KIS H0IFCNT0 payload is incomplete")
@@ -79,13 +101,9 @@ class KISIndexFuturesMarketWebSocketAdapter:
             raise KISIndexFuturesWebSocketAdapterInvalid("KIS futures short code is missing")
         try:
             return KisIndexFuturesMarketObservation(
-                shrn_iscd=symbol,
-                observed_hour=values[_TRADE_TIME].strip(),
-                price=Decimal(values[_TRADE_PRICE]),
-                volume=Decimal(values[_TRADE_VOLUME]),
-                ask_price=Decimal(values[_TRADE_ASK1]),
-                bid_price=Decimal(values[_TRADE_BID1]),
-                source=source,
+                shrn_iscd=symbol, observed_hour=values[_TRADE_TIME].strip(),
+                price=Decimal(values[_TRADE_PRICE]), volume=Decimal(values[_TRADE_VOLUME]),
+                ask_price=Decimal(values[_TRADE_ASK1]), bid_price=Decimal(values[_TRADE_BID1]), source=source,
             )
         except Exception as exc:
             raise KISIndexFuturesWebSocketAdapterInvalid("invalid H0IFCNT0 numeric field") from exc

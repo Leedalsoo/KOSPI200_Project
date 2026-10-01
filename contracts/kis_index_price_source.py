@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -18,6 +18,7 @@ class KISIndexPriceObservation:
     observed_at: datetime
     source: str
     tr_id: str = KIS_INDEX_PRICE_TR_ID
+    collected_at: datetime | None = None
 
 
 class KISIndexPriceSource(Protocol):
