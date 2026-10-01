@@ -16,7 +16,7 @@ import websockets
 
 from infrastructure.kis.auth import KISAuthManager
 from infrastructure.kis.futures_market_transport import KISWebSocketApprovalKeyProvider
-from infrastructure.kis.kis_weekday_collection_plan import FUTURES_QUOTE_TR_ID, FUTURES_TRADE_TR_ID, OPTION_TRADE_TR_ID, STRATEGY_MONTHLY_OFFSETS
+from infrastructure.kis.kis_weekday_collection_plan import FUTURES_TRADE_TR_ID, OPTION_TRADE_TR_ID, STRATEGY_MONTHLY_OFFSETS
 from infrastructure.krx.krx_marketplace_master import load_option_master
 from infrastructure.krx.krx_option_master_store import resolve_option_master_paths_for_day
 from infrastructure.kis.kis_vts_weekday_collector import _latest_krx_spot_price, market_data_root_from_env, _kis_option_resolver_for_day
@@ -93,7 +93,10 @@ def build_subscriptions(day: date) -> tuple[tuple[str, str], ...]:
 
     # Align the WS subscription with the current front KOSPI200 futures
     # broker symbol observed by the authoritative VTS REST futures board.
-    subscriptions.append((FUTURES_TRADE_TR_ID, "A05610"))
+    subscriptions.extend((
+        (FUTURES_TRADE_TR_ID, "A05610"),
+        ("H0UPCNT0", "2001"),
+    ))
     if len(subscriptions) > MAX_SUBSCRIPTIONS:
         raise RuntimeError(f"KIS_WEBSOCKET_SUBSCRIPTION_LIMIT_EXCEEDED:{len(subscriptions)}")
     return tuple(subscriptions)
