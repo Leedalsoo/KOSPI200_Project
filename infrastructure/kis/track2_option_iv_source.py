@@ -36,7 +36,7 @@ class KISTrack2OptionIVSource:
         if identity is None or identity.option_type not in {"CALL", "PUT"} or identity.strike is None:
             raise ValueError("AUTHORITATIVE_OPTION_IV_IDENTITY_UNAVAILABLE")
         record = Track2OptionIVObservation(
-            symbol=identity.shrn_iscd,
+            symbol=observation.shrn_iscd,
             expiry=identity.expiry,
             option_type=identity.option_type,
             strike=identity.strike,
@@ -54,4 +54,5 @@ class KISTrack2OptionIVSource:
         return record.implied_volatility if record is not None else None
 
     def get_observation(self, *, expiry: str, option_type: str, strike: Decimal) -> Track2OptionIVObservation | None:
-        return self._observations.get((str(expiry), str(option_type).upper(), Decimal(str(strike))))
+        key_expiry = str(expiry).replace("-", "")[:6]
+        return self._observations.get((key_expiry, str(option_type).upper(), Decimal(str(strike))))
