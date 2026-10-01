@@ -65,6 +65,8 @@ def _decode_fields(frame: str, expected_tr_id: str) -> list[str]:
         raise KISIndexOptionMarketWebSocketAdapterInvalid("KIS record count must be positive")
     if record_count == 1 and len(values) == _TRADE_RECORD_WIDTH:
         return values
+    if expected_tr_id == _H0IOASP0 and record_count == 1 and len(values) >= max(_QUOTE_ASK_QTY[-1], _QUOTE_BID_QTY[-1]) + 1:
+        return values
     if expected_tr_id == _H0IOCNT0 and len(values) == _TRADE_RECORD_WIDTH * record_count:
         return values[:_TRADE_RECORD_WIDTH]
     if record_count == len(values):

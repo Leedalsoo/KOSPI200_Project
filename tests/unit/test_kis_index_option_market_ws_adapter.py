@@ -47,6 +47,23 @@ def test_quote_frame_adapts_option_bid_ask() -> None:
     assert observation.order_book.bid_quantities == (Decimal("1"),) * 5
 
 
+def test_quote_frame_accepts_actual_kis_37_field_layout() -> None:
+    values = [
+        "B01610A34", "133631",
+        "20.40", "20.55", "20.85", "20.90", "21.00",
+        "20.20", "20.15", "19.80", "19.75", "19.30",
+        "1", "2", "1", "1", "1", "1", "2", "1", "1", "1", "1", "2",
+        "1", "2", "2", "1", "2", "1", "2", "1",
+        "18", "94", "37", "198", "0", "-1",
+    ]
+    observation = KISIndexOptionMarketWebSocketAdapter().adapt(
+        _frame("H0IOASP0", values)
+    )
+    assert observation.order_book is not None
+    assert observation.order_book.ask_quantities == tuple(Decimal(x) for x in ["1", "2", "1", "2", "2"])
+    assert observation.order_book.bid_quantities == tuple(Decimal(x) for x in ["1", "2", "1", "2", "1"])
+
+
 def test_rejects_wrong_tr_id() -> None:
     with pytest.raises(KISIndexOptionMarketWebSocketAdapterInvalid, match="unsupported"):
         KISIndexOptionMarketWebSocketAdapter().adapt("0|H0IFCNT0|1|X")
