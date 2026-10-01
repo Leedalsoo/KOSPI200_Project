@@ -91,12 +91,9 @@ def build_subscriptions(day: date) -> tuple[tuple[str, str], ...]:
                 raise RuntimeError(f"KIS_OPTION_IDENTITY_REQUIRED:{expiry}:{option_type}:{strike}")
             subscriptions.append((OPTION_TRADE_TR_ID, resolved.symbol))
 
-    subscriptions.extend((
-        (FUTURES_TRADE_TR_ID, "A01609"),
-        (FUTURES_QUOTE_TR_ID, "A01609"),
-        (FUTURES_TRADE_TR_ID, "A05609"),
-        (FUTURES_QUOTE_TR_ID, "A05609"),
-    ))
+    # Align the WS subscription with the current front KOSPI200 futures
+    # broker symbol observed by the authoritative VTS REST futures board.
+    subscriptions.append((FUTURES_TRADE_TR_ID, "A05610"))
     if len(subscriptions) > MAX_SUBSCRIPTIONS:
         raise RuntimeError(f"KIS_WEBSOCKET_SUBSCRIPTION_LIMIT_EXCEEDED:{len(subscriptions)}")
     return tuple(subscriptions)
