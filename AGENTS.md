@@ -252,3 +252,26 @@ REST와 WebSocket은 서로 다른 수집 경계로 유지하며, 한 원본의 
 - WebSocket이 REST보다 더 적합하다는 실제 증거가 확보되기 전에는 WebSocket 중심 장기 수집 전환을 선언하지 않는다.
 - 기존 결정 No.953의 REST 유지 + 독립 WebSocket 병렬 수집 + 실증 비교 후 전환 결정 원칙을 유지한다.
 - 실제 VTS 데이터는 REAL_VTS 원본으로 취급하되, 서로 다른 transport의 provenance를 섞지 않는다.
+## 27. Project-wide architecture efficiency and independence baseline (2026-10-01)
+Strategy 1~9는 전략 자체를 하나로 통합하지 않고 독립된 Strategy Plugin/Registry 경계를 유지한다. 공통 시장지표는 Common Analytics가 단일 소유하고, Strategy-specific metric은 각 전략에 남긴다.
+Calendar의 거래일/휴장일/previous-next trading day/week boundary 계산은 공통 MarketCalendarHub/MarketCalendarSnapshot을 단일 계산 경계로 유지한다. Strategy별 Calendar source가 동일 의미를 재계산하지 않으며, Strategy는 snapshot을 소비한다.
+StandardRuntimeInputProvider는 Common Runtime Input 조립과 Strategy-specific Input 조립을 분리할 수 있는 구조를 우선 검토한다. Common Analytics를 전략별 assembler가 다시 계산하지 않는다.
+AutomatedVirtualRuntimeFactory/Composition은 전략별 execution/multi-leg 특례를 직접 if-chain으로 계속 확대하지 않고, 필요 시 Strategy별 ExecutionPlan/MultiLeg Resolver Registry로 분리하여 Composition Root가 resolver 선택만 담당하도록 한다.
+Control Tower는 감독·운영/read-model facade로 유지하며 정상 주문 생성 경로와 전략 로직을 소유하지 않는다.
+REAL_VTS, DERIVED_SCENARIO, SYNTHETIC, VIRTUAL_EXECUTION의 provenance 경계는 유지한다. 고속 Replay 공통화가 필요하더라도 source provenance를 변경하거나 실제 VTS를 synthetic으로 취급하지 않는다.
+
+## 28. Architecture dependency verification
+ARCHITECTURE_LINT_SPEC.md에 정의된 core/application/environment/infrastructure/interfaces/contracts/strategy 의존성 규칙은 문서만으로 유지하지 않고 실행 가능한 자동검사로 보강한다.
+현재 tests/architecture/test_dependency_rules.py가 없는 상태는 구조 위반의 증거가 아니라 자동 예방검사 부재로 판정한다. 신규 아키텍처 규칙 검증기는 실제 import graph를 검사하되 현재 허용된 표준 경계를 기준으로 작성한다.
+Legacy 구현은 production 표준 경계에 재연결하지 않으며, 호출자가 없는 Legacy adapter는 테스트/호환성 의존 여부를 확인한 후 제거 대상으로 분류한다.
+
+## 29. Collector manifest/evidence consistency
+KIS VTS collector의 manifest.json 상태는 실제 raw/canonical evidence와 일치해야 한다. 실제 WebSocket raw frame이 존재하는데 manifest가 NOT_STARTED로 남는 등의 불일치는 collector lifecycle 기록 문제로 분류하고 별도 검증/수정한다.
+Manifest 상태만으로 실제 frame 수신 여부를 판단하지 않는다. REST/WS 각각의 raw evidence, source time, received_at, TR별 frame 존재구간을 함께 확인한다.
+Calendar UNKNOWN은 휴장으로 추정하지 않으며, 이미 수집된 실제 VTS 데이터를 synthetic/test 데이터로 격하하지 않는다.
+
+## 30. Project-wide E2E 판정 기준
+Strategy 1~9의 현재 E2E 상태는 CONTRACT/INTEGRATION, SOURCE, RUNTIME, SIGNAL, EXECUTION, POSITION/PnL, REGRESSION을 분리하여 판정한다.
+CONTRACT/INTEGRATION PASS 또는 runtime failure 0만으로 전체 Strategy E2E PASS를 선언하지 않는다.
+실제 REAL_VTS signal이 발생하지 않은 전략은 signal-driven execution lifecycle을 PASS로 선언하지 않고 미검증/BLOCKED로 유지한다.
+현재까지 확보된 REAL_VTS는 2026-09-28 → 2026-09-29 → 이후 거래일의 연속 stream으로 계속 누적하며, 새 거래일을 기존 검증범위와 교체하지 않는다.
