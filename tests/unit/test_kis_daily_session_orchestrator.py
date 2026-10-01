@@ -58,9 +58,10 @@ def test_same_date_restart_preserves_existing_store_and_uses_date_loader(tmp_pat
 
 def test_session_boundaries_are_deterministic():
     orchestrator = DailySessionOrchestrator(Path("data"), Calendar({date(2026, 9, 22)}))
-    assert orchestrator.is_before_open(datetime(2026, 9, 22, 8, 29, 59, tzinfo=orchestrator.kst))
-    assert not orchestrator.is_before_open(datetime(2026, 9, 22, 8, 30, tzinfo=orchestrator.kst))
-    assert orchestrator.is_after_close(datetime(2026, 9, 22, 16, 0, tzinfo=orchestrator.kst))
+    assert orchestrator.is_before_open(datetime(2026, 9, 22, 8, 28, 59, tzinfo=orchestrator.kst))
+    assert not orchestrator.is_before_open(datetime(2026, 9, 22, 8, 29, tzinfo=orchestrator.kst))
+    assert not orchestrator.is_after_close(datetime(2026, 9, 22, 16, 0, tzinfo=orchestrator.kst))
+    assert orchestrator.is_after_close(datetime(2026, 9, 22, 16, 1, tzinfo=orchestrator.kst))
 
 
 def test_manifest_round_trip_preserves_status_and_counts(tmp_path):
@@ -86,6 +87,18 @@ def test_unknown_calendar_still_allows_read_only_rest_path(tmp_path):
     manifest = orchestrator.prepare_day(date(2026, 9, 22), run_id="run-unknown")
     assert manifest.session_status == TradingDayStatus.UNKNOWN
     assert orchestrator.rest_collector is not None
+
+
+def test_finalize_reconciles_websocket_raw_evidence(tmp_path):
+    orchestrator = DailySessionOrchestrator(tmp_path, Calendar({date(2026, 9, 22)}))
+    manifest = orchestrator.prepare_day(date(2026, 9, 22), run_id="run-ws")
+    raw = tmp_path / "2026-09-22" / "kis_vts_websocket_raw.jsonl"
+    raw.write_text('{"tr_id":"H0IOCNT0"}\n{"tr_id":"H0IOASP0"}\n', encoding="utf-8")
+    orchestrator.finalize(manifest, end_reason="SESSION_END")
+    saved = DateSessionManifest.read(tmp_path / "2026-09-22" / "manifest.json")
+    assert saved.collectors["websocket"]["status"] == "RECEIVED_WITH_EVIDENCE"
+    assert saved.collectors["websocket"]["evidence_record_count"] == 2
+    assert saved.collectors["websocket"]["evidence_files"] == ["kis_vts_websocket_raw.jsonl"]
 
 
 def test_finalize_records_file_hashes_and_end_reason(tmp_path):
@@ -146,3 +159,9 @@ def test_calendar_cases_include_chuseok_and_midnight_transition(tmp_path):
     assert orchestrator.classify(date(2026, 9, 23)) == TradingDayStatus.TRADING
     assert orchestrator.classify(date(2026, 9, 27)) == TradingDayStatus.NO_TRADING_SESSION
     assert orchestrator.day_dir(date(2026, 9, 22)) != orchestrator.day_dir(date(2026, 9, 23))
+
+
+def test_market_data_root_can_be_selected_by_environment(monkeypatch):
+    import infrastructure.kis.kis_vts_weekday_collector as module
+    monkeypatch.setenv("PROJECT200_MARKET_DATA_DIR", "kis_market_data_restart")
+    assert module.market_data_root_from_env() == module.ROOT / "data" / "kis_market_data_restart"

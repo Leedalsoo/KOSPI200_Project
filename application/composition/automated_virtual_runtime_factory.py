@@ -18,13 +18,18 @@ from contracts.types import OptionInstrumentIdentity
 from infrastructure.kis.track2_option_iv_source import KISTrack2OptionIVSource
 from infrastructure.kis.track9_iv_observation_history_store import KISTrack9IVObservationHistoryStore
 from infrastructure.kis.track9_atm_iv_source import KISTrack9ATMIVSource
+from infrastructure.kis.auth import KISAuthManager
+from infrastructure.kis.kis_kospi200_daily_source import KISKOSPI200DailySource
+from infrastructure.kis.track6_atm_volatility_source import KISTrack6ATMVolatilitySource
 from contracts.track9_iv_event_materializer import Track9IVEventMaterializer
 from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
 from environments.virtual.account.track9_margin_read_model import VSSFTrack9MarginReadModel
+from environments.virtual.authoritative_vssf.track9_position_execution_read_model import VirtualTrack9PositionExecutionReadModel
 from application.strategy_hub.hub import StrategyHub
 from application.composition.track2_execution_plan_adapter import Track2ExecutionPlanAdapter
 from application.composition.market_calendar_hub import MarketCalendarHub
 from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
+from application.composition.execution_multi_leg_resolver_registry import ExecutionMultiLegResolverRegistry
 from contracts.types import MultiLegExecutionPlan
 from contracts.futures_contract_master import KisCurrentFuturesContractSource, parse_kis_futures_contracts
 from contracts.futures_contract_spec import FuturesProductType
@@ -37,7 +42,7 @@ from contracts.risk_guard import RiskGuardStatusSource
 from core.strategy.standard_registry import STANDARD_STRATEGY_KEYS, build_standard_strategy_registry
 
 
-def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=None, strategy_keys=None, track9_iv_history_path=None, run_id=None, historical_observation_option_source=None, risk_guard_status_source: RiskGuardStatusSource | None = None, market_calendar_hub=None):
+def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=None, strategy_keys=None, track9_iv_history_path=None, run_id=None, historical_observation_option_source=None, risk_guard_status_source: RiskGuardStatusSource | None = None, synthetic_runtime_sources=None, track4_greeks_provider=None, market_calendar_hub=None):
     """Attach all nine Standard strategies to the RuntimeController-owned VMS."""
     selected_keys = tuple(strategy_keys) if strategy_keys else STANDARD_STRATEGY_KEYS
     registry = build_standard_strategy_registry()
@@ -53,21 +58,31 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         if track9_iv_history_source is not None else None
     )
     track9_iv_event_materializer = Track9IVEventMaterializer() if track9_atm_iv_source is not None else None
+    kospi200_daily_source = KISKOSPI200DailySource(KISAuthManager.from_env(is_vts=True))
+    track6_volatility_source = None
+    if synthetic_runtime_sources is None:
+        track6_volatility_source = KISTrack6ATMVolatilitySource(
+            option_master=bootstrap.bundle.option_master,
+            option_iv_source=track2_option_iv_source,
+        )
     vssf_runtime = bootstrap.bundle.execution._authoritative_execute.__self__.vssf_runtime
     if track3_runtime_input_source is not None:
         track3_source = track3_runtime_input_source
-    else:
+    elif synthetic_runtime_sources is not None:
         track3_source = VirtualTrack3RuntimeInputSource(
             bootstrap.bundle.market,
             bootstrap.bundle.account,
             vssf_runtime,
             bootstrap.bundle.option_master,
         )
+    else:
+        track3_source = KISTrack3RuntimeInputSource()
     fee_ledger = VirtualTrack9FeeLedger()
     margin_read_model = VSSFTrack9MarginReadModel(bootstrap.bundle.account)
     run_id = run_id or getattr(getattr(bootstrap, "run_context", None), "run_id", "")
     market_calendar_hub = market_calendar_hub or MarketCalendarHub(
         getattr(bootstrap.bundle.option_master, "calendar", None)
+        or getattr(synthetic_runtime_sources, "calendar", None)
     )
     provider = StandardRuntimeInputProvider(
         bootstrap.bundle.market,
@@ -77,17 +92,28 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         option_expiry_source=expiry_source,
         trading_calendar=market_calendar_hub,
         option_master=bootstrap.bundle.option_master,
-        track2_option_iv_source=track2_option_iv_source,
-        option_orderbook_source=historical_observation_option_source,
+        track2_option_iv_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else track2_option_iv_source),
+        track4_greeks_provider=track4_greeks_provider,
+        option_orderbook_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else historical_observation_option_source),
+        volume_profile_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else None),
+        basis_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else None),
+        track2_metrics_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else None),
         track9_iv_event_materializer=track9_iv_event_materializer,
         track9_atm_iv_source=track9_atm_iv_source,
-        track7_order_timeout_source=getattr(bootstrap.bundle, "track7_order_timeout_source", None),
-        track7_support_resistance_source=getattr(bootstrap.bundle, "track7_support_resistance_source", None),
+        track7_order_timeout_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else getattr(bootstrap.bundle, "track7_order_timeout_source", None)),
+        track7_support_resistance_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else getattr(bootstrap.bundle, "track7_support_resistance_source", None)),
+        risk_guard_status_source=(risk_guard_status_source if risk_guard_status_source is not None else synthetic_runtime_sources),
         track3_runtime_input_source=track3_source,
         track6_option_contract_source=Track6OptionContractSource(bootstrap.bundle.option_master),
         track7_option_contract_source=Track7OptionContractSource(bootstrap.bundle.option_master),
         track8_option_contract_source=Track8OptionContractSource(bootstrap.bundle.option_master),
+        kospi200_daily_source=kospi200_daily_source,
+        track6_volatility_source=track6_volatility_source,
     )
+    if synthetic_runtime_sources is not None:
+        provider.track9_event_source = synthetic_runtime_sources
+        from environments.high_speed.synthetic_runtime_sources import SyntheticEventRiskSource
+        provider.track9_event_risk_source = SyntheticEventRiskSource(synthetic_runtime_sources)
 
     def identity(evaluation, tick):
         proposal = evaluation.result.execution_proposal
@@ -107,7 +133,7 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         if identity.contract_multiplier is None:
             raise ValueError("VIRTUAL_AUTHORITATIVE_OPTION_MULTIPLIER_REQUIRED")
         return OptionInstrumentIdentity(
-            instrument_id=identity.shrn_iscd,
+            instrument_id=(identity.stnd_iscd or identity.shrn_iscd),
             symbol=identity.shrn_iscd,
             expiry=identity.expiry.replace("-", "")[:6],
             option_type=identity.option_type,
@@ -117,8 +143,11 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         )
 
     def context_builder(tick, state):
+        observed_at = datetime.fromisoformat(tick.timestamp)
         if historical_observation_option_source is not None:
-            historical_observation_option_source.set_as_of(datetime.fromisoformat(tick.timestamp))
+            historical_observation_option_source.set_as_of(observed_at)
+        if synthetic_runtime_sources is not None:
+            synthetic_runtime_sources.set_tick(tick)
         return provider.build(tick, state, bootstrap.bundle.account)
 
     track2_plan_adapter = Track2ExecutionPlanAdapter()
@@ -141,8 +170,9 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         run_id=run_id,
         option_master=bootstrap.bundle.option_master,
         futures_identity_source=futures_identity_source,
-        risk_guard_status_source=risk_guard_status_source,
+        risk_guard_status_source=(risk_guard_status_source or synthetic_runtime_sources),
     )
+    provider.track9_position_execution_source = VirtualTrack9PositionExecutionReadModel(multi_leg_bridge)
 
     def track1_fence_type_source():
         strategy = registry.get("TRACK1_TAIL_DEFENSE", "1.1.0")
@@ -156,58 +186,71 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
     provider.track1_position_lot_store = multi_leg_bridge.position_lot_store
     provider.track1_option_delta_source = historical_observation_option_source
 
+    execution_resolvers = ExecutionMultiLegResolverRegistry()
+
+    def resolve_track2(evaluation, canonical):
+        analytics = evaluation.context.analytics
+        if analytics is None:
+            raise ValueError("TRACK2_MULTI_LEG_ANALYTICS_REQUIRED")
+        active = analytics.get("volatility.active")
+        base = analytics.get("volatility.base")
+        if active is None or base is None or getattr(active, "value", None) is None or getattr(base, "value", None) is None:
+            raise ValueError("TRACK2_MULTI_LEG_VOLATILITY_REQUIRED")
+        market_state = evaluation.context.market_state
+        if market_state is None or "KOSPI200" not in market_state.ticks:
+            raise ValueError("TRACK2_UNDERLYING_PRICE_REQUIRED")
+        underlying = Decimal(str(market_state.ticks["KOSPI200"].price))
+        expiry = track2_option_contract_source.nearest_expiry(as_of=market_state.as_of.date())
+        selection = track2_option_contract_source.select(expiry=expiry, current_price=underlying)
+        group_id = f"{run_id}-{canonical.signal_id}"
+        return track2_plan_adapter.build_plan(
+            approved_signal=canonical,
+            strategy=registry.get("track2_asymmetric_trap", "1.0"),
+            current_atm=selection.atm_strike,
+            active_vol=float(active.value), base_vol=float(base.value), group_id=group_id,
+        )
+
+    def resolve_track3(evaluation, canonical):
+        if futures_identity_source is None:
+            raise ValueError("TRACK3_HEDGE_IDENTITY_SOURCE_REQUIRED")
+        group_id = f"{run_id}-{canonical.signal_id}"
+        return track3_plan_adapter.build_plan(
+            strategy_id="Strategy_3_StatArb", group_id=group_id,
+            side=canonical.side.value, quantity=canonical.qty,
+            identity=futures_identity_source.current_identity(),
+            hedge_identity_source=Track3HedgeIdentitySource(futures_identity_source),
+        )
+
+    def resolve_track6(evaluation, canonical):
+        if str(getattr(evaluation.result, "direction", "")) != "BUY_INSURANCE":
+            return None
+        return registry.get("track6_daily_tail_insurance", "1.0").build_execution_plan(
+            f"{run_id}-{canonical.signal_id}"
+        )
+
+    def resolve_track7(evaluation, canonical):
+        proposal = evaluation.result.execution_proposal
+        if proposal is None:
+            raise ValueError("TRACK7_EXECUTION_PROPOSAL_REQUIRED")
+        strategy = registry.get("track7_volatility_skew_weekly_insurance", "1.0")
+        if not isinstance(strategy, Track7VolatilitySkewWeeklyInsurance):
+            raise ValueError("TRACK7_STRATEGY_REGISTRY_TYPE_REQUIRED")
+        return strategy.build_execution_plan(f"{run_id}-{canonical.signal_id}", proposal=proposal)
+
+    def resolve_track8(evaluation, canonical):
+        return registry.get("track8_macro_regime_monthly_strangle", "2.0").build_execution_plan(
+            f"{run_id}-{canonical.signal_id}"
+        )
+
+    execution_resolvers.register("track2_asymmetric_trap", resolve_track2)
+    execution_resolvers.register("Strategy_3_StatArb", resolve_track3)
+    execution_resolvers.register("track6_daily_tail_insurance", resolve_track6)
+    execution_resolvers.register("track7_volatility_skew_weekly_insurance", resolve_track7)
+    execution_resolvers.register("track8_macro_regime_monthly_strangle", resolve_track8)
+
     def multi_leg_plan_resolver(evaluation, canonical):
         strategy_id = str(getattr(evaluation.context, "strategy_id", "") or "")
-        group_id = f"{run_id}-{canonical.signal_id}"
-        if strategy_id == "track2_asymmetric_trap":
-            analytics = evaluation.context.analytics
-            if analytics is None:
-                raise ValueError("TRACK2_MULTI_LEG_ANALYTICS_REQUIRED")
-            active = analytics.get("volatility.active")
-            base = analytics.get("volatility.base")
-            if active is None or base is None or getattr(active, "value", None) is None or getattr(base, "value", None) is None:
-                raise ValueError("TRACK2_MULTI_LEG_VOLATILITY_REQUIRED")
-            market_state = evaluation.context.market_state
-            if market_state is None or "KOSPI200" not in market_state.ticks:
-                raise ValueError("TRACK2_UNDERLYING_PRICE_REQUIRED")
-            underlying = Decimal(str(market_state.ticks["KOSPI200"].price))
-            expiry = track2_option_contract_source.nearest_expiry(as_of=market_state.as_of.date())
-            selection = track2_option_contract_source.select(
-                expiry=expiry, current_price=underlying
-            )
-            return track2_plan_adapter.build_plan(
-                approved_signal=canonical,
-                strategy=registry.get(strategy_id, "1.0"),
-                current_atm=selection.atm_strike,
-                active_vol=float(active.value),
-                base_vol=float(base.value),
-                group_id=group_id,
-            )
-        if strategy_id == "Strategy_3_StatArb":
-            if futures_identity_source is None:
-                raise ValueError("TRACK3_HEDGE_IDENTITY_SOURCE_REQUIRED")
-            identity = futures_identity_source.current_identity()
-            return track3_plan_adapter.build_plan(
-                strategy_id=strategy_id,
-                group_id=group_id,
-                side=canonical.side.value,
-                quantity=canonical.qty,
-                identity=identity,
-                hedge_identity_source=Track3HedgeIdentitySource(futures_identity_source),
-            )
-        if strategy_id == "track6_daily_tail_insurance":
-            return registry.get(strategy_id, "1.0").build_execution_plan(group_id)
-        if strategy_id == "track7_volatility_skew_weekly_insurance":
-            proposal = evaluation.result.execution_proposal
-            if proposal is None:
-                raise ValueError("TRACK7_EXECUTION_PROPOSAL_REQUIRED")
-            strategy = registry.get(strategy_id, "1.0")
-            if not isinstance(strategy, Track7VolatilitySkewWeeklyInsurance):
-                raise ValueError("TRACK7_STRATEGY_REGISTRY_TYPE_REQUIRED")
-            return strategy.build_execution_plan(group_id, proposal=proposal)
-        if strategy_id == "track8_macro_regime_monthly_strangle":
-            return registry.get(strategy_id, "2.0").build_execution_plan(group_id)
-        return None
+        return execution_resolvers.resolve(strategy_id, evaluation, canonical)
 
     loop = AutomatedVirtualTradingLoop(
         bundle=bootstrap.bundle,
@@ -218,7 +261,7 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         identity_provider=identity,
         multi_leg_plan_resolver=multi_leg_plan_resolver,
         multi_leg_executor=multi_leg_bridge.execute,
-        risk_guard_status_source=risk_guard_status_source,
+        risk_guard_status_source=(risk_guard_status_source or synthetic_runtime_sources),
     )
     bootstrap.bundle.market.subscribe(loop.on_tick)
     return loop

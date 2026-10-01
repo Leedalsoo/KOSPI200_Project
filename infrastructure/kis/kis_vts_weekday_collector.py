@@ -406,7 +406,28 @@ class DailySessionOrchestrator:
             manifest.counts[status] = manifest.counts.get(status, 0) + 1
         manifest.collectors["rest"] = {"status": "RUNNING", "last_result_count": len(results)}
 
+    def _reconcile_websocket_evidence(self, manifest: DateSessionManifest) -> None:
+        day_dir = self.day_dir(date.fromisoformat(manifest.trading_date))
+        evidence = sorted(day_dir.glob("kis_vts_websocket*.jsonl"))
+        evidence = [path for path in evidence if path.is_file() and path.stat().st_size > 0]
+        websocket = dict(manifest.collectors.get("websocket", {}))
+        if evidence:
+            total_lines = 0
+            for path in evidence:
+                with path.open("r", encoding="utf-8") as handle:
+                    total_lines += sum(1 for _ in handle)
+            websocket.update({
+                "status": "RECEIVED_WITH_EVIDENCE",
+                "evidence_files": [str(path.relative_to(day_dir)) for path in evidence],
+                "evidence_record_count": total_lines,
+                "evidence_reconciled_at": datetime.now(KST).isoformat(),
+            })
+        elif websocket.get("status") == "NOT_STARTED":
+            websocket.setdefault("reason", "NO_WEBSOCKET_RAW_EVIDENCE")
+        manifest.collectors["websocket"] = websocket
+
     def finalize(self, manifest: DateSessionManifest, *, end_reason: str) -> None:
+        self._reconcile_websocket_evidence(manifest)
         manifest.ended_at = datetime.now(KST).isoformat()
         manifest.end_reason = end_reason
         day_dir = self.market_data_root / manifest.trading_date
@@ -419,7 +440,7 @@ class DailySessionOrchestrator:
         self._write_status(manifest_day := date.fromisoformat(manifest.trading_date), manifest)
 
 
-DEFAULT_MARKET_DATA_DIR = "kis_market_data"
+DEFAULT_MARKET_DATA_DIR = "kis_market_data_restart"
 
 
 def market_data_root_from_env() -> Path:
@@ -482,7 +503,6 @@ def build_plan_for_day(day: date) -> CollectionPlan:
             option_master_paths=monthly_paths,
             weekly_master_paths=weekly_paths,
             standard_futures_symbol="A01609", mini_futures_symbol="A05609", as_of=day,
-            include_weekly=False,
         )
     except ValueError as exc:
         if str(exc) != "NO_LISTED_OPTION_EXPIRY_AVAILABLE":

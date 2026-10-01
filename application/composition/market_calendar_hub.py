@@ -38,7 +38,8 @@ class MarketCalendarHub:
             is_trading = self._calendar.is_trading_day(observed_date)
             previous = self._calendar.prev_trading_day(observed_date)
             next_day = self._next_trading_day(observed_date)
-            resolution = self._calendar.holiday_resolution(observed_date.year)
+            resolver = getattr(self._calendar, "holiday_resolution", None)
+            resolution = resolver(observed_date.year) if callable(resolver) else None
         except Exception as exc:
             return MarketCalendarSnapshot(
                 observed_date=observed_date,
@@ -81,6 +82,32 @@ class MarketCalendarHub:
         raise RuntimeError("MARKET_CALENDAR_NEXT_TRADING_DAY_UNAVAILABLE")
 
     # Compatibility surface: consumers can migrate without owning calendar logic.
+    def resolve_option_expiry(self, tick: Any, option_master: Any | None = None) -> date | None:
+        master = option_master or self._calendar
+        if master is None or not hasattr(master, "find_contract_identity"):
+            return None
+        identity = master.find_contract_identity(
+            str(getattr(tick, "expiry", "")),
+            str(getattr(tick, "option_type", "")),
+            getattr(tick, "strike_price", None),
+        )
+        if identity is None or not getattr(identity, "expiry", None):
+            return None
+        try:
+            return date.fromisoformat(str(identity.expiry))
+        except ValueError as exc:
+            raise ValueError("MARKET_CALENDAR_AUTHORITATIVE_OPTION_EXPIRY_INVALID") from exc
+
+    def flags(self, observed_date: date, expiry: date | None = None) -> tuple[bool, bool, bool]:
+        snapshot = self.snapshot(observed_date, expiry=expiry)
+        if not snapshot.available:
+            raise ValueError("MARKET_CALENDAR_SNAPSHOT_UNAVAILABLE")
+        return (
+            snapshot.is_new_week_start is True,
+            snapshot.is_expiry_day is True,
+            snapshot.is_week_end is True,
+        )
+
     def is_trading_day(self, value: date) -> bool:
         return self.snapshot(value).is_trading_day is True
 

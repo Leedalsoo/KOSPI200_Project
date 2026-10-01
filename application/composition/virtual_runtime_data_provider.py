@@ -12,7 +12,9 @@ from contracts.basis_source import BasisSource
 from contracts.track2_market_metrics_source import Track2MarketMetricsSource
 from contracts.track2_option_iv_source import Track2OptionIVSource
 from contracts.track9_iv_event_materializer import Track9IVEventMaterializer, Track9ATMIVSource
-from application.composition.track7_calendar_source import Track7CalendarSource
+from contracts.kis_kospi200_daily_source import KOSPI200DailySource
+from contracts.track6_volatility_source import Track6VolatilitySource
+from application.composition.market_calendar_hub import MarketCalendarHub
 from application.composition.track7_support_resistance_source import Track7AuthoritativeSupportResistanceSource
 
 @dataclass(frozen=True)
@@ -63,12 +65,17 @@ class VirtualRuntimeData:
 
 class VirtualRuntimeDataProvider:
     """Derive only from VMS observations and injected authoritative sources."""
-    def __init__(self, market: Any, *, history_size: int = 50, option_expiry_source: Any | None = None, track7_order_timeout_source: Any | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, track7_support_resistance_source: Track7AuthoritativeSupportResistanceSource | None = None) -> None:
+    def __init__(self, market: Any, *, history_size: int = 50, option_expiry_source: Any | None = None, track7_order_timeout_source: Any | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, track7_support_resistance_source: Track7AuthoritativeSupportResistanceSource | None = None, track4_greeks_provider: Any | None = None, kospi200_daily_source: KOSPI200DailySource | None = None, track6_volatility_source: Track6VolatilitySource | None = None) -> None:
         self.market = market
         self.history_size = history_size
         self.option_expiry_source = option_expiry_source
         self.track7_order_timeout_source = track7_order_timeout_source
-        self.trading_calendar = Track7CalendarSource(trading_calendar, option_master) if trading_calendar is not None else None
+        self.trading_calendar = (
+            trading_calendar
+            if isinstance(trading_calendar, MarketCalendarHub)
+            else MarketCalendarHub(trading_calendar) if trading_calendar is not None else None
+        )
+        self.option_master = option_master
         self.option_orderbook_source = option_orderbook_source
         self.volume_profile_source = volume_profile_source
         self.basis_source = basis_source
@@ -76,6 +83,9 @@ class VirtualRuntimeDataProvider:
         self.track2_option_iv_source = track2_option_iv_source
         self.track9_iv_event_materializer = track9_iv_event_materializer
         self.track9_atm_iv_source = track9_atm_iv_source
+        self.track4_greeks_provider = track4_greeks_provider
+        self.kospi200_daily_source = kospi200_daily_source
+        self.track6_volatility_source = track6_volatility_source
         self.track7_support_resistance_source = track7_support_resistance_source
 
     @staticmethod
@@ -133,6 +143,16 @@ class VirtualRuntimeDataProvider:
         low = min(prices)
         open_price = prices[0]
         previous_close = prices[-2] if len(prices) >= 2 else prices[0]
+        daily_context = None
+        daily_error = None
+        if self.kospi200_daily_source is not None and str(getattr(tick, "underlying_symbol", "") or "KOSPI200") == "KOSPI200":
+            try:
+                daily_context = self.kospi200_daily_source.get_context(observed_at.date())
+            except Exception as exc:
+                daily_error = str(exc)
+            if daily_context is not None:
+                open_price = daily_context.open_price
+                previous_close = daily_context.previous_close
         returns = tuple(abs(prices[i] / prices[i - 1] - 1) for i in range(1, len(prices)) if prices[i - 1])
         active_vol = (sum(returns, Decimal("0")) / Decimal(len(returns))) if returns else None
         base_vol = active_vol
@@ -152,7 +172,18 @@ class VirtualRuntimeDataProvider:
                 iv, put_iv = current_iv, opposite_iv
             else:
                 put_iv, iv = current_iv, opposite_iv
-        delta = gamma = None
+        # Replay carries authoritative per-option analytics from MarketObservation.
+        delta = getattr(tick, 'delta', None)
+        gamma = getattr(tick, 'gamma', None)
+        if delta is None and gamma is None and self.track4_greeks_provider is not None:
+            snapshot = getattr(self.track4_greeks_provider, "snapshot", None)
+            if snapshot is not None and getattr(snapshot, "observed_at", "") == observed_at.isoformat():
+                delta = self.track4_greeks_provider.current_delta()
+                gamma = self.track4_greeks_provider.current_gamma()
+        # Strategy 5 active volatility uses authoritative KIS ATM CALL/PUT IV.
+        # KIS reports IV in percentage points; Common Analytics consumes decimal form.
+        # Missing H0IOCNT0 evidence remains unavailable and never falls back to scenario volatility.
+        authoritative_active_vol = None
         iv_spike = iv_crush = None
         if (self.track9_iv_event_materializer is not None and self.track9_atm_iv_source is not None
                 and getattr(tick, "symbol", None) and getattr(tick, "expiry", None)):
@@ -165,12 +196,42 @@ class VirtualRuntimeDataProvider:
                 source=self.track9_atm_iv_source,
             )
             iv_spike, iv_crush = event_values.iv_spike, event_values.iv_crush
-        if iv is not None:
-            s, k, sigma = float(price), float(tick.strike_price), float(iv)
-            t = max(1.0 / 365.0, (datetime.strptime(str(tick.expiry).replace("-", "")[:6], "%Y%m").replace(tzinfo=observed_at.tzinfo) - observed_at.replace(day=1)).total_seconds() / 31536000.0)
-            d1 = (log(s / k) + 0.5 * sigma * sigma * t) / (sigma * sqrt(t))
-            delta = Decimal(str(round(self._norm_cdf(d1), 8)))
-            gamma = Decimal(str(round(exp(-0.5 * d1 * d1) / sqrt(2 * 3.141592653589793) / (s * sigma * sqrt(t)), 8)))
+            if event_values.current_iv is not None and event_values.current_iv > 0:
+                authoritative_active_vol = event_values.current_iv / Decimal("100")
+        elif (self.track9_atm_iv_source is not None
+                and getattr(tick, "symbol", None) and getattr(tick, "expiry", None)):
+            atm_snapshot = self.track9_atm_iv_source.snapshot(
+                symbol=tick.symbol,
+                expiry=tick.expiry,
+                current_price=Decimal(str(tick.underlying_price)),
+                observed_at=observed_at,
+            )
+            if atm_snapshot is not None and atm_snapshot.call_iv > 0 and atm_snapshot.put_iv > 0:
+                authoritative_active_vol = (atm_snapshot.call_iv + atm_snapshot.put_iv) / Decimal("2") / Decimal("100")
+        if authoritative_active_vol is not None:
+            active_vol = authoritative_active_vol
+            base_vol = authoritative_active_vol
+
+        track6_active_vol = None
+        track6_base_vol = None
+        track6_vol_status = RuntimeDataStatus(False, False, "KIS:ATM_IV", "TRACK6_VOLATILITY_UNAVAILABLE")
+        if (
+            self.track6_volatility_source is not None
+            and getattr(tick, "expiry", None)
+            and getattr(tick, "underlying_price", None) is not None
+        ):
+            snapshot = self.track6_volatility_source.snapshot(
+                expiry=tick.expiry,
+                current_price=Decimal(str(tick.underlying_price)),
+                observed_at=observed_at,
+            )
+            if snapshot is not None:
+                track6_active_vol = snapshot.active_vol
+                track6_base_vol = snapshot.base_vol
+                track6_vol_status = RuntimeDataStatus(
+                    True, True, snapshot.source
+                )
+
         scenario = self.market.scenario.active_config()
         base_volatility = float(scenario.get("base_volatility", 1.0))
         macro_regime = "HIGH_VOL" if base_volatility >= 2.0 else "NORMAL"
@@ -197,7 +258,7 @@ class VirtualRuntimeDataProvider:
             option_expiry = self.option_expiry_source.resolve_expiry(tick.symbol)
         if option_expiry is None and self.trading_calendar is not None:
             try:
-                option_expiry = self.trading_calendar.resolve_option_expiry(tick)
+                option_expiry = self.trading_calendar.resolve_option_expiry(tick, self.option_master)
             except (ValueError, TypeError):
                 option_expiry = None
         if option_expiry is not None:
@@ -266,6 +327,7 @@ class VirtualRuntimeDataProvider:
         status = {
             "tick": RuntimeDataStatus(True, True, "VMS.recent_ticks"),
             "ohlc_history": RuntimeDataStatus(len(prices) >= 1, True, "VMS.recent_ticks"),
+            "kospi200_daily": RuntimeDataStatus(daily_context is not None, daily_context is not None, getattr(daily_context, "source", "KIS:FHPUP02120000:2001"), daily_error or ("KOSPI200_DAILY_SOURCE_UNAVAILABLE" if daily_context is None else None)),
             "track7_moving_average": RuntimeDataStatus(
                 moving_average_available,
                 moving_average_available,
@@ -283,12 +345,13 @@ class VirtualRuntimeDataProvider:
             "volume_profile_poc": poc_status,
             "basis": basis_status,
             "track2_bbw_volume": metrics_status,
+            "track6_volatility": track6_vol_status,
         }
         return VirtualRuntimeData(
             as_of=observed_at, price=price, prices=prices, open_price=open_price,
             high_price=high, low_price=low, previous_close=previous_close,
-            active_vol=metrics_active_vol if metrics_active_vol is not None else active_vol,
-            base_vol=metrics_base_vol if metrics_base_vol is not None else base_vol,
+            active_vol=track6_active_vol if track6_active_vol is not None else (metrics_active_vol if metrics_active_vol is not None else active_vol),
+            base_vol=track6_base_vol if track6_base_vol is not None else (metrics_base_vol if metrics_base_vol is not None else base_vol),
             option_iv=iv, put_iv=put_iv, option_delta=delta, option_gamma=gamma,
             iv_spike=iv_spike, iv_crush=iv_crush,
             macro_regime=macro_regime, event_upcoming=event_upcoming, status=status,
@@ -300,5 +363,3 @@ class VirtualRuntimeDataProvider:
             order_timeout=order_timeout,
             support=support, resistance=resistance,
         )
-
-

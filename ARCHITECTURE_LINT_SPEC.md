@@ -1,19 +1,20 @@
-Static gate rules:
+# Architecture Lint Specification
 
-- core must not import application/environments/infrastructure/interfaces
+Project200 executable dependency baseline.
 
-- strategy must not import broker/UI implementations
+## Layer rules
 
-- contracts must not import concrete environment implementations
+- `contracts/` may depend only on the Python standard library and other `contracts/` modules.
+- `core/` may depend on `contracts/` and other `core/` modules, but not `application/`, `infrastructure/`, or `interfaces/`.
+- `core/strategy/` follows the same rule; strategies must not import adapters or orchestration layers.
+- `application/` may compose `contracts/`, `core/`, `infrastructure/`, and approved interfaces, but strategy logic remains in `core/strategy/`.
+- `infrastructure/` must not import `application/` orchestration modules.
 
-- interfaces must not import concrete broker/VMS/VSSF/KIS modules
+## Runtime boundary rules
 
-- legacy paths are forbidden from new runtime imports
+- Strategy-specific execution/multi-leg resolution is supplied through `ExecutionMultiLegResolverRegistry` rather than a central strategy-id if/elif chain.
+- Calendar facts are supplied through `MarketCalendarHub` / `MarketCalendarSnapshot`; strategy-specific calendar sources must not recalculate the same trading-day boundaries in the standard runtime path.
 
-Implementation approach:
+## Collector evidence rule
 
-AST import scanner in tests/architecture/test_dependency_rules.py.
-
-Forbidden imports fail CI.
-
-This is a design gate specification; execution requires the physical Python workspace.
+A daily collector manifest may not claim `websocket=NOT_STARTED` when a non-empty `kis_vts_websocket*.jsonl` raw evidence file exists in the same date partition. Finalization must reconcile manifest state with filesystem evidence.

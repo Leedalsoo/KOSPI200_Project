@@ -48,7 +48,7 @@ class HighSpeedReplayRunner:
                     if not line.strip():
                         continue
                     record = json.loads(line)
-                    if record.get("provenance") != "SYNTHETIC":
+                    if record.get("provenance") not in {"SYNTHETIC", "DERIVED_SCENARIO"}:
                         raise ValueError("SYNTHETIC_DATASET_PROVENANCE_REQUIRED")
                     if record.get("schema") != "reference-canonical-market-tick-v1":
                         raise ValueError("UNSUPPORTED_SYNTHETIC_DATASET_SCHEMA")

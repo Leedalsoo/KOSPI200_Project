@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Callable, Sequence
+from typing import Any, Callable, Sequence
 
 from .track4_kis_greeks_provider import Track4KisGreeksProvider
 from .track4_attribution_provider import Track4AttributionProvider
-
-from core.sensor.market_condition_sensor import MarketConditionSnapshot
 
 from .track4_runtime_input_provider import (
     Track4InputSourceUnavailable,
@@ -20,7 +18,7 @@ class Track4MarketProjectionProvider(Track4RuntimeInputProvider):
 
     def __init__(
         self,
-        snapshot_supplier: Callable[[], MarketConditionSnapshot | None],
+        snapshot_supplier: Callable[[], Any | None],
         price_history_supplier: Callable[[str], Sequence[float]] | None = None,
         greeks_provider: Track4KisGreeksProvider | None = None,
         attribution_provider: Track4AttributionProvider | None = None,
@@ -30,7 +28,7 @@ class Track4MarketProjectionProvider(Track4RuntimeInputProvider):
         self._greeks_provider = greeks_provider
         self._attribution_provider = attribution_provider
 
-    def _snapshot(self) -> MarketConditionSnapshot:
+    def _snapshot(self) -> Any:
         snapshot = self._snapshot_supplier()
         if snapshot is None:
             raise Track4InputSourceUnavailable("market condition snapshot is unavailable")

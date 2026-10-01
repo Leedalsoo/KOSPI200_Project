@@ -1,9 +1,9 @@
 """Authoritative KIS FUTURES execution/Risk symbol projection."""
 from __future__ import annotations
 
+from typing import Any
+
 from contracts.futures_contract_master import KisCurrentFuturesContractSource
-from application.composition.futures_contract_target_resolver import resolve_current_futures_contract
-from application.composition.futures_target_configuration import FuturesTargetConfiguration
 
 
 class FuturesExecutionSymbolSourceError(ValueError):
@@ -16,16 +16,17 @@ class KisFuturesExecutionSymbolSource:
     def __init__(
         self,
         source: KisCurrentFuturesContractSource,
-        target: FuturesTargetConfiguration,
+        target: Any,
     ) -> None:
         self._source = source
         self._target = target
 
     def current_symbol(self) -> str:
-        contract = resolve_current_futures_contract(
-            source=self._source,
-            target=self._target,
-        )
+        if self._source is None:
+            raise FuturesExecutionSymbolSourceError("FUTURES_CONTRACT_SOURCE_REQUIRED")
+        if self._target is None or not hasattr(self._target, "selector_kwargs"):
+            raise FuturesExecutionSymbolSourceError("FUTURES_TARGET_CONFIGURATION_REQUIRED")
+        contract = self._source.with_target(**self._target.selector_kwargs()).current_contract()
         symbol = contract.shrn_iscd.strip()
         if not symbol:
             raise FuturesExecutionSymbolSourceError("FUTURES_EXECUTION_SYMBOL_REQUIRED")

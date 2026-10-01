@@ -10,6 +10,7 @@ from decimal import Decimal
 from typing import Any
 
 from application.composition.virtual_runtime_data_provider import VirtualRuntimeDataProvider
+from application.composition.common_runtime_input_assembler import CommonRuntimeInputAssembler
 from core.domain.market_models import MarketState
 from core.strategy.contracts import CommonStrategyInput, StrategyContext, StrategyInput, UnavailableStrategyPayload
 from core.strategy.track1_tail_defense import Track1Input
@@ -30,9 +31,13 @@ from contracts.volume_profile_source import VolumeProfileSource
 from contracts.basis_source import BasisSource
 from contracts.track2_market_metrics_source import Track2MarketMetricsSource
 from contracts.track2_option_iv_source import Track2OptionIVSource
+from contracts.track4_kis_greeks_provider import Track4KisGreeksProvider
 from contracts.track9_iv_event_materializer import Track9IVEventMaterializer, Track9ATMIVSource
 from contracts.track9_fee_ledger import Track9FeeLedger
 from contracts.track9_margin_read_model import Track9MarginReadModel
+from contracts.track9_authoritative_sources import Track9PositionExecutionReadModel, Track9EventSource, Track9EventRiskSource
+from contracts.kis_kospi200_daily_source import KOSPI200DailySource
+from contracts.track6_volatility_source import Track6VolatilitySource
 from application.composition.track6_option_contract_source import Track6OptionContractSource
 from application.composition.track8_option_contract_source import Track8OptionContractSource
 from application.composition.track2_analytics_provider import build_track2_analytics_snapshot
@@ -46,13 +51,19 @@ from application.composition.track8_analytics_provider import build_track8_analy
 class StandardRuntimeInputProvider:
     """Build standard inputs from observable VMS/VSSF sources only."""
 
-    def __init__(self, market: Any, *, track9_fee_ledger: Track9FeeLedger | None = None, track9_margin_read_model: Track9MarginReadModel | None = None, run_id: str | None = None, track7_order_timeout_source: Any | None = None, track7_support_resistance_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None, track6_option_contract_source: Track6OptionContractSource | None = None, track7_option_contract_source: Track7OptionContractSource | None = None, track8_option_contract_source: Track8OptionContractSource | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None) -> None:
+    def __init__(self, market: Any, *, track9_fee_ledger: Track9FeeLedger | None = None, track9_margin_read_model: Track9MarginReadModel | None = None, track9_position_execution_source: Track9PositionExecutionReadModel | None = None, track9_event_source: Track9EventSource | None = None, track9_event_risk_source: Track9EventRiskSource | None = None, run_id: str | None = None, track7_order_timeout_source: Any | None = None, track7_support_resistance_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None, track6_option_contract_source: Track6OptionContractSource | None = None, track7_option_contract_source: Track7OptionContractSource | None = None, track8_option_contract_source: Track8OptionContractSource | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None, track4_greeks_provider: Track4KisGreeksProvider | None = None, kospi200_daily_source: KOSPI200DailySource | None = None, track6_volatility_source: Track6VolatilitySource | None = None) -> None:
         self.risk_guard_status_source = risk_guard_status_source
         self.market_condition_sensor = MarketConditionSensor()
         self.track9_fee_ledger = track9_fee_ledger
         self.track9_margin_read_model = track9_margin_read_model
+        self.track9_position_execution_source = track9_position_execution_source
+        self.track9_event_source = track9_event_source
+        self.track9_event_risk_source = track9_event_risk_source
         self.run_id = run_id
         self.track9_margin_ratio = None
+        self.common_runtime_assembler = CommonRuntimeInputAssembler(
+            fee_ledger=track9_fee_ledger, run_id=run_id
+        )
         self.track7_order_timeout_source = track7_order_timeout_source
         self.track7_support_resistance_source = track7_support_resistance_source
         self.track6_option_contract_source = track6_option_contract_source
@@ -67,6 +78,9 @@ class StandardRuntimeInputProvider:
             track2_option_iv_source=track2_option_iv_source,
             track9_iv_event_materializer=track9_iv_event_materializer,
             track9_atm_iv_source=track9_atm_iv_source,
+            track4_greeks_provider=track4_greeks_provider,
+            kospi200_daily_source=kospi200_daily_source,
+            track6_volatility_source=track6_volatility_source,
         )
         self.track3 = Track3RuntimeInputProvider(track3_runtime_input_source)
         self.track1_fence_type_source = None
@@ -84,31 +98,6 @@ class StandardRuntimeInputProvider:
             ),
         )
 
-    @staticmethod
-    def _account_snapshot(account: Any | None) -> Any | None:
-        if account is None:
-            return None
-        getter = getattr(account, "snapshot", None)
-        return getter() if callable(getter) else account
-
-    def _common(self, d: Any, account: Any | None) -> CommonStrategyInput:
-        snapshot = self._account_snapshot(account)
-        balances = getattr(snapshot, "balances", {}) if snapshot is not None else {}
-        budget = balances.get("available_cash")
-        realized_pnl = balances.get("realized_pnl")
-        unrealized_pnl = balances.get("unrealized_pnl")
-        pnl = (Decimal(str(realized_pnl)) + Decimal(str(unrealized_pnl))) if realized_pnl is not None and unrealized_pnl is not None else None
-        return CommonStrategyInput(
-            as_of=d.as_of,
-            current_price=d.price,
-            active_vol=d.active_vol,
-            base_vol=d.base_vol,
-            budget=Decimal(str(budget)) if budget is not None else None,
-            current_pnl=Decimal(str(pnl)) if pnl is not None else None,
-            total_fees=(self.track9_fee_ledger.total(run_id=self.run_id) if self.track9_fee_ledger is not None and self.run_id else None),
-            time_str=d.as_of.strftime("%H:%M:%S"),
-            date_str=d.as_of.date().isoformat(),
-        )
 
     @staticmethod
     def _position_values(account: Any | None) -> tuple[int, int]:
@@ -135,7 +124,7 @@ class StandardRuntimeInputProvider:
             )
         except (KeyError, ValueError, TypeError):
             condition = None
-        common = self._common(d, account)
+        common = self.common_runtime_assembler.common_input(d, account)
         self.track9_margin_ratio = None
         if self.track9_margin_read_model is not None and self.run_id:
             snapshot = self.track9_margin_read_model.snapshot(run_id=self.run_id)
@@ -146,31 +135,12 @@ class StandardRuntimeInputProvider:
             self.risk_guard_status_source.snapshot()
             if self.risk_guard_status_source is not None else None
         )
-        common_market_snapshot = MarketSnapshot(
-            run_id=self.run_id or "virtual",
-            as_of=d.as_of,
-            provenance=AnalyticsProvenance(source="standard-runtime.common"),
-            instrument_identity=None,
-            observations={
-                "current_price": d.price,
-                "active_vol": d.active_vol,
-                "base_vol": d.base_vol,
-                "current_regime": condition.current_regime if condition is not None else None,
-                "call_iv": d.option_iv,
-                "put_iv": d.put_iv,
-                "current_pnl": common.current_pnl,
-                "total_fees": common.total_fees,
-                "margin_ratio": self.track9_margin_ratio,
-                "risk_guard_active": (
-                    risk_guard_status.admission_allowed
-                    if risk_guard_status is not None else None
-                ),
-                "risk_guard_status": risk_guard_status,
-            },
-        )
-        common_analytics = build_common_analytics_snapshot(
-            common_market_snapshot,
-            tuple(COMMON_METRIC_CONTRACTS),
+        common_analytics = self.common_runtime_assembler.analytics_snapshot(
+            d,
+            common,
+            condition=condition,
+            margin_ratio=self.track9_margin_ratio,
+            risk_guard_status=risk_guard_status,
         )
         contexts: dict[str, StrategyContext] = {}
 
@@ -289,10 +259,16 @@ class StandardRuntimeInputProvider:
                 ),
             )
 
-        # Track5 always receives the canonical AnalyticsSnapshot. Missing
-        # authoritative observations become unavailable metrics and the Strategy
-        # remains fail-closed at its feature boundary.
-        contexts["track5_gap_divergence"] = StrategyContext(
+        # Track5 requires the authoritative KIS KOSPI200 daily boundary.
+        # VMS recent-tick/scenario OHLC is never promoted as a substitute.
+        daily_status = d.status.get("kospi200_daily")
+        if daily_status is None or not daily_status.available:
+            contexts["track5_gap_divergence"] = self._unavailable(
+                "track5_gap_divergence", ("KOSPI200_daily_open_previous_close",),
+                daily_status.reason if daily_status is not None and daily_status.reason else "KOSPI200_DAILY_SOURCE_UNAVAILABLE",
+            )
+        else:
+            contexts["track5_gap_divergence"] = StrategyContext(
             market_state,
             "track5_gap_divergence",
             StrategyInput(common),
@@ -484,9 +460,32 @@ class StandardRuntimeInputProvider:
                 )
             except (ValueError, TypeError, AttributeError):
                 track9_selection = None
+        track9_position = (
+            self.track9_position_execution_source.snapshot(
+                run_id=self.run_id or "virtual", strategy_id="track9_event_overnight_insurance"
+            )
+            if self.track9_position_execution_source is not None and self.run_id
+            else None
+        )
+        track9_event = (
+            self.track9_event_source.upcoming(run_id=self.run_id or "virtual", as_of=d.as_of)
+            if self.track9_event_source is not None and self.run_id
+            else None
+        )
+        track9_event_risk = (
+            self.track9_event_risk_source.snapshot(run_id=self.run_id or "virtual", as_of=d.as_of)
+            if self.track9_event_risk_source is not None and self.run_id
+            else None
+        )
         track9_analytics = build_track9_analytics_snapshot(
             d, run_id=self.run_id or "virtual", as_of=d.as_of,
             option_contract_selection=track9_selection, common_snapshot=common_analytics,
+            active_sell_qty=(track9_position.active_sell_qty if track9_position else None),
+            insurance_qty=(track9_position.insurance_qty if track9_position else None),
+            event_upcoming=track9_event,
+            event_budget=(track9_event_risk.event_budget if track9_event_risk else None),
+            estimated_event_cost=(track9_event_risk.estimated_event_cost if track9_event_risk else None),
+            premium_spent=(track9_position.premium_spent if track9_position else None),
         )
         track9_missing = tuple(
             key for key in track9_required
