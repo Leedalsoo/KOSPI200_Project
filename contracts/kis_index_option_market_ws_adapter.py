@@ -33,6 +33,7 @@ _TRADE_PRICE = 2
 _TRADE_VOLUME = 10
 _TRADE_ASK1 = 41
 _TRADE_BID1 = 42
+_TRADE_RECORD_WIDTH = 58
 
 # KIS index-option realtime quote payload positions.
 _QUOTE_SYMBOL = 0
@@ -54,17 +55,21 @@ def _decode_fields(frame: str, expected_tr_id: str) -> list[str]:
     if parts[1] != expected_tr_id:
         raise KISIndexOptionMarketWebSocketAdapterInvalid("unexpected KIS TR ID")
     try:
-        field_count = int(parts[2])
+        record_count = int(parts[2])
     except ValueError as exc:
         raise KISIndexOptionMarketWebSocketAdapterInvalid(
-            "invalid KIS field count"
+            "invalid KIS record count"
         ) from exc
     values = parts[3].split("^")
-    if field_count != len(values):
-        raise KISIndexOptionMarketWebSocketAdapterInvalid(
-            "KIS field count mismatch"
-        )
-    return values
+    if record_count <= 0:
+        raise KISIndexOptionMarketWebSocketAdapterInvalid("KIS record count must be positive")
+    if record_count == 1 and len(values) == _TRADE_RECORD_WIDTH:
+        return values
+    if expected_tr_id == _H0IOCNT0 and len(values) == _TRADE_RECORD_WIDTH * record_count:
+        return values[:_TRADE_RECORD_WIDTH]
+    if record_count == len(values):
+        return values
+    raise KISIndexOptionMarketWebSocketAdapterInvalid("KIS field count mismatch")
 
 
 def _decimal(value: str, field_name: str) -> Decimal:
@@ -98,10 +103,38 @@ class KISIndexOptionMarketWebSocketAdapter:
             "unsupported KIS index-option TR ID"
         )
 
+    def adapt_many(
+        self, frame: str, *, source: str | None = None
+    ) -> tuple[KisIndexOptionMarketObservation, ...]:
+        parts = frame.split("|")
+        if len(parts) < 4 or parts[1] != self.TRADE_TR_ID:
+            return (self.adapt(frame, source=source),)
+        try:
+            record_count = int(parts[2])
+        except ValueError as exc:
+            raise KISIndexOptionMarketWebSocketAdapterInvalid(
+                "invalid KIS record count"
+            ) from exc
+        values = parts[3].split("^")
+        if record_count <= 0 or len(values) != _TRADE_RECORD_WIDTH * record_count:
+            raise KISIndexOptionMarketWebSocketAdapterInvalid("KIS H0IOCNT0 repeated record layout mismatch")
+        return tuple(
+            self._adapt_trade_values(
+                values[index * _TRADE_RECORD_WIDTH:(index + 1) * _TRADE_RECORD_WIDTH],
+                source=source or "KIS:H0IOCNT0",
+            )
+            for index in range(record_count)
+        )
+
     def _adapt_trade(
         self, frame: str, *, source: str
     ) -> KisIndexOptionMarketObservation:
         values = _decode_fields(frame, self.TRADE_TR_ID)
+        return self._adapt_trade_values(values, source=source)
+
+    def _adapt_trade_values(
+        self, values: list[str], *, source: str
+    ) -> KisIndexOptionMarketObservation:
         required_max = max(
             _TRADE_SYMBOL, _TRADE_TIME, _TRADE_PRICE,
             _TRADE_VOLUME, _TRADE_ASK1, _TRADE_BID1,
