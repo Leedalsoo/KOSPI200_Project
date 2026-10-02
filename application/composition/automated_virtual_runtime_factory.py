@@ -128,8 +128,17 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
             return futures_identity_source.identity_for_observed_symbol(observed_symbol)
         if tick is None or not tick.expiry or not proposal.option_type or proposal.strike is None:
             raise ValueError("VIRTUAL_AUTHORITATIVE_OPTION_IDENTITY_INPUT_REQUIRED")
-        identity = bootstrap.bundle.option_master.find_contract_identity(
-            tick.expiry, proposal.option_type, proposal.strike
+        observed_symbol = str(
+            getattr(tick, "instrument_id", None)
+            or getattr(tick, "symbol", None)
+            or ""
+        ).strip()
+        identity = (
+            bootstrap.bundle.option_master.get_contract_identity(observed_symbol)
+            if observed_symbol and synthetic_runtime_sources is None
+            else bootstrap.bundle.option_master.find_contract_identity(
+                tick.expiry, proposal.option_type, proposal.strike
+            )
         )
         if identity is None or not identity.shrn_iscd:
             raise ValueError("VIRTUAL_AUTHORITATIVE_OPTION_IDENTITY_NOT_FOUND")
@@ -217,11 +226,20 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         if futures_identity_source is None:
             raise ValueError("TRACK3_HEDGE_IDENTITY_SOURCE_REQUIRED")
         group_id = f"{run_id}-{canonical.signal_id}"
+        observed_symbol = str(
+            getattr(canonical, "instrument_id", None)
+            or getattr(canonical, "symbol", None)
+            or ""
+        ).strip()
+        if not observed_symbol:
+            raise ValueError("TRACK3_WS_FUTURES_SYMBOL_REQUIRED")
+        hedge_source = Track3HedgeIdentitySource(futures_identity_source)
+        observed_identity = hedge_source.identity_for_observed_symbol(observed_symbol)
         return track3_plan_adapter.build_plan(
             strategy_id="Strategy_3_StatArb", group_id=group_id,
             side=canonical.side.value, quantity=canonical.qty,
-            identity=futures_identity_source.current_identity(),
-            hedge_identity_source=Track3HedgeIdentitySource(futures_identity_source),
+            identity=observed_identity,
+            hedge_identity_source=hedge_source,
         )
 
     def resolve_track6(evaluation, canonical):

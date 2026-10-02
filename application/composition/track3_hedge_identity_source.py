@@ -13,3 +13,14 @@ class Track3HedgeIdentitySource:
         if self._source is None:
             raise ValueError("TRACK3_HEDGE_IDENTITY_SOURCE_REQUIRED")
         return self._source.current_identity()
+
+    def identity_for_observed_symbol(self, shrn_iscd: str):
+        if self._source is None:
+            raise ValueError("TRACK3_HEDGE_IDENTITY_SOURCE_REQUIRED")
+        resolver = getattr(self._source, "identity_for_observed_symbol", None)
+        if resolver is None:
+            raise ValueError("TRACK3_HEDGE_WS_IDENTITY_SOURCE_REQUIRED")
+        symbol = str(shrn_iscd or "").strip()
+        if not symbol:
+            raise ValueError("TRACK3_HEDGE_WS_SYMBOL_REQUIRED")
+        return resolver(symbol)
