@@ -19,7 +19,8 @@ from infrastructure.kis.futures_market_transport import KISWebSocketApprovalKeyP
 from infrastructure.kis.kis_weekday_collection_plan import FUTURES_TRADE_TR_ID, OPTION_TRADE_TR_ID, STRATEGY_MONTHLY_OFFSETS
 from infrastructure.krx.krx_marketplace_master import load_option_master
 from infrastructure.krx.krx_option_master_store import resolve_option_master_paths_for_day
-from infrastructure.kis.kis_vts_weekday_collector import _latest_krx_spot_price, market_data_root_from_env, _kis_option_resolver_for_day
+from infrastructure.kis.kis_vts_weekday_collector import market_data_root_from_env, _kis_option_resolver_for_day
+from infrastructure.kis.index_price_source import KISKOSPI200IndexPriceSource
 from infrastructure.kis.realtime_raw_store import KISRealtimeRawStore
 
 KST = timezone(timedelta(hours=9))
@@ -59,7 +60,7 @@ def build_subscriptions(day: date) -> tuple[tuple[str, str], ...]:
     The monthly option set is the same ATM +/- 15-point family used by the existing
     KIS collector, plus standard/mini futures trade+quote streams.
     """
-    reference_price = Decimal(_latest_krx_spot_price())
+    reference_price = KISKOSPI200IndexPriceSource(KISAuthManager.from_env(is_vts=True)).refresh().price
     monthly_paths, _ = resolve_option_master_paths_for_day(ROOT, day)
     monthly_master = load_option_master(monthly_paths)
     identities = tuple(monthly_master.identities.values())
