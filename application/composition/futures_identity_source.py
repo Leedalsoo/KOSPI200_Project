@@ -15,6 +15,13 @@ class KisFuturesIdentitySource:
 
     def current_identity(self) -> FuturesInstrumentIdentity:
         contract = resolve_current_futures_contract(source=self._source, target=self._target)
+        return self._to_identity(contract)
+
+    def identity_for_observed_symbol(self, shrn_iscd: str) -> FuturesInstrumentIdentity:
+        return self._to_identity(self._source.contract_for_symbol(shrn_iscd))
+
+    @staticmethod
+    def _to_identity(contract) -> FuturesInstrumentIdentity:
         if contract.product_type is None or contract.contract_multiplier is None:
             raise ValueError("FUTURES_PRODUCT_SPEC_UNAVAILABLE")
         return FuturesInstrumentIdentity(

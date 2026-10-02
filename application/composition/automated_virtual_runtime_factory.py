@@ -122,7 +122,10 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         if str(proposal.asset_type) == "FUTURES":
             if futures_identity_source is None:
                 raise ValueError("VIRTUAL_AUTHORITATIVE_FUTURES_IDENTITY_SOURCE_REQUIRED")
-            return futures_identity_source.current_identity()
+            observed_symbol = str(getattr(tick, "instrument_id", None) or getattr(tick, "symbol", None) or "").strip()
+            if not observed_symbol:
+                raise ValueError("VIRTUAL_AUTHORITATIVE_FUTURES_WS_IDENTITY_INPUT_REQUIRED")
+            return futures_identity_source.identity_for_observed_symbol(observed_symbol)
         if tick is None or not tick.expiry or not proposal.option_type or proposal.strike is None:
             raise ValueError("VIRTUAL_AUTHORITATIVE_OPTION_IDENTITY_INPUT_REQUIRED")
         identity = bootstrap.bundle.option_master.find_contract_identity(

@@ -174,7 +174,7 @@ class AutomatedVirtualTradingLoop:
                 quantity=canonical.qty,
                 order_type="LIMIT",
                 broker_symbol=canonical.symbol or "KOSPI200",
-                instrument_identity=(self.identity_provider(next(e for e in evaluations if e.runtime_context.client_order_id(canonical.track_id) == canonical.client_order_id), tick) if canonical.asset_type.value == "OPTION" else None),
+                instrument_identity=(self.identity_provider(next(e for e in evaluations if e.runtime_context.client_order_id(canonical.track_id) == canonical.client_order_id), tick) if canonical.asset_type.value in {"OPTION", "FUTURES"} else None),
                 asset_type=canonical.asset_type.value,
                 requested_price=Decimal(str(tick.ask_price)),
                 strategy_id=canonical.track_id,

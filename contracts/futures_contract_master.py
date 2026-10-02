@@ -90,6 +90,13 @@ class KisCurrentFuturesContractSource:
             underlying_name=self._underlying_name, product_type=self._product_type,
         )
 
+    def contract_for_symbol(self, shrn_iscd: str) -> KisFuturesContractIdentity:
+        symbol = (shrn_iscd or "").strip()
+        matches = [r for r in self._records if r.shrn_iscd == symbol]
+        if len(matches) != 1:
+            raise FuturesContractMasterError(f"FUTURES_SYMBOL_NOT_UNIQUE:{symbol}:{len(matches)}")
+        return matches[0]
+
     def with_target(self, *, underlying_short_code: Optional[str] = None,
                     underlying_name: Optional[str] = None,
                     product_type: FuturesProductType | None = None):
