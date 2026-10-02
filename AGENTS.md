@@ -275,3 +275,24 @@ Strategy 1~9의 현재 E2E 상태는 CONTRACT/INTEGRATION, SOURCE, RUNTIME, SIGN
 CONTRACT/INTEGRATION PASS 또는 runtime failure 0만으로 전체 Strategy E2E PASS를 선언하지 않는다.
 실제 REAL_VTS signal이 발생하지 않은 전략은 signal-driven execution lifecycle을 PASS로 선언하지 않고 미검증/BLOCKED로 유지한다.
 현재까지 확보된 REAL_VTS는 2026-09-28 → 2026-09-29 → 이후 거래일의 연속 stream으로 계속 누적하며, 새 거래일을 기존 검증범위와 교체하지 않는다.
+## 31. Strategy 1-9 Integrated E2E Execution Standard (2026-10-02)
+Strategy 1-9 must be validated independently; contract/integration PASS alone does not establish full E2E PASS.
+Per-strategy validation order: Source -> Runtime Input -> Strategy Signal -> Decision -> Risk -> OMS/Router -> Virtual Execution -> Position/PnL -> Regression.
+Strategy 1: OPTION + FUTURES hedge/unwind; verify option identity, initial fence/runtime input, execution and Position/PnL.
+Strategy 2: OPTION 4-leg; verify PUT/CALL, strike, authoritative expiry, quote/orderbook, Multi-Leg execution and Position/PnL.
+Strategy 3: current execution proposal is FUTURES using Futures-Index basis; verify canonical KOSPI200 runtime alias, authoritative futures/index source and execution lifecycle.
+Strategy 4: FUTURES gamma hedge/rebalance/unwind/trailing close; verify authoritative Greeks, account/equity, OHLC and futures identity.
+Strategy 5: no authoritative execution contract currently exists; separate signal/state validation from execution-contract availability and never invent an order contract.
+Strategy 6: OPTION PUT + strike/pair; search the continuous REAL_VTS stream for the confirmed active_vol >= base_vol x 1.3 condition and validate execution/Position/PnL when a real signal occurs.
+Strategy 7: OPTION PUT/CALL + strike Multi-Leg; keep the already-resolved OHLC/calendar standard closed and verify Option Master/expiry/quote, Multi-Leg execution and Position/PnL.
+Strategy 8: OPTION CALL and PUT/CALL pair; verify authoritative runtime inputs and signal-driven execution lifecycle.
+Strategy 9: ATM OPTION PUT + strike; verify authoritative IV/source/runtime path and signal-driven execution lifecycle.
+Use an independent Run ID per strategy; do not reuse prior position/order/PnL/strategy state.
+REAL_VTS is one continuously growing stream: 2026-09-28 -> 2026-09-29 -> every subsequent trading day under data/kis_market_data_restart/YYYY-MM-DD/.
+High-Speed Replay defaults to >=100x where practical; Scenario repetition may use 100x-1000x.
+Never inject synthetic/fixed/zero/false values for missing authoritative inputs to manufacture E2E PASS. Keep REAL_VTS, DERIVED_SCENARIO and SYNTHETIC provenance separate.
+For blockers: identify the cause from code/source/execution evidence, apply the minimum allowed change, run focused regression, then replay the same strategy.
+After the same error occurs twice consecutively, stop workaround repetition and record BLOCKED before moving to independent analysis.
+Keep intraday KIS VTS REST/WS collection through market close; after close finalize raw/TR counts, source time, received_at, overlap, gaps, duplicates and manifest consistency.
+Strategy 1-9 completion requires actual signal/execution evidence and regression evidence for the applicable lifecycle. No real signal means signal-driven lifecycle remains unverified/BLOCKED.
+Before Live credentials exist, all validation remains Virtual/VTS and must not place real KIS orders.
