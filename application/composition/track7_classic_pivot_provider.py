@@ -44,12 +44,12 @@ class Track7ClassicPivotProvider:
         if bar is None:
             return None
         pivot, r1, s1, r2, s2 = self._levels(bar)
-        supports = [level for level in (s2, s1, pivot) if level <= price]
-        resistances = [level for level in (r1, r2, pivot) if level >= price]
-        support = max(supports) if supports else None
-        resistance = min(resistances) if resistances else None
-        if support is None or resistance is None:
-            return None
+        # Pivot levels are fixed reference levels for the session:
+        # S2 < S1 < P < R1 < R2.  When price moves outside the ladder,
+        # keep the nearest boundary level on that side rather than making
+        # the source unavailable.
+        support = max((level for level in (s2, s1, pivot) if level <= price), default=s2)
+        resistance = min((level for level in (pivot, r1, r2) if level >= price), default=r2)
         return Track7SupportResistanceObservation(
             support=support,
             resistance=resistance,

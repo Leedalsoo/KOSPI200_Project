@@ -108,6 +108,56 @@ def build_orderbook_subscriptions(day: date) -> tuple[tuple[str, str], ...]:
     return tuple((OPTION_QUOTE_TR_ID, symbol) for tr_id, symbol in build_subscriptions(day) if tr_id == OPTION_TRADE_TR_ID)
 
 
+def build_validation_subscriptions(
+    day: date,
+    *,
+    option_type: str = "CALL",
+    strike_offset: Decimal = Decimal("0.0"),
+    futures_symbol: str | None = None,
+    index_symbol: str = "2001",
+) -> tuple[tuple[str, str], ...]:
+    """Build one-session overlap validation subscriptions."""
+    if option_type not in {"CALL", "PUT"}:
+        raise ValueError("VALIDATION_OPTION_TYPE_MUST_BE_CALL_OR_PUT")
+    reference_price = Decimal(_latest_krx_spot_price())
+    monthly_paths, _ = resolve_option_master_paths_for_day(ROOT, day)
+    monthly_master = load_option_master(monthly_paths)
+    identities = tuple(monthly_master.identities.values())
+    expiry_candidates = sorted({identity.expiry for identity in identities if identity.expiry >= day.isoformat()})
+    if not expiry_candidates:
+        raise RuntimeError(f"KRX_MONTHLY_OPTION_EXPIRY_REQUIRED:{day.isoformat()}")
+    expiry = expiry_candidates[0]
+    atm = min(
+        (identity.strike for identity in identities if identity.expiry == expiry),
+        key=lambda strike: abs(strike - reference_price),
+    )
+    strike = atm + Decimal(strike_offset)
+    matches = [
+        identity for identity in identities
+        if identity.expiry == expiry
+        and identity.option_type == option_type
+        and identity.strike == strike
+    ]
+    if len(matches) != 1:
+        raise RuntimeError(
+            f"AUTHORITATIVE_OPTION_IDENTITY_REQUIRED:{expiry}:{option_type}:{strike}:{len(matches)}"
+        )
+    resolver = _kis_option_resolver_for_day(day)
+    resolved = resolver.get_contract_identity(matches[0].shrn_iscd, matches[0])
+    if resolved is None:
+        raise RuntimeError(f"KIS_OPTION_IDENTITY_REQUIRED:{expiry}:{option_type}:{strike}")
+    option_symbol = resolved.symbol
+    if futures_symbol is None:
+        futures_symbol = dict(current_kospi200_futures_symbols(ROOT))[FuturesProductType.MINI]
+    subscriptions = (
+        (OPTION_TRADE_TR_ID, option_symbol),
+        (OPTION_QUOTE_TR_ID, option_symbol),
+        (FUTURES_TRADE_TR_ID, futures_symbol),
+        ("H0UPCNT0", index_symbol),
+    )
+    return subscriptions
+
+
 def _approval_key(auth: KISAuthManager) -> str:
     provider = KISWebSocketApprovalKeyProvider(auth, timeout=10.0)
     return provider.issue()
@@ -161,7 +211,15 @@ async def _subscribe_all(ws, approval_key: str, subscriptions: tuple[tuple[str, 
             await asyncio.sleep(SUBSCRIBE_INTERVAL_SECONDS)
 
 
-async def collect_day(day: date, *, market_data_root: Path, orderbook_only: bool = False) -> None:
+async def collect_day(
+    day: date,
+    *,
+    market_data_root: Path,
+    orderbook_only: bool = False,
+    validation: bool = False,
+    validation_option_type: str = "CALL",
+    validation_strike_offset: Decimal = Decimal("0.0"),
+) -> None:
     auth = KISAuthManager.from_env(
         is_vts=True,
         env_file=str(ROOT / ".env"),
@@ -170,9 +228,24 @@ async def collect_day(day: date, *, market_data_root: Path, orderbook_only: bool
     if not auth.has_credentials():
         raise RuntimeError("KIS_VTS_CREDENTIALS_REQUIRED")
 
-    subscriptions = build_orderbook_subscriptions(day) if orderbook_only else build_subscriptions(day)
+    if orderbook_only and validation:
+        raise ValueError("ORDERBOOK_ONLY_AND_VALIDATION_ARE_MUTUALLY_EXCLUSIVE")
+    if validation:
+        subscriptions = build_validation_subscriptions(
+            day,
+            option_type=validation_option_type,
+            strike_offset=validation_strike_offset,
+        )
+    elif orderbook_only:
+        subscriptions = build_orderbook_subscriptions(day)
+    else:
+        subscriptions = build_subscriptions(day)
     day_dir = market_data_root / day.isoformat()
-    raw_filename = "kis_vts_websocket_orderbook_raw.jsonl" if orderbook_only else "kis_vts_websocket_raw.jsonl"
+    raw_filename = (
+        "kis_vts_websocket_validation_raw.jsonl" if validation
+        else "kis_vts_websocket_orderbook_raw.jsonl" if orderbook_only
+        else "kis_vts_websocket_raw.jsonl"
+    )
     raw_store = KISRealtimeRawStore(day_dir / raw_filename)
     sequence = raw_store.count()
     ws_url = "ws://ops.koreainvestment.com:31000"
@@ -232,12 +305,20 @@ async def collect_day(day: date, *, market_data_root: Path, orderbook_only: bool
                 LOGGER.info("WS_SESSION_END date=%s raw_count=%d", day, raw_store.count())
                 break
         except Exception as exc:
-            LOGGER.exception("WS_SESSION_ERROR date=%s error=%s", day, exc)
+            LOGGER.exception("WS_SESSION_ERROR date=%s validation=%s error=%s", day, validation, exc)
+            if validation:
+                # Validation evidence must remain attributable to one WS session.
+                # Do not silently reconnect and mix a second session into the same file.
+                break
             await asyncio.sleep(RECONNECT_BACKOFF_SECONDS)
 
     if raw_store.path.exists():
         raw_store.write_manifest(
-            source="KIS_VTS_WEBSOCKET_ORDERBOOK_RAW" if orderbook_only else "KIS_VTS_WEBSOCKET_RAW",
+            source=(
+                "KIS_VTS_WEBSOCKET_VALIDATION_RAW" if validation
+                else "KIS_VTS_WEBSOCKET_ORDERBOOK_RAW" if orderbook_only
+                else "KIS_VTS_WEBSOCKET_RAW"
+            ),
             endpoint=ws_url,
             tolerate_truncated_tail=True,
         )
@@ -268,7 +349,13 @@ async def run_forever() -> None:
         await asyncio.sleep(1)
 
 
-def preflight(*, orderbook_only: bool = False) -> int:
+def preflight(
+    *,
+    orderbook_only: bool = False,
+    validation: bool = False,
+    validation_option_type: str = "CALL",
+    validation_strike_offset: Decimal = Decimal("0.0"),
+) -> int:
     configure_logging()
     auth = KISAuthManager.from_env(
         is_vts=True,
@@ -280,11 +367,23 @@ def preflight(*, orderbook_only: bool = False) -> int:
         return 2
     day = now_kst().date()
     try:
-        subscriptions = build_orderbook_subscriptions(day) if orderbook_only else build_subscriptions(day)
+        if orderbook_only and validation:
+            raise ValueError("ORDERBOOK_ONLY_AND_VALIDATION_ARE_MUTUALLY_EXCLUSIVE")
+        subscriptions = (
+            build_validation_subscriptions(day, option_type=validation_option_type, strike_offset=validation_strike_offset)
+            if validation else
+            build_orderbook_subscriptions(day) if orderbook_only else
+            build_subscriptions(day)
+        )
     except Exception as exc:
         print(f"PLAN_BLOCKED:{type(exc).__name__}:{exc}")
         return 3
-    print(f"WS_ORDERBOOK_PREFLIGHT_OK date={day} subscriptions={len(subscriptions)} limit={MAX_SUBSCRIPTIONS}") if orderbook_only else print(f"WS_PREFLIGHT_OK date={day} subscriptions={len(subscriptions)} limit={MAX_SUBSCRIPTIONS}")
+    if validation:
+        print(f"WS_VALIDATION_PREFLIGHT_OK date={day} subscriptions={len(subscriptions)} limit={MAX_SUBSCRIPTIONS}")
+    elif orderbook_only:
+        print(f"WS_ORDERBOOK_PREFLIGHT_OK date={day} subscriptions={len(subscriptions)} limit={MAX_SUBSCRIPTIONS}")
+    else:
+        print(f"WS_PREFLIGHT_OK date={day} subscriptions={len(subscriptions)} limit={MAX_SUBSCRIPTIONS}")
     for tr_id, symbol in subscriptions:
         print(f"  {tr_id} {symbol}")
     print(f"raw_root={market_data_root_from_env()}")
@@ -296,12 +395,30 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--preflight", action="store_true")
     parser.add_argument("--orderbook-only", action="store_true")
+    parser.add_argument("--validation", action="store_true")
+    parser.add_argument("--validation-option-type", choices=("CALL", "PUT"), default="CALL")
+    parser.add_argument("--validation-strike-offset", default="0.0")
     args = parser.parse_args()
     configure_logging()
+    validation_offset = Decimal(args.validation_strike_offset)
     if args.preflight:
-        return preflight(orderbook_only=args.orderbook_only)
+        return preflight(
+            orderbook_only=args.orderbook_only,
+            validation=args.validation,
+            validation_option_type=args.validation_option_type,
+            validation_strike_offset=validation_offset,
+        )
     day = now_kst().date()
-    asyncio.run(collect_day(day, market_data_root=market_data_root_from_env(), orderbook_only=args.orderbook_only))
+    asyncio.run(
+        collect_day(
+            day,
+            market_data_root=market_data_root_from_env(),
+            orderbook_only=args.orderbook_only,
+            validation=args.validation,
+            validation_option_type=args.validation_option_type,
+            validation_strike_offset=validation_offset,
+        )
+    )
     return 0
 
 

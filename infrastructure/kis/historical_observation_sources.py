@@ -12,6 +12,7 @@ class HistoricalObservationOptionSource(Track2OptionIVSource):
     def __init__(self, observations: Sequence[MarketObservation]) -> None:
         self._as_of: datetime | None = None
         self._iv: dict[tuple[str, str, Decimal], list[tuple[datetime, Decimal]]] = {}
+        self._iv_source: dict[tuple[str, str, Decimal], list[tuple[datetime, str]]] = {}
         self._delta: dict[tuple[str, str, Decimal], list[tuple[datetime, Decimal]]] = {}
         self._delta_by_instrument: dict[str, list[tuple[datetime, Decimal]]] = {}
         self._books: dict[str, list[tuple[datetime, OptionOrderBookSnapshot]]] = {}
@@ -24,6 +25,7 @@ class HistoricalObservationOptionSource(Track2OptionIVSource):
             iv = getattr(observation.analytics, "implied_volatility", None)
             if iv is not None:
                 self._iv.setdefault(key, []).append((observed_at, Decimal(str(iv))))
+                self._iv_source.setdefault(key, []).append((observed_at, str(observation.source)))
             delta = getattr(observation.analytics, "delta", None)
             if delta is not None:
                 delta_value = Decimal(str(delta))
@@ -56,6 +58,32 @@ class HistoricalObservationOptionSource(Track2OptionIVSource):
             return None
         index = bisect_right([item[0] for item in values], self._as_of) - 1
         return values[index][1] if index >= 0 else None
+
+    def get_iv_source(self, *, expiry: str, option_type: str, strike: Decimal):
+        normalized_expiry = str(expiry).replace("-", "")
+        option_type = str(option_type).upper()
+        strike = Decimal(str(strike))
+        key = (normalized_expiry[:8], option_type, strike)
+        values = self._iv.get(key, ())
+        if not values and len(normalized_expiry) >= 6:
+            month = normalized_expiry[:6]
+            candidates = [v for k, v in self._iv.items()
+                          if k[0].startswith(month) and k[1] == option_type and k[2] == strike]
+            if len(candidates) == 1:
+                values = candidates[0]
+        if self._as_of is None or not values:
+            return None
+        source_values = self._iv_source.get(key, ())
+        if not source_values and len(normalized_expiry) >= 6:
+            month = normalized_expiry[:6]
+            candidates = [v for k, v in self._iv_source.items()
+                          if k[0].startswith(month) and k[1] == option_type and k[2] == strike]
+            if len(candidates) == 1:
+                source_values = candidates[0]
+        if not source_values:
+            return None
+        index = bisect_right([item[0] for item in source_values], self._as_of) - 1
+        return source_values[index][1] if index >= 0 else None
 
     def get_iv(self, *, expiry: str, option_type: str, strike: Decimal) -> Decimal | None:
         normalized_expiry = str(expiry).replace("-", "")

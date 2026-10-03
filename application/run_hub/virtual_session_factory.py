@@ -24,6 +24,7 @@ from core.risk.risk_config import RiskConfig
 from core.risk.risk_engine import RiskEngine
 from environments.virtual.execution.vssf_command_context_provider import CanonicalVSSFCommandContextProvider
 from infrastructure.kis.track2_option_iv_source import KISTrack2OptionIVSource
+from infrastructure.kis.track4_kis_greeks_source import KISTrack4GreeksRealtimeSource
 from infrastructure.kis.historical_observation_sources import HistoricalObservationOptionSource
 from application.composition.track7_support_resistance_source import Track7AuthoritativeSupportResistanceSource
 from application.composition.market_calendar_hub import MarketCalendarHub
@@ -31,7 +32,7 @@ from interfaces.control_tower.ui_adapter import ControlTowerUIAdapter
 from interfaces.control_tower.virtual_test_controller import VirtualTestController
 
 
-def create_virtual_run_session(context: RunContext, option_master: Any, risk_guard_status_source: RiskGuardStatusSource | None = None) -> RunSession:
+def create_virtual_run_session(context: RunContext, option_master: Any, risk_guard_status_source: RiskGuardStatusSource | None = None, track4_greeks_source: KISTrack4GreeksRealtimeSource | None = None) -> RunSession:
     dependencies = VirtualCompositionDependencies(
         contract_registry=None,
         option_master=option_master,
@@ -40,7 +41,9 @@ def create_virtual_run_session(context: RunContext, option_master: Any, risk_gua
         vssf_command_context=CanonicalVSSFCommandContextProvider(),
     )
     config = EnvironmentConfig(environment=EnvironmentType.VIRTUAL, name=f"run_{context.run_id}")
-    policy = RuntimePolicy()
+    # Virtual automated replay uses the established Track7 5-second limit;
+    # generic RuntimePolicy remains neutral for other environments.
+    policy = RuntimePolicy(track7_order_timeout_seconds=5.0)
     holder: dict[str, Any] = {}
     def build(_config: EnvironmentConfig, _policy: RuntimePolicy):
         bundle = ConcreteVirtualEnvironmentBuilder(dependencies=dependencies).build(_config, _policy)
@@ -66,9 +69,8 @@ def create_virtual_run_session(context: RunContext, option_master: Any, risk_gua
     historical_observation_option_source = None
     if context.historical_store_path and Path(context.historical_store_path).name.endswith(".observations.jsonl"):
         base_path = Path(str(context.historical_store_path)[: -len(".observations.jsonl")])
-        if base_path.is_file():
-            from environments.virtual.market.historical_market_store import HistoricalMarketStore
-            historical_observation_option_source = HistoricalObservationOptionSource(HistoricalMarketStore(base_path).load_observations())
+        from environments.virtual.market.historical_market_store import HistoricalMarketStore
+        historical_observation_option_source = HistoricalObservationOptionSource(HistoricalMarketStore(base_path).load_observations())
 
     market_calendar_hub = MarketCalendarHub(getattr(bundle.option_master, "calendar", None))
     if context.historical_daily_store_path:
@@ -105,6 +107,7 @@ def create_virtual_run_session(context: RunContext, option_master: Any, risk_gua
         historical_observation_option_source=historical_observation_option_source,
         risk_guard_status_source=risk_guard_status_source,
         market_calendar_hub=market_calendar_hub,
+        track4_greeks_provider=track4_greeks_source,
     )
     strategy_hub = loop.strategy_hub
     runtime_hub = RuntimeHub(loop)

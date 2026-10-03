@@ -125,21 +125,23 @@ class Track1RuntimeInputProvider:
         missing: list[str] = []
 
         fence_type = self.fence_type_source() if self.fence_type_source is not None else None
-        if fence_type not in {"PUT", "CALL"}:
-            missing.append("track1_fence_direction")
-
-        momentum = (
-            self._momentum_confirmed(underlying_history, as_of, fence_type)
-            if fence_type in {"PUT", "CALL"}
-            else None
-        )
-        if momentum is None:
-            missing.append("momentum")
 
         lots = self._track1_lots()
         if lots is None:
             missing.extend(("position_coverage", "option_position_greeks"))
             return Track1RuntimeInputResult(None, tuple(dict.fromkeys(missing)))
+
+        initial_unfenced_state = fence_type not in {"PUT", "CALL"} and not lots
+        if initial_unfenced_state:
+            momentum = False
+        else:
+            if fence_type not in {"PUT", "CALL"}:
+                missing.append("track1_fence_direction")
+                momentum = None
+            else:
+                momentum = self._momentum_confirmed(underlying_history, as_of, fence_type)
+            if momentum is None:
+                missing.append("momentum")
 
         coverage_ratio, short_option_net_delta = self._position_metrics(lots, as_of)
         if active_vol is None:

@@ -23,7 +23,8 @@ class VirtualTrack3RuntimeInputSource:
         recent = tuple(getattr(self.market, "recent_ticks", ()))
         if tick is None or not recent or not symbol:
             return None
-        if getattr(tick, "symbol", None) != symbol:
+        # Synthetic replay keeps its explicit instrument symbol while Runtime uses the canonical KOSPI200 key.
+        if getattr(tick, "symbol", None) != symbol and symbol != "KOSPI200":
             return None
         if datetime.fromisoformat(tick.timestamp) != observed_at:
             return None

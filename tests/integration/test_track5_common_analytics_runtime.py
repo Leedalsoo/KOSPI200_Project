@@ -1,8 +1,16 @@
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 
 from application.bootstrap import create_virtual_runtime_bootstrap
 from application.composition.standard_runtime_input_provider import StandardRuntimeInputProvider
 from contracts.types import DataQuality, MarketState
+from contracts.kis_kospi200_daily_source import KOSPI200DailyContext
+
+class FakeKOSPI200DailySource:
+    def get_context(self, trading_date: date):
+        return KOSPI200DailyContext(trading_date, Decimal("1122"), Decimal("1118"), "TEST:KOSPI200_DAILY")
+
+DAILY_SOURCE = FakeKOSPI200DailySource()
 
 
 def test_standard_runtime_materializes_track5_analytics_snapshot():
@@ -15,7 +23,7 @@ def test_standard_runtime_materializes_track5_analytics_snapshot():
         ticks={"KOSPI200": tick},
         quality={"KOSPI200": DataQuality(True, True, True)},
     )
-    context = StandardRuntimeInputProvider(market).build(tick, state, account)["track5_gap_divergence"]
+    context = StandardRuntimeInputProvider(market, kospi200_daily_source=DAILY_SOURCE).build(tick, state, account)["track5_gap_divergence"]
     assert context.analytics is not None
     assert context.analytics.run_id == "virtual"
     assert context.analytics.get("price.gap") is not None
@@ -31,7 +39,7 @@ def test_standard_runtime_track5_fails_closed_when_volatility_is_missing():
     tick = next(market.generate_tick_stream(total_days=1, ticks_per_day=1))
     market._recent_ticks.clear()
     state = MarketState(as_of=datetime.fromisoformat(tick.timestamp), ticks={"KOSPI200": tick}, quality={})
-    context = StandardRuntimeInputProvider(market).build(tick, state, account)["track5_gap_divergence"]
+    context = StandardRuntimeInputProvider(market, kospi200_daily_source=DAILY_SOURCE).build(tick, state, account)["track5_gap_divergence"]
     assert context.analytics is not None
     assert context.analytics.get("volatility.expected_move").value is None
 
@@ -68,7 +76,7 @@ def test_standard_runtime_injects_authoritative_fee_and_margin_metrics():
         quality={"KOSPI200": DataQuality(True, True, True)},
     )
     provider = StandardRuntimeInputProvider(
-        market, track9_fee_ledger=FeeLedger(), track9_margin_read_model=MarginReadModel(), run_id="RUN-COMMON"
+        market, track9_fee_ledger=FeeLedger(), track9_margin_read_model=MarginReadModel(), run_id="RUN-COMMON", kospi200_daily_source=DAILY_SOURCE
     )
     context = provider.build(tick, state, account)["track5_gap_divergence"]
     assert context.analytics.get("portfolio.total_fees").value == Decimal("1234")
@@ -106,10 +114,20 @@ def test_standard_runtime_current_pnl_is_realized_plus_unrealized_and_net_pnl_su
         quality={"KOSPI200": DataQuality(True, True, True)},
     )
     provider = StandardRuntimeInputProvider(
-        market, track9_fee_ledger=FeeLedger(), run_id="RUN-PNL"
+        market, track9_fee_ledger=FeeLedger(), run_id="RUN-PNL", kospi200_daily_source=DAILY_SOURCE
     )
     context = provider.build(tick, state, AccountSource())["track5_gap_divergence"]
     assert context.analytics.get("portfolio.current_pnl").value == Decimal("1500")
     assert context.analytics.get("portfolio.net_pnl").value == Decimal("1400")
     assert context.analytics.get("portfolio.current_pnl").provenance[0].source == "common-analytics.canonical"
     assert context.analytics.get("portfolio.net_pnl").provenance[0].source == "common-analytics.canonical"
+
+
+def test_standard_runtime_track5_fails_closed_without_kospi200_daily_source():
+    bootstrap = create_virtual_runtime_bootstrap()
+    market = bootstrap.bundle.market
+    account = bootstrap.bundle.account
+    tick = next(market.generate_tick_stream(total_days=1, ticks_per_day=1))
+    state = MarketState(as_of=datetime.fromisoformat(tick.timestamp), ticks={"KOSPI200": tick}, quality={"KOSPI200": DataQuality(True, True, True)})
+    context = StandardRuntimeInputProvider(market).build(tick, state, account)["track5_gap_divergence"]
+    assert context.input.payload.reason == "KOSPI200_DAILY_SOURCE_UNAVAILABLE"

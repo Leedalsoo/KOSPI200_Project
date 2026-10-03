@@ -1,4 +1,4 @@
-﻿from collections.abc import Iterable
+from collections.abc import Iterable
 from typing import Callable, List, Optional
 
 from contracts.types import MarketObservation
@@ -81,6 +81,11 @@ class HistoricalReplayEngine:
             underlying_symbol=observation.underlying_symbol,
             underlying_observed_hour=observation.underlying_observed_hour,
             underlying_source=observation.underlying_source,
+            implied_volatility=float(observation.analytics.implied_volatility) if observation.analytics.implied_volatility is not None else None,
+            delta=float(observation.analytics.delta) if observation.analytics.delta is not None else None,
+            gamma=float(observation.analytics.gamma) if observation.analytics.gamma is not None else None,
+            theta=float(observation.analytics.theta) if observation.analytics.theta is not None else None,
+            vega=float(observation.analytics.vega) if observation.analytics.vega is not None else None,
             option_observed_hour=(observation.provenance.source_timestamps[0] if observation.provenance.source_timestamps else ""),
             option_source=observation.source,
         )

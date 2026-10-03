@@ -43,6 +43,30 @@ def test_classic_pivot_selects_nearest_support_and_resistance(tmp_path):
     assert result.calculation_version == "TRACK7-CLASSIC-PIVOT-v1"
 
 
+def test_classic_pivot_keeps_s2_as_support_below_the_pivot_ladder(tmp_path):
+    provider = Track7ClassicPivotProvider(HistoricalMarketDailyOHLCProvider(_store(tmp_path), Calendar()))
+    result = provider.get_support_resistance(
+        symbol="KOSPI200",
+        observed_at=datetime(2026, 9, 18, 9, 0),
+        current_price=Decimal("320"),
+    )
+    assert result is not None
+    assert result.support == Decimal("328.35")
+    assert result.resistance == Decimal("348.35")
+
+
+def test_classic_pivot_keeps_r2_as_resistance_above_the_pivot_ladder(tmp_path):
+    provider = Track7ClassicPivotProvider(HistoricalMarketDailyOHLCProvider(_store(tmp_path), Calendar()))
+    result = provider.get_support_resistance(
+        symbol="KOSPI200",
+        observed_at=datetime(2026, 9, 18, 9, 0),
+        current_price=Decimal("375"),
+    )
+    assert result is not None
+    assert result.support == Decimal("348.35")
+    assert result.resistance == Decimal("368.35")
+
+
 def test_classic_pivot_fails_closed_without_previous_day_data(tmp_path):
     provider = Track7ClassicPivotProvider(HistoricalMarketDailyOHLCProvider(HistoricalDailyStore(tmp_path / "empty.jsonl"), Calendar()))
     assert provider.get_support_resistance(symbol="B056A960", observed_at=datetime(2026, 9, 18, 9, 0), current_price=Decimal("350")) is None

@@ -9,7 +9,11 @@ from core.analytics.common import COMMON_METRIC_CONTRACTS, merge_analytics_snaps
 
 def build_track7_analytics_snapshot(data, *, run_id: str, as_of, common_snapshot=None):
     observations = {
-        "current_price": data.price,
+        "current_price": (
+            data.underlying_price
+            if getattr(data, "underlying_price", None) is not None
+            else data.price
+        ),
         "call_iv": data.option_iv,
         "put_iv": data.put_iv,
         "ma_1m": data.ma_1m,

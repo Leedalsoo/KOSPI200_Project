@@ -41,9 +41,9 @@ def _latest_underlying_context(
     )
 
 
-def ingest_day(day: date) -> tuple[int, int, int]:
+def ingest_day(day: date, *, raw_filename: str = "kis_vts_websocket_raw.jsonl") -> tuple[int, int, int]:
     day_dir = ROOT / "data" / "kis_market_data_restart" / day.isoformat()
-    raw_path = day_dir / "kis_vts_websocket_raw.jsonl"
+    raw_path = day_dir / raw_filename
     canonical_path = day_dir / "historical_market_observations.jsonl"
 
     if not raw_path.is_file():
@@ -92,9 +92,10 @@ def ingest_day(day: date) -> tuple[int, int, int]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--date", required=True)
+    parser.add_argument("--raw-file", default="kis_vts_websocket_raw.jsonl")
     args = parser.parse_args()
     day = date.fromisoformat(args.date)
-    raw_count, canonical_count, skipped = ingest_day(day)
+    raw_count, canonical_count, skipped = ingest_day(day, raw_filename=args.raw_file)
     print(
         f"WS_CANONICAL_INGEST_OK date={day.isoformat()} "
         f"raw_frames={raw_count} canonical_appended={canonical_count} skipped_existing={skipped}"

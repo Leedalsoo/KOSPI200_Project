@@ -5,6 +5,7 @@ import argparse
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
+from decimal import Decimal
 
 from application.bootstrap import create_virtual_runtime_bootstrap
 from application.composition.automated_virtual_runtime_factory import attach_standard_automated_loop
@@ -54,6 +55,7 @@ class HighSpeedVirtualRuntimeReplayRunner:
             strategy_keys=self.strategy_keys,
             run_id=self.run_id,
             synthetic_runtime_sources=synthetic_sources,
+            track4_greeks_provider=synthetic_sources,
         )
         totals = {"events": 0, "signals": 0, "approved": 0, "routed": 0, "filled": 0, "rejected": 0}
         execution_ids: list[str] = []
@@ -88,22 +90,43 @@ class HighSpeedVirtualRuntimeReplayRunner:
         def publish(tick) -> None:
             spot = float(tick.underlying_price)
             base_last = float(tick.last_price)
-            for offset in (-12.5, -10.0, -7.5, -5.0, -2.5, 0.0, 2.5, 5.0, 7.5, 10.0, 12.5):
-                strike = spot + offset
+            # DERIVED_SCENARIO quote materialization follows the authoritative synthetic
+            # Option Master strike/expiry set so Strategy-selected legs always have a
+            # corresponding scenario quote. This does not alter REAL_VTS evidence.
+            current_expiry = str(tick.expiry).replace("-", "")[:8]
+            identities = tuple(
+                identity
+                for identity in bootstrap.bundle.option_master.list_contract_identities()
+                if str(identity.expiry).replace("-", "")[:8] == current_expiry
+            )
+            if not identities:
+                raise ValueError("DERIVED_SCENARIO_OPTION_MASTER_EXPIRY_REQUIRED")
+            grid_center = round(spot / 2.5) * 2.5
+            requested_identities = list(identities)
+            for offset in range(-10, 11):
+                strike = grid_center + offset * 2.5
                 for option_type in ("CALL", "PUT"):
-                    intrinsic = max(0.0, spot - strike) if option_type == "CALL" else max(0.0, strike - spot)
-                    mid = max(0.01, base_last * 0.35 + intrinsic * 0.10)
-                    bootstrap.bundle.market.register_replay_option_quote(
-                        symbol=tick.symbol,
-                        option_type=option_type,
-                        strike=strike,
-                        expiry=tick.expiry,
-                        bid=max(0.01, mid - 0.02),
-                        ask=mid + 0.02,
-                        last=mid,
-                        timestamp=tick.timestamp,
-                        contract_multiplier=tick.contract_multiplier,
+                    identity = bootstrap.bundle.option_master.find_contract_identity(
+                        current_expiry, option_type, Decimal(str(strike))
                     )
+                    if identity is not None:
+                        requested_identities.append(identity)
+            seen_keys: set[tuple[str, float]] = set()
+            for identity in requested_identities:
+                strike = float(identity.strike)
+                option_type = str(identity.option_type).upper()
+                key = (option_type, strike)
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                intrinsic = max(0.0, spot - strike) if option_type == "CALL" else max(0.0, strike - spot)
+                mid = max(0.01, base_last * 0.35 + intrinsic * 0.10)
+                bootstrap.bundle.market.register_replay_option_quote(
+                    symbol=identity.shrn_iscd or tick.symbol, option_type=option_type,
+                    strike=strike, expiry=current_expiry, bid=max(0.01, mid - 0.02),
+                    ask=mid + 0.02, last=mid, timestamp=tick.timestamp,
+                    contract_multiplier=float(identity.contract_multiplier or tick.contract_multiplier),
+                )
             bootstrap.bundle.market.publish_replay_tick(tick)
             result = loop.last_result
             if result is None:

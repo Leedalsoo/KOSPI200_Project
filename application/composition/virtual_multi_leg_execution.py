@@ -79,6 +79,7 @@ class VirtualMultiLegExecutionBridge:
         self.option_position_attribution = Track9OptionPositionAttributionReadModel(self.position_lot_store)
         self.insurance_position = Track9InsurancePositionReadModel(self.position_lot_store)
         self.provenance: dict[str, dict[str, str]] = {}
+        self.execution_legs: dict[str, dict[str, object]] = {}
         self.leg_positions: dict[str, Any] = {}
 
     def identity_for_leg(self, plan: MultiLegExecutionPlan, leg) -> OptionInstrumentIdentity | FuturesInstrumentIdentity:
@@ -88,19 +89,30 @@ class VirtualMultiLegExecutionBridge:
             raise ValueError("MULTI_LEG_OPTION_IDENTITY_REQUIRED")
         if self.option_master is None:
             raise ValueError("MULTI_LEG_OPTION_MASTER_REQUIRED")
+        current_tick = getattr(self.bundle.market, "last_tick", None)
+        authoritative_expiry = str(getattr(current_tick, "expiry", "") or "").replace("-", "")[:8]
         option_quotes = getattr(self.bundle.market, "option_quotes", {})
-        matching_expiries = sorted({
-            str(expiry).replace("-", "")[:8]
-            for key in option_quotes
-            if isinstance(key, tuple) and len(key) == 3
-            and str(key[0]).upper() == str(leg.option_type).upper()
-            and float(key[1]) == float(leg.strike)
-            for expiry in (key[2],)
-        })
-        if len(matching_expiries) != 1:
-            raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_EXPIRY_REQUIRED")
+        if len(authoritative_expiry) == 8:
+            quote_key = (
+                str(leg.option_type).upper(),
+                float(leg.strike),
+                authoritative_expiry,
+            )
+            if option_quotes.get(quote_key) is None:
+                raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_EXPIRY_REQUIRED")
+        else:
+            matching_expiries = sorted({
+                str(key[2]).replace("-", "")[:8]
+                for key in option_quotes
+                if isinstance(key, tuple) and len(key) == 3
+                and str(key[0]).upper() == str(leg.option_type).upper()
+                and float(key[1]) == float(leg.strike)
+            })
+            if len(matching_expiries) != 1:
+                raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_EXPIRY_REQUIRED")
+            authoritative_expiry = matching_expiries[0]
         identity = self.option_master.find_contract_identity(
-            matching_expiries[0], leg.option_type, Decimal(str(leg.strike))
+            authoritative_expiry, leg.option_type, Decimal(str(leg.strike))
         )
         if identity is None or not identity.shrn_iscd:
             raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_IDENTITY_NOT_FOUND")
@@ -223,6 +235,14 @@ class VirtualMultiLegExecutionBridge:
                 leg_id=leg.leg_id,
             )
             reports.append(report)
+            if report.execution_id:
+                self.execution_legs[report.execution_id] = {
+                    "strategy_id": plan.strategy_id,
+                    "side": leg.side,
+                    "position_role": leg.position_role,
+                    "asset_type": "OPTION" if isinstance(identity, OptionInstrumentIdentity) else "FUTURES",
+                    "contract_multiplier": identity.contract_multiplier,
+                }
             if report.status == "FILLED" and report.filled_quantity > 0:
                 if not report.execution_id or report.execution_timestamp is None:
                     raise RuntimeError("MULTI_LEG_POSITION_PROVENANCE_EXECUTION_REQUIRED")
@@ -334,6 +354,8 @@ class VirtualMultiLegExecutionBridge:
                 multiplier = identity.contract_multiplier
             else:
                 if position_snapshot is None:
+                    # A closing fill may flatten the position before realized PnL is calculated.
+                    # The execution identity remains authoritative for the multiplier.
                     multiplier = identity.contract_multiplier
                 else:
                     if position_snapshot.contract_multiplier is None:
@@ -341,6 +363,8 @@ class VirtualMultiLegExecutionBridge:
                     multiplier = position_snapshot.contract_multiplier
                     if position_snapshot.identity_source != identity.identity_source:
                         raise ValueError("MULTI_LEG_POSITION_IDENTITY_PROVENANCE_MISMATCH")
+            # The execution-time mark is not realized PnL.  For the leg read model
+            # retain only an MTM projection when the authoritative VSSF position is open.
             position_snapshot = vssf.account.positions.get(identity.instrument_id)
             if position_snapshot is None:
                 leg_unrealized = Decimal("0")
@@ -349,7 +373,9 @@ class VirtualMultiLegExecutionBridge:
                 quantity = Decimal(str(position_snapshot["qty"]))
                 side = str(position_snapshot["side"])
                 mark = Decimal(str(current))
-                leg_unrealized = ((mark - avg_price) if side == "BUY" else (avg_price - mark)) * quantity * multiplier
+                leg_unrealized = (
+                    (mark - avg_price) if side == "BUY" else (avg_price - mark)
+                ) * quantity * multiplier
             pnl_legs.append(
                 PositionGroupLegPnL(
                     leg.leg_id, plan.group_id, identity.instrument_id, rep.filled_quantity,

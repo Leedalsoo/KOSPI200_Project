@@ -22,3 +22,9 @@ class ReferenceCanonicalMarketTick:
     option_source: str = ""
     underlying_sequence: int = 0
     instrument_id: str = ""
+    # Per-option analytics carried from authoritative MarketObservation.
+    implied_volatility: float | None = None
+    delta: float | None = None
+    gamma: float | None = None
+    theta: float | None = None
+    vega: float | None = None

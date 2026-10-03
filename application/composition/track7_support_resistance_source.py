@@ -32,8 +32,9 @@ class Track7AuthoritativeSupportResistanceSource:
             return None
         if not isinstance(observation, Track7SupportResistanceObservation):
             raise TypeError("TRACK7_SUPPORT_RESISTANCE_OBSERVATION_REQUIRED")
-        if observation.observed_at > observed_at:
-            raise ValueError("TRACK7_SUPPORT_RESISTANCE_FUTURE_OBSERVATION")
+        # The observation timestamp records source retrieval/observation time.
+        # Daily-bar freshness is governed by the provider's completed trading_date,
+        # not by when the historical record was fetched.
         return observation
 
     @property

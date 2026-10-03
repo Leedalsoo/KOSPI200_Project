@@ -6,7 +6,7 @@ from typing import Sequence
 from contracts.analytics import AnalyticsSnapshot, AnalyticsStatus
 from core.market.session_policy import MarketSessionPolicy
 from contracts.types import MultiLegExecutionPlan
-from core.strategy.contracts import Signal, StrategyContext, StrategyFeatureRequirement
+from core.strategy.contracts import NonExecutionEvent, Signal, SignalKind, StrategyContext, StrategyFeatureRequirement
 from core.strategy.multi_leg_plan import build_pair_plan
 from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
 
@@ -115,6 +115,19 @@ class Track6DailyTailInsurance:
             ),
         ),)
 
+    def _close_execution_proposal(self, *, tag_id: str) -> StrategyExecutionProposal:
+        if self.state.long_put_strike <= 0 or self.state.long_call_strike <= 0:
+            raise ValueError("TRACK6_OPTION_SELECTION_REQUIRED")
+        return StrategyExecutionProposal(
+            proposed_quantity=self.insurance_qty,
+            asset_type="OPTION",
+            side="SELL",
+            track_id=self.strategy_id,
+            tag_id=tag_id,
+            option_type="PUT",
+            strike=self.state.long_put_strike,
+        )
+
     def build_execution_plan(self, group_id: str) -> MultiLegExecutionPlan | None:
         if not self.state.is_active or self.state.long_put_strike <= 0 or self.state.long_call_strike <= 0:
             return None
@@ -151,13 +164,25 @@ class Track6DailyTailInsurance:
         trailing_ratio = Decimal("0.90") if pnl_ratio >= 2 else Decimal("0.88") if pnl_ratio >= Decimal("1.3") else Decimal("0.85")
         stop_trigger = current_high * trailing_ratio
         if current_high > 0 and total_intrinsic <= stop_trigger:
+            proposal = self._close_execution_proposal(tag_id="DAILY_TAIL_INSURANCE_TRAILING_CLOSE")
             self.reset()
-            return (Signal(self.strategy_id, "CLOSE", 1.0,
-                           f"TRAILING_STOP;REALIZED:{total_intrinsic};HIGH:{current_high};RATIO:{trailing_ratio}"),)
+            return (Signal(
+                self.strategy_id, "CLOSE", 1.0,
+                f"TRAILING_STOP;REALIZED:{total_intrinsic};HIGH:{current_high};RATIO:{trailing_ratio}",
+                execution_proposal=proposal,
+            ),)
         if previous_high == 0 or current_high >= previous_high * Decimal("1.01"):
             self.state = replace(self.state, trailing_stop_active=True, high_watermark_intrinsic=current_high)
-            return (Signal(self.strategy_id, "UPDATE_TRAILING", 0.9,
-                           f"HIGH_WATERMARK:{current_high};STOP_TRIGGER:{stop_trigger};OFFSET_TICKS:2"),)
+            return (Signal(
+                self.strategy_id, "UPDATE_TRAILING", 0.9,
+                f"HIGH_WATERMARK:{current_high};STOP_TRIGGER:{stop_trigger};OFFSET_TICKS:2",
+                kind=SignalKind.NON_EXECUTION,
+                non_execution_event=NonExecutionEvent(
+                    event_type="TRACK6_TRAILING_STATE_UPDATE",
+                    reason="TRAILING_WATERMARK_UPDATED",
+                    payload={"high_watermark": current_high, "stop_trigger": stop_trigger, "offset_ticks": 2},
+                ),
+            ),)
         self.state = replace(self.state, trailing_stop_active=trailing_active)
         return ()
 
@@ -166,10 +191,17 @@ class Track6DailyTailInsurance:
             return ()
         time_str = self._as_time(context.analytics)
         if MarketSessionPolicy.text(MarketSessionPolicy.LIMIT_CUTOFF) <= time_str < MarketSessionPolicy.text(MarketSessionPolicy.MARKET_CUTOFF):
-            return (Signal(self.strategy_id, "CLOSE_LIMIT", 1.0, "DAILY_INSURANCE_15:00_CUTOFF"),)
+            return (Signal(
+                self.strategy_id, "CLOSE_LIMIT", 1.0, "DAILY_INSURANCE_15:00_CUTOFF",
+                execution_proposal=self._close_execution_proposal(tag_id="DAILY_TAIL_INSURANCE_LIMIT_CLOSE"),
+            ),)
         if time_str >= MarketSessionPolicy.text(MarketSessionPolicy.MARKET_CUTOFF):
+            proposal = self._close_execution_proposal(tag_id="DAILY_TAIL_INSURANCE_FALLBACK_CLOSE")
             self.reset()
-            return (Signal(self.strategy_id, "CLOSE_FALLBACK", 1.0, "DAILY_INSURANCE_15:15_FALLBACK"),)
+            return (Signal(
+                self.strategy_id, "CLOSE_FALLBACK", 1.0, "DAILY_INSURANCE_15:15_FALLBACK",
+                execution_proposal=proposal,
+            ),)
         return ()
 
     def evaluate(self, context: StrategyContext) -> Sequence[Signal]:

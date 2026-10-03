@@ -58,3 +58,22 @@ def test_virtual_runtime_can_replay_authoritative_rest_observation_store(tmp_pat
     assert len(seen) == 4
     assert runtime.replay.exhausted
     assert seen[-1].symbol == "C01610A29"
+
+
+def test_virtual_runtime_uses_only_injected_authoritative_track4_greeks():
+    from contracts.track4_kis_greeks_provider import KISIndexOptionGreeksProvider
+
+    bootstrap = create_virtual_runtime_bootstrap()
+    market = bootstrap.bundle.market
+    tick = next(market.generate_tick_stream(total_days=1, ticks_per_day=1))
+    greeks = KISIndexOptionGreeksProvider.from_payload(
+        {"delta": "0.41", "gama": "0.017", "theta": "-0.03", "hts_ints_vltl": "0.22"},
+        instrument_id=tick.symbol, observed_at=tick.timestamp,
+    )
+    data = VirtualRuntimeDataProvider(market, track4_greeks_provider=greeks).snapshot(tick)
+    assert data.option_delta == Decimal("0.41")
+    assert data.option_gamma == Decimal("0.017")
+
+    unavailable = VirtualRuntimeDataProvider(market).snapshot(tick)
+    assert unavailable.option_delta is None
+    assert unavailable.option_gamma is None

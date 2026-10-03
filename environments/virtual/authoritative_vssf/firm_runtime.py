@@ -59,12 +59,15 @@ class VirtualSecuritiesFirmRuntime:
         now = self._now()
         if self.account.free_margin < self.margin_engine.calculate_order_margin(command):
             return None
+        self._submitted_at.setdefault(command.client_order_id, now)
+        if self.timeout_source is not None:
+            self.timeout_source.observe_submission(
+                command.client_order_id, command.track_id, now
+            )
         price = self.order_book.match_order(command)
         if price <= 0:
             self.order_book.add_pending_order(command)
             self._submitted_at[command.client_order_id] = now
-            if self.timeout_source is not None:
-                self.timeout_source.observe_submission(command.client_order_id, command.track_id, now)
             result = VSSFOrderResult(
                 client_order_id=command.client_order_id,
                 status="NEW",

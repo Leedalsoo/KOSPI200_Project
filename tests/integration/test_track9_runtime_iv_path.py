@@ -57,3 +57,17 @@ def test_materializer_output_is_projected_into_virtual_runtime_data():
     assert result.iv_spike == Decimal("4.00")
     assert result.iv_crush == Decimal("0")
     assert result.status["track9_iv_event"].available is True
+
+
+def test_authoritative_atm_iv_is_projected_to_decimal_active_vol():
+    now = datetime(2026, 9, 18, 10, 0)
+    source = FakeATMSource([_snapshot(now, "43.00", "45.00")])
+    provider = VirtualRuntimeDataProvider(
+        FakeMarket(),
+        track9_atm_iv_source=source,
+    )
+
+    result = provider.snapshot(_tick(now))
+
+    assert result.active_vol == Decimal("0.44")
+    assert result.base_vol == Decimal("0.44")

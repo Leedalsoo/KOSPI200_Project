@@ -51,8 +51,13 @@ class _VirtualBrokerAckAdapter:
         if report is None:
             return BrokerOrderResponse(command.client_order_id, False, message="VIRTUAL_ORDER_NOT_EXECUTED")
         return BrokerOrderResponse(
-            command.client_order_id, True, broker_order_id=f"VIRTUAL-{report.execution_id}"
+            command.client_order_id, True, broker_order_id=(f"VIRTUAL-{report.execution_id}" if report.execution_id else f"VIRTUAL-{report.client_order_id}")
         )
+
+    def cancel(self, client_order_id: str):
+        report = self.broker.cancel(client_order_id)
+        self.last_report = report
+        return report
 
 
 class AutomatedVirtualTradingLoop:
@@ -134,6 +139,7 @@ class AutomatedVirtualTradingLoop:
             instrument_identity_provider=self.identity_provider,
             market_tick=tick,
             multi_leg_plan_resolver=self.multi_leg_plan_resolver,
+            pending_order_ids_provider=self.fsm.pending_client_order_ids,
         )
         approved = tuple(decision.arbitration.approved_signals[:1])
         for canonical in approved:
@@ -149,6 +155,19 @@ class AutomatedVirtualTradingLoop:
         filled = 0
         rejected = len(decision.arbitration.rejected_signals)
         execution_ids: list[str] = []
+
+        for cancel_request in decision.cancel_requests:
+            status = status_by_strategy.get(cancel_request.strategy_id, StrategyRuntimeStatus(cancel_request.strategy_id))
+            for client_order_id in cancel_request.client_order_ids:
+                report = self.broker_adapter.cancel(client_order_id)
+                if report is None or report.status != "CANCELLED":
+                    rejected += 1
+                    status = status.add(risk_rejected=1)
+                    continue
+                self.fsm.apply_cancel(report)
+                routed += 1
+                status = status.add(routed=1)
+            status_by_strategy[cancel_request.strategy_id] = status
 
         if decision.multi_leg_decisions:
             if self.multi_leg_executor is None:
@@ -248,6 +267,3 @@ class AutomatedVirtualTradingLoop:
             strategy_status=self._last_strategy_status,
         )
         return self._last_result
-
-
-

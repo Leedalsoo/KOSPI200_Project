@@ -189,8 +189,8 @@ def test_standard_runtime_input_provider_blocks_track5_and_track6_when_volatilit
     try:
         contexts = provider.build(tick, state, account)
         track5_context = contexts["track5_gap_divergence"]
-        assert track5_context.analytics is not None
-        assert track5_context.analytics.get("volatility.expected_move").value is None
+        assert track5_context.analytics is None
+        assert track5_context.input.data_status["KOSPI200_daily_open_previous_close"] == "UNAVAILABLE"
         track6_context = contexts["track6_daily_tail_insurance"]
         if track6_context.analytics is not None:
             assert track6_context.analytics.get("volatility.active").value is None

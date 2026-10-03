@@ -182,6 +182,42 @@ class OrderStateMachine:
             raise OrderStateTransitionError("BROKER_ORDER_COMMAND_NOT_REGISTERED")
         return state.broker_order_command
 
+    def pending_client_order_ids(self, strategy_id: str) -> tuple[str, ...]:
+        target = str(strategy_id).strip()
+        if not target:
+            raise OrderStateTransitionError("STRATEGY_ID_REQUIRED")
+        pending = []
+        for state in self._states.values():
+            command = state.broker_order_command
+            if command is None or str(command.strategy_id or "").strip() != target:
+                continue
+            if state.status in {"SUBMITTED", "ACKED", "PARTIALLY_FILLED"}:
+                pending.append(state.client_order_id)
+        return tuple(sorted(pending))
+
+    def apply_cancel(self, report: ExecutionReport) -> OrderState:
+        client_order_id = str(report.client_order_id).strip()
+        if not client_order_id:
+            raise OrderStateTransitionError("CLIENT_ORDER_ID_REQUIRED")
+        current = self._states.get(client_order_id)
+        if current is None:
+            raise OrderStateTransitionError("ORDER_NOT_REGISTERED")
+        if current.status not in {"SUBMITTED", "ACKED", "PARTIALLY_FILLED"}:
+            raise OrderStateTransitionError("CANCEL_AFTER_INVALID_STATE")
+        if report.status != "CANCELLED":
+            raise OrderStateTransitionError("CANCEL_REPORT_REQUIRED")
+        state = OrderState(
+            client_order_id=current.client_order_id,
+            status="CANCELLED",
+            broker_order_id=report.broker_order_id or current.broker_order_id,
+            order_quantity=current.order_quantity,
+            filled_quantity=current.filled_quantity,
+            broker_order_command=current.broker_order_command,
+            average_execution_price=current.average_execution_price,
+        )
+        self._states[client_order_id] = state
+        return state
+
     def get(self, client_order_id: str) -> OrderState | None:
         return self._states.get(client_order_id)
 

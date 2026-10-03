@@ -18,12 +18,26 @@ def build_track9_analytics_snapshot(
     margin_ratio=None,
     option_contract_selection=None,
     common_snapshot=None,
+    active_sell_qty=None,
+    insurance_qty=None,
+    event_upcoming=None,
+    event_budget=None,
+    estimated_event_cost=None,
+    premium_spent=None,
 ):
     """Build Track9-specific analytics and merge canonical Common Analytics."""
     observations = {
         "iv_spike": getattr(data, "iv_spike", None),
         "iv_crush": getattr(data, "iv_crush", None),
     }
+    observations.update({
+        "active_sell_qty": active_sell_qty,
+        "insurance_qty": insurance_qty,
+        "event_upcoming": event_upcoming,
+        "event_budget": event_budget,
+        "estimated_event_cost": estimated_event_cost,
+        "premium_spent": premium_spent,
+    })
     if option_contract_selection is not None:
         put = option_contract_selection.put
         call = option_contract_selection.call

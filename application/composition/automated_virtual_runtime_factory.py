@@ -166,7 +166,6 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         futures_identity_source=futures_identity_source,
         risk_guard_status_source=(risk_guard_status_source or synthetic_runtime_sources),
     )
-    provider.track9_position_execution_source = VirtualTrack9PositionExecutionReadModel(multi_leg_bridge)
 
     def track1_fence_type_source():
         strategy = registry.get("TRACK1_TAIL_DEFENSE", "1.1.0")

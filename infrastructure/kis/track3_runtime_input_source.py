@@ -47,6 +47,7 @@ class KISTrack3RuntimeInputSource:
         self._options: dict[str, list[tuple[datetime, MarketObservation]]] = defaultdict(list)
         self._fees: dict[datetime, Decimal] = {}
         self._premium: dict[datetime, Decimal] = {}
+        self._option_quantities: dict[str, list[tuple[datetime, int]]] = defaultdict(list)
         self._common_analytics: dict[datetime, tuple[float, float, str]] = {}
         for item in initial_futures:
             self.update_futures(item, session_date=item.observed_at.date() if hasattr(item, "observed_at") else None)
@@ -131,6 +132,19 @@ class KISTrack3RuntimeInputSource:
         self._fees[observed_at] = total_fees
         self._premium[observed_at] = premium_spent
 
+    def set_option_quantity(
+        self,
+        *,
+        instrument_id: str,
+        observed_at: datetime,
+        quantity: int,
+    ) -> None:
+        if not str(instrument_id).strip() or quantity <= 0:
+            raise ValueError("TRACK3_OPTION_QUANTITY_INVALID")
+        values = self._option_quantities[str(instrument_id)]
+        values.append((observed_at, int(quantity)))
+        values.sort(key=lambda item: item[0])
+
     def get_input(self, symbol: str, observed_at: datetime) -> Track3RuntimeInput | None:
         if str(symbol).strip() != "KOSPI200":
             return None
@@ -172,6 +186,10 @@ class KISTrack3RuntimeInputSource:
         options_legs = self._option_legs(observed_at)
         if not options_legs:
             return None
+        total_fees = self._latest_total(self._fees, observed_at)
+        premium_spent = self._latest_total(self._premium, observed_at)
+        if total_fees is None or premium_spent is None:
+            return None
         multipliers = {float(leg["contract_multiplier"]) for leg in options_legs}
         if len(multipliers) != 1:
             return None
@@ -188,8 +206,8 @@ class KISTrack3RuntimeInputSource:
             market_stable=regime not in {"EXTREME_MOVE", "HIGH_VOLATILITY"},
             spread_normalizing=spread_normalizing,
             allow_size_up=regime == "NORMAL" and spread_normalizing,
-            total_fees=self._latest_total(self._fees, observed_at),
-            premium_spent=self._latest_total(self._premium, observed_at),
+            total_fees=total_fees,
+            premium_spent=premium_spent,
             options_legs=options_legs,
             contract_multiplier=multipliers.pop(),
             source=self.source_name,
@@ -249,13 +267,19 @@ class KISTrack3RuntimeInputSource:
                 continue
             item = candidates[-1][1]
             identity = item.contract
+            quantity = self._latest_option_quantity(
+                str(identity.instrument_id),
+                observed_at,
+            )
+            if quantity is None:
+                continue
             legs.append(
                 {
                     "instrument_id": identity.instrument_id,
                     "strike": float(identity.strike),
                     "price": float(item.quote.last),
                     "current_market_price": float(item.quote.last),
-                    "qty": 1,
+                    "qty": quantity,
                     "side": "BUY",
                     "type": str(identity.option_type).upper(),
                     "expiry": str(identity.expiry),
@@ -266,6 +290,11 @@ class KISTrack3RuntimeInputSource:
         return tuple(legs)
 
     @staticmethod
-    def _latest_total(values: dict[datetime, Decimal], observed_at: datetime) -> float:
+    def _latest_total(values: dict[datetime, Decimal], observed_at: datetime) -> float | None:
         candidates = sorted(value for timestamp, value in values.items() if timestamp <= observed_at)
-        return float(candidates[-1]) if candidates else 0.0
+        return float(candidates[-1]) if candidates else None
+
+    def _latest_option_quantity(self, instrument_id: str, observed_at: datetime) -> int | None:
+        values = self._option_quantities.get(str(instrument_id), ())
+        candidates = [quantity for timestamp, quantity in values if timestamp <= observed_at]
+        return candidates[-1] if candidates else None
