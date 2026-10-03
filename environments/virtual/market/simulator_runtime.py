@@ -117,7 +117,8 @@ class VirtualMarketSimulatorRuntime:
         """Register an external replay quote without triggering strategy evaluation."""
         if not symbol or option_type not in {"CALL", "PUT"} or not expiry:
             raise ValueError("VMS_REPLAY_OPTION_QUOTE_REQUIRED")
-        self._option_quotes[(option_type.upper(), float(strike), expiry)] = {
+        normalized_expiry = str(expiry).replace("-", "")[:6]
+        self._option_quotes[(option_type.upper(), float(strike), normalized_expiry)] = {
             "bid": float(bid),
             "ask": float(ask),
             "last": float(last),
@@ -129,14 +130,8 @@ class VirtualMarketSimulatorRuntime:
         """Publish one externally supplied replay tick through the Virtual Market boundary."""
         if not isinstance(tick, ReferenceCanonicalMarketTick):
             raise TypeError("VMS_REPLAY_TICK_REQUIRED")
-        if self.option_master is not None and tick.instrument_id and tick.symbol and tick.expiry and tick.option_type:
-            identity = self.option_master.find_contract_identity(
-                tick.expiry, tick.option_type, Decimal(str(tick.strike_price))
-            )
-            if identity is not None:
-                authoritative_id = identity.stnd_iscd or identity.shrn_iscd
-                if authoritative_id:
-                    tick = replace(tick, instrument_id=authoritative_id)
+        # Preserve the observed WS broker symbol at the Runtime boundary.
+        # Contract metadata is resolved separately through the authoritative Master.
         self.last_tick = tick
         self._recent_ticks.append(tick)
         if tick.underlying_price is not None:
@@ -149,7 +144,8 @@ class VirtualMarketSimulatorRuntime:
             self._price = tick.underlying_price
             self._futures_price = self._price + self.config.futures_basis_points
         if tick.symbol and tick.option_type and tick.expiry and tick.bid_price > 0 and tick.ask_price > 0:
-            self._option_quotes[(tick.option_type.upper(), float(tick.strike_price), tick.expiry)] = {
+            normalized_expiry = str(tick.expiry).replace("-", "")[:6]
+            self._option_quotes[(tick.option_type.upper(), float(tick.strike_price), normalized_expiry)] = {
                 "bid": tick.bid_price,
                 "ask": tick.ask_price,
                 "last": tick.last_price,

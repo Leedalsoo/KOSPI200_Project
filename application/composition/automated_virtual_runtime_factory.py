@@ -97,18 +97,31 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
             return futures_identity_source.identity_for_observed_symbol(observed_symbol)
         if tick is None or not tick.expiry or not proposal.option_type or proposal.strike is None:
             raise ValueError("VIRTUAL_AUTHORITATIVE_OPTION_IDENTITY_INPUT_REQUIRED")
-        observed_symbol = str(
-            getattr(tick, "instrument_id", None)
-            or getattr(tick, "symbol", None)
-            or ""
-        ).strip()
-        identity = (
-            bootstrap.bundle.option_master.get_contract_identity(observed_symbol)
-            if observed_symbol and synthetic_runtime_sources is None
-            else bootstrap.bundle.option_master.find_contract_identity(
+        observed_candidates = tuple(dict.fromkeys(
+            str(value).strip()
+            for value in (
+                getattr(tick, "instrument_id", None),
+                getattr(tick, "symbol", None),
+            )
+            if value
+        ))
+        identity = None
+        if synthetic_runtime_sources is None:
+            for observed_symbol in observed_candidates:
+                observed_identity = bootstrap.bundle.option_master.get_contract_identity(observed_symbol)
+                if observed_identity is None:
+                    continue
+                same_target = (
+                    str(observed_identity.option_type).upper() == str(proposal.option_type).upper()
+                    and Decimal(str(observed_identity.strike)) == Decimal(str(proposal.strike))
+                )
+                if same_target:
+                    identity = observed_identity
+                    break
+        if identity is None:
+            identity = bootstrap.bundle.option_master.find_contract_identity(
                 tick.expiry, proposal.option_type, proposal.strike
             )
-        )
         if identity is None or not identity.shrn_iscd:
             raise ValueError("VIRTUAL_AUTHORITATIVE_OPTION_IDENTITY_NOT_FOUND")
         if identity.contract_multiplier is None:
