@@ -20,7 +20,7 @@ def test_virtual_multileg_execution_populates_track9_lot_read_models(tmp_path):
             timestamp=f"2026-10-15T10:00:00.{seq:03d}",
             underlying_price=512.5, strike_price=510.0, option_type=option_type,
             contract_multiplier=250000.0, bid_price=bid, ask_price=ask,
-            last_price=ask, volume=100, seq_id=seq, expiry="202610", symbol=symbol,
+            last_price=ask, volume=100, seq_id=seq, expiry="20261015", symbol=symbol,
         ), source="KIS:H0IOCNT0")
     bundle.market.load_historical_store(store, source="KIS:H0IOCNT0")
     assert bundle.market.replay_next() is not None
@@ -63,7 +63,7 @@ def test_repeated_bridge_executions_consume_fifo_and_create_reversal_lot(tmp_pat
         timestamp="2026-10-15T10:00:00.001", underlying_price=512.5,
         strike_price=510.0, option_type="CALL", contract_multiplier=250000.0,
         bid_price=3.20, ask_price=3.30, last_price=3.25, volume=100, seq_id=1,
-        expiry="202610", symbol="201S11305",
+        expiry="20261015", symbol="201S11305",
     ), source="KIS:H0IOCNT0")
     bundle.market.load_historical_store(store, source="KIS:H0IOCNT0")
     assert bundle.market.replay_next() is not None

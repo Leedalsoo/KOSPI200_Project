@@ -36,7 +36,7 @@ def test_live_option_quote_binds_master_identity_and_virtual_quote_store() -> No
         )
     )
 
-    assert key == ("PUT", 335.0, "202609")
+    assert key == ("PUT", 335.0, "20260910")
     quote = market.option_quotes[key]
     assert quote["bid"] == Decimal("2.80")
     assert quote["ask"] == Decimal("3.00")

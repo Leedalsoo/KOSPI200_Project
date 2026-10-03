@@ -41,7 +41,7 @@ class LiveOptionQuoteVirtualBridge:
         if observation.last_price is not None and observation.last_price <= 0:
             raise LiveOptionQuoteBridgeError("LIVE_OPTION_LAST_INVALID")
 
-        expiry_key = identity.expiry.replace("-", "")[:6]
+        expiry_key = identity.expiry.replace("-", "")[:8]
         key = (identity.option_type, float(identity.strike), expiry_key)
         quote = {
             "bid": observation.bid_price,

@@ -25,7 +25,7 @@ def identity(symbol="B01610C41"):
     return OptionInstrumentIdentity(
         instrument_id=symbol,
         symbol=symbol,
-        expiry="202610",
+        expiry="20261015",
         option_type="CALL",
         strike=Decimal("1595.0"),
         contract_multiplier=Decimal("250000"),
@@ -371,7 +371,7 @@ def test_krx_target_resolves_to_kis_broker_symbol_before_rest_requests(tmp_path)
         "KRX_MARKETPLACE", Decimal("250000"),
     )
     kis = KisOptionContractIdentity(
-        "B01610A41", "KR4B016AA412", "202610", "CALL", Decimal("1097.5"),
+        "B01610A41", "KR4B016AA412", "2026-10-08", "CALL", Decimal("1097.5"),
         "KIS_INDEX_OPTION_MASTER", Decimal("250000"),
     )
     resolver = KRXKISOptionIdentityResolver({kis.shrn_iscd: kis})

@@ -25,13 +25,13 @@ class Track2OptionContractSource:
         if self.option_master is None:
             raise ValueError("TRACK2_OPTION_MASTER_REQUIRED")
         expiries = sorted({
-            str(identity.expiry).replace("-", "")[:6]
+            str(identity.expiry).replace("-", "")[:8]
             for identity in self.option_master.list_contract_identities()
             if getattr(identity, "expiry", None) and getattr(identity, "shrn_iscd", "")
         })
         if not expiries:
             raise ValueError("TRACK2_OPTION_EXPIRY_NOT_FOUND")
-        candidates = [value for value in expiries if value >= as_of.strftime("%Y%m")]
+        candidates = [value for value in expiries if value >= as_of.strftime("%Y%m%d")]
         if not candidates:
             raise ValueError("TRACK2_OPTION_EXPIRY_NOT_FOUND")
         return candidates[0]
@@ -74,7 +74,7 @@ class Track2OptionContractSource:
             raise ValueError("TRACK2_CONTRACT_MULTIPLIER_REQUIRED")
         if put_multiplier != call_multiplier:
             raise ValueError("TRACK2_CONTRACT_MULTIPLIER_MISMATCH")
-        return Track2OptionContractSelection(str(expiry), atm, put, call)
+        return Track2OptionContractSelection(str(expiry).replace("-", "")[:8], atm, put, call)
 
 
 __all__ = ("Track2OptionContractSelection", "Track2OptionContractSource")

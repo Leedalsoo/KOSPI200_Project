@@ -16,7 +16,7 @@ def test_option_master_standard_identity_is_shared_by_replay_and_execution():
     master = bootstrap.bundle.option_master
 
     identity = master.find_contract_identity(
-        "202610", "CALL", Decimal("1105.0")
+        "2026-10-08", "CALL", Decimal("1105.0")
     )
     assert identity is not None
     assert identity.stnd_iscd
@@ -31,7 +31,7 @@ def test_option_master_standard_identity_is_shared_by_replay_and_execution():
             )
         )
     )
-    runtime_identity = loop.identity_provider(evaluation, SimpleNamespace(expiry="202610"))
+    runtime_identity = loop.identity_provider(evaluation, SimpleNamespace(expiry="2026-10-08"))
     assert runtime_identity.instrument_id == identity.stnd_iscd
     assert runtime_identity.symbol == identity.shrn_iscd
 

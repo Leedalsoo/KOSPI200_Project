@@ -52,4 +52,4 @@ def test_h0iocnt0_observation_sink_connects_adapter_to_iv_chain() -> None:
     sink = KISTrack2OptionIVObservationSink(option_master=master, iv_source=source, session_date=date(2026, 9, 17))
     observation = adapter.adapt(_frame("201C51000", "0.241"))
     sink.on_observation(observation)
-    assert source.get_iv(expiry="202610", option_type="CALL", strike=Decimal("510")) == Decimal("0.241")
+    assert source.get_iv(expiry="2026-10-15", option_type="CALL", strike=Decimal("510")) == Decimal("0.241")

@@ -29,3 +29,20 @@ def test_invalid_master_expiry_is_not_accepted() -> None:
     source = KisOptionMasterExpirySource(master)
     with pytest.raises(ValueError, match="AUTHORITATIVE_OPTION_EXPIRY_INVALID"):
         source.resolve_expiry("201V12345")
+
+
+def test_option_master_exact_expiry_separates_same_month_weekly_and_monthly():
+    master = InMemoryOptionContractMaster()
+    master.register_contract_identity(KisOptionContractIdentity(
+        shrn_iscd="WEEKLY", stnd_iscd=None, expiry="2026-10-08",
+        option_type="CALL", strike=Decimal("510"), contract_multiplier=Decimal("250000"),
+    ))
+    master.register_contract_identity(KisOptionContractIdentity(
+        shrn_iscd="MONTHLY", stnd_iscd=None, expiry="2026-10-15",
+        option_type="CALL", strike=Decimal("510"), contract_multiplier=Decimal("250000"),
+    ))
+
+    assert master.find_contract_identity("2026-10-08", "CALL", Decimal("510")).shrn_iscd == "WEEKLY"
+    assert master.find_contract_identity("2026-10-15", "CALL", Decimal("510")).shrn_iscd == "MONTHLY"
+    assert master.find_contract_identity("202610", "CALL", Decimal("510")) is None
+    assert [x.shrn_iscd for x in master.list_contract_identities("2026-10-08")] == ["WEEKLY"]

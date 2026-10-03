@@ -23,7 +23,7 @@ class FakeOptionMaster:
     def list_contract_identities(self, expiry=None):
         if expiry is None:
             return self.identities
-        return tuple(identity for identity in self.identities if identity.expiry.replace("-", "")[:6] == expiry)
+        return tuple(identity for identity in self.identities if identity.expiry.replace("-", "")[:8] == str(expiry).replace("-", "")[:8])
 
 
 def test_select_uses_authoritative_listed_atm_and_preserves_identity_pair():
@@ -35,7 +35,7 @@ def test_select_uses_authoritative_listed_atm_and_preserves_identity_pair():
     )
     source = Track2OptionContractSource(FakeOptionMaster(identities))
 
-    selection = source.select(expiry="202610", current_price=Decimal("1089.39011"))
+    selection = source.select(expiry="2026-10-08", current_price=Decimal("1089.39011"))
 
     assert selection.atm_strike == Decimal("1090.0")
     assert selection.put.shrn_iscd == "P10900"
@@ -49,7 +49,7 @@ def test_nearest_expiry_uses_option_master_identities():
     )
     source = Track2OptionContractSource(FakeOptionMaster(identities))
 
-    assert source.nearest_expiry(as_of=date(2026, 9, 30)) == "202610"
+    assert source.nearest_expiry(as_of=date(2026, 9, 30)) == "20261008"
 
 
 def test_missing_option_master_fails_closed():

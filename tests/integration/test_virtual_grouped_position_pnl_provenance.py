@@ -22,7 +22,7 @@ def test_virtual_fill_position_grouped_pnl_preserves_authoritative_multiplier_an
             timestamp=f"2026-10-15T10:00:00.{123 + idx:03d}",
             underlying_price=512.5, strike_price=strike, option_type=option_type,
             contract_multiplier=250000.0, bid_price=bid, ask_price=ask,
-            last_price=last, volume=100, seq_id=seq, expiry="202610", symbol=symbol,
+            last_price=last, volume=100, seq_id=seq, expiry="20261015", symbol=symbol,
         ), source="KIS:H0IOCNT0")
     bundle.market.load_historical_store(store, source="KIS:H0IOCNT0")
     for _ in events:
@@ -73,7 +73,7 @@ def test_position_group_snapshot_uses_authoritative_realized_pnl_for_closed_opti
         timestamp="2026-10-15T10:00:01.123", underlying_price=512.5,
         strike_price=610.0, option_type="CALL", contract_multiplier=250000.0,
         bid_price=23.35, ask_price=23.40, last_price=24.70, volume=100,
-        seq_id=19, expiry="202610", symbol="C01610A34",
+        seq_id=19, expiry="20261015", symbol="C01610A34",
     )
     store.append(tick, source="KIS:H0IOCNT0")
     bundle.market.load_historical_store(store, source="KIS:H0IOCNT0")

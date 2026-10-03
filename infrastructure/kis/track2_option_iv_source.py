@@ -44,15 +44,15 @@ class KISTrack2OptionIVSource:
             observed_at=self._observed_at(observation.observed_hour, session_date),
             source=observation.source,
         )
-        key_expiry = record.expiry.replace("-", "")[:6]
+        key_expiry = record.expiry.replace("-", "")[:8]
         self._observations[(key_expiry, record.option_type, record.strike)] = record
         return record
 
     def get_iv(self, *, expiry: str, option_type: str, strike: Decimal) -> Decimal | None:
-        key_expiry = str(expiry).replace("-", "")[:6]
+        key_expiry = str(expiry).replace("-", "")[:8]
         record = self._observations.get((key_expiry, str(option_type).upper(), Decimal(str(strike))))
         return record.implied_volatility if record is not None else None
 
     def get_observation(self, *, expiry: str, option_type: str, strike: Decimal) -> Track2OptionIVObservation | None:
-        key_expiry = str(expiry).replace("-", "")[:6]
+        key_expiry = str(expiry).replace("-", "")[:8]
         return self._observations.get((key_expiry, str(option_type).upper(), Decimal(str(strike))))

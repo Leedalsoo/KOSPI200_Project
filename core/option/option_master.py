@@ -348,21 +348,37 @@ class _IdentityOptionContractMaster(IOptionContractMaster):
     def find_contract_identity(
         self, expiry: str, option_type: str, strike: Decimal
     ) -> Optional[KisOptionContractIdentity]:
-        target_expiry = str(expiry).replace("-", "")[:6]
+        target_expiry = str(expiry).replace("-", "")
         target_type = str(option_type).upper()
         target_strike = Decimal(str(strike))
-        for identity in self._contract_identities.values():
-            if (
-                identity.expiry.replace("-", "")[:6] == target_expiry
+        exact_matches = [
+            identity for identity in self._contract_identities.values()
+            if identity.expiry.replace("-", "")[:8] == target_expiry[:8]
+            and identity.option_type == target_type
+            and identity.strike == target_strike
+        ]
+        if len(exact_matches) == 1:
+            return exact_matches[0]
+        if exact_matches:
+            return exact_matches[0]
+        if len(target_expiry) == 6:
+            month_matches = [
+                identity for identity in self._contract_identities.values()
+                if identity.expiry.replace("-", "")[:6] == target_expiry
                 and identity.option_type == target_type
                 and identity.strike == target_strike
-            ):
-                return identity
+            ]
+            if len(month_matches) == 1:
+                return month_matches[0]
         return None
 
     def list_contract_identities(self, expiry: Optional[str] = None) -> tuple[KisOptionContractIdentity, ...]:
-        target = str(expiry).replace("-", "")[:6] if expiry else None
-        return tuple(identity for identity in self._contract_identities.values() if target is None or identity.expiry.replace("-", "")[:6] == target)
+        target = str(expiry).replace("-", "") if expiry else None
+        if target is None:
+            return tuple(self._contract_identities.values())
+        if len(target) >= 8:
+            return tuple(identity for identity in self._contract_identities.values() if identity.expiry.replace("-", "")[:8] == target[:8])
+        return tuple(identity for identity in self._contract_identities.values() if identity.expiry.replace("-", "")[:6] == target[:6])
 
     def register_contract_identity(
         self, identity: KisOptionContractIdentity

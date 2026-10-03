@@ -90,7 +90,7 @@ class VirtualMultiLegExecutionBridge:
             raise ValueError("MULTI_LEG_OPTION_MASTER_REQUIRED")
         option_quotes = getattr(self.bundle.market, "option_quotes", {})
         matching_expiries = sorted({
-            str(expiry).replace("-", "")[:6]
+            str(expiry).replace("-", "")[:8]
             for key in option_quotes
             if isinstance(key, tuple) and len(key) == 3
             and str(key[0]).upper() == str(leg.option_type).upper()
@@ -107,7 +107,7 @@ class VirtualMultiLegExecutionBridge:
         return OptionInstrumentIdentity(
             instrument_id=identity.shrn_iscd,
             symbol=identity.shrn_iscd,
-            expiry=identity.expiry.replace("-", "")[:6],
+            expiry=identity.expiry.replace("-", "")[:8],
             option_type=identity.option_type,
             strike=identity.strike,
             contract_multiplier=Decimal(str(identity.contract_multiplier)),
@@ -145,8 +145,8 @@ class VirtualMultiLegExecutionBridge:
                         and len(key) == 3
                         and str(key[0]).upper() == identity.option_type
                         and float(key[1]) == float(identity.strike)
-                        and str(key[2]).replace("-", "")[:6]
-                        == identity.expiry.replace("-", "")[:6]
+                        and str(key[2]).replace("-", "")[:8]
+                        == identity.expiry.replace("-", "")[:8]
                     ),
                     None,
                 )
@@ -318,8 +318,8 @@ class VirtualMultiLegExecutionBridge:
                         and len(key) == 3
                         and str(key[0]).upper() == identity.option_type
                         and float(key[1]) == float(identity.strike)
-                        and str(key[2]).replace("-", "")[:6]
-                        == identity.expiry.replace("-", "")[:6]
+                        and str(key[2]).replace("-", "")[:8]
+                        == identity.expiry.replace("-", "")[:8]
                     ),
                     None,
                 )

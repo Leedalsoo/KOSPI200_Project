@@ -129,7 +129,7 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         return OptionInstrumentIdentity(
             instrument_id=(identity.stnd_iscd or identity.shrn_iscd),
             symbol=identity.shrn_iscd,
-            expiry=identity.expiry.replace("-", "")[:6],
+            expiry=identity.expiry.replace("-", "")[:8],
             option_type=identity.option_type,
             strike=identity.strike,
             contract_multiplier=identity.contract_multiplier,

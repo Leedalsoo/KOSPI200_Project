@@ -95,7 +95,7 @@ class KRXKISOptionIdentityResolver:
             if kis is None:
                 return None
             if (
-                kis.expiry != krx_identity.expiry.replace("-", "")[:6]
+                kis.expiry.replace("-", "")[:8] != krx_identity.expiry.replace("-", "")[:8]
                 or kis.option_type != krx_identity.option_type
                 or kis.strike != krx_identity.strike
             ):
@@ -169,12 +169,12 @@ class KISOptionIdentityResolver:
     def find_contract_identity(
         self, expiry: str, option_type: str, strike: Decimal
     ) -> OptionInstrumentIdentity | None:
-        target_expiry = expiry.replace("-", "")[:6]
+        target_expiry = expiry.replace("-", "")[:8]
         target_type = option_type.upper()
         target_strike = Decimal(str(strike))
         matches = [
             identity for identity in self._by_short.values()
-            if identity.expiry.replace("-", "")[:6] == target_expiry
+            if identity.expiry.replace("-", "")[:8] == target_expiry
             and identity.option_type == target_type
             and identity.strike == target_strike
         ]

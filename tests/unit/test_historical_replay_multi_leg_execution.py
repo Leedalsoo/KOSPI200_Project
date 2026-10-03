@@ -65,7 +65,7 @@ def test_historical_replay_flows_through_broker_api_and_multi_leg_execution(tmp_
         last_price=3.25,
         volume=120,
         seq_id=7,
-        expiry="202610",
+        expiry="20261015",
         symbol="201S11305",
     )
     store.append(tick, source="KIS:H0IOCNT0")
@@ -73,7 +73,7 @@ def test_historical_replay_flows_through_broker_api_and_multi_leg_execution(tmp_
     replayed = bundle.market.replay_next()
 
     quote = bundle.broker_api.get_option_quote(
-        option_type="CALL", strike=510.0, expiry="202610"
+        option_type="CALL", strike=510.0, expiry="20261015"
     )
     assert replayed == tick
     assert quote["contract_multiplier"] == 250000.0
@@ -90,7 +90,7 @@ def test_historical_replay_flows_through_broker_api_and_multi_leg_execution(tmp_
 
     identity = bridge.identity_for_leg(plan, plan.legs[0])
     assert identity.instrument_id == "201S11305"
-    assert identity.expiry == "202610"
+    assert identity.expiry == "20261015"
     assert identity.option_type == "CALL"
     assert identity.strike == Decimal("510")
 
@@ -117,14 +117,14 @@ def test_historical_replay_rejects_multiplier_mismatch(tmp_path):
             timestamp="2026-10-15T10:00:00.123",
             underlying_price=512.5, strike_price=510.0, option_type="CALL",
             contract_multiplier=250000.0, bid_price=3.20, ask_price=3.30,
-            last_price=3.25, volume=120, seq_id=8, expiry="202610",
+            last_price=3.25, volume=120, seq_id=8, expiry="20261015",
             symbol="201S11305",
         ), source="KIS:H0IOCNT0"
     )
     bundle.market.load_historical_store(store, source="KIS:H0IOCNT0")
     bundle.market.replay_next()
     bundle.market.publish_authoritative_option_quote(
-        ("CALL", 510.0, "202610"),
+        ("CALL", 510.0, "20261015"),
         {"bid": 3.20, "ask": 3.30, "last": 3.25,
          "timestamp": "2026-10-15T10:00:00.123", "contract_multiplier": 50000},
     )
@@ -146,7 +146,7 @@ def test_two_leg_historical_replay_preserves_group_identity_and_pnl(tmp_path):
             timestamp="2026-10-15T10:00:00.123",
             underlying_price=512.5, strike_price=510.0, option_type="CALL",
             contract_multiplier=250000.0, bid_price=3.20, ask_price=3.30,
-            last_price=3.25, volume=120, seq_id=10, expiry="202610",
+            last_price=3.25, volume=120, seq_id=10, expiry="20261015",
             symbol="201S11305",
         ), source="KIS:H0IOCNT0"
     )
@@ -155,7 +155,7 @@ def test_two_leg_historical_replay_preserves_group_identity_and_pnl(tmp_path):
             timestamp="2026-10-15T10:00:00.456",
             underlying_price=512.5, strike_price=510.0, option_type="PUT",
             contract_multiplier=250000.0, bid_price=2.70, ask_price=2.80,
-            last_price=2.80, volume=100, seq_id=11, expiry="202610",
+            last_price=2.80, volume=100, seq_id=11, expiry="20261015",
             symbol="201S11306",
         ), source="KIS:H0IOCNT0"
     )
@@ -164,10 +164,10 @@ def test_two_leg_historical_replay_preserves_group_identity_and_pnl(tmp_path):
     assert bundle.market.replay_next() is not None
 
     assert bundle.broker_api.get_option_quote(
-        option_type="CALL", strike=510.0, expiry="202610"
+        option_type="CALL", strike=510.0, expiry="20261015"
     )["contract_multiplier"] == 250000.0
     assert bundle.broker_api.get_option_quote(
-        option_type="PUT", strike=510.0, expiry="202610"
+        option_type="PUT", strike=510.0, expiry="20261015"
     )["contract_multiplier"] == 250000.0
 
     bridge = VirtualMultiLegExecutionBridge(bundle=bundle, run_id="TEST-RUN", option_master=bundle.option_master, risk_guard_status_source=allow_risk_guard())
@@ -252,7 +252,7 @@ def test_four_leg_historical_replay_risk_provenance_broker_api_and_control_tower
             timestamp=f"2026-10-15T10:00:00.{123 + idx:03d}",
             underlying_price=512.5, strike_price=strike, option_type=option_type,
             contract_multiplier=250000.0, bid_price=bid, ask_price=ask,
-            last_price=last, volume=100, seq_id=seq, expiry="202610", symbol=symbol,
+            last_price=last, volume=100, seq_id=seq, expiry="20261015", symbol=symbol,
         ), source="KIS:H0IOCNT0")
     bundle.market.load_historical_store(store, source="KIS:H0IOCNT0")
     for _ in events:
@@ -260,7 +260,7 @@ def test_four_leg_historical_replay_risk_provenance_broker_api_and_control_tower
 
     for option_type, strike, *_ in events:
         quote = bundle.broker_api.get_option_quote(
-            option_type=option_type, strike=strike, expiry="202610"
+            option_type=option_type, strike=strike, expiry="20261015"
         )
         assert quote["contract_multiplier"] == 250000.0
 

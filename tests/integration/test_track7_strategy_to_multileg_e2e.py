@@ -26,7 +26,7 @@ def test_track7_strategy_decision_risk_multileg_execution_position_pnl_e2e():
         risk_guard_status_source=allow_risk_guard(),
     )
     selection = Track7OptionContractSource(master).select(
-        expiry="202609", strike=Decimal("350")
+        expiry="20260910", strike=Decimal("350")
     )
     data = SimpleNamespace(
         price=Decimal("350"),
@@ -53,7 +53,7 @@ def test_track7_strategy_decision_risk_multileg_execution_position_pnl_e2e():
         StrategyInput(
             payload=Track7ExecutionInput(
                 strategy_id="track7_volatility_skew_weekly_insurance",
-                expiry="202609",
+                expiry="20260910",
                 listed_put_strike=selection.strike,
                 listed_call_strike=selection.strike,
                 contract_multiplier=selection.contract_multiplier,
@@ -103,11 +103,11 @@ def test_track7_strategy_decision_risk_multileg_execution_position_pnl_e2e():
     assert plan.legs[1].side == "SELL"
 
     market = bootstrap.bundle.market
-    market._option_quotes[("PUT", 350.0, "202609")] = {
+    market._option_quotes[("PUT", 350.0, "20260910")] = {
         "bid": 10.0, "ask": 10.2, "last": 10.1,
         "contract_multiplier": Decimal("250000"), "shrn_iscd": selection.put.shrn_iscd,
     }
-    market._option_quotes[("CALL", 350.0, "202609")] = {
+    market._option_quotes[("CALL", 350.0, "20260910")] = {
         "bid": 9.0, "ask": 9.2, "last": 9.1,
         "contract_multiplier": Decimal("250000"), "shrn_iscd": selection.call.shrn_iscd,
     }

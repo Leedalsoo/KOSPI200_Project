@@ -66,7 +66,7 @@ def make_context(as_of: datetime, price: Decimal) -> StrategyContext:
         strategy_id="track2_asymmetric_trap",
         analytics=analytics,
     )
-def seed_quotes(bundle, expiry: str = "202609") -> None:
+def seed_quotes(bundle, expiry: str = "20260910") -> None:
     for option_type in ("CALL", "PUT"):
         for strike in (490.0, 495.0, 500.0, 505.0, 510.0):
             identity = bundle.option_master.find_contract_identity(
@@ -110,7 +110,7 @@ def test_track2_e2e_authoritative_input_to_execution_and_run_isolation():
         return OptionInstrumentIdentity(
             instrument_id="T2-P-490",
             symbol="T2-P-490",
-            expiry="202609",
+            expiry="20260910",
             option_type="PUT",
             strike=Decimal("490"),
             contract_multiplier=Decimal("250000"),

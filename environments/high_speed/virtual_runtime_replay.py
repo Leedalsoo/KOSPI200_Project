@@ -79,7 +79,7 @@ class HighSpeedVirtualRuntimeReplayRunner:
                 identity = option_master.get_contract_identity(symbol)
                 if identity is None or identity.option_type is None or identity.strike is None:
                     continue
-                expiry = str(identity.expiry).replace("-", "")[:6]
+                expiry = str(identity.expiry).replace("-", "")[:8]
                 key = (str(identity.option_type).upper(), float(identity.strike), expiry)
                 quote = bootstrap.bundle.market.option_quotes.get(key)
                 if quote is not None:
