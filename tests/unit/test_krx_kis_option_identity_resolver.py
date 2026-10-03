@@ -21,7 +21,7 @@ def test_resolver_matches_krx_and_kis_by_authoritative_standard_code():
         "KRX_MARKETPLACE", Decimal("250000"),
     )
     kis = KisOptionContractIdentity(
-        "B01610A41", "KR4B016AA412", "202610", "CALL", Decimal("1097.5"),
+        "B01610A41", "KR4B016AA412", "2026-10-08", "CALL", Decimal("1097.5"),
         "KIS_INDEX_OPTION_MASTER", Decimal("250000"),
     )
     resolver = KRXKISOptionIdentityResolver({kis.shrn_iscd: kis})
@@ -37,9 +37,17 @@ def test_resolver_rejects_missing_standard_code_match():
     resolver = KRXKISOptionIdentityResolver({})
     assert resolver.get_contract_identity(krx.shrn_iscd, krx) is None
 
+
+def test_resolver_fails_closed_on_duplicate_standard_code():
+    first = KisOptionContractIdentity("B01610A41", "KR4B016AA412", "2026-10-08", "CALL", Decimal("1097.5"), "KIS_INDEX_OPTION_MASTER", Decimal("250000"))
+    second = KisOptionContractIdentity("C01610A41", "KR4B016AA412", "2026-10-08", "PUT", Decimal("1097.5"), "KIS_INDEX_OPTION_MASTER", Decimal("250000"))
+    import pytest
+    with pytest.raises(ValueError, match="AMBIGUOUS_KIS_STANDARD_CODE"):
+        KRXKISOptionIdentityResolver({first.shrn_iscd: first, second.shrn_iscd: second})
+
 def test_kis_first_resolver_uses_kis_identity_without_krx_input():
     kis = KisOptionContractIdentity(
-        "B01610A41", "KR4B016AA412", "202610", "CALL", Decimal("1097.5"),
+        "B01610A41", "KR4B016AA412", "2026-10-08", "CALL", Decimal("1097.5"),
         "KIS_INDEX_OPTION_MASTER", Decimal("250000"),
     )
     resolver = KISOptionIdentityResolver({kis.shrn_iscd: kis})
@@ -52,11 +60,11 @@ def test_kis_first_resolver_uses_kis_identity_without_krx_input():
 
 def test_kis_first_resolver_fails_closed_on_ambiguous_standard_code():
     first = KisOptionContractIdentity(
-        "B01610A41", "KR4B016AA412", "202610", "CALL", Decimal("1097.5"),
+        "B01610A41", "KR4B016AA412", "2026-10-08", "CALL", Decimal("1097.5"),
         "KIS_INDEX_OPTION_MASTER", Decimal("250000"),
     )
     second = KisOptionContractIdentity(
-        "C01610A41", "KR4B016AA412", "202610", "CALL", Decimal("1097.5"),
+        "C01610A41", "KR4B016AA412", "2026-10-08", "CALL", Decimal("1097.5"),
         "KIS_INDEX_OPTION_MASTER", Decimal("250000"),
     )
     import pytest

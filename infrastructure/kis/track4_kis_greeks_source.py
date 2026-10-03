@@ -27,5 +27,28 @@ class KISTrack4GreeksRealtimeSource:
         return self._provider
 
     @property
+    def snapshot(self):
+        if self._provider is None:
+            raise Track4KisGreeksSourceInvalid("TRACK4_KIS_GREEKS_UNAVAILABLE")
+        return self._provider.snapshot
+
+    def current_delta(self):
+        return self._require_provider().current_delta()
+
+    def current_gamma(self):
+        return self._require_provider().current_gamma()
+
+    def current_theta(self):
+        return self._require_provider().current_theta()
+
+    def active_vol(self):
+        return self._require_provider().active_vol()
+
+    def _require_provider(self):
+        if self._provider is None:
+            raise Track4KisGreeksSourceInvalid("TRACK4_KIS_GREEKS_UNAVAILABLE")
+        return self._provider
+
+    @property
     def provider(self) -> Track4KisGreeksProvider | None:
         return self._provider

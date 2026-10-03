@@ -24,3 +24,21 @@ def test_realtime_source_accepts_h0iocnt0_and_retains_provider():
 def test_non_greeks_frame_does_not_replace_provider():
     source = KISTrack4GreeksRealtimeSource()
     assert source.accept_frame("0|H0IFCNT0|1|A", observed_at=datetime(2026, 9, 22, 10, 0)) is None
+
+
+def test_realtime_source_facade_updates_after_accept_frame():
+    from datetime import datetime, timezone
+    from infrastructure.kis.track4_kis_greeks_source import KISTrack4GreeksRealtimeSource
+    values = [""] * 58
+    values[0] = "201S11305"
+    values[28] = "0.41"
+    values[29] = "0.017"
+    values[31] = "-0.03"
+    values[33] = "0.22"
+    source = KISTrack4GreeksRealtimeSource()
+    observed_at = datetime(2026, 9, 30, 6, 0, tzinfo=timezone.utc)
+    assert source.provider is None
+    source.accept_frame(f"0|H0IOCNT0|58|{'^'.join(values)}", observed_at=observed_at)
+    assert source.current_delta() == Decimal("0.41")
+    assert source.current_gamma() == Decimal("0.017")
+    assert source.snapshot.observed_at == observed_at.isoformat()

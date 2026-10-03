@@ -135,18 +135,18 @@ class KISAuthManager:
         def value(name: str) -> str:
             return os.getenv(name) or fallback.get(name, "")
 
-        app_key = (
-            value("KIS_VTS_APP_KEY") if is_vts else value("KIS_REAL_APP_KEY")
-        ) or value("KIS_APP_KEY") or value("REAL_BROKER_APP_KEY")
-        app_secret = (
-            value("KIS_VTS_APP_SECRET") if is_vts else value("KIS_REAL_APP_SECRET")
-        ) or value("KIS_APP_SECRET") or value("REAL_BROKER_APP_SECRET")
-
-        resolved_base_url = (
-            base_url
-            or value("KIS_BASE_URL")
-            or (KIS_VTS_BASE_URL if is_vts else KIS_REAL_BASE_URL)
-        )
+        if is_vts:
+            # VTS is an isolated credential boundary: never fall back to
+            # generic or REAL/LIVE credentials, and never inherit KIS_BASE_URL.
+            app_key = value("KIS_VTS_APP_KEY")
+            app_secret = value("KIS_VTS_APP_SECRET")
+            resolved_base_url = base_url or value("KIS_VTS_BASE_URL") or KIS_VTS_BASE_URL
+        else:
+            # REAL/LIVE is explicit; generic legacy credentials are not
+            # accepted as an implicit cross-environment fallback.
+            app_key = value("KIS_REAL_APP_KEY")
+            app_secret = value("KIS_REAL_APP_SECRET")
+            resolved_base_url = base_url or value("KIS_REAL_BASE_URL") or KIS_REAL_BASE_URL
         if cache_file_path is None:
             prefix = "vts" if is_vts else "real"
             cache_file_path = os.path.join("data", f".kis_token_cache_{prefix}.json")

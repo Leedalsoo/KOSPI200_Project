@@ -79,11 +79,16 @@ class KRXKISOptionIdentityResolver:
 
     def __init__(self, kis_master: Mapping[str, KisOptionContractIdentity]) -> None:
         self._by_short = dict(kis_master)
-        self._by_standard = {
-            identity.stnd_iscd: identity
-            for identity in self._by_short.values()
-            if identity.stnd_iscd
-        }
+        by_standard: dict[str, KisOptionContractIdentity] = {}
+        for identity in self._by_short.values():
+            standard = identity.stnd_iscd
+            if not standard:
+                continue
+            existing = by_standard.get(standard)
+            if existing is not None and existing != identity:
+                raise ValueError(f"AMBIGUOUS_KIS_STANDARD_CODE:{standard}")
+            by_standard[standard] = identity
+        self._by_standard = by_standard
 
     def get_contract_identity(
         self, symbol: str, krx_identity: KisOptionContractIdentity | None = None
@@ -123,7 +128,7 @@ class KRXKISOptionIdentityResolver:
         )
 
 class KISOptionIdentityResolver:
-    """Resolve development identity directly from KIS master data.
+    """Resolve the canonical development identity directly from KIS master data.
 
     KRX remains available as a separate validation source; this resolver does not
     require KRX data at runtime.
@@ -180,4 +185,4 @@ class KISOptionIdentityResolver:
         ]
         if len(matches) != 1:
             return None
-        return self.get_contract_identity(matches[0])
+        return self.get_contract_identity(matches[0].shrn_iscd)

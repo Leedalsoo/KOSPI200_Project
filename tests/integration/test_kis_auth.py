@@ -68,6 +68,25 @@ class KISAuthManagerTests(unittest.TestCase):
         self.assertEqual(headers["authorization"], "Bearer token")
         self.assertEqual(headers["tr_id"], "FHPST02300000")
 
+    def test_vts_does_not_fallback_to_generic_or_real_credentials(self):
+        with patch.dict("os.environ", {"KIS_APP_KEY": "generic-key", "KIS_APP_SECRET": "generic-secret", "REAL_BROKER_APP_KEY": "real-key", "REAL_BROKER_APP_SECRET": "real-secret"}, clear=True):
+            auth = KISAuthManager.from_env(is_vts=True, env_file="__missing_test_env__.env", cache_file_path=None)
+        self.assertFalse(auth.has_credentials())
+        self.assertEqual(auth.app_key, "")
+        self.assertEqual(auth.app_secret, "")
+
+    def test_vts_does_not_inherit_generic_base_url(self):
+        with patch.dict("os.environ", {"KIS_VTS_APP_KEY": "vts-key", "KIS_VTS_APP_SECRET": "vts-secret", "KIS_BASE_URL": "https://openapi.koreainvestment.com:9443"}, clear=True):
+            auth = KISAuthManager.from_env(is_vts=True, cache_file_path=None)
+        self.assertEqual(auth.base_url, "https://openapivts.koreainvestment.com:29443")
+
+    def test_real_does_not_fallback_to_generic_credentials(self):
+        with patch.dict("os.environ", {"KIS_APP_KEY": "generic-key", "KIS_APP_SECRET": "generic-secret"}, clear=True):
+            auth = KISAuthManager.from_env(is_vts=False, cache_file_path=None)
+        self.assertFalse(auth.has_credentials())
+        self.assertEqual(auth.app_key, "")
+        self.assertEqual(auth.app_secret, "")
+
 
 if __name__ == "__main__":
     pass

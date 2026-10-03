@@ -93,9 +93,14 @@ class MarketCalendarHub:
         )
         if identity is None or not getattr(identity, "expiry", None):
             return None
+        raw = str(identity.expiry).replace("-", "").strip()
         try:
+            if len(raw) == 6 and raw.isdigit():
+                year, month = int(raw[:4]), int(raw[4:6])
+                first = date(year, month, 1)
+                return first + timedelta(days=(3 - first.weekday()) % 7 + 14)
             return date.fromisoformat(str(identity.expiry))
-        except ValueError as exc:
+        except (ValueError, TypeError) as exc:
             raise ValueError("MARKET_CALENDAR_AUTHORITATIVE_OPTION_EXPIRY_INVALID") from exc
 
     def flags(self, observed_date: date, expiry: date | None = None) -> tuple[bool, bool, bool]:

@@ -25,7 +25,9 @@ class HistoricalMarketDailyOHLCProvider:
             raise ValueError("HISTORICAL_OHLC_SYMBOL_REQUIRED")
         candidates: list[HistoricalDailyOHLC] = []
         for record, _provenance in self.store.load_records(symbol=requested, trading_date=target.isoformat()):
-            if record.observed_at > observed_at:
+            # `observed_at` is the source observation/retrieval timestamp; the
+            # completed daily bar's market date is the authoritative freshness boundary.
+            if record.trading_date >= observed_at.date():
                 continue
             candidates.append(record)
         if not candidates:
