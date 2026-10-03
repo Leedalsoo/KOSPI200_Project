@@ -27,7 +27,7 @@ def test_daily_store_round_trip_preserves_decimal_and_provenance(tmp_path):
         "source_endpoint": "KRX_OPEN_API:fut_bydd_trd",
         "trading_date": "2026-09-18",
         "krx_isu_cd": "A016C000",
-        "master_files": "data_0900_20260919.xlsx",
+        "master_files": "tests/fixtures/krx/data_0900_20260919.xlsx",
         "master_sha256": "def",
         "observation_semantics": "EOD_DAILY_OHLC;observed_at_is_date_anchor_not_trade_timestamp",
     }

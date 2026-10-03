@@ -16,11 +16,11 @@ def test_strategy_contract_plan_covers_all_required_offsets_and_futures() -> Non
     plan = build_collection_plan(
         reference_price=Decimal("1090.23"),
         option_master_paths=(
-            "data_2801_20260919.xlsx",
+            "tests/fixtures/krx/data_2801_20260919.xlsx",
         ),
         weekly_master_paths=(
-            "data_2923_20260919.xlsx",
-            "data_2935_20260919.xlsx",
+            "tests/fixtures/krx/data_2923_20260919.xlsx",
+            "tests/fixtures/krx/data_2935_20260919.xlsx",
         ),
         standard_futures_symbol="A01609",
         mini_futures_symbol="A05609",
@@ -77,11 +77,11 @@ def test_plan_does_not_include_unresolved_contracts(tmp_path: Path) -> None:
     plan = build_collection_plan(
         reference_price=Decimal("1090.23"),
         option_master_paths=(
-            "data_2801_20260919.xlsx",
+            "tests/fixtures/krx/data_2801_20260919.xlsx",
         ),
         weekly_master_paths=(
-            "data_2923_20260919.xlsx",
-            "data_2935_20260919.xlsx",
+            "tests/fixtures/krx/data_2923_20260919.xlsx",
+            "tests/fixtures/krx/data_2935_20260919.xlsx",
         ),
         standard_futures_symbol="A01609",
         mini_futures_symbol="A05609",

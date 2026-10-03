@@ -10,7 +10,7 @@ ROOT = "C:/Users/white/Desktop/MovingProject/KOSPI200_Project"
 
 
 def test_loads_krx_kospi200_option_excel_as_authoritative_identity():
-    master = load_option_master([f"{ROOT}/data_2801_20260919.xlsx"])
+    master = load_option_master([f"{ROOT}/tests/fixtures/krx/data_2801_20260919.xlsx"])
     identity = master.get_contract_identity("B016A752")
     assert identity is not None
     assert identity.shrn_iscd == "B016A752"
@@ -22,7 +22,7 @@ def test_loads_krx_kospi200_option_excel_as_authoritative_identity():
 
 
 def test_loads_mini_kospi200_futures_excel():
-    master = load_futures_master([f"{ROOT}/data_2836_20260919.xlsx"], FuturesProductType.MINI)
+    master = load_futures_master([f"{ROOT}/tests/fixtures/krx/data_2836_20260919.xlsx"], FuturesProductType.MINI)
     identity = master.get_contract_identity("A056A000")
     assert identity is not None
     assert identity.shrn_iscd == "A056A000"
@@ -41,8 +41,8 @@ class DirectMaster:
 
 
 def test_weekly_option_files_are_separate_identity_sources():
-    thursday = load_option_master([f"{ROOT}/data_2923_20260919.xlsx"])
-    monday = load_option_master([f"{ROOT}/data_2935_20260919.xlsx"])
+    thursday = load_option_master([f"{ROOT}/tests/fixtures/krx/data_2923_20260919.xlsx"])
+    monday = load_option_master([f"{ROOT}/tests/fixtures/krx/data_2935_20260919.xlsx"])
     assert len(thursday.identities) == 196
     assert len(monday.identities) == 232
     assert thursday.get_contract_identity("B09FE937").expiry == "2026-09-23"
@@ -50,8 +50,8 @@ def test_weekly_option_files_are_separate_identity_sources():
 
 
 def test_merge_preserves_standard_and_mini_futures_identity_types():
-    standard = load_futures_master([f"{ROOT}/data_0900_20260919.xlsx"], FuturesProductType.STANDARD)
-    mini = load_futures_master([f"{ROOT}/data_2836_20260919.xlsx"], FuturesProductType.MINI)
+    standard = load_futures_master([f"{ROOT}/tests/fixtures/krx/data_0900_20260919.xlsx"], FuturesProductType.STANDARD)
+    mini = load_futures_master([f"{ROOT}/tests/fixtures/krx/data_2836_20260919.xlsx"], FuturesProductType.MINI)
     from infrastructure.krx.krx_marketplace_master import merge_futures_masters
     merged = merge_futures_masters(standard, mini)
     assert merged.get_contract_identity("A016C000").product_type is FuturesProductType.STANDARD
