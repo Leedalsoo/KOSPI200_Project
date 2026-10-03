@@ -1,6 +1,4 @@
 from datetime import date
-import json
-
 import pytest
 
 from infrastructure.kis.holiday_fallback_provider import (
@@ -8,6 +6,7 @@ from infrastructure.kis.holiday_fallback_provider import (
     HolidayCalendarUnavailableError,
     HolidayResolutionStatus,
     KRXHolidayProvider,
+    fetch_krx_holidays,
 )
 from infrastructure.kis.trading_calendar import ProductionTradingCalendar
 
@@ -30,6 +29,31 @@ class FakeKIS:
 
     def is_holiday(self, value):
         return value in self.holidays
+
+
+def test_krx_remote_loader_parses_official_payload():
+    class Response:
+        def __init__(self, payload):
+            self.payload = payload.encode("utf-8")
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return False
+        def read(self):
+            return self.payload
+
+    responses = [
+        Response("OTP123"),
+        Response('{"block1":[{"calnd_dd":"2027-01-01"},{"calnd_dd":"2027-09-24"}]}'),
+    ]
+
+    def urlopen(request, timeout=10):
+        return responses.pop(0)
+
+    assert fetch_krx_holidays(2027, urlopen=urlopen) == {
+        date(2027, 1, 1),
+        date(2027, 9, 24),
+    }
 
 
 def test_kis_primary_is_year_aware(tmp_path):
@@ -61,8 +85,12 @@ def test_kis_failure_falls_back_to_krx_and_caches_each_year(tmp_path):
     assert (tmp_path / "krx" / "2026.json").is_file()
 
 
+def _krx_unavailable(year):
+    raise RuntimeError("KRX unavailable")
+
+
 def test_cached_snapshot_is_used_when_kis_and_krx_are_unavailable(tmp_path):
-    krx = KRXHolidayProvider(cache_dir=tmp_path)
+    krx = KRXHolidayProvider(cache_dir=tmp_path, source_loader=_krx_unavailable)
     krx._write_cache(2027, {date(2027, 10, 3)}, source="KRX")
     provider = FallbackHolidayProvider(
         kis_provider=FakeKIS(fail=True),
@@ -77,7 +105,7 @@ def test_cached_snapshot_is_used_when_kis_and_krx_are_unavailable(tmp_path):
 def test_all_sources_failed_are_unknown_and_fail_closed(tmp_path):
     provider = FallbackHolidayProvider(
         kis_provider=FakeKIS(fail=True),
-        krx_provider=KRXHolidayProvider(cache_dir=tmp_path),
+        krx_provider=KRXHolidayProvider(cache_dir=tmp_path, source_loader=_krx_unavailable),
     )
 
     resolution = provider.get_resolution(2028)
@@ -90,7 +118,7 @@ def test_all_sources_failed_are_unknown_and_fail_closed(tmp_path):
 def test_trading_calendar_does_not_treat_unknown_as_trading_day(tmp_path):
     provider = FallbackHolidayProvider(
         kis_provider=FakeKIS(fail=True),
-        krx_provider=KRXHolidayProvider(cache_dir=tmp_path),
+        krx_provider=KRXHolidayProvider(cache_dir=tmp_path, source_loader=_krx_unavailable),
     )
     calendar = ProductionTradingCalendar(provider)
 

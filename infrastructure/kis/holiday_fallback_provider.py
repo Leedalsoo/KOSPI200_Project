@@ -5,8 +5,10 @@ The fallback is fail-closed: UNKNOWN never becomes a weekday/trading day.
 from __future__ import annotations
 
 import json
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Callable, Optional, Set
@@ -16,6 +18,44 @@ KRX_HOLIDAY_SOURCE_URL = (
     "https://global.krx.co.kr/contents/GLB/05/0501/0501110000/"
     "GLB0501110000.jsp"
 )
+
+KRX_HOLIDAY_OTP_PATH = "/contents/COM/GenerateOTP.jspx"
+KRX_HOLIDAY_DATA_PATH = "/contents/GLB/99/GLB99000001.jspx"
+KRX_HOLIDAY_FORM_BLD = "/GLB/05/0501/0501110000/glb0501110000_01"
+
+def fetch_krx_holidays(year: int, *, urlopen=urllib.request.urlopen) -> Set[date]:
+    """Fetch the official KRX yearly holiday list without hardcoded dates."""
+    otp_query = urllib.parse.urlencode({"name": "form", "bld": KRX_HOLIDAY_FORM_BLD}).encode("utf-8")
+    otp_request = urllib.request.Request(
+        "https://global.krx.co.kr" + KRX_HOLIDAY_OTP_PATH,
+        data=otp_query, headers={"User-Agent": "Project200/holiday-calendar"}, method="POST"
+    )
+    with urlopen(otp_request, timeout=10) as response:
+        otp = response.read().decode("utf-8").strip()
+    if not otp:
+        raise HolidayCalendarUnavailableError("KRX holiday OTP is empty")
+    payload = urllib.parse.urlencode({"search_bas_yy": str(year), "gridTp": "KRX", "code": otp}).encode("utf-8")
+    data_request = urllib.request.Request(
+        "https://global.krx.co.kr" + KRX_HOLIDAY_DATA_PATH,
+        data=payload, headers={"User-Agent": "Project200/holiday-calendar"}, method="POST"
+    )
+    with urlopen(data_request, timeout=10) as response:
+        data = json.loads(response.read().decode("utf-8"))
+    rows = data.get("block1")
+    if not isinstance(rows, list):
+        raise HolidayCalendarUnavailableError(f"KRX holiday response missing block1 for {year}")
+    holidays: Set[date] = set()
+    for row in rows:
+        raw = str(row.get("calnd_dd") or row.get("calnd_dd_dy") or "").strip()
+        try:
+            parsed = date.fromisoformat(raw)
+        except ValueError:
+            continue
+        if parsed.year == year:
+            holidays.add(parsed)
+    if not holidays:
+        raise HolidayCalendarUnavailableError(f"KRX holiday response empty for {year}")
+    return holidays
 
 
 class HolidayResolutionStatus(str, Enum):
@@ -47,7 +87,7 @@ class KRXHolidayProvider:
         source_loader: Optional[Callable[[int], Set[date]]] = None,
     ) -> None:
         self._cache_dir = Path(cache_dir)
-        self._source_loader = source_loader
+        self._source_loader = source_loader or fetch_krx_holidays
         self._last_error: Optional[str] = None
 
     @property
@@ -105,6 +145,7 @@ class KRXHolidayProvider:
             "year": year,
             "source": source,
             "source_url": KRX_HOLIDAY_SOURCE_URL,
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
             "holidays": sorted(v.isoformat() for v in holidays),
         }
         path.write_text(
@@ -114,6 +155,8 @@ class KRXHolidayProvider:
 
     @staticmethod
     def _validate_year(values: Set[date], year: int) -> None:
+        if not values:
+            raise ValueError("holiday calendar is empty")
         if any(value.year != year for value in values):
             raise ValueError("holiday contains a different calendar year")
 
