@@ -51,7 +51,7 @@ from application.composition.track8_analytics_provider import build_track8_analy
 class StandardRuntimeInputProvider:
     """Build standard inputs from observable VMS/VSSF sources only."""
 
-    def __init__(self, market: Any, *, track9_fee_ledger: Track9FeeLedger | None = None, track9_margin_read_model: Track9MarginReadModel | None = None, track9_position_execution_source: Track9PositionExecutionReadModel | None = None, track9_event_source: Track9EventSource | None = None, track9_event_risk_source: Track9EventRiskSource | None = None, run_id: str | None = None, track7_order_timeout_source: Any | None = None, track7_support_resistance_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None, track6_option_contract_source: Track6OptionContractSource | None = None, track7_option_contract_source: Track7OptionContractSource | None = None, track8_option_contract_source: Track8OptionContractSource | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None, track4_greeks_provider: Track4KisGreeksProvider | None = None, kospi200_daily_source: KOSPI200DailySource | None = None, track6_volatility_source: Track6VolatilitySource | None = None) -> None:
+    def __init__(self, market: Any, *, track9_fee_ledger: Track9FeeLedger | None = None, track9_margin_read_model: Track9MarginReadModel | None = None, track9_position_execution_source: Track9PositionExecutionReadModel | None = None, track9_event_source: Track9EventSource | None = None, track9_event_risk_source: Track9EventRiskSource | None = None, run_id: str | None = None, track7_order_timeout_source: Any | None = None, track7_support_resistance_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None, track6_option_contract_source: Track6OptionContractSource | None = None, track7_option_contract_source: Track7OptionContractSource | None = None, track8_option_contract_source: Track8OptionContractSource | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None, track4_greeks_provider: Track4KisGreeksProvider | None = None, kospi200_daily_source: KOSPI200DailySource | None = None, track6_volatility_source: Track6VolatilitySource | None = None, track1_fence_type_source: Any | None = None, track1_position_lot_store: Any | None = None, track1_option_delta_source: Any | None = None) -> None:
         self.risk_guard_status_source = risk_guard_status_source
         self.market_condition_sensor = MarketConditionSensor()
         self.track9_fee_ledger = track9_fee_ledger
@@ -83,10 +83,11 @@ class StandardRuntimeInputProvider:
             track6_volatility_source=track6_volatility_source,
         )
         self.track3 = Track3RuntimeInputProvider(track3_runtime_input_source)
-        self.track1_fence_type_source = None
-        self.track1_position_lot_store = None
-        self.track1_option_delta_source = None
-        self.track1 = Track1RuntimeInputProvider()
+        self.track1 = Track1RuntimeInputProvider(
+            fence_type_source=track1_fence_type_source,
+            position_lot_store=track1_position_lot_store,
+            option_delta_source=track1_option_delta_source,
+        )
 
     @staticmethod
     def _unavailable(strategy_id: str, sources: tuple[str, ...], reason: str) -> StrategyContext:
@@ -144,11 +145,6 @@ class StandardRuntimeInputProvider:
         )
         contexts: dict[str, StrategyContext] = {}
 
-        # Track1 consumes its strategy-state fence direction plus authoritative
-        # underlying history and execution-created option lots.
-        self.track1.fence_type_source = self.track1_fence_type_source
-        self.track1.position_lot_store = self.track1_position_lot_store
-        self.track1.option_delta_source = self.track1_option_delta_source
         track1_result = self.track1.build(
             as_of=d.as_of,
             active_vol=d.active_vol,

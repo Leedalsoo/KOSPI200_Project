@@ -84,37 +84,6 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         getattr(bootstrap.bundle.option_master, "calendar", None)
         or getattr(synthetic_runtime_sources, "calendar", None)
     )
-    provider = StandardRuntimeInputProvider(
-        bootstrap.bundle.market,
-        track9_fee_ledger=fee_ledger,
-        track9_margin_read_model=margin_read_model,
-        run_id=run_id,
-        option_expiry_source=expiry_source,
-        trading_calendar=market_calendar_hub,
-        option_master=bootstrap.bundle.option_master,
-        track2_option_iv_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else track2_option_iv_source),
-        track4_greeks_provider=track4_greeks_provider,
-        option_orderbook_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else historical_observation_option_source),
-        volume_profile_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else None),
-        basis_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else None),
-        track2_metrics_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else None),
-        track9_iv_event_materializer=track9_iv_event_materializer,
-        track9_atm_iv_source=track9_atm_iv_source,
-        track7_order_timeout_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else getattr(bootstrap.bundle, "track7_order_timeout_source", None)),
-        track7_support_resistance_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else getattr(bootstrap.bundle, "track7_support_resistance_source", None)),
-        risk_guard_status_source=(risk_guard_status_source if risk_guard_status_source is not None else synthetic_runtime_sources),
-        track3_runtime_input_source=track3_source,
-        track6_option_contract_source=Track6OptionContractSource(bootstrap.bundle.option_master),
-        track7_option_contract_source=Track7OptionContractSource(bootstrap.bundle.option_master),
-        track8_option_contract_source=Track8OptionContractSource(bootstrap.bundle.option_master),
-        kospi200_daily_source=kospi200_daily_source,
-        track6_volatility_source=track6_volatility_source,
-    )
-    if synthetic_runtime_sources is not None:
-        provider.track9_event_source = synthetic_runtime_sources
-        from environments.high_speed.synthetic_runtime_sources import SyntheticEventRiskSource
-        provider.track9_event_risk_source = SyntheticEventRiskSource(synthetic_runtime_sources)
-
     def identity(evaluation, tick):
         proposal = evaluation.result.execution_proposal
         if proposal is None:
@@ -194,9 +163,43 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
             return "PUT"
         return None
 
-    provider.track1_fence_type_source = track1_fence_type_source
-    provider.track1_position_lot_store = multi_leg_bridge.position_lot_store
-    provider.track1_option_delta_source = historical_observation_option_source
+
+
+    provider = StandardRuntimeInputProvider(
+        bootstrap.bundle.market,
+        track9_fee_ledger=fee_ledger,
+        track9_margin_read_model=margin_read_model,
+        run_id=run_id,
+        option_expiry_source=expiry_source,
+        trading_calendar=market_calendar_hub,
+        option_master=bootstrap.bundle.option_master,
+        track2_option_iv_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else track2_option_iv_source),
+        track4_greeks_provider=track4_greeks_provider,
+        option_orderbook_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else historical_observation_option_source),
+        volume_profile_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else None),
+        basis_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else None),
+        track2_metrics_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else None),
+        track9_iv_event_materializer=track9_iv_event_materializer,
+        track9_atm_iv_source=track9_atm_iv_source,
+        track7_order_timeout_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else getattr(bootstrap.bundle, "track7_order_timeout_source", None)),
+        track7_support_resistance_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else getattr(bootstrap.bundle, "track7_support_resistance_source", None)),
+        risk_guard_status_source=(risk_guard_status_source if risk_guard_status_source is not None else synthetic_runtime_sources),
+        track3_runtime_input_source=track3_source,
+        track6_option_contract_source=Track6OptionContractSource(bootstrap.bundle.option_master),
+        track7_option_contract_source=Track7OptionContractSource(bootstrap.bundle.option_master),
+        track8_option_contract_source=Track8OptionContractSource(bootstrap.bundle.option_master),
+        kospi200_daily_source=kospi200_daily_source,
+        track6_volatility_source=track6_volatility_source,
+        track1_fence_type_source=track1_fence_type_source,
+        track1_position_lot_store=multi_leg_bridge.position_lot_store,
+        track1_option_delta_source=historical_observation_option_source,
+    )
+    if synthetic_runtime_sources is not None:
+        provider.track9_event_source = synthetic_runtime_sources
+        from environments.high_speed.synthetic_runtime_sources import SyntheticEventRiskSource
+        provider.track9_event_risk_source = SyntheticEventRiskSource(synthetic_runtime_sources)
+
+    provider.track9_position_execution_source = VirtualTrack9PositionExecutionReadModel(multi_leg_bridge)
 
     execution_resolvers = ExecutionMultiLegResolverRegistry()
 
