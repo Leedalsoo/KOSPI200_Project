@@ -22,6 +22,7 @@ from infrastructure.krx.krx_option_master_store import resolve_option_master_pat
 from infrastructure.kis.kis_vts_weekday_collector import market_data_root_from_env, _kis_option_resolver_for_day
 from infrastructure.kis.index_price_source import KISKOSPI200IndexPriceSource
 from infrastructure.kis.realtime_raw_store import KISRealtimeRawStore
+from infrastructure.kis.futures_websocket_subscription_source import current_kospi200_futures_symbols
 
 KST = timezone(timedelta(hours=9))
 ROOT = Path(__file__).resolve().parents[1]
@@ -92,12 +93,10 @@ def build_subscriptions(day: date) -> tuple[tuple[str, str], ...]:
                 raise RuntimeError(f"KIS_OPTION_IDENTITY_REQUIRED:{expiry}:{option_type}:{strike}")
             subscriptions.append((OPTION_TRADE_TR_ID, resolved.symbol))
 
-    # Align the WS subscription with the current front KOSPI200 futures
-    # broker symbol observed by the authoritative VTS REST futures board.
-    subscriptions.extend((
-        (FUTURES_TRADE_TR_ID, "A05610"),
-        ("H0UPCNT0", "2001"),
-    ))
+    # Resolve current standard/mini futures symbols from the authoritative KIS master.
+    for _, futures_symbol in current_kospi200_futures_symbols(ROOT):
+        subscriptions.append((FUTURES_TRADE_TR_ID, futures_symbol))
+    subscriptions.append(("H0UPCNT0", "2001"))
     if len(subscriptions) > MAX_SUBSCRIPTIONS:
         raise RuntimeError(f"KIS_WEBSOCKET_SUBSCRIPTION_LIMIT_EXCEEDED:{len(subscriptions)}")
     return tuple(subscriptions)

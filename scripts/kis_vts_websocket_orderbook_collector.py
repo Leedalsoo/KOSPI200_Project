@@ -21,6 +21,8 @@ from infrastructure.krx.krx_marketplace_master import load_option_master
 from infrastructure.krx.krx_option_master_store import resolve_option_master_paths_for_day
 from infrastructure.kis.kis_vts_weekday_collector import _latest_krx_spot_price, market_data_root_from_env, _kis_option_resolver_for_day
 from infrastructure.kis.realtime_raw_store import KISRealtimeRawStore
+from infrastructure.kis.futures_websocket_subscription_source import current_kospi200_futures_symbols
+from contracts.futures_contract_master import FuturesProductType
 
 KST = timezone(timedelta(hours=9))
 ROOT = Path(__file__).resolve().parents[1]
@@ -92,12 +94,11 @@ def build_subscriptions(day: date) -> tuple[tuple[str, str], ...]:
                 raise RuntimeError(f"KIS_OPTION_IDENTITY_REQUIRED:{expiry}:{option_type}:{strike}")
             subscriptions.append((OPTION_TRADE_TR_ID, resolved.symbol))
 
-    subscriptions.extend((
-        (FUTURES_TRADE_TR_ID, "A01609"),
-        (FUTURES_QUOTE_TR_ID, "A01609"),
-        (FUTURES_TRADE_TR_ID, "A05609"),
-        (FUTURES_QUOTE_TR_ID, "A05609"),
-    ))
+    for _, futures_symbol in current_kospi200_futures_symbols(ROOT):
+        subscriptions.extend((
+            (FUTURES_TRADE_TR_ID, futures_symbol),
+            (FUTURES_QUOTE_TR_ID, futures_symbol),
+        ))
     if len(subscriptions) > MAX_SUBSCRIPTIONS:
         raise RuntimeError(f"KIS_WEBSOCKET_SUBSCRIPTION_LIMIT_EXCEEDED:{len(subscriptions)}")
     return tuple(subscriptions)
