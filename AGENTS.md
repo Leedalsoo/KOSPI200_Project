@@ -296,3 +296,26 @@ After the same error occurs twice consecutively, stop workaround repetition and 
 Keep intraday KIS VTS REST/WS collection through market close; after close finalize raw/TR counts, source time, received_at, overlap, gaps, duplicates and manifest consistency.
 Strategy 1-9 completion requires actual signal/execution evidence and regression evidence for the applicable lifecycle. No real signal means signal-driven lifecycle remains unverified/BLOCKED.
 Before Live credentials exist, all validation remains Virtual/VTS and must not place real KIS orders.
+
+## 32. Strategy 1-9 2026-10-02 REAL_VTS WebSocket E2E baseline
+2026-10-02 REAL_VTS WebSocket canonical data is the primary E2E input for the current Strategy 1-9 validation baseline; REST may be used only as reference and not as the E2E signal source.
+
+The 10/2 baseline contains actual REAL_VTS WebSocket evidence across option, KOSPI200 index and futures streams. Strategy 1-9 E2E verdicts are evidence-based and remain independent:
+- Strategy 1: actual signal and order approval/routing evidence; target quote absence prevents final fill lifecycle PASS.
+- Strategy 2: required authoritative inputs were present, but no actual strategy signal occurred in this dataset; signal-driven lifecycle remains unverified/BLOCKED.
+- Strategy 3: contract/integration validation passed, but the actual data-analysis result was not confirmed; remain BLOCKED rather than infer PASS.
+- Strategy 4: actual WS signals occurred; futures contract identity must resolve from observed WS symbol through the authoritative Master before execution/PnL validation.
+- Strategy 5: no actual signal occurred in this dataset; do not invent an execution contract or signal.
+- Strategy 6: actual ATM PUT/CALL evaluations occurred, but the confirmed volatility trigger did not occur; remain BLOCKED.
+- Strategy 7: keep the already-resolved OHLC/calendar standard closed; do not reopen it as an unresolved issue. Signal-driven execution remains unverified unless actual WS-to-runtime evidence is available.
+- Strategy 8: actual signal reached Runtime, but any remaining identity/Master coverage blocker must be resolved from evidence before full lifecycle PASS.
+- Strategy 9: Runtime fail-closed behavior is preserved; signal-driven execution remains unverified when authoritative ATM IV pair supply is not evidenced.
+
+For all Strategy 1-9 E2E:
+- Contract/integration PASS is not full E2E PASS.
+- Validate Source -> Runtime Input -> Strategy Signal -> Decision -> Risk -> OMS/Router -> Virtual Execution -> Position/PnL -> Regression as applicable.
+- A strategy with no real signal in the observed REAL_VTS interval remains signal-lifecycle BLOCKED/unverified; do not manufacture a signal with fixed, zero/false, synthetic or inferred authoritative inputs.
+- Continue the REAL_VTS stream cumulatively: 2026-09-28 -> 2026-09-29 -> every subsequently collected trading day. Do not replace the cumulative validation scope with a single two-day or single-day dataset.
+- The common contract identity rule remains: observed actual WS instrument code -> exact authoritative Master lookup -> contract identity -> strategy/order/execution/Position/PnL.
+- Monthly/yearly contract changes must be handled by Master data refresh/coverage, not by hardcoded strategy-specific contract selection.
+- Current overall Strategy 1-9 E2E status is BLOCKED because complete signal -> execution -> Position/PnL evidence has not been established across all strategies. This is a validation status, not a claim that the strategy implementations are invalid.
