@@ -126,8 +126,10 @@ WebSocket은 보조 raw-frame 경계이며 실패·approval-key timeout이 해�
 UNKNOWN 상태에서 가능한 read-only 시장데이터 수집은 수행할 수 있으나 주문 endpoint는 호출하지 않는다.
 
 ## 16. 검증 절차
-모든 작업은 임의의 기억, 과거 실행 결과, 페이지 제목 또는 오래된 BLOCKED/PASS 상태만으로 현재 상태를 판단하지 않는다.
-작업 시작 시 최신 관련 Notion `결정로그`/`질문과답변` 기록을 확인하고, 원격 `Project200`의 현재 `AGENTS.md`와 실제 코드, 로컬 working tree, 실제 데이터/source 및 최신 실행 증거를 순서대로 대조한다. 과거 기록은 현재 증거와 일치할 때만 현재 상태의 근거로 재사용한다.
+모든 검증은 과거 기억, 과거 실행 결과, 페이지 제목 또는 오래된 BLOCKED/PASS 상태를 현재 근거로 삼지 않는다.
+**검증 판단 순서는 항상 현재 코드 → 현재 확정 결정 → 현재 AGENTS.md → 현재 실제 데이터/source → 새로 작성한 검증 순으로 고정한다.**
+과거 테스트가 존재한다는 이유만으로 그 테스트의 전제나 결과를 현재 검증에 끌어오지 않는다. 기존 테스트는 현재 계약을 보호하는 회귀 안전망인지 별도로 판단하고, 현재 기준과 맞지 않으면 수정·삭제하거나 현재 기준의 새 검증을 작성한다.
+프로젝트를 다시 참조할 때의 기준 순서는 **Current Baseline → 최신 활성 결정로그 → AGENTS.md → 현재 코드/실제 증거**이다. Historical Q&A / Historical Decision Log는 세부 과거 근거·변경 이력·원문 증거가 필요할 때만 조회한다.
 작업 전후 `git status`와 변경 파일을 확인한다.
 TDD 변경은 테스트 작성/실패 관찰 → 최소 구현 → focused pytest → 필요한 Virtual E2E → `py -m pytest -q` → `git diff --check` → project200_gate → `git status` → 원격 HEAD 확인 → Notion 기록 순으로 진행한다.
 Python은 Windows launcher `py`로 실행한다.
