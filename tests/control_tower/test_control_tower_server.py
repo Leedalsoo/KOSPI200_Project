@@ -98,3 +98,27 @@ def test_control_tower_server_rejects_invalid_active_tab():
     server = MagicMock()
     ControlTowerRequestHandler(sock, ("127.0.0.1", 12345), server)
     assert b"400 Bad Request" in sock._wfile.getvalue()
+
+
+def test_control_tower_server_run_api_injects_configured_historical_store(monkeypatch):
+    store = r"C:\\project\\data\\2026-09-28\\historical_market_observations.jsonl.observations.jsonl"
+    tower = MagicMock()
+    tower.create_run.return_value = {"run_id": "CT-ENV-STORE", "historical_store_path": store}
+    monkeypatch.setattr(ControlTowerRequestHandler, "tower", tower)
+    monkeypatch.setenv("PROJECT200_HISTORICAL_STORE", store)
+
+    body = json.dumps({"run_id": "CT-ENV-STORE", "environment": "virtual"}).encode("utf-8")
+    request_data = (
+        b"POST /api/run HTTP/1.1\r\n"
+        b"Host: localhost\r\n"
+        b"Content-Type: application/json\r\n"
+        b"Content-Length: " + str(len(body)).encode("ascii") + b"\r\n\r\n" + body
+    )
+    sock = _MockSocket(request_data)
+    handler = ControlTowerRequestHandler(sock, ("127.0.0.1", 12345), MagicMock())
+
+    assert b"200 OK" in sock._wfile.getvalue()
+    payload = sock._wfile.getvalue().split(b"\r\n\r\n", 1)[1]
+    assert json.loads(payload)["run"]["historical_store_path"] == store
+    tower.create_run.assert_called_once()
+    assert tower.create_run.call_args.args[0]["historical_store_path"] == store
