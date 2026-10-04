@@ -11,6 +11,7 @@ class KISVolumeProfileSource:
 
     def __init__(self) -> None:
         self._last_cumulative: dict[str, Decimal] = {}
+        self._last_observed_hour: dict[str, str] = {}
         self._profile: dict[str, dict[Decimal, Decimal]] = defaultdict(dict)
         self._latest_symbol: str | None = None
 
@@ -23,14 +24,20 @@ class KISVolumeProfileSource:
         if not symbol:
             return
         cumulative = observation.volume
+        observed_hour = str(observation.observed_hour).strip()
         previous = self._last_cumulative.get(symbol)
+        last_observed_hour = self._last_observed_hour.get(symbol)
         if previous is None:
             delta = cumulative
         elif cumulative >= previous:
             delta = cumulative - previous
+        elif last_observed_hour is not None and observed_hour <= last_observed_hour:
+            return
         else:
             raise ValueError("AUTHORITATIVE_VOLUME_PROFILE_CUMULATIVE_VOLUME_RESET")
         self._last_cumulative[symbol] = cumulative
+        if observed_hour:
+            self._last_observed_hour[symbol] = observed_hour
         if delta <= 0:
             return
         self._latest_symbol = symbol

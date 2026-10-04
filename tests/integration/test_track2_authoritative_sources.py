@@ -8,6 +8,7 @@ from contracts.kis_index_price_source import KISIndexPriceObservation
 from infrastructure.kis.basis_source import KISBasisSource
 from infrastructure.kis.track2_market_metrics_source import KISTrack2MarketMetricsSource
 from infrastructure.kis.track2_market_observation_sink import KISTrack2MarketObservationSink
+from infrastructure.kis.volume_profile_source import KISVolumeProfileSource
 
 
 def obs(i: int, price: str, volume: int) -> KisIndexFuturesMarketObservation:
@@ -56,3 +57,33 @@ def test_track2_metrics_rejects_cumulative_volume_reset() -> None:
     with pytest.raises(ValueError, match="CUMULATIVE_RESET"):
         source.update(obs(1, "511.0", 10))
 
+
+def test_volume_profile_ignores_same_observed_hour_lower_cumulative_volume() -> None:
+    source = KISVolumeProfileSource()
+    source.update(obs(0, "510.0", 100))
+    source.update(obs(1, "511.0", 110))
+    stale = KisIndexFuturesMarketObservation(shrn_iscd="101S2609", observed_hour="101501", price=Decimal("512.0"), volume=Decimal(105), ask_price=Decimal("512.0"), bid_price=Decimal("512.0"), source="KIS:H0IFCNT0")
+    source.update(stale)
+    source.update(obs(3, "513.0", 120))
+    assert source.get_poc("101S2609") == Decimal("510.0")
+
+
+def test_volume_profile_rejects_lower_cumulative_volume_from_newer_observed_hour() -> None:
+    source = KISVolumeProfileSource()
+    source.update(obs(0, "510.0", 100))
+    newer = KisIndexFuturesMarketObservation(
+        shrn_iscd="101S2609", observed_hour="101601", price=Decimal("511.0"),
+        volume=Decimal(90), ask_price=Decimal("511.0"), bid_price=Decimal("511.0"),
+        source="KIS:H0IFCNT0",
+    )
+    with pytest.raises(ValueError, match="CUMULATIVE_VOLUME_RESET"):
+        source.update(newer)
+
+
+def test_volume_profile_accepts_newer_observation_after_ignored_stale_frame() -> None:
+    source = KISVolumeProfileSource()
+    source.update(obs(0, "510.0", 100))
+    stale = KisIndexFuturesMarketObservation(shrn_iscd="101S2609", observed_hour="101500", price=Decimal("511.0"), volume=Decimal(90), ask_price=Decimal("511.0"), bid_price=Decimal("511.0"), source="KIS:H0IFCNT0")
+    source.update(stale)
+    source.update(obs(2, "512.0", 110))
+    assert source.get_poc("101S2609") == Decimal("510.0")
