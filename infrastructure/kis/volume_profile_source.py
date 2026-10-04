@@ -29,7 +29,9 @@ class KISVolumeProfileSource:
         elif cumulative >= previous:
             delta = cumulative - previous
         else:
-            raise ValueError("AUTHORITATIVE_VOLUME_PROFILE_CUMULATIVE_VOLUME_RESET")
+            # KIS H0IFCNT0 can deliver a late/stale batch after a newer cumulative
+            # volume. Do not reinterpret that observation as a broker reset.
+            return
         self._last_cumulative[symbol] = cumulative
         if delta <= 0:
             return

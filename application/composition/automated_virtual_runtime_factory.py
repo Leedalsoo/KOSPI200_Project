@@ -21,6 +21,10 @@ from infrastructure.kis.track9_atm_iv_source import KISTrack9ATMIVSource
 from infrastructure.kis.auth import KISAuthManager
 from infrastructure.kis.kis_kospi200_daily_source import KISKOSPI200DailySource
 from infrastructure.kis.track6_atm_volatility_source import KISTrack6ATMVolatilitySource
+from infrastructure.kis.basis_source import KISBasisSource
+from infrastructure.kis.track2_market_metrics_source import KISTrack2MarketMetricsSource
+from infrastructure.kis.track2_market_observation_sink import KISTrack2MarketObservationSink
+from infrastructure.kis.volume_profile_source import KISVolumeProfileSource
 from contracts.track9_iv_event_materializer import Track9IVEventMaterializer
 from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
 from environments.virtual.account.track9_margin_read_model import VSSFTrack9MarginReadModel
@@ -91,10 +95,10 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         if str(proposal.asset_type) == "FUTURES":
             if futures_identity_source is None:
                 raise ValueError("VIRTUAL_AUTHORITATIVE_FUTURES_IDENTITY_SOURCE_REQUIRED")
-            observed_symbol = str(getattr(tick, "instrument_id", None) or getattr(tick, "symbol", None) or "").strip()
-            if not observed_symbol:
-                raise ValueError("VIRTUAL_AUTHORITATIVE_FUTURES_WS_IDENTITY_INPUT_REQUIRED")
-            return futures_identity_source.identity_for_observed_symbol(observed_symbol)
+            timestamp = getattr(tick, "timestamp", None) if tick is not None else None
+            if not timestamp:
+                raise ValueError("VIRTUAL_AUTHORITATIVE_FUTURES_AS_OF_REQUIRED")
+            return futures_identity_source.identity_for_as_of(datetime.fromisoformat(str(timestamp)))
         if tick is None or not tick.expiry or not proposal.option_type or proposal.strike is None:
             raise ValueError("VIRTUAL_AUTHORITATIVE_OPTION_IDENTITY_INPUT_REQUIRED")
         observed_candidates = tuple(dict.fromkeys(
@@ -145,6 +149,19 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         return provider.build(tick, state, bootstrap.bundle.account)
 
     track2_plan_adapter = Track2ExecutionPlanAdapter()
+    track2_basis_source = None
+    track2_metrics_source = None
+    track2_volume_profile_source = None
+    track2_market_observation_sink = None
+    if synthetic_runtime_sources is None:
+        track2_basis_source = KISBasisSource()
+        track2_metrics_source = KISTrack2MarketMetricsSource()
+        track2_volume_profile_source = KISVolumeProfileSource()
+        track2_market_observation_sink = KISTrack2MarketObservationSink(
+            basis_source=track2_basis_source,
+            metrics_source=track2_metrics_source,
+            volume_profile_source=track2_volume_profile_source,
+        )
     track2_option_contract_source = Track2OptionContractSource(bootstrap.bundle.option_master)
     track3_plan_adapter = Track3MultiLegExecutionPlanAdapter()
     futures_master_path = Path(__file__).resolve().parents[2] / "fo_idx_code_mts.mst"
@@ -156,7 +173,7 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
             futures_master,
             FuturesTargetConfiguration(
                 underlying_short_code="2001",
-                product_type=FuturesProductType.STANDARD,
+                product_type=FuturesProductType.MINI,
             ),
         )
     multi_leg_bridge = VirtualMultiLegExecutionBridge(
@@ -188,9 +205,9 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         track2_option_iv_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else track2_option_iv_source),
         track4_greeks_provider=track4_greeks_provider,
         option_orderbook_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else historical_observation_option_source),
-        volume_profile_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else None),
-        basis_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else None),
-        track2_metrics_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else None),
+        volume_profile_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else track2_volume_profile_source),
+        basis_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else track2_basis_source),
+        track2_metrics_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else track2_metrics_source),
         track9_iv_event_materializer=track9_iv_event_materializer,
         track9_atm_iv_source=track9_atm_iv_source,
         track7_order_timeout_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else getattr(bootstrap.bundle, "track7_order_timeout_source", None)),
@@ -205,6 +222,10 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         track1_fence_type_source=track1_fence_type_source,
         track1_position_lot_store=multi_leg_bridge.position_lot_store,
         track1_option_delta_source=historical_observation_option_source,
+        strategy_keys=tuple(
+            key[0] if isinstance(key, tuple) else str(key)
+            for key in selected_keys
+        ),
     )
     if synthetic_runtime_sources is not None:
         provider.track9_event_source = synthetic_runtime_sources
@@ -212,6 +233,7 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         provider.track9_event_risk_source = SyntheticEventRiskSource(synthetic_runtime_sources)
 
     provider.track9_position_execution_source = VirtualTrack9PositionExecutionReadModel(multi_leg_bridge)
+    provider.track2_market_observation_sink = track2_market_observation_sink
 
     execution_resolvers = ExecutionMultiLegResolverRegistry()
 
@@ -300,4 +322,5 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         risk_guard_status_source=(risk_guard_status_source or synthetic_runtime_sources),
     )
     bootstrap.bundle.market.subscribe(loop.on_tick)
+    loop.track2_market_observation_sink = track2_market_observation_sink
     return loop

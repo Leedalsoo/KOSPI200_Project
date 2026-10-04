@@ -21,6 +21,7 @@ class KISTrack2MarketMetricsSource:
         self._prices: dict[str, deque[Decimal]] = defaultdict(lambda: deque(maxlen=history_size))
         self._volumes: dict[str, deque[Decimal]] = defaultdict(lambda: deque(maxlen=history_size))
         self._last_cumulative: dict[str, Decimal] = {}
+        self._last_observed_hour: dict[str, str] = {}
         self._latest_symbol: str | None = None
 
     def update(self, observation: KisIndexFuturesMarketObservation) -> None:
@@ -32,10 +33,14 @@ class KISTrack2MarketMetricsSource:
         if observation.price <= 0 or observation.volume < 0:
             raise ValueError("AUTHORITATIVE_TRACK2_FUTURES_OBSERVATION_INVALID")
         previous = self._last_cumulative.get(symbol)
+        previous_hour = self._last_observed_hour.get(symbol)
         if previous is not None and observation.volume < previous:
+            if previous_hour is not None and observation.observed_hour <= previous_hour:
+                return
             raise ValueError("AUTHORITATIVE_TRACK2_VOLUME_CUMULATIVE_RESET")
         delta = observation.volume if previous is None else observation.volume - previous
         self._last_cumulative[symbol] = observation.volume
+        self._last_observed_hour[symbol] = observation.observed_hour
         self._latest_symbol = symbol
         self._prices[symbol].append(observation.price)
         self._volumes[symbol].append(delta)

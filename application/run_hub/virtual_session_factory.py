@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,7 @@ from application.composition.concrete_virtual_environment_builder import Concret
 from application.composition.virtual_composition_dependencies import VirtualCompositionDependencies
 from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
 from application.control_tower_hub import ControlTowerHub
+from application.option_program_read_model import OptionProgramReadModel
 from application.environment_hub.contracts import EnvironmentConfig, RuntimePolicy
 from application.environment_hub.factory import EnvironmentFactory
 from application.environment_hub.hub import EnvironmentHub
@@ -26,10 +28,13 @@ from environments.virtual.execution.vssf_command_context_provider import Canonic
 from infrastructure.kis.track2_option_iv_source import KISTrack2OptionIVSource
 from infrastructure.kis.track4_kis_greeks_source import KISTrack4GreeksRealtimeSource
 from infrastructure.kis.historical_observation_sources import HistoricalObservationOptionSource
+from infrastructure.kis.historical_futures_observation_replay import HistoricalFuturesObservationReplay
+from infrastructure.kis.historical_index_price_observation_replay import HistoricalIndexPriceObservationReplay
 from application.composition.track7_support_resistance_source import Track7AuthoritativeSupportResistanceSource
 from application.composition.market_calendar_hub import MarketCalendarHub
 from interfaces.control_tower.ui_adapter import ControlTowerUIAdapter
 from interfaces.control_tower.virtual_test_controller import VirtualTestController
+from application.composition.virtual_risk_guard_status_source import VirtualRiskGuardStatusSource
 
 
 def create_virtual_run_session(context: RunContext, option_master: Any, risk_guard_status_source: RiskGuardStatusSource | None = None, track4_greeks_source: KISTrack4GreeksRealtimeSource | None = None) -> RunSession:
@@ -52,6 +57,7 @@ def create_virtual_run_session(context: RunContext, option_master: Any, risk_gua
     environment_hub = EnvironmentHub(EnvironmentFactory(virtual_builder=build))
     controller = RuntimeController(environment_hub)
     controller.start(config, policy)
+    virtual_risk_guard = risk_guard_status_source or VirtualRiskGuardStatusSource(controller)
     bundle = environment_hub.active
     if bundle is None:
         raise RuntimeError("VIRTUAL_RUN_ENVIRONMENT_NOT_ACTIVE")
@@ -91,13 +97,12 @@ def create_virtual_run_session(context: RunContext, option_master: Any, risk_gua
             scenario_engine.set_scenario(context.scenario)
     vssf = bundle.execution._authoritative_execute.__self__.vssf_runtime
     risk_engine = RiskEngine(config=RiskConfig(), margin_engine=vssf.margin_engine)
-    bridge = VirtualMultiLegExecutionBridge(bundle=bundle, run_id=context.run_id, option_master=bundle.option_master, risk_config=RiskConfig(), risk_guard_status_source=risk_guard_status_source)
+    bridge = VirtualMultiLegExecutionBridge(bundle=bundle, run_id=context.run_id, option_master=bundle.option_master, risk_config=RiskConfig(), risk_guard_status_source=virtual_risk_guard)
     bundle.broker_api.attach_group_read_model(
         snapshot_reader=bridge.position_groups.snapshot,
         reports_reader=bridge.group_reports,
         group_ids_reader=lambda: tuple(bridge.position_groups.all().keys()),
     )
-    adapter = ControlTowerUIAdapter(runtime_controller=controller, broker_api=bundle.broker_api)
     strategy_hub = None
     loop = attach_standard_automated_loop(
         type("Bootstrap", (), {"bundle": bundle})(),
@@ -105,12 +110,39 @@ def create_virtual_run_session(context: RunContext, option_master: Any, risk_gua
         track9_iv_history_path=context.track9_iv_history_path,
         run_id=context.run_id,
         historical_observation_option_source=historical_observation_option_source,
-        risk_guard_status_source=risk_guard_status_source,
+        risk_guard_status_source=virtual_risk_guard,
         market_calendar_hub=market_calendar_hub,
         track4_greeks_provider=track4_greeks_source,
     )
     strategy_hub = loop.strategy_hub
+    raw_futures_path = None
+    if context.historical_store_path and Path(context.historical_store_path).name.endswith(".observations.jsonl"):
+        base_path = Path(str(context.historical_store_path)[: -len(".observations.jsonl")])
+        candidate = base_path.parent / "kis_vts_websocket_raw.jsonl"
+        if candidate.is_file():
+            raw_futures_path = candidate
+    if raw_futures_path is not None and loop.track2_market_observation_sink is not None:
+        session_partition = Path(context.historical_store_path).parent.name
+        loop.track2_market_observation_sink.session_date = date.fromisoformat(session_partition)
+        futures_replay = HistoricalFuturesObservationReplay(raw_futures_path)
+        index_replay = HistoricalIndexPriceObservationReplay(raw_futures_path)
+        bundle.market.set_futures_observation_replay(futures_replay)
+        bundle.market.set_index_price_observation_replay(index_replay)
+        bundle.market.subscribe_futures_observation(loop.track2_market_observation_sink.on_observation)
+        bundle.market.subscribe_index_price_observation(loop.track2_market_observation_sink.basis_source.update_index)
     runtime_hub = RuntimeHub(loop)
+    option_program_read_model = OptionProgramReadModel(
+        runtime_controller=controller,
+        runtime_hub=runtime_hub,
+        strategy_hub=strategy_hub,
+        bundle=bundle,
+        context=context,
+    )
+    adapter = ControlTowerUIAdapter(
+        runtime_controller=controller,
+        broker_api=bundle.broker_api,
+        option_program_read_model=option_program_read_model,
+    )
     virtual_test_controller = VirtualTestController(market=bundle.market, tick_handler=runtime_hub.on_tick)
     tower = ControlTowerHub(
         runtime_controller=controller,

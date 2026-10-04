@@ -22,13 +22,13 @@ class KisIndexFuturesMarketObservation:
 _H0IFCNT0 = "H0IFCNT0"
 _H0IFASP0 = "H0IFASP0"
 
-# H0IFCNT0: symbol, time, current price, accumulated volume, ask1, bid1
+# H0IFCNT0: futs_shrn_iscd, bsop_hour, futs_prpr, acml_vol, futs_askp1, futs_bidp1
 _TRADE_SYMBOL = 0
 _TRADE_TIME = 1
 _TRADE_PRICE = 5
 _TRADE_VOLUME = 10
-_TRADE_ASK1 = 35
-_TRADE_BID1 = 36
+_TRADE_ASK1 = 34
+_TRADE_BID1 = 35
 
 # H0IFASP0: symbol, time, ask1, bid1
 _QUOTE_SYMBOL = 0

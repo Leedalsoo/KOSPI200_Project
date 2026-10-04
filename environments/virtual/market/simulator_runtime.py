@@ -11,6 +11,8 @@ from typing import Optional
 from core.option.option_master import IOptionContractMaster
 
 from environments.virtual.market.canonical import ReferenceCanonicalMarketTick
+from contracts.types import CanonicalFuturesQuote
+from contracts.kis_index_futures_market_ws_adapter import KisIndexFuturesMarketObservation
 from environments.virtual.market.config import VirtualBrokerConfig, VirtualBrokerControlInterface
 from environments.virtual.market.clock_controller import VMSClockController
 from environments.virtual.market.state_manager import VMSStateManager
@@ -32,6 +34,11 @@ class VirtualMarketSimulatorRuntime:
         self._price = 350.0
         self._initial_price = 350.0
         self._subscribers = []
+        self._futures_quote_subscribers = []
+        self._futures_observation_subscribers = []
+        self._futures_observation_replay = None
+        self._index_price_observation_subscribers = []
+        self._index_price_observation_replay = None
         self._recent_ticks = deque(maxlen=50)
         self._underlying_history = deque(maxlen=600)
         self.last_tick = None
@@ -126,6 +133,57 @@ class VirtualMarketSimulatorRuntime:
             "contract_multiplier": float(contract_multiplier),
         }
 
+    def subscribe_index_price_observation(self, callback) -> None:
+        if not callable(callback):
+            raise TypeError("VMS_INDEX_PRICE_OBSERVATION_SUBSCRIBER_REQUIRED")
+        self._index_price_observation_subscribers.append(callback)
+
+    def set_index_price_observation_replay(self, replay) -> None:
+        if replay is None or not hasattr(replay, "consume_until"):
+            raise TypeError("VMS_INDEX_PRICE_OBSERVATION_REPLAY_REQUIRED")
+        self._index_price_observation_replay = replay
+
+    def _publish_index_price_observations_until(self, timestamp: str) -> int:
+        if self._index_price_observation_replay is None:
+            return 0
+        observations = self._index_price_observation_replay.consume_until(timestamp)
+        for observation in observations:
+            for subscriber in tuple(self._index_price_observation_subscribers):
+                subscriber(observation)
+        return len(observations)
+
+    def subscribe_futures_observation(self, callback) -> None:
+        if not callable(callback):
+            raise TypeError("VMS_FUTURES_OBSERVATION_SUBSCRIBER_REQUIRED")
+        self._futures_observation_subscribers.append(callback)
+
+    def set_futures_observation_replay(self, replay) -> None:
+        if replay is None or not hasattr(replay, "consume_until"):
+            raise TypeError("VMS_FUTURES_OBSERVATION_REPLAY_REQUIRED")
+        self._futures_observation_replay = replay
+
+    def _publish_futures_observations_until(self, timestamp: str) -> int:
+        if self._futures_observation_replay is None:
+            return 0
+        observations = self._futures_observation_replay.consume_until(timestamp)
+        for observation in observations:
+            for subscriber in tuple(self._futures_observation_subscribers):
+                subscriber(observation)
+        return len(observations)
+
+    def subscribe_futures_quote(self, callback) -> None:
+        if not callable(callback):
+            raise TypeError("VMS_FUTURES_QUOTE_SUBSCRIBER_REQUIRED")
+        self._futures_quote_subscribers.append(callback)
+
+    def publish_authoritative_futures_quote(self, quote: CanonicalFuturesQuote) -> CanonicalFuturesQuote:
+        """Publish an authoritative futures quote without altering option/underlying replay state."""
+        if not isinstance(quote, CanonicalFuturesQuote):
+            raise TypeError("VMS_FUTURES_QUOTE_REQUIRED")
+        for subscriber in tuple(self._futures_quote_subscribers):
+            subscriber(quote)
+        return quote
+
     def publish_replay_tick(self, tick: ReferenceCanonicalMarketTick):
         """Publish one externally supplied replay tick through the Virtual Market boundary."""
         if not isinstance(tick, ReferenceCanonicalMarketTick):
@@ -134,6 +192,8 @@ class VirtualMarketSimulatorRuntime:
         # Contract metadata is resolved separately through the authoritative Master.
         self.last_tick = tick
         self._recent_ticks.append(tick)
+        self._publish_futures_observations_until(tick.timestamp)
+        self._publish_index_price_observations_until(tick.timestamp)
         if tick.underlying_price is not None:
             observed_at = datetime.fromisoformat(tick.timestamp)
             underlying_value = Decimal(str(tick.underlying_price))

@@ -30,11 +30,11 @@ def test_poc_is_unavailable_without_trade_volume() -> None:
     assert source.get_poc("101V6000") is None
 
 
-def test_cumulative_volume_reset_is_rejected() -> None:
+def test_late_cumulative_volume_is_ignored() -> None:
     source = KISVolumeProfileSource()
     source.update(_obs("101V6000", "510", "20"))
-    with pytest.raises(ValueError, match="CUMULATIVE_VOLUME_RESET"):
-        source.update(_obs("101V6000", "511", "10"))
+    source.update(_obs("101V6000", "511", "10", hour="101501"))
+    assert source.get_poc("101V6000") == Decimal("510")
 
 
 def test_runtime_exposes_poc_only_from_injected_source() -> None:

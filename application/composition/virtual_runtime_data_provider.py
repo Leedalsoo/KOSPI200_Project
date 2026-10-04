@@ -1,5 +1,6 @@
 """Authoritative derived-data providers for the Virtual Market runtime."""
 from __future__ import annotations
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
@@ -125,11 +126,15 @@ class VirtualRuntimeDataProvider:
         as_of: datetime,
         minutes: int,
     ) -> Decimal | None:
-        cutoff = as_of.timestamp() - minutes * 60
-        points = [(timestamp, Decimal(str(price))) for timestamp, price in underlying_history if timestamp <= as_of]
-        if not points or points[0][0].timestamp() > cutoff:
+        if not underlying_history:
             return None
-        values = [price for timestamp, price in points if timestamp.timestamp() >= cutoff]
+        cutoff = as_of.timestamp() - minutes * 60
+        cutoff_at = datetime.fromtimestamp(cutoff, tz=as_of.tzinfo)
+        start = bisect_left(underlying_history, (cutoff_at, Decimal("-Infinity")))
+        end = bisect_right(underlying_history, (as_of, Decimal("Infinity")))
+        if start >= end:
+            return None
+        values = [price for _timestamp, price in underlying_history[start:end]]
         if not values:
             return None
         return sum(values, Decimal("0")) / Decimal(len(values))
@@ -175,11 +180,25 @@ class VirtualRuntimeDataProvider:
         # Replay carries authoritative per-option analytics from MarketObservation.
         delta = getattr(tick, 'delta', None)
         gamma = getattr(tick, 'gamma', None)
-        if delta is None and gamma is None and self.track4_greeks_provider is not None:
-            snapshot = getattr(self.track4_greeks_provider, "snapshot", None)
-            if snapshot is not None and getattr(snapshot, "observed_at", "") == observed_at.isoformat():
-                delta = self.track4_greeks_provider.current_delta()
-                gamma = self.track4_greeks_provider.current_gamma()
+        if self.track4_greeks_provider is not None and (delta is None or gamma is None):
+            greeks_provider = getattr(
+                self.track4_greeks_provider,
+                "provider",
+                self.track4_greeks_provider,
+            )
+            snapshot = (
+                getattr(greeks_provider, "snapshot", None)
+                if greeks_provider is not None
+                else None
+            )
+            provider_observed_at = getattr(snapshot, "observed_at", None) if snapshot is not None else None
+            if provider_observed_at:
+                provider_as_of = datetime.fromisoformat(provider_observed_at)
+                if provider_as_of <= observed_at:
+                    if delta is None:
+                        delta = self.track4_greeks_provider.current_delta()
+                    if gamma is None:
+                        gamma = self.track4_greeks_provider.current_gamma()
         # Strategy 5 active volatility uses authoritative KIS ATM CALL/PUT IV.
         # KIS reports IV in percentage points; Common Analytics consumes decimal form.
         # Missing H0IOCNT0 evidence remains unavailable and never falls back to scenario volatility.

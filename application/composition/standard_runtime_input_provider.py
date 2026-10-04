@@ -51,8 +51,9 @@ from application.composition.track8_analytics_provider import build_track8_analy
 class StandardRuntimeInputProvider:
     """Build standard inputs from observable VMS/VSSF sources only."""
 
-    def __init__(self, market: Any, *, track9_fee_ledger: Track9FeeLedger | None = None, track9_margin_read_model: Track9MarginReadModel | None = None, track9_position_execution_source: Track9PositionExecutionReadModel | None = None, track9_event_source: Track9EventSource | None = None, track9_event_risk_source: Track9EventRiskSource | None = None, run_id: str | None = None, track7_order_timeout_source: Any | None = None, track7_support_resistance_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None, track6_option_contract_source: Track6OptionContractSource | None = None, track7_option_contract_source: Track7OptionContractSource | None = None, track8_option_contract_source: Track8OptionContractSource | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None, track4_greeks_provider: Track4KisGreeksProvider | None = None, kospi200_daily_source: KOSPI200DailySource | None = None, track6_volatility_source: Track6VolatilitySource | None = None, track1_fence_type_source: Any | None = None, track1_position_lot_store: Any | None = None, track1_option_delta_source: Any | None = None) -> None:
+    def __init__(self, market: Any, *, track9_fee_ledger: Track9FeeLedger | None = None, track9_margin_read_model: Track9MarginReadModel | None = None, track9_position_execution_source: Track9PositionExecutionReadModel | None = None, track9_event_source: Track9EventSource | None = None, track9_event_risk_source: Track9EventRiskSource | None = None, run_id: str | None = None, track7_order_timeout_source: Any | None = None, track7_support_resistance_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None, track6_option_contract_source: Track6OptionContractSource | None = None, track7_option_contract_source: Track7OptionContractSource | None = None, track8_option_contract_source: Track8OptionContractSource | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None, track4_greeks_provider: Track4KisGreeksProvider | None = None, kospi200_daily_source: KOSPI200DailySource | None = None, track6_volatility_source: Track6VolatilitySource | None = None, track1_fence_type_source: Any | None = None, track1_position_lot_store: Any | None = None, track1_option_delta_source: Any | None = None, strategy_keys: tuple[str, ...] | None = None) -> None:
         self.risk_guard_status_source = risk_guard_status_source
+        self.strategy_keys = frozenset(strategy_keys or ())
         self.market_condition_sensor = MarketConditionSensor()
         self.track9_fee_ledger = track9_fee_ledger
         self.track9_margin_read_model = track9_margin_read_model
@@ -145,6 +146,51 @@ class StandardRuntimeInputProvider:
         )
         contexts: dict[str, StrategyContext] = {}
 
+        # Strategy-specific Runtime Input is materialized only for strategies
+        # selected for this run. This prevents an unrelated strategy's
+        # authoritative source graph from becoming a hidden per-tick dependency.
+        if self.strategy_keys == frozenset({"track4_gamma_scalping"}):
+            if (
+                d.option_delta is None
+                or d.option_gamma is None
+                or d.active_vol is None
+                or d.base_vol is None
+                or common.budget is None
+                or common.current_pnl is None
+                or not d.prices
+            ):
+                contexts["track4_gamma_scalping"] = self._unavailable(
+                    "track4_gamma_scalping",
+                    ("option_greeks", "account_equity", "ohlc_history"),
+                    "TRACK4_COMMON_ANALYTICS_INPUTS_UNAVAILABLE",
+                )
+            else:
+                track4_payload = Track4MarketInput(
+                    observed_at=d.as_of,
+                    current_price=d.price,
+                    active_vol=d.active_vol,
+                    base_vol=d.base_vol,
+                    time_str=d.as_of.strftime("%H:%M:%S"),
+                    current_delta=d.option_delta,
+                    current_gamma=d.option_gamma,
+                    current_pnl=common.current_pnl,
+                    current_equity=common.budget,
+                    price_history=d.prices,
+                    current_theta=None,
+                )
+                contexts["track4_gamma_scalping"] = StrategyContext(
+                    market_state,
+                    "track4_gamma_scalping",
+                    StrategyInput(common, track4_payload),
+                    analytics=build_track4_analytics_snapshot(
+                        track4_payload,
+                        run_id=self.run_id or "virtual",
+                        as_of=d.as_of,
+                        common_snapshot=common_analytics,
+                    ),
+                )
+            return contexts
+
         track1_result = self.track1.build(
             as_of=d.as_of,
             active_vol=d.active_vol,
@@ -204,6 +250,9 @@ class StandardRuntimeInputProvider:
                         d, run_id=self.run_id or "virtual", common_snapshot=common_analytics
                     ),
                 )
+
+        if self.strategy_keys == frozenset({"track2_asymmetric_trap"}):
+            return contexts
 
         # Track3 is materialized only through its authoritative source seam.
         if hasattr(self.track3.source, "set_common_analytics") and common_analytics is not None:
