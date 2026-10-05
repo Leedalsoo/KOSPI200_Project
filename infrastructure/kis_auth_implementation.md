@@ -28,7 +28,7 @@ OptionProject/infrastructure/kis/auth.py
 
 ## 구현 전제
 
-DEPENDENCY_RULES.md의 infrastructure → contracts 방향과 Core의 외부 API 비의존 원칙을 유지한다.
+ARCHITECTURE_LINT_SPEC.md의 infrastructure → contracts 방향과 Core의 외부 API 비의존 원칙을 유지한다.
 
 ## 구현 대상 최소 API
 

@@ -1,54 +1,54 @@
 # KOSPI200 Project200
 
-## 목적
-KOSPI200 선물·옵션 자동매매 시스템을 구축한다. Standard Core를 중심으로 High-Speed, Virtual, Paper, Live 환경을 교체·검증하며, 증권사 종속 없이 여러 broker를 동일한 Standard Broker API 뒤에 연결할 수 있는 broker-agnostic 구조를 목표로 한다.
+## 紐⑹쟻
+KOSPI200 ?좊Ъ쨌?듭뀡 ?먮룞留ㅻℓ ?쒖뒪?쒖쓣 援ъ텞?쒕떎. Standard Core瑜?以묒떖?쇰줈 High-Speed, Virtual, Paper, Live ?섍꼍??援먯껜쨌寃利앺븯硫? 利앷텒??醫낆냽 ?놁씠 ?щ윭 broker瑜??숈씪??Standard Broker API ?ㅼ뿉 ?곌껐?????덈뒗 broker-agnostic 援ъ“瑜?紐⑺몴濡??쒕떎.
 
-## 현재 개발 기준
-- 기본 검증 환경: Virtual Trading
-- 실행 흐름: 시장 데이터 → Runtime Input → Strategy → Decision → Risk → OMS/Router → Broker → Execution → Position/Margin/PnL → Control Tower Read Model
-- 전략 공통 계산은 Common Analytics가 소유하며 Strategy는 전략 고유 의사결정만 담당한다.
-- Control Tower: 감독·운영 계층이며 정상 주문 생성의 주 경로가 아니다.
-- Real KIS 주문: 현재 실행하지 않으며 외부 인증·실주문 검증은 BLOCKED로 관리한다.
-- KIS 모의투자(VTS) 시장데이터 수집은 일별로 상시 운영하며, 실제 시장데이터를 실거래 전 Virtual/Replay 검증 자산으로 축적한다.
-- Multi-Broker 설계는 확정됐으나 LS증권 등 제2 broker의 실제 연동 코드·credential 처리는 사용자 승인 전까지 작성하지 않는다.
+## ?꾩옱 媛쒕컻 湲곗?
+- 湲곕낯 寃利??섍꼍: Virtual Trading
+- ?ㅽ뻾 ?먮쫫: ?쒖옣 ?곗씠????Runtime Input ??Strategy ??Decision ??Risk ??OMS/Router ??Broker ??Execution ??Position/Margin/PnL ??Control Tower Read Model
+- ?꾨왂 怨듯넻 怨꾩궛? Common Analytics媛 ?뚯쑀?섎ŉ Strategy???꾨왂 怨좎쑀 ?섏궗寃곗젙留??대떦?쒕떎.
+- Control Tower: 媛먮룆쨌?댁쁺 怨꾩링?대ŉ ?뺤긽 二쇰Ц ?앹꽦??二?寃쎈줈媛 ?꾨땲??
+- Real KIS 二쇰Ц: ?꾩옱 ?ㅽ뻾?섏? ?딆쑝硫??몃? ?몄쬆쨌?ㅼ＜臾?寃利앹? BLOCKED濡?愿由ы븳??
+- KIS 紐⑥쓽?ъ옄(VTS) ?쒖옣?곗씠???섏쭛? ?쇰퀎濡??곸떆 ?댁쁺?섎ŉ, ?ㅼ젣 ?쒖옣?곗씠?곕? ?ㅺ굅????Virtual/Replay 寃利??먯궛?쇰줈 異뺤쟻?쒕떎.
+- Multi-Broker ?ㅺ퀎???뺤젙?먯쑝??LS利앷텒 ???? broker???ㅼ젣 ?곕룞 肄붾뱶쨌credential 泥섎━???ъ슜???뱀씤 ?꾧퉴吏 ?묒꽦?섏? ?딅뒗??
 
-## 저장소 구조
-- `contracts/` 표준 계약·DTO·port
-- `core/` 환경 독립 domain/strategy/risk/OMS
+## ??μ냼 援ъ“
+- `contracts/` ?쒖? 怨꾩빟쨌DTO쨌port
+- `core/` ?섍꼍 ?낅┰ domain/strategy/risk/OMS
 - `application/` orchestration/composition
-- `environments/` 실행 환경 구현
-- `infrastructure/` KIS/KRX 등 외부 source adapter
+- `environments/` ?ㅽ뻾 ?섍꼍 援ы쁽
+- `infrastructure/` KIS/KRX ???몃? source adapter
 - `interfaces/` Control Tower/API/UI
-- `tests/` 실행 가능한 현재 회귀·통합 검증
-- `docs/`, `scripts/`, `shared/`, `support/`, `verification/` 보조 문서·운영 스크립트·공용 유틸리티
-- 저장소 루트의 `ARCHITECTURE.md` 등 개별 스펙 문서는 해당 경계의 세부 설계를 다룬다.
+- `tests/` ?ㅽ뻾 媛?ν븳 ?꾩옱 ?뚭?쨌?듯빀 寃利?
+- `docs/`, `scripts/`, `shared/`, `support/`, `verification/` 蹂댁“ 臾몄꽌쨌?댁쁺 ?ㅽ겕由쏀듃쨌怨듭슜 ?좏떥由ы떚
+- ??μ냼 猷⑦듃??`ARCHITECTURE.md` ??媛쒕퀎 ?ㅽ럺 臾몄꽌???대떦 寃쎄퀎???몃? ?ㅺ퀎瑜??ㅻ，??
 
-## 데이터·계약 경계
-- KRX Marketplace는 계약 선택의 authoritative source이며 Option Master, expiry, strike, option type 등 계약 identity를 추정하지 않는다.
-- KIS Index Option Master는 KIS broker symbol reconciliation의 authoritative source로 사용한다.
-- 시장데이터는 source/provenance를 보존하고 거래일별 partition으로 저장한다.
-- Virtual 시장데이터 경계는 authoritative source 수집·정규화 → Historical Market Store → Virtual Exchange → Virtual Broker → Virtual Broker API → Option Program이다.
-- Replay/Scenario/Synthetic 결과는 실제 시장 원본과 명확히 구분한다.
+## ?곗씠?걔룰퀎??寃쎄퀎
+- KRX Marketplace??怨꾩빟 ?좏깮??authoritative source?대ŉ Option Master, expiry, strike, option type ??怨꾩빟 identity瑜?異붿젙?섏? ?딅뒗??
+- KIS Index Option Master??KIS broker symbol reconciliation??authoritative source濡??ъ슜?쒕떎.
+- ?쒖옣?곗씠?곕뒗 source/provenance瑜?蹂댁〈?섍퀬 嫄곕옒?쇰퀎 partition?쇰줈 ??ν븳??
+- Virtual ?쒖옣?곗씠??寃쎄퀎??authoritative source ?섏쭛쨌?뺢퇋????Historical Market Store ??Virtual Exchange ??Virtual Broker ??Virtual Broker API ??Option Program?대떎.
+- Replay/Scenario/Synthetic 寃곌낵???ㅼ젣 ?쒖옣 ?먮낯怨?紐낇솗??援щ텇?쒕떎.
 
-## 장기 백그라운드 수집
-Daily Session Orchestrator가 KST 거래일을 기준으로 readiness/smoke, 장중 반복 수집, heartbeat, manifest 및 날짜 partition을 관리한다.
+## ?κ린 諛깃렇?쇱슫???섏쭛
+Daily Session Orchestrator媛 KST 嫄곕옒?쇱쓣 湲곗??쇰줈 readiness/smoke, ?μ쨷 諛섎났 ?섏쭛, heartbeat, manifest 諛??좎쭨 partition??愿由ы븳??
 
-KRX authoritative Option Master는 날짜별 snapshot을 선택하며, 대상 날짜에 필요한 계약/만기가 현재 snapshot으로 설명되지 않으면 임의 fallback 대신 `BLOCKED` 또는 refresh-required로 fail-closed 한다. Broker master로 KRX 계약 선택을 대체하지 않는다.
+KRX authoritative Option Master???좎쭨蹂?snapshot???좏깮?섎ŉ, ????좎쭨???꾩슂??怨꾩빟/留뚭린媛 ?꾩옱 snapshot?쇰줈 ?ㅻ챸?섏? ?딆쑝硫??꾩쓽 fallback ???`BLOCKED` ?먮뒗 refresh-required濡?fail-closed ?쒕떎. Broker master濡?KRX 怨꾩빟 ?좏깮???泥댄븯吏 ?딅뒗??
 
-축적한 VTS 실제 시장데이터는 여러 거래일·만기·계약·시장상황에 대해 1x Replay와 가속 Replay로 반복 검증한다. 실제 원본을 변형한 Scenario/Synthetic 데이터는 별도의 provenance로 관리한다.
+異뺤쟻??VTS ?ㅼ젣 ?쒖옣?곗씠?곕뒗 ?щ윭 嫄곕옒?셋룸쭔湲걔룰퀎?승룹떆?μ긽?⑹뿉 ???1x Replay? 媛??Replay濡?諛섎났 寃利앺븳?? ?ㅼ젣 ?먮낯??蹂?뺥븳 Scenario/Synthetic ?곗씠?곕뒗 蹂꾨룄??provenance濡?愿由ы븳??
 
-## 실행·검증 원칙
-- Windows에서 Python 검증은 `py`를 사용한다.
-- 실제 실행 결과와 exit code를 기준으로 PASS / FAIL / BLOCKED를 독립적으로 판정한다.
-- authoritative source가 없으면 0, False, 고정값, 추정값 또는 synthetic 값으로 정상 runtime을 채우지 않는다.
-- Live credential 및 실제 market-data frame이 없으면 Live E2E는 BLOCKED다.
-- 실제 KIS 주문은 어떤 개발·검증 단계에서도 실행하지 않는다.
+## ?ㅽ뻾쨌寃利??먯튃
+- Windows?먯꽌 Python 寃利앹? `py`瑜??ъ슜?쒕떎.
+- ?ㅼ젣 ?ㅽ뻾 寃곌낵? exit code瑜?湲곗??쇰줈 PASS / FAIL / BLOCKED瑜??낅┰?곸쑝濡??먯젙?쒕떎.
+- authoritative source媛 ?놁쑝硫?0, False, 怨좎젙媛? 異붿젙媛??먮뒗 synthetic 媛믪쑝濡??뺤긽 runtime??梨꾩슦吏 ?딅뒗??
+- Live credential 諛??ㅼ젣 market-data frame???놁쑝硫?Live E2E??BLOCKED??
+- ?ㅼ젣 KIS 二쇰Ц? ?대뼡 媛쒕컻쨌寃利??④퀎?먯꽌???ㅽ뻾?섏? ?딅뒗??
 
-## 작업 기준
-상세 작업 지침은 `AGENTS.md`를 따른다.
+## ?묒뾽 湲곗?
+?곸꽭 ?묒뾽 吏移⑥? `AGENTS.md`瑜??곕Ⅸ??
 
-현재 상태·완료 Track·우선순위·최신 검증 수치의 단일 기준은 `PROJECT_STATUS.md`가 가리키는 Notion `질문과답변`의 최신 `[No.xxx 답변내용요약]` 기록이다. 이 README에는 특정 테스트 숫자, checkpoint, 완료 Track 또는 임시 우선순위를 고정하지 않는다.
+?꾩옱 ?곹깭쨌?꾨즺 Track쨌?곗꽑?쒖쐞쨌理쒖떊 寃利??섏튂???⑥씪 湲곗?? `PROJECT_STATUS.md`媛 媛由ы궎??Notion `吏덈Ц怨쇰떟蹂`??理쒖떊 `[No.xxx ?듬??댁슜?붿빟]` 湲곕줉?대떎. ??README?먮뒗 ?뱀젙 ?뚯뒪???レ옄, checkpoint, ?꾨즺 Track ?먮뒗 ?꾩떆 ?곗꽑?쒖쐞瑜?怨좎젙?섏? ?딅뒗??
 
-의미 있는 구현·정리·검증은 Notion `질문과답변`에 기록한다. 과거 단계별 Process 문서와 일회성 검증 파일은 저장소에 유지하지 않는다.
+?섎? ?덈뒗 援ы쁽쨌?뺣━쨌寃利앹? Notion `吏덈Ц怨쇰떟蹂`??湲곕줉?쒕떎. 怨쇨굅 ?④퀎蹂?Process 臾몄꽌? ?쇳쉶??寃利??뚯씪? ??μ냼???좎??섏? ?딅뒗??
 
-`.env` 및 credential은 Git에 기록하지 않는다.
+`.env` 諛?credential? Git??湲곕줉?섏? ?딅뒗??
