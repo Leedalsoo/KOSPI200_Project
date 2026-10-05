@@ -124,9 +124,9 @@ def test_track7_skew_exit_stop_and_expiry_cutoff():
     assert strategy.evaluate(track7_context(with_contract=True, option_iv=Decimal("10"), put_iv=Decimal("19")))[0].direction == "CLOSE_SKEW_ARB_STOP_LOSS"
     strategy.evaluate(track7_context(with_contract=True, option_iv=Decimal("10"), put_iv=Decimal("13")))
     assert strategy.evaluate(track7_context(with_contract=True, option_iv=Decimal("10"), put_iv=Decimal("10.4")))[0].direction == "CLOSE_SKEW_ARB_LIMIT"
-    strategy.state = strategy.state.__class__(insurance_active=True)
+    strategy.state = strategy.state.__class__(insurance_active=True, put_strike=Decimal("350"), call_strike=Decimal("350"))
     assert strategy.evaluate_expiry_cutoff(track7_context(is_expiry_day=True, as_of=datetime(2026, 9, 18, 15, 5)))[0].direction == "CLOSE_WEEKLY_INSURANCE_LIMIT"
-    strategy.state = strategy.state.__class__(insurance_active=True)
+    strategy.state = strategy.state.__class__(insurance_active=True, put_strike=Decimal("350"), call_strike=Decimal("350"))
     assert strategy.evaluate_expiry_cutoff(track7_context(is_expiry_day=True, as_of=datetime(2026, 9, 18, 15, 15)))[0].direction == "CLOSE_WEEKLY_INSURANCE_FALLBACK_MARKET"
 
 

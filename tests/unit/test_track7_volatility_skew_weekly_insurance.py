@@ -63,7 +63,7 @@ def test_skew_stop_and_normal_exit():
 
 def test_preemptive_take_profit_requires_real_ma_inputs():
     s = Track7VolatilitySkewWeeklyInsurance()
-    s.state = s.state.__class__(insurance_active=True)
+    s.state = s.state.__class__(insurance_active=True, put_strike=Decimal("350"), call_strike=Decimal("350"))
     assert s.evaluate_preemptive_take_profit(context(ma_1m=None)) == ()
     signals = s.evaluate_preemptive_take_profit(context(ma_1m=Decimal("354"), ma_3m=Decimal("353"), ma_5m=Decimal("352"), ma_10m=Decimal("351")))
     assert signals and signals[0].direction == "PREEMPTIVE_LIMIT_TAKE_PROFIT"
@@ -71,11 +71,11 @@ def test_preemptive_take_profit_requires_real_ma_inputs():
 
 def test_expiry_cutoff_limit_then_fallback():
     s = Track7VolatilitySkewWeeklyInsurance()
-    s.state = s.state.__class__(insurance_active=True)
+    s.state = s.state.__class__(insurance_active=True, put_strike=Decimal("350"), call_strike=Decimal("350"))
     limit = context(is_expiry_day=True, as_of=datetime(2026, 9, 18, 15, 5))
     assert s.evaluate_expiry_cutoff(limit)[0].direction == "CLOSE_WEEKLY_INSURANCE_LIMIT"
     fallback = context(is_expiry_day=True, as_of=datetime(2026, 9, 18, 15, 15))
-    s.state = s.state.__class__(insurance_active=True)
+    s.state = s.state.__class__(insurance_active=True, put_strike=Decimal("350"), call_strike=Decimal("350"))
     assert s.evaluate_expiry_cutoff(fallback)[0].direction == "CLOSE_WEEKLY_INSURANCE_FALLBACK_MARKET"
 
 

@@ -194,15 +194,25 @@ class Track7VolatilitySkewWeeklyInsurance:
         if primary_side not in {"BUY","SELL"}:
             raise ValueError("TRACK7_EXECUTION_SIDE_REQUIRED")
         if self.state.insurance_active and not self.state.skew_active:
-            if primary_type != "PUT" or primary_side != "BUY" or Decimal(str(proposal.strike)) != self.state.put_strike:
-                raise ValueError("TRACK7_INSURANCE_ENTRY_MUST_START_WITH_PUT")
-            return MultiLegExecutionPlan(
-                group_id=group_id, strategy_id=self.strategy_id, purpose="WEEKLY_INSURANCE_ENTRY",
-                legs=(
-                    ExecutionLeg("put","BUY",self.insurance_qty,"PUT",self.state.put_strike),
-                    ExecutionLeg("call","BUY",self.insurance_qty,"CALL",self.state.call_strike),
-                ),
-            )
+            if primary_type == "PUT" and primary_side == "BUY" and Decimal(str(proposal.strike)) == self.state.put_strike:
+                return MultiLegExecutionPlan(
+                    group_id=group_id, strategy_id=self.strategy_id, purpose="WEEKLY_INSURANCE_ENTRY",
+                    legs=(
+                        ExecutionLeg("put","BUY",self.insurance_qty,"PUT",self.state.put_strike),
+                        ExecutionLeg("call","BUY",self.insurance_qty,"CALL",self.state.call_strike),
+                    ),
+                )
+            if primary_type == "PUT" and primary_side == "SELL" and Decimal(str(proposal.strike)) == self.state.put_strike:
+                plan = MultiLegExecutionPlan(
+                    group_id=group_id, strategy_id=self.strategy_id, purpose="WEEKLY_INSURANCE_CLOSE",
+                    legs=(
+                        ExecutionLeg("put","SELL",self.insurance_qty,"PUT",self.state.put_strike),
+                        ExecutionLeg("call","SELL",self.insurance_qty,"CALL",self.state.call_strike),
+                    ),
+                )
+                self.reset()
+                return plan
+            raise ValueError("TRACK7_INSURANCE_EXECUTION_MUST_START_WITH_PUT")
         secondary_type="CALL" if primary_type=="PUT" else "PUT"
         secondary_side="SELL" if primary_side=="BUY" else "BUY"
         primary_strike=self.state.put_strike if primary_type=="PUT" else self.state.call_strike
@@ -234,8 +244,15 @@ class Track7VolatilitySkewWeeklyInsurance:
         near_resistance = isinstance(resistance, Decimal) and price >= resistance
         near_support = isinstance(support, Decimal) and price <= support
         if bullish_cross or bearish_cross or near_resistance or near_support:
-            return (Signal(self.strategy_id, "PREEMPTIVE_LIMIT_TAKE_PROFIT", 0.8,
-                           f"MA_CROSS:{bullish_cross or bearish_cross};SUPPORT:{support};RESISTANCE:{resistance};PRICE:{price}"),)
+            return (Signal(
+                self.strategy_id, "PREEMPTIVE_LIMIT_TAKE_PROFIT", 0.8,
+                f"MA_CROSS:{bullish_cross or bearish_cross};SUPPORT:{support};RESISTANCE:{resistance};PRICE:{price}",
+                execution_proposal=StrategyExecutionProposal(
+                    proposed_quantity=self.insurance_qty, asset_type="OPTION", side="SELL",
+                    track_id=self.strategy_id, tag_id="WEEKLY_INSURANCE_CLOSE_PREEMPTIVE",
+                    option_type="PUT", strike=self.state.put_strike,
+                ),
+            ),)
         return ()
 
     def evaluate_expiry_cutoff(self, context: StrategyContext) -> Sequence[Signal]:
@@ -245,15 +262,34 @@ class Track7VolatilitySkewWeeklyInsurance:
         time_str = analytics.as_of.strftime("%H:%M:%S")
         expiry_active = self._metric(analytics, "calendar.is_expiry_day") is True or self._metric(analytics, "calendar.is_week_end") is True
         if self.expiry_mode == "D-4" and time_str >= MarketSessionPolicy.text(MarketSessionPolicy.LIMIT_CUTOFF):
-            self.reset()
-            return (Signal(self.strategy_id, "CLOSE_WEEKLY_INSURANCE_PREEMPTIVE_D4", 1.0, "D4_PREEMPTIVE_CUTOFF"),)
+            return (Signal(
+                self.strategy_id, "CLOSE_WEEKLY_INSURANCE_PREEMPTIVE_D4", 1.0, "D4_PREEMPTIVE_CUTOFF",
+                execution_proposal=StrategyExecutionProposal(
+                    proposed_quantity=self.insurance_qty, asset_type="OPTION", side="SELL",
+                    track_id=self.strategy_id, tag_id="WEEKLY_INSURANCE_CLOSE_D4",
+                    option_type="PUT", strike=self.state.put_strike,
+                ),
+            ),)
         if not expiry_active:
             return ()
         if MarketSessionPolicy.text(MarketSessionPolicy.LIMIT_CUTOFF) <= time_str < MarketSessionPolicy.text(MarketSessionPolicy.MARKET_CUTOFF):
-            return (Signal(self.strategy_id, "CLOSE_WEEKLY_INSURANCE_LIMIT", 1.0, "15:00_LIMIT_CUTOFF"),)
+            return (Signal(
+                self.strategy_id, "CLOSE_WEEKLY_INSURANCE_LIMIT", 1.0, "15:00_LIMIT_CUTOFF",
+                execution_proposal=StrategyExecutionProposal(
+                    proposed_quantity=self.insurance_qty, asset_type="OPTION", side="SELL",
+                    track_id=self.strategy_id, tag_id="WEEKLY_INSURANCE_CLOSE_LIMIT",
+                    option_type="PUT", strike=self.state.put_strike,
+                ),
+            ),)
         if time_str >= MarketSessionPolicy.text(MarketSessionPolicy.MARKET_CUTOFF):
-            self.reset()
-            return (Signal(self.strategy_id, "CLOSE_WEEKLY_INSURANCE_FALLBACK_MARKET", 1.0, "15:15_FALLBACK_MARKET"),)
+            return (Signal(
+                self.strategy_id, "CLOSE_WEEKLY_INSURANCE_FALLBACK_MARKET", 1.0, "15:15_FALLBACK_MARKET",
+                execution_proposal=StrategyExecutionProposal(
+                    proposed_quantity=self.insurance_qty, asset_type="OPTION", side="SELL",
+                    track_id=self.strategy_id, tag_id="WEEKLY_INSURANCE_CLOSE_MARKET",
+                    option_type="PUT", strike=self.state.put_strike,
+                ),
+            ),)
         return ()
 
     def evaluate(self, context: StrategyContext) -> Sequence[Signal]:

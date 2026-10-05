@@ -164,7 +164,7 @@ class OptionProgramReadModel:
 
         return {
             "tab_id": "option_program",
-            "tab_name": "?�션?�로그램",
+            "tab_name": "Option Program",
             "run_id": getattr(self._context, "run_id", None),
             "runtime_state": runtime_state,
             "environment": getattr(self._context, "environment", None),
