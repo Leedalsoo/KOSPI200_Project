@@ -317,7 +317,7 @@ document.addEventListener("DOMContentLoaded", () => {
     setText("hs-scenario", data.scenario_name || "?");
     const progress = Number(data.progress_ratio);
     const bar = document.getElementById("hs-progress");
-    if (bar) bar.style.width = `${Number.isFinite(progress) ? Math.max(0, Math.min(100, progress * 100)) : 0}%`;
+    if (bar) { const percent = Number.isFinite(progress) ? Math.max(0, Math.min(100, progress * 100)) : 0; bar.value = percent; bar.textContent = `${percent}%`; }
     renderRows("hs-positions-tbody", data.positions, 5, (p) => `
       <tr><td class="mono">${escapeHtml(p.symbol)}</td><td>${escapeHtml(p.qty)}</td>
       <td class="mono">${numberText(p.avg_price)}</td><td class="mono">${numberText(p.current_price)}</td>
