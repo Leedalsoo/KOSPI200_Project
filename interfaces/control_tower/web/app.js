@@ -218,7 +218,10 @@ document.addEventListener("DOMContentLoaded", () => {
       setConnectionMessage(`panel-${tabId}`, "");
       if (tabId === "virtual_exchange") renderVirtualExchange(data);
       else if (tabId === "virtual_broker") renderVirtualBroker(data);
-      else if (tabId === "option_program") renderOptionProgram(data);
+      else if (tabId === "option_program") {
+        renderOptionProgram(data);
+        await renderCurrentVerification();
+      }
       else if (tabId === "high_speed") renderHighSpeed(data);
       else if (tabId === "paper") renderPaper(data);
       else if (tabId === "live") renderLive(data);
@@ -234,6 +237,45 @@ document.addEventListener("DOMContentLoaded", () => {
   function setText(id, value) {
     const el = document.getElementById(id);
     if (el) el.textContent = value;
+  }
+
+  async function renderCurrentVerification() {
+    const summary = document.getElementById("current-verification-summary");
+    const grid = document.getElementById("current-verification-grid");
+    if (!summary || !grid) return;
+    try {
+      const data = await apiFetch("/api/verification/current");
+      const reports = Array.isArray(data.reports) ? data.reports : [];
+      const byTrack = new Map(reports.map((item) => [item.strategy_id, item]));
+      const target = Number(data.target_ticks || 5000);
+      const passCount = reports.filter((item) => item.processed_ticks === target && !item.errors?.length).length;
+      const blockedCount = reports.filter((item) => item.processed_ticks !== target || item.errors?.length).length;
+      summary.innerHTML = [
+        ["Basis", "CURRENT_BASELINE"], ["Target", target.toLocaleString("ko-KR") + " ticks / strategy"],
+        ["Completed reports", reports.length + " / 9"], ["5,000-tick complete", passCount + " / 9"],
+        ["Blocked / incomplete", blockedCount + " / 9"],
+      ].map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
+      const strategyRows = [
+        ["TRACK 01", "TRACK1_TAIL_DEFENSE"], ["TRACK 02", "track2_asymmetric_trap"],
+        ["TRACK 03", "Strategy_3_StatArb"], ["TRACK 04", "track4_gamma_scalping"],
+        ["TRACK 05", "track5_gap_divergence"], ["TRACK 06", "track6_daily_tail_insurance"],
+        ["TRACK 07", "track7_volatility_skew_weekly_insurance"],
+        ["TRACK 08", "track8_macro_regime_monthly_strangle"],
+        ["TRACK 09", "track9_event_overnight_insurance"],
+      ];
+      grid.innerHTML = strategyRows.map(([track, strategyId]) => {
+        const item = byTrack.get(strategyId);
+        if (!item) return `<div class="verification-item"><span>${track}</span><strong>${escapeHtml(strategyId)}</strong><span>Current baseline</span><b>NOT RUN</b></div>`;
+        const result = item.result || {};
+        const status = item.strategy_status?.[strategyId] || {};
+        const complete = item.processed_ticks === target && !(item.errors || []).length;
+        const state = complete ? "OBSERVED" : "BLOCKED / INCOMPLETE";
+        return `<div class="verification-item"><span>${track}</span><strong>${escapeHtml(strategyId)}</strong><span>Ticks / source</span><b>${escapeHtml(String(item.processed_ticks) + " / " + target)} · ${escapeHtml(item.source || "?")}</b><span>Signal / Approved / Routed / Filled</span><b>${escapeHtml(String(status.reaction_signals ?? result.signals ?? 0) + " / " + String(status.approved ?? result.approved ?? 0) + " / " + String(status.routed ?? result.routed ?? 0) + " / " + String(status.filled_quantity ?? result.filled ?? 0))}</b><span>Verdict</span><b>${escapeHtml(state)}</b></div>`;
+      }).join("");
+    } catch (error) {
+      summary.textContent = "CURRENT BASELINE VERIFICATION UNAVAILABLE: " + error.message;
+      grid.innerHTML = "";
+    }
   }
 
   function renderOptionProgram(data) {

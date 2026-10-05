@@ -63,6 +63,16 @@ class ControlTowerRequestHandler(BaseHTTPRequestHandler):
         if path == "/api/run":
             self._send_json(self.tower.run_read_model())
             return
+        if path == "/api/verification/current":
+            verification_dir = Path(__file__).resolve().parents[2] / "verification"
+            reports = []
+            for report_path in sorted(verification_dir.glob("current_track*_5000.json")):
+                try:
+                    reports.append(json.loads(report_path.read_text(encoding="utf-8")))
+                except (OSError, json.JSONDecodeError):
+                    continue
+            self._send_json({"scope": "CURRENT_BASELINE", "target_ticks": 5000, "reports": reports})
+            return
         if path.startswith("/api/environment/"):
             tab_id = path.removeprefix("/api/environment/").strip("/")
             detail = self.tower.environment(tab_id)
