@@ -25,8 +25,8 @@ def test_standard_and_mini_kospi200_option_multipliers_are_distinct():
         (
             "5|B01610A49|KR4B016AA495|C 202610 1,117.5|3|01117.50| |2001|KOSPI200",
             "6|C01610A40|KR4C016AA403|P 202610 1,092.5|3|01092.50| |2001|KOSPI200",
-            "D|B05610A48|KR4B056AA483|미니 C 202610 1,117.5|3|01117.50| |2001|KOSPI200",
-            "E|C05610A38|KR4C056AA383|미니 P 202610 1,092.5|3|01092.50| |2001|KOSPI200",
+            "D|B05610A48|KR4B056AA483|誘몃땲 C 202610 1,117.5|3|01117.50| |2001|KOSPI200",
+            "E|C05610A38|KR4C056AA383|誘몃땲 P 202610 1,092.5|3|01092.50| |2001|KOSPI200",
         )
     )
 
@@ -42,7 +42,7 @@ def test_standard_and_mini_same_economic_terms_are_not_duplicate_authoritative_c
     raw = "\n".join(
         (
             "6|C01610A40|KR4C016AA403|P 202610 1,092.5|3|01092.50| |2001|KOSPI200",
-            "E|C05610A38|KR4C056AA383|미니 P 202610 1,092.5|3|01092.50| |2001|KOSPI200",
+            "E|C05610A38|KR4C056AA383|誘몃땲 P 202610 1,092.5|3|01092.50| |2001|KOSPI200",
         )
     )
 
@@ -86,7 +86,8 @@ def test_track6_selects_standard_kospi200_identity_when_mini_has_same_strike():
     assert selection.call.contract_multiplier == Decimal("250000")
 
 
-def test_find_contract_identity_prefers_standard_option_when_mini_matches():`r`n    master = InMemoryOptionContractMaster()
+def test_find_contract_identity_prefers_standard_option_when_mini_matches():
+    master = InMemoryOptionContractMaster()
     master.register_contract_identity(KisOptionContractIdentity(
         shrn_iscd="C01610A40", stnd_iscd=None, expiry="2026-10-08",
         option_type="PUT", strike=Decimal("1092.5"), contract_multiplier=Decimal("250000"),

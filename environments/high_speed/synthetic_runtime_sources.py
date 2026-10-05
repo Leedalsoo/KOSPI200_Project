@@ -207,6 +207,12 @@ def build_synthetic_option_master(dataset: str | Path) -> InMemoryOptionContract
                     info_type="SYNTHETIC",
                     contract_multiplier=Decimal(str(tick["contract_multiplier"])),
                 )
+                existing = master.get_contract_identity(str(tick["instrument_id"]))
+                if existing is not None:
+                    existing_month = str(existing.expiry).replace("-", "")[:6]
+                    incoming_month = str(identity.expiry).replace("-", "")[:6]
+                    if existing_month == incoming_month and existing.option_type == identity.option_type and existing.strike == identity.strike and existing.contract_multiplier == identity.contract_multiplier:
+                        continue
                 master.register_contract_identity(identity)
     return master
 
