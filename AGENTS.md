@@ -321,3 +321,11 @@ For all Strategy 1-9 E2E:
 - The common contract identity rule remains: observed actual WS instrument code -> exact authoritative Master lookup -> contract identity -> strategy/order/execution/Position/PnL.
 - Monthly/yearly contract changes must be handled by Master data refresh/coverage, not by hardcoded strategy-specific contract selection.
 - Current overall Strategy 1-9 E2E status is BLOCKED because complete signal -> execution -> Position/PnL evidence has not been established across all strategies. This is a validation status, not a claim that the strategy implementations are invalid.
+
+## 33. Test PASS vs Actual Production Function Verification (2026-10-04)
+- A PASS from a test file is not, by itself, evidence that the corresponding production functionality is correct.
+- If a test file, fixture, mock, expected value, or assertion is modified merely to make the test PASS, that PASS MUST be excluded from actual functionality verification evidence.
+- Final Strategy 1-9 verdicts MUST prioritize evidence from the actual production execution path and actual REAL_VTS execution.
+- For every strategy, record separately: (1) test result, (2) actual production files/execution path changed, (3) REAL_VTS source/replay evidence, (4) Runtime Input status, (5) actual Signal or NO_SIGNAL_OBSERVED, (6) Decision/Risk/OMS/Router evidence, (7) Virtual Execution/Fill evidence, and (8) Position/PnL evidence.
+- Contract/unit/integration test PASS may support regression confidence, but MUST NOT be reported as full Strategy E2E PASS without applicable real execution evidence.
+- When no real signal occurs in the validated REAL_VTS interval, report NO_SIGNAL_OBSERVED and keep the signal-driven execution lifecycle unverified; never manufacture a signal with synthetic/fixed/zero/false/inferred authoritative inputs.

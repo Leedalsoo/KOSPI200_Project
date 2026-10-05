@@ -52,6 +52,7 @@ class KisOptionMasterParseResult:
 
 
 KIS_KOSPI200_OPTION_CONTRACT_MULTIPLIER = Decimal("250000")
+KIS_MINI_KOSPI200_OPTION_CONTRACT_MULTIPLIER = Decimal("50000")
 
 KIS_INFO_TYPE_TO_OPTION_TYPE = {
     "5": "CALL", "D": "CALL", "L": "CALL",
@@ -175,7 +176,9 @@ def parse_kis_fo_idx_mst_result(
             strike=strike,
             info_type=prod_type or None,
             contract_multiplier=(
-                KIS_KOSPI200_OPTION_CONTRACT_MULTIPLIER
+                KIS_MINI_KOSPI200_OPTION_CONTRACT_MULTIPLIER
+                if prod_type in {"D", "E"}
+                else KIS_KOSPI200_OPTION_CONTRACT_MULTIPLIER
                 if prod_type in KIS_INFO_TYPE_TO_OPTION_TYPE
                 else None
             ),
@@ -360,7 +363,13 @@ class _IdentityOptionContractMaster(IOptionContractMaster):
         if len(exact_matches) == 1:
             return exact_matches[0]
         if exact_matches:
-            return exact_matches[0]
+            standard_matches = [
+                identity for identity in exact_matches
+                if identity.contract_multiplier == KIS_KOSPI200_OPTION_CONTRACT_MULTIPLIER
+            ]
+            if len(standard_matches) == 1:
+                return standard_matches[0]
+            return None
         if len(target_expiry) == 6:
             month_matches = [
                 identity for identity in self._contract_identities.values()
@@ -370,6 +379,13 @@ class _IdentityOptionContractMaster(IOptionContractMaster):
             ]
             if len(month_matches) == 1:
                 return month_matches[0]
+            if month_matches:
+                standard_matches = [
+                    identity for identity in month_matches
+                    if identity.contract_multiplier == KIS_KOSPI200_OPTION_CONTRACT_MULTIPLIER
+                ]
+                if len(standard_matches) == 1:
+                    return standard_matches[0]
         return None
 
     def list_contract_identities(self, expiry: Optional[str] = None) -> tuple[KisOptionContractIdentity, ...]:

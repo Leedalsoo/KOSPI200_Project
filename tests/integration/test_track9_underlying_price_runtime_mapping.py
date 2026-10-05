@@ -40,5 +40,7 @@ def test_track9_runtime_uses_underlying_price_for_atm_contract_selection():
     )
     assert (tick.expiry, Decimal("1130.63")) in seen
     context = contexts["track9_event_overnight_insurance"]
-    assert context.analytics is None
-    assert "track9_authoritative_option_contract" not in context.input.payload.required_sources
+    assert context.analytics is not None
+    assert context.analytics.get("options.atm_put_strike").value == Decimal("1117.5")
+    assert context.analytics.get("options.atm_call_strike").value == Decimal("1142.5")
+    assert context.analytics.get("options.contract_multiplier").value == Decimal("250000")

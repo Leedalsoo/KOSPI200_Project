@@ -1,6 +1,6 @@
 /**
- * Project200 Control Tower — Frontend Controller
- * Backend DTO를 단일 데이터 원천으로 사용하며, 가짜 상태/시장값을 생성하지 않는다.
+ * Project200 Control Tower ??Frontend Controller
+ * Backend DTO瑜??⑥씪 ?곗씠???먯쿇?쇰줈 ?ъ슜?섎ŉ, 媛吏??곹깭/?쒖옣媛믪쓣 ?앹꽦?섏? ?딅뒗??
  */
 document.addEventListener("DOMContentLoaded", () => {
   const storedTab = localStorage.getItem("p200:lastTab");
@@ -32,26 +32,27 @@ document.addEventListener("DOMContentLoaded", () => {
     high_speed: "High-Speed Test",
     virtual_exchange: "가상거래소 (Virtual Market)",
     virtual_broker: "가상증권사 (Virtual Broker)",
+    option_program: "옵션프로그램 (Option Program)",
     paper: "모의투자 (KIS Paper)",
-    live: "실투자 (KIS Live)",
+    live: "?ㅽ닾??(KIS Live)",
   };
 
-  const escapeHtml = (value) => String(value ?? "—")
+  const escapeHtml = (value) => String(value ?? "?")
     .replaceAll("&", "&amp;").replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;").replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 
   const numberText = (value, digits = 2) => {
-    if (value === null || value === undefined || value === "") return "—";
+    if (value === null || value === undefined || value === "") return "?";
     const n = Number(value);
-    return Number.isFinite(n) ? n.toLocaleString("ko-KR", { minimumFractionDigits: digits, maximumFractionDigits: digits }) : "—";
+    return Number.isFinite(n) ? n.toLocaleString("ko-KR", { minimumFractionDigits: digits, maximumFractionDigits: digits }) : "?";
   };
 
   const moneyText = (value) => {
-    if (value === null || value === undefined) return "—";
+    if (value === null || value === undefined) return "?";
     const n = Number(value);
-    if (!Number.isFinite(n)) return "—";
-    return `${n >= 0 ? "+" : "−"}₩ ${Math.abs(n).toLocaleString("ko-KR", { maximumFractionDigits: 0 })}`;
+    if (!Number.isFinite(n)) return "?";
+    return `${n >= 0 ? "+" : "-"}₩${Math.abs(n).toLocaleString("ko-KR", { maximumFractionDigits: 0 })}`;
   };
 
   function setPanelLoading(panel, loading) {
@@ -95,7 +96,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (scenarioSelect && !scenarioSelect.options.length) {
         (scenarios.available_scenarios || []).forEach((x) => { const o=document.createElement("option"); o.value=x; o.textContent=x; scenarioSelect.appendChild(o); });
       }
-      if (runStatus) runStatus.textContent = `RUN: ${run.run_id || "—"} / ${run.runtime_state || "STOPPED"}`;
+      if (runStatus) runStatus.textContent = `RUN: ${run.run_id || "?"} / ${run.runtime_state || "STOPPED"}`;
       const readModel = document.getElementById("run-read-model");
       if (readModel) readModel.textContent = JSON.stringify({run_id: run.run_id, runtime_state: run.runtime_state, historical_source: run.historical_source, last_replay_tick: run.last_replay_tick, account: run.account, position: run.position, margin: run.margin, pnl: run.pnl, execution_reports: run.execution_reports}, null, 2);
     } catch (error) { addAuditLog(`[RUN] control read failed: ${error.message}`, "error"); }
@@ -107,9 +108,9 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   runCreateBtn?.addEventListener("click", async () => {
     const key=(strategySelect?.value || "").split(":");
-    if (!runIdInput?.value.trim() || key.length !== 2) return alert("Run ID와 Strategy를 선택하세요.");
+    if (!runIdInput?.value.trim() || key.length !== 2) return alert("Run ID? Strategy瑜??좏깮?섏꽭??");
     try { await apiFetch("/api/run", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({run_id:runIdInput.value.trim(),environment:"virtual",scenario:scenarioSelect?.value || null,strategy_keys:[[key[0],key[1]]]})}); refreshRunControls(); }
-    catch(error) { alert(`RUN 생성 실패: ${error.message}`); }
+    catch(error) { alert(`RUN ?앹꽦 ?ㅽ뙣: ${error.message}`); }
   });
   runStartBtn?.addEventListener("click", () => runAction("START"));
   runStopBtn?.addEventListener("click", () => runAction("STOP"));
@@ -135,9 +136,9 @@ document.addEventListener("DOMContentLoaded", () => {
     currentTab = tabId;
     localStorage.setItem("p200:lastTab", tabId);
     tabButtons.forEach((btn) => btn.setAttribute("aria-selected", String(btn.dataset.tab === tabId)));
-    const virtualOnly = tabId === "virtual_exchange" || tabId === "virtual_broker";
+    const virtualOnly = tabId === "virtual_exchange" || tabId === "virtual_broker" || tabId === "option_program";
     runControlPanel?.classList.toggle("is-hidden", !virtualOnly);
-    if (runControlScope) runControlScope.textContent = virtualOnly ? "VIRTUAL 전용" : "현재 탭에서는 비활성";
+    if (runControlScope) runControlScope.textContent = virtualOnly ? "VIRTUAL ONLY" : "CONTROL DISABLED";
     tabButtons.forEach((btn) => btn.classList.toggle("active", btn.dataset.tab === tabId));
     panels.forEach((panel) => panel.classList.toggle("active", panel.id === `panel-${tabId}`));
     if (activeEnvBadge) activeEnvBadge.textContent = tabNames[tabId];
@@ -147,14 +148,14 @@ document.addEventListener("DOMContentLoaded", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tab_id: tabId }),
-    }).catch((error) => addAuditLog(`[UI] 탭 상태 저장 실패: ${error.message}`, "error"));
+    }).catch((error) => addAuditLog(`[UI] ???곹깭 ????ㅽ뙣: ${error.message}`, "error"));
 
     fetchTabDetail(tabId);
   }
 
   panicHaltBtn?.addEventListener("click", async () => {
     if (panicHaltBtn.disabled) return;
-    if (!confirm("비상정지(PANIC HALT)를 발동하시겠습니까?\n실제 RiskEngine/Runtime에 정지 명령이 전달됩니다.")) return;
+    if (!confirm("鍮꾩긽?뺤?(PANIC HALT)瑜?諛쒕룞?섏떆寃좎뒿?덇퉴?\n?ㅼ젣 RiskEngine/Runtime???뺤? 紐낅졊???꾨떖?⑸땲??")) return;
     panicHaltBtn.disabled = true;
     try {
       const data = await apiFetch("/api/command", {
@@ -162,11 +163,11 @@ document.addEventListener("DOMContentLoaded", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ command: "PANIC_HALT" }),
       });
-      addAuditLog(`[PANIC_HALT] ${data.message || "비상정지 완료"}`, "warning");
+      addAuditLog(`[PANIC_HALT] ${data.message || "鍮꾩긽?뺤? ?꾨즺"}`, "warning");
       updateSafetyState(data.kill_switch_active === true, data.runtime_state);
     } catch (error) {
-      addAuditLog(`[PANIC_HALT] 실행 실패: ${error.message}`, "error");
-      alert(`비상정지 요청 실패: ${error.message}`);
+      addAuditLog(`[PANIC_HALT] ?ㅽ뻾 ?ㅽ뙣: ${error.message}`, "error");
+      alert(`鍮꾩긽?뺤? ?붿껌 ?ㅽ뙣: ${error.message}`);
     } finally {
       panicHaltBtn.disabled = false;
       fetchSummary();
@@ -197,8 +198,8 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     } catch (error) {
-      addAuditLog(`[STATUS] 상태 조회 실패: ${error.message}`, "error");
-      setConnectionMessage(`panel-${currentTab}`, `상태 조회 실패: ${error.message}`);
+      addAuditLog(`[STATUS] ?곹깭 議고쉶 ?ㅽ뙣: ${error.message}`, "error");
+      setConnectionMessage(`panel-${currentTab}`, `?곹깭 議고쉶 ?ㅽ뙣: ${error.message}`);
     }
   }
 
@@ -217,13 +218,14 @@ document.addEventListener("DOMContentLoaded", () => {
       setConnectionMessage(`panel-${tabId}`, "");
       if (tabId === "virtual_exchange") renderVirtualExchange(data);
       else if (tabId === "virtual_broker") renderVirtualBroker(data);
+      else if (tabId === "option_program") renderOptionProgram(data);
       else if (tabId === "high_speed") renderHighSpeed(data);
       else if (tabId === "paper") renderPaper(data);
       else if (tabId === "live") renderLive(data);
       (data.audit_logs || []).slice(-3).forEach((log) => addAuditLog(`[${tabId.toUpperCase()}] ${log}`));
     } catch (error) {
-      setConnectionMessage(`panel-${tabId}`, `환경 데이터 조회 실패: ${error.message}`);
-      addAuditLog(`[${tabId.toUpperCase()}] 조회 실패: ${error.message}`, "error");
+      setConnectionMessage(`panel-${tabId}`, `?섍꼍 ?곗씠??議고쉶 ?ㅽ뙣: ${error.message}`);
+      addAuditLog(`[${tabId.toUpperCase()}] 議고쉶 ?ㅽ뙣: ${error.message}`, "error");
     } finally {
       setPanelLoading(panel, false);
     }
@@ -234,14 +236,43 @@ document.addEventListener("DOMContentLoaded", () => {
     if (el) el.textContent = value;
   }
 
+  function renderOptionProgram(data) {
+    setText("op-runtime-state", data.runtime_state || "STOPPED");
+    setText("op-run-id", "RUN: " + (data.run_id || "?"));
+    const market = data.market_input;
+    setText("op-market-input", market ? (market.symbol || "?") + " @ " + numberText(market.last, 4) : "UNAVAILABLE");
+    const result = data.last_result || {};
+    setText("op-signals", result.signals ?? "?");
+    setText("op-decisions", (result.approved ?? "?") + " / " + (result.rejected ?? "?"));
+    setText("op-execution", (result.routed ?? "?") + " / " + (result.filled ?? "?"));
+    const flow = data.flow || {};
+    const flowItems = [["Market Input", flow.market_input],["Strategy", flow.strategy],["Signal", flow.signal],["Decision Approved", flow.decision_approved],["Risk / Router Rejected", flow.risk_or_router_rejected],["Order Routed", flow.order_routed],["Execution Filled", flow.execution_filled],["Position / PnL", flow.position_pnl]];
+    const flowGrid = document.getElementById("op-flow-grid");
+    if (flowGrid) flowGrid.innerHTML = flowItems.map(([label,value]) => `<div class="flow-node"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value ?? "?")}</strong></div>`).join("");
+    const strategies = Array.isArray(data.strategies) ? data.strategies : [];
+    const grid = document.getElementById("op-strategy-grid");
+    setText("op-strategy-count", strategies.length + " / 9");
+    if (grid) grid.innerHTML = strategies.map(function(item,index) {
+      const status=item.status||{}; const state=item.enabled?"ENABLED":"DISABLED"; const observation=item.observation_state||"NO_SIGNAL_OBSERVED";
+      const cls=observation.includes("BLOCKED")||observation==="INPUT_UNAVAILABLE"?"blocked":(observation.includes("OBSERVED")?"observed":"neutral");
+      return `<article class="strategy-card"><div class="strategy-card-top"><span>TRACK ${String(index+1).padStart(2,"0")}</span><b>${escapeHtml(state)}</b></div><h4>${escapeHtml(item.strategy_id)}</h4><div class="strategy-version">${escapeHtml(item.version)}</div><div class="strategy-stats"><span>signals <b>${escapeHtml(status.reaction_signals??0)}</b></span><span>approved <b>${escapeHtml(status.approved??0)}</b></span><span>routed <b>${escapeHtml(status.routed??0)}</b></span><span>filled <b>${escapeHtml(status.filled_quantity??0)}</b></span></div><div class="strategy-evidence"><span>Source <b>${escapeHtml(item.source_status||"SOURCE_UNSPECIFIED")}</b></span><span>Runtime Input <b>${escapeHtml(item.runtime_input_status||"UNAVAILABLE")}</b></span><span>Signal <b>${escapeHtml(item.signal_status||observation)}</b></span></div><span class="verification-state ${cls}">${escapeHtml(observation)}</span><div class="strategy-version">FULL E2E: NOT CLAIMED</div></article>`;
+    }).join("");
+    const marketDetail=document.getElementById("op-market-detail"); if(marketDetail) marketDetail.textContent=JSON.stringify(market||{status:"UNAVAILABLE"},null,2);
+    const accountDetail=document.getElementById("op-account-detail"); if(accountDetail) accountDetail.textContent=JSON.stringify({account:data.account,margin:data.margin,pnl:data.pnl,position:data.position,execution_reports:data.execution_reports},null,2);
+    const verification=data.verification||{}; setText("op-e2e-status","FULL E2E: "+(verification.full_e2e_status||"NOT_CLAIMED"));
+    const summary=document.getElementById("op-verification-summary"); if(summary) summary.innerHTML=[["Scope",verification.scope||"RUN_OBSERVATION_ONLY"],["Source",verification.source||"UNSPECIFIED"],["Environment",data.environment||"UNSPECIFIED"],["Scenario",data.scenario||"UNSPECIFIED"]].map(([label,value])=>`<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
+    const vg=document.getElementById("op-verification-grid"); if(vg) vg.innerHTML=strategies.map(function(item,index){const st=item.status||{};return `<div class="verification-item"><span>TRACK ${String(index+1).padStart(2,"0")}</span><strong>${escapeHtml(item.strategy_id)}</strong><span>Current run observation</span><b>${escapeHtml(item.observation_state||"NO_SIGNAL_OBSERVED")}</b><span>Signals / Approved / Routed / Filled</span><b>${escapeHtml(st.reaction_signals??0)} / ${escapeHtml(st.approved??0)} / ${escapeHtml(st.routed??0)} / ${escapeHtml(st.filled_quantity??0)}</b></div>`;}).join("");
+    const unavailable=data.unavailable_sections||[]; setText("op-unavailable",unavailable.length?unavailable.join(", "):"현재 Read Model에서 공급되지 않는 세부 항목 없음");
+  }
+
   function renderHighSpeed(data) {
     const connected = data.connection_state === "CONNECTED";
-    setText("hs-ticks", connected ? `${data.processed_ticks ?? 0} / ${data.total_ticks ?? 0}` : "—");
-    setText("hs-decisions", connected ? (data.strategy_decisions_count ?? 0) : "—");
-    setText("hs-orders", connected ? `${data.orders_submitted ?? 0} / ${data.orders_filled ?? 0}` : "—");
+    setText("hs-ticks", connected ? `${data.processed_ticks ?? 0} / ${data.total_ticks ?? 0}` : "?");
+    setText("hs-decisions", connected ? (data.strategy_decisions_count ?? 0) : "?");
+    setText("hs-orders", connected ? `${data.orders_submitted ?? 0} / ${data.orders_filled ?? 0}` : "?");
     setText("hs-pnl", moneyText(data.total_pnl));
     setText("hs-speed", `${numberText(data.speed_multiplier, 2)}x`);
-    setText("hs-scenario", data.scenario_name || "—");
+    setText("hs-scenario", data.scenario_name || "?");
     const progress = Number(data.progress_ratio);
     const bar = document.getElementById("hs-progress");
     if (bar) bar.style.width = `${Number.isFinite(progress) ? Math.max(0, Math.min(100, progress * 100)) : 0}%`;
@@ -253,11 +284,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function renderVirtualExchange(data) {
     setText("vm-underlying", numberText(data.underlying_index_price));
-    setText("vm-vkospi", data.volatility_index == null ? "—" : `${numberText(data.volatility_index)} %`);
+    setText("vm-vkospi", data.volatility_index == null ? "?" : `${numberText(data.volatility_index)} %`);
     setText("vm-instruments", data.instruments_count ?? 0);
     setText("vm-feed-status", data.connection_state || "UNKNOWN");
     setText("vm-feed-badge", data.market_state || "UNKNOWN");
-    setText("vm-latency", data.feed_latency_ms == null ? "LATENCY: —" : `LATENCY: ${numberText(data.feed_latency_ms)} ms`);
+    setText("vm-latency", data.feed_latency_ms == null ? "LATENCY: ?" : `LATENCY: ${numberText(data.feed_latency_ms)} ms`);
     renderRows("vm-ticks-tbody", data.recent_ticks, 6, (t) => `
       <tr><td class="mono">${escapeHtml(t.code)}</td><td>${escapeHtml(t.name)}</td>
       <td class="mono">${numberText(t.price)}</td><td class="mono">${numberText(t.change)}</td>
@@ -271,7 +302,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const asks = Array.isArray(depth?.asks) ? depth.asks : [];
     const bids = Array.isArray(depth?.bids) ? depth.bids : [];
     const rows = (items, cls) => items.map((x) => `<div class="depth-row"><span class="price ${cls}">${numberText(x.price)}</span><span class="qty">${escapeHtml(x.qty)}</span></div>`).join("");
-    root.innerHTML = asks.length || bids.length ? `${rows(asks, "text-down")}<div class="depth-spread">${escapeHtml(depth.spread ?? "—")}</div>${rows(bids, "text-up")}` : `<div class="empty-state">실제 호가 데이터 없음</div>`;
+    root.innerHTML = asks.length || bids.length ? `${rows(asks, "text-down")}<div class="depth-spread">${escapeHtml(depth.spread ?? "?")}</div>${rows(bids, "text-up")}` : `<div class="empty-state">No live market data</div>`;
   }
 
   function renderVirtualBroker(data) {
@@ -280,7 +311,7 @@ document.addEventListener("DOMContentLoaded", () => {
     setText("vb-margin-available", moneyText(data.margin_available));
     setText("vb-realized", moneyText(data.realized_pnl));
     setText("vb-unrealized", moneyText(data.unrealized_pnl));
-    setText("vb-account", data.account_number || "—");
+    setText("vb-account", data.account_number || "?");
     renderRows("vb-orders-tbody", data.active_orders, 6, (o) => `<tr><td class="mono">${escapeHtml(o.order_id)}</td><td class="mono">${escapeHtml(o.symbol)}</td><td>${escapeHtml(o.side)}</td><td>${escapeHtml(o.qty)}</td><td>${numberText(o.price)}</td><td>${escapeHtml(o.status)}</td></tr>`);
     renderRows("vb-positions-tbody", data.positions, 6, (p) => `<tr><td class="mono">${escapeHtml(p.symbol)}</td><td>${escapeHtml(p.name || p.symbol)}</td><td>${escapeHtml(p.qty)}</td><td class="mono">${numberText(p.avg_price)}</td><td class="mono">${numberText(p.current_price)}</td><td class="mono">${escapeHtml(moneyText(p.pnl))}</td></tr>`);
   }
@@ -289,8 +320,8 @@ document.addEventListener("DOMContentLoaded", () => {
     setText("paper-connection", data.connection_state || "UNKNOWN");
     setText("paper-auth", data.auth_state || "UNKNOWN");
     setText("paper-risk", data.risk_state || "UNKNOWN");
-    setText("paper-account", data.account_number || "—");
-    setText("paper-reason", data.blocked_reason || "—");
+    setText("paper-account", data.account_number || "?");
+    setText("paper-reason", data.blocked_reason || "?");
   }
 
   function renderLive(data) {
@@ -299,21 +330,21 @@ document.addEventListener("DOMContentLoaded", () => {
     setText("live-approval", data.live_approval ? "APPROVED" : "NOT APPROVED");
     setText("live-kill-switch", data.kill_switch_engaged ? "ENGAGED" : "NOT ENGAGED");
     setText("live-execution", data.execution_allowed ? "ALLOWED" : "BLOCKED");
-    setText("live-reason", data.blocked_reason || "—");
+    setText("live-reason", data.blocked_reason || "?");
   }
 
   function renderRows(id, rows, colspan, renderer) {
     const tbody = document.getElementById(id);
     if (!tbody) return;
     if (!Array.isArray(rows) || rows.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="${colspan}" class="empty-state">실제 데이터 없음</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="${colspan}" class="empty-state">?ㅼ젣 ?곗씠???놁쓬</td></tr>`;
       return;
     }
     tbody.innerHTML = rows.map(renderer).join("");
   }
 
   function formatTime(value) {
-    if (!value) return "—";
+    if (!value) return "?";
     const text = String(value);
     return text.length >= 19 ? text.slice(11, 19) : text;
   }

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Iterable, Optional
+import re
 from decimal import Decimal
 
 from contracts.futures_contract_spec import FuturesProductType, KRXFuturesContractSpecSource
@@ -89,6 +90,23 @@ class KisCurrentFuturesContractSource:
             self._records, underlying_short_code=self._underlying_short_code,
             underlying_name=self._underlying_name, product_type=self._product_type,
         )
+
+    def contract_for_month(self, year_month: str) -> KisFuturesContractIdentity:
+        target = str(year_month or "").strip()
+        if not re.fullmatch(r"\d{6}", target):
+            raise FuturesContractMasterError(f"INVALID_FUTURES_CONTRACT_MONTH:{target}")
+        candidates = [
+            r for r in self._records
+            if (self._underlying_short_code is None or r.unas_shrn_iscd == self._underlying_short_code)
+            and (self._underlying_name is None or r.unas_kor_name == self._underlying_name)
+            and (self._product_type is None or r.product_type is self._product_type)
+            and r.kor_name is not None
+            and re.search(r"(\d{6})$", r.kor_name.strip()) is not None
+            and re.search(r"(\d{6})$", r.kor_name.strip()).group(1) == target
+        ]
+        if len(candidates) != 1:
+            raise FuturesContractMasterError(f"FUTURES_CONTRACT_MONTH_NOT_UNIQUE:{target}:{len(candidates)}")
+        return candidates[0]
 
     def contract_for_symbol(self, shrn_iscd: str) -> KisFuturesContractIdentity:
         symbol = (shrn_iscd or "").strip()

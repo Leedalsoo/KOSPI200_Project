@@ -1,8 +1,7 @@
-"""Test Control Tower 5 Environment Views.
+"""Test Control Tower 6-tab Views.
 
-5개 환경 탭(High-Speed Test, 가상거래소, 가상증권사, 모의투자, 실투자)의 뷰모델이
-누락 없이 존재하고, 외부 미연결 시 가짜 성공 없이 DISCONNECTED/BLOCKED를 정직하게
-표시하는지 검증합니다.
+5개 실행환경과 1개 옵션프로그램 Runtime 관제 탭의 뷰모델이 누락 없이 존재하고,
+외부 미연결 시 가짜 성공 없이 DISCONNECTED/BLOCKED를 정직하게 표시하는지 검증합니다.
 """
 
 from dataclasses import asdict
@@ -10,6 +9,7 @@ from interfaces.control_tower.view_models import (
     ControlTowerSummaryView,
     HighSpeedTestView,
     LiveTradingView,
+    OptionProgramView,
     PaperTradingView,
     TabEnvironmentId,
     VirtualBrokerView,
@@ -17,16 +17,26 @@ from interfaces.control_tower.view_models import (
 )
 
 
-def test_5_environment_tabs_enum_has_all_required_environments():
+def test_6_control_tower_tabs_enum_has_all_required_views():
     expected_tabs = {
         "high_speed",
         "virtual_exchange",
         "virtual_broker",
+        "option_program",
         "paper",
         "live",
     }
     actual_tabs = {t.value for t in TabEnvironmentId}
-    assert actual_tabs == expected_tabs, f"5개 탭 목록 불일치: {actual_tabs}"
+    assert actual_tabs == expected_tabs, f"6개 탭 목록 불일치: {actual_tabs}"
+
+
+def test_option_program_view_defaults():
+    view = OptionProgramView()
+    assert view.tab_id == "option_program"
+    assert view.tab_name == "옵션프로그램"
+    assert view.runtime_state == "STOPPED"
+    assert view.strategies == []
+    assert view.unavailable_sections == []
 
 
 def test_high_speed_test_view_defaults():
@@ -95,6 +105,7 @@ def test_views_are_serializable_to_dict():
         HighSpeedTestView(),
         VirtualExchangeView(),
         VirtualBrokerView(),
+        OptionProgramView(),
         PaperTradingView(),
         LiveTradingView(),
         ControlTowerSummaryView(),

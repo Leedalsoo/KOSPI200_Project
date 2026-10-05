@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from contracts.futures_contract_master import KisCurrentFuturesContractSource
 from contracts.futures_identity_source_port import FuturesInstrumentIdentity
 from application.composition.futures_contract_target_resolver import resolve_current_futures_contract
@@ -15,6 +17,14 @@ class KisFuturesIdentitySource:
 
     def current_identity(self) -> FuturesInstrumentIdentity:
         contract = resolve_current_futures_contract(source=self._source, target=self._target)
+        return self._to_identity(contract)
+
+    def identity_for_as_of(self, as_of: datetime) -> FuturesInstrumentIdentity:
+        if as_of is None:
+            raise ValueError("FUTURES_AS_OF_REQUIRED")
+        contract = self._source.with_target(**self._target.selector_kwargs()).contract_for_month(
+            as_of.strftime("%Y%m")
+        )
         return self._to_identity(contract)
 
     def identity_for_observed_symbol(self, shrn_iscd: str) -> FuturesInstrumentIdentity:

@@ -34,6 +34,7 @@ def test_control_tower_server_status_api():
     assert b"high_speed" in response_bytes
     assert b"virtual_exchange" in response_bytes
     assert b"virtual_broker" in response_bytes
+    assert b"option_program" in response_bytes
     assert b"paper" in response_bytes
     assert b"live" in response_bytes
 
@@ -48,6 +49,19 @@ def test_control_tower_server_tab_detail_api():
 
     assert b"200 OK" in response_bytes
     assert b"High-Speed Test" in response_bytes
+
+
+def test_control_tower_server_option_program_detail_api():
+    request_data = b"GET /api/environment/option_program HTTP/1.1\r\nHost: localhost\r\n\r\n"
+    sock = _MockSocket(request_data)
+    server = MagicMock()
+
+    ControlTowerRequestHandler(sock, ("127.0.0.1", 12345), server)
+    response_bytes = sock._wfile.getvalue()
+
+    assert b"200 OK" in response_bytes
+    assert b"option_program" in response_bytes
+    assert b"strategies" in response_bytes
 
 
 def test_control_tower_server_serves_index_html():

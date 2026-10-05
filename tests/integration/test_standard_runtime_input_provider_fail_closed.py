@@ -30,7 +30,7 @@ def test_track8_gate_requires_canonical_common_metrics():
     assert "macro_regime" not in required_sources
 
 
-def test_standard_runtime_input_provider_track9_gate_requires_canonical_common_metrics():
+def test_standard_runtime_input_provider_track9_requires_only_own_inputs():
     bootstrap = create_virtual_runtime_bootstrap()
     market = bootstrap.bundle.market
     account = bootstrap.bundle.account
@@ -43,8 +43,13 @@ def test_standard_runtime_input_provider_track9_gate_requires_canonical_common_m
     contexts = StandardRuntimeInputProvider(market).build(tick, state, account)
     track9 = contexts["track9_event_overnight_insurance"]
     assert track9.input.payload.__class__.__name__ == "UnavailableStrategyPayload"
-    assert "volatility.active" in track9.input.payload.required_sources
-    assert "portfolio.total_fees" in track9.input.payload.required_sources
+    assert "events.upcoming" not in track9.input.payload.required_sources
+    assert "options.iv_spike" not in track9.input.payload.required_sources
+    assert "options.iv_crush" not in track9.input.payload.required_sources
+    assert "portfolio.event_budget" not in track9.input.payload.required_sources
+    assert "portfolio.estimated_event_cost" not in track9.input.payload.required_sources
+    assert "options.atm_put_strike" in track9.input.payload.required_sources
+    assert "options.atm_call_strike" in track9.input.payload.required_sources
 
 def test_standard_runtime_input_provider_consumes_authoritative_risk_guard_status():
     bootstrap = create_virtual_runtime_bootstrap()

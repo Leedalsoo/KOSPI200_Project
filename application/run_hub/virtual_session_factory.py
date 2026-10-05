@@ -30,6 +30,7 @@ from infrastructure.kis.track4_kis_greeks_source import KISTrack4GreeksRealtimeS
 from infrastructure.kis.historical_observation_sources import HistoricalObservationOptionSource
 from infrastructure.kis.historical_futures_observation_replay import HistoricalFuturesObservationReplay
 from infrastructure.kis.historical_index_price_observation_replay import HistoricalIndexPriceObservationReplay
+from infrastructure.kis.track3_runtime_input_source import KISTrack3RuntimeInputSource
 from application.composition.track7_support_resistance_source import Track7AuthoritativeSupportResistanceSource
 from application.composition.market_calendar_hub import MarketCalendarHub
 from interfaces.control_tower.ui_adapter import ControlTowerUIAdapter
@@ -104,6 +105,13 @@ def create_virtual_run_session(context: RunContext, option_master: Any, risk_gua
         group_ids_reader=lambda: tuple(bridge.position_groups.all().keys()),
     )
     strategy_hub = None
+    track3_replay_source = None
+    if historical_observation_option_source is not None:
+        from environments.virtual.market.historical_market_store import HistoricalMarketStore
+        base_path = Path(str(context.historical_store_path)[: -len(".observations.jsonl")])
+        track3_replay_source = KISTrack3RuntimeInputSource(
+            initial_options=HistoricalMarketStore(base_path).load_observations(),
+        )
     loop = attach_standard_automated_loop(
         type("Bootstrap", (), {"bundle": bundle})(),
         strategy_keys=context.strategy_keys,
@@ -113,6 +121,7 @@ def create_virtual_run_session(context: RunContext, option_master: Any, risk_gua
         risk_guard_status_source=virtual_risk_guard,
         market_calendar_hub=market_calendar_hub,
         track4_greeks_provider=track4_greeks_source,
+        track3_runtime_input_source=track3_replay_source,
     )
     strategy_hub = loop.strategy_hub
     raw_futures_path = None
@@ -130,6 +139,11 @@ def create_virtual_run_session(context: RunContext, option_master: Any, risk_gua
         bundle.market.set_index_price_observation_replay(index_replay)
         bundle.market.subscribe_futures_observation(loop.track2_market_observation_sink.on_observation)
         bundle.market.subscribe_index_price_observation(loop.track2_market_observation_sink.basis_source.update_index)
+        if track3_replay_source is not None:
+            bundle.market.subscribe_futures_observation(
+                lambda observation: track3_replay_source.update_futures(observation, session_date=loop.track2_market_observation_sink.session_date)
+            )
+            bundle.market.subscribe_index_price_observation(track3_replay_source.update_index)
     runtime_hub = RuntimeHub(loop)
     option_program_read_model = OptionProgramReadModel(
         runtime_controller=controller,

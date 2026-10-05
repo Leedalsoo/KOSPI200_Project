@@ -90,9 +90,24 @@ class Track7VolatilitySkewWeeklyInsurance:
             return ()
         if self._metric(analytics, "execution.order_timeout") is True:
             return ()
-        # Contract identity/strike selection is intentionally not derived here.
-        # Until an authoritative Option Master selection is injected, fail closed.
-        return ()
+        contract = self._execution_input(context)
+        if contract is None or contract.contract_multiplier <= 0:
+            return ()
+        if contract.listed_put_strike <= 0 or contract.listed_call_strike <= 0:
+            return ()
+        as_of = analytics.as_of.date().isoformat()
+        self.state = replace(self.state, insurance_active=True, bought_date=as_of,
+                             put_strike=contract.listed_put_strike, call_strike=contract.listed_call_strike,
+                             premium_spent=Decimal("0"), high_watermark_intrinsic=Decimal("0"), trailing_active=False)
+        return (Signal(
+            self.strategy_id, "BUY_WEEKLY_INSURANCE", 1.0,
+            f"NEW_WEEK:{as_of};PUT:{contract.listed_put_strike};CALL:{contract.listed_call_strike};QTY:{self.insurance_qty}",
+            execution_proposal=StrategyExecutionProposal(
+                proposed_quantity=self.insurance_qty, asset_type="OPTION", side="BUY",
+                track_id=self.strategy_id, tag_id="WEEKLY_INSURANCE_ENTRY",
+                option_type="PUT", strike=contract.listed_put_strike,
+            ),
+        ),)
 
     def evaluate_skew_arbitrage(self, context: StrategyContext) -> Sequence[Signal]:
         analytics = context.analytics
@@ -169,34 +184,36 @@ class Track7VolatilitySkewWeeklyInsurance:
             )
         return ()
 
-    def build_execution_plan(
-        self, group_id: str, *, proposal: StrategyExecutionProposal
-    ) -> MultiLegExecutionPlan:
+    def build_execution_plan(self, group_id: str, *, proposal: StrategyExecutionProposal) -> MultiLegExecutionPlan:
         if proposal.option_type not in {"PUT", "CALL"} or proposal.strike is None:
             raise ValueError("TRACK7_EXECUTION_PROPOSAL_CONTRACT_REQUIRED")
         if self.state.put_strike <= 0 or self.state.call_strike <= 0:
             raise ValueError("TRACK7_OPTION_SELECTION_REQUIRED")
-        if self.state.put_strike != self.state.call_strike:
-            raise ValueError("TRACK7_PAIRED_STRIKE_MISMATCH")
-
-        primary_type = str(proposal.option_type).upper()
-        primary_side = str(proposal.side or "").upper()
-        if primary_side not in {"BUY", "SELL"}:
+        primary_type=str(proposal.option_type).upper()
+        primary_side=str(proposal.side or "").upper()
+        if primary_side not in {"BUY","SELL"}:
             raise ValueError("TRACK7_EXECUTION_SIDE_REQUIRED")
-        secondary_type = "CALL" if primary_type == "PUT" else "PUT"
-        secondary_side = "SELL" if primary_side == "BUY" else "BUY"
-        primary_strike = self.state.put_strike if primary_type == "PUT" else self.state.call_strike
-        secondary_strike = self.state.call_strike if secondary_type == "CALL" else self.state.put_strike
+        if self.state.insurance_active and not self.state.skew_active:
+            if primary_type != "PUT" or primary_side != "BUY" or Decimal(str(proposal.strike)) != self.state.put_strike:
+                raise ValueError("TRACK7_INSURANCE_ENTRY_MUST_START_WITH_PUT")
+            return MultiLegExecutionPlan(
+                group_id=group_id, strategy_id=self.strategy_id, purpose="WEEKLY_INSURANCE_ENTRY",
+                legs=(
+                    ExecutionLeg("put","BUY",self.insurance_qty,"PUT",self.state.put_strike),
+                    ExecutionLeg("call","BUY",self.insurance_qty,"CALL",self.state.call_strike),
+                ),
+            )
+        secondary_type="CALL" if primary_type=="PUT" else "PUT"
+        secondary_side="SELL" if primary_side=="BUY" else "BUY"
+        primary_strike=self.state.put_strike if primary_type=="PUT" else self.state.call_strike
+        secondary_strike=self.state.call_strike if secondary_type=="CALL" else self.state.put_strike
         if Decimal(str(proposal.strike)) != primary_strike:
             raise ValueError("TRACK7_EXECUTION_STRIKE_MISMATCH")
-
         return MultiLegExecutionPlan(
-            group_id=group_id,
-            strategy_id=self.strategy_id,
-            purpose="WEEKLY_SKEW_ARBITRAGE",
+            group_id=group_id, strategy_id=self.strategy_id, purpose="WEEKLY_SKEW_ARBITRAGE",
             legs=(
-                ExecutionLeg("primary", primary_side, self.insurance_qty, primary_type, primary_strike),
-                ExecutionLeg("secondary", secondary_side, self.insurance_qty, secondary_type, secondary_strike),
+                ExecutionLeg("primary",primary_side,self.insurance_qty,primary_type,primary_strike),
+                ExecutionLeg("secondary",secondary_side,self.insurance_qty,secondary_type,secondary_strike),
             ),
         )
 

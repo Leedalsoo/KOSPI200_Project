@@ -13,8 +13,8 @@ def frame() -> str:
     values[1] = "103015"
     values[5] = "350.25"
     values[10] = "12345"
-    values[35] = "350.30"
-    values[36] = "350.20"
+    values[34] = "350.30"
+    values[35] = "350.20"
     return "0|H0IFCNT0|50|" + "^".join(values)
 
 

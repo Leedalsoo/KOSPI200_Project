@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
+from core.option.option_master import KIS_KOSPI200_OPTION_CONTRACT_MULTIPLIER
+
 
 @dataclass(frozen=True)
 class Track6OptionContractSelection:
@@ -26,6 +28,9 @@ class Track6OptionContractSource:
         calls = {}
         puts = {}
         for identity in identities:
+            multiplier = getattr(identity, "contract_multiplier", None)
+            if multiplier is None or Decimal(str(multiplier)) != KIS_KOSPI200_OPTION_CONTRACT_MULTIPLIER:
+                continue
             option_type = str(getattr(identity, "option_type", "")).upper()
             strike = getattr(identity, "strike", None)
             if option_type not in {"CALL", "PUT"} or strike is None:

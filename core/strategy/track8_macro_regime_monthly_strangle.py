@@ -1,7 +1,7 @@
 from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Sequence
-from core.strategy.contracts import Signal, StrategyContext
+from core.strategy.contracts import NonExecutionEvent, Signal, StrategyContext
 from core.strategy.multi_leg_plan import build_pair_plan
 from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
 from contracts.types import MultiLegExecutionPlan
@@ -92,13 +92,32 @@ class Track8MacroRegimeMonthlyStrangle:
         if intrinsic is None: return ()
         high = max(self.state.high_watermark_intrinsic, intrinsic)
         if high > 0 and intrinsic <= high * Decimal("0.85"):
-            self.reset(); return (Signal(self.strategy_id, "TAKE_PROFIT_HYBRID_TRAILING_STOP", 1.0, f"INTRINSIC_PROXY:{intrinsic};HIGH:{high}"),)
+            put_qty, call_qty = self.state.qty_put, self.state.qty_call
+            put_strike, call_strike = self.state.put_strike, self.state.call_strike
+            self.reset()
+            return (
+                Signal(self.strategy_id, "TAKE_PROFIT_PUT", 1.0, f"INTRINSIC_PROXY:{intrinsic};HIGH:{high}",
+                    execution_proposal=StrategyExecutionProposal(proposed_quantity=put_qty, asset_type="OPTION", requested_price=None, side="SELL", track_id=self.strategy_id, tag_id="MONTHLY_STRANGLE_TP_PUT", option_type="PUT", strike=put_strike)),
+                Signal(self.strategy_id, "TAKE_PROFIT_CALL", 1.0, f"INTRINSIC_PROXY:{intrinsic};HIGH:{high}",
+                    execution_proposal=StrategyExecutionProposal(proposed_quantity=call_qty, asset_type="OPTION", requested_price=None, side="SELL", track_id=self.strategy_id, tag_id="MONTHLY_STRANGLE_TP_CALL", option_type="CALL", strike=call_strike)),
+            )
         self.state = replace(self.state, high_watermark_intrinsic=high, trailing_stop_active=True)
         return (Signal(self.strategy_id, "UPDATE_TRAILING", 0.9, f"HIGH:{high}"),) if high > self.state.high_watermark_intrinsic else ()
 
     def evaluate_macro_regime_protection(self, context: StrategyContext) -> Sequence[Signal]:
         a = self._analytics(context); regime = self._m(a, "market.current_regime") if a else None
-        return (Signal(self.strategy_id, "MACRO_HEDGE_SCALE_UP", 1.0, f"REGIME:{regime};HEDGE_MULTIPLIER:1.5"),) if regime in {"HIGH_VOL", "CIRCUIT_BREAKER", "CRASH"} else ()
+        if regime not in {"HIGH_VOL", "CIRCUIT_BREAKER", "CRASH"}:
+            return ()
+        if not self.state.is_active or self.state.put_strike <= 0:
+            return (Signal(self.strategy_id, "MACRO_HEDGE_SCALE_UP", 1.0,
+                f"REGIME:{regime};HEDGE_MULTIPLIER:1.5",
+                kind="NON_EXECUTION",
+                non_execution_event=NonExecutionEvent("TRACK8_MACRO_HEDGE_STATE", "MONTHLY_STRANGLE_NOT_ACTIVE")),)
+        extra_put=max(1,(self.state.qty_put+1)//2)
+        return (Signal(self.strategy_id, "MACRO_HEDGE_SCALE_UP", 1.0,
+            f"REGIME:{regime};HEDGE_MULTIPLIER:1.5;EXTRA_PUT_QTY:{extra_put}",
+            execution_proposal=StrategyExecutionProposal(proposed_quantity=extra_put, asset_type="OPTION", requested_price=None, side="BUY",
+                track_id=self.strategy_id, tag_id="MACRO_HEDGE_SCALE_UP", option_type="PUT", strike=self.state.put_strike)),)
 
     def evaluate_profit_rebuild(self, context: StrategyContext) -> Sequence[Signal]:
         a = self._analytics(context)
@@ -110,9 +129,9 @@ class Track8MacroRegimeMonthlyStrangle:
         if not self.state.is_active: return ()
         a = self._analytics(context); dte = self._m(a, "options.dte") if a else None
         time_str = a.as_of.strftime("%H:%M:%S")
-        if MarketSessionPolicy.text(MarketSessionPolicy.MARKET_CUTOFF) <= time_str < MarketSessionPolicy.text(MarketSessionPolicy.PENDING_CANCEL_END): return (Signal(self.strategy_id, "CANCEL_PENDING_TRANCHES", 1.0, "15:15_CANCEL_PENDING_TRANCHES"),)
+        if MarketSessionPolicy.text(MarketSessionPolicy.MARKET_CUTOFF) <= time_str < MarketSessionPolicy.text(MarketSessionPolicy.PENDING_CANCEL_END): return (Signal(self.strategy_id, "CANCEL_PENDING_TRANCHES", 1.0, "15:15_CANCEL_PENDING_TRANCHES", kind="NON_EXECUTION", non_execution_event=NonExecutionEvent("TRACK8_PENDING_CANCEL", "PENDING_ORDER_CONTROL")),)
         if dte is None or dte > Decimal("4"): return ()
-        return (Signal(self.strategy_id, "HOLD_LONG_ATTACK", 0.9, "D4_D0_MONEYNESS_OR_IV_EXPANSION"),)
+        return (Signal(self.strategy_id, "HOLD_LONG_ATTACK", 0.9, "D4_D0_MONEYNESS_OR_IV_EXPANSION", kind="NON_EXECUTION", non_execution_event=NonExecutionEvent("TRACK8_HOLD_STATE", "NO_ORDER")),)
 
     def build_execution_plan(self, group_id: str) -> MultiLegExecutionPlan | None:
         if not self.state.is_active or self.state.call_strike <= 0 or self.state.put_strike <= 0: return None

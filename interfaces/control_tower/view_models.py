@@ -11,6 +11,7 @@ class TabEnvironmentId(str, Enum):
     HIGH_SPEED = "high_speed"
     VIRTUAL_EXCHANGE = "virtual_exchange"
     VIRTUAL_BROKER = "virtual_broker"
+    OPTION_PROGRAM = "option_program"
     PAPER = "paper"
     LIVE = "live"
 
@@ -115,6 +116,33 @@ class VirtualBrokerView:
     realized_pnl: float | None = None
     unrealized_pnl: float | None = None
     multi_leg_groups: list[dict[str, Any]] = field(default_factory=list)
+    audit_logs: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class OptionProgramView:
+    """Option Program runtime projection inside the virtual execution cycle."""
+
+    tab_id: str = "option_program"
+    tab_name: str = "옵션프로그램"
+    run_id: str | None = None
+    runtime_state: str = "STOPPED"
+    environment: str | None = None
+    scenario: str | None = None
+    historical_source: str | None = None
+    historical_store_path: str | None = None
+    market_input: dict[str, Any] | None = None
+    strategies: list[dict[str, Any]] = field(default_factory=list)
+    strategy_status: list[dict[str, Any]] = field(default_factory=list)
+    last_result: dict[str, Any] | None = None
+    flow: dict[str, Any] = field(default_factory=dict)
+    account: Any = None
+    position: Any = None
+    margin: Any = None
+    pnl: Any = None
+    execution_reports: list[dict[str, Any]] = field(default_factory=list)
+    unavailable_sections: list[str] = field(default_factory=list)
+    verification: dict[str, Any] = field(default_factory=dict)
     audit_logs: list[str] = field(default_factory=list)
 
 

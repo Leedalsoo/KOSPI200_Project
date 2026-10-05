@@ -8,6 +8,10 @@ class Track9PositionExecutionSnapshot:
     active_sell_qty: int
     insurance_qty: int
     premium_spent: Decimal
+    put_entry_price: Decimal | None
+    call_entry_price: Decimal | None
+    put_entry_timestamp: object | None
+    call_entry_timestamp: object | None
     source: str
 
 class Track9PositionExecutionReadModel(Protocol):

@@ -93,13 +93,24 @@ class Track4GammaScalping:
             return ()
         if abs(delta) <= deadband:
             return ()
-        hedge_side = "SELL" if delta > 0 else "BUY"
-        qty = min(delta_to_mini_futures_qty(delta), 100)
-        if qty == 0:
+        target_abs_qty = min(delta_to_mini_futures_qty(abs(delta)), 100)
+        target_signed_qty = -target_abs_qty if delta > 0 else target_abs_qty
+        adjustment = target_signed_qty - self.state.active_hedge_qty
+        if adjustment == 0:
             return ()
-        signed_qty = qty if hedge_side == "BUY" else -qty
-        self.state.active_hedge_qty += signed_qty
-        return (Signal(self.strategy_id, hedge_side, 1.0, f"GAMMA_REBALANCE qty={qty} delta={delta} band={deadband}", execution_proposal=StrategyExecutionProposal(proposed_quantity=qty, asset_type="FUTURES", requested_price=None, side=hedge_side, track_id=self.strategy_id, tag_id=None, option_type=None, strike=None)),)
+        hedge_side = "BUY" if adjustment > 0 else "SELL"
+        qty = abs(adjustment)
+        self.state.active_hedge_qty = target_signed_qty
+        return (Signal(
+            self.strategy_id,
+            hedge_side,
+            1.0,
+            f"GAMMA_REBALANCE target_qty={target_signed_qty} adjustment={adjustment} delta={delta} band={deadband}",
+            execution_proposal=StrategyExecutionProposal(
+                proposed_quantity=qty, asset_type="FUTURES", requested_price=None, side=hedge_side,
+                track_id=self.strategy_id, tag_id="GAMMA_REBALANCE", option_type=None, strike=None
+            ),
+        ),)
 
     def evaluate_profit_trailing(self, data: Track4MarketInput, *, current_pnl: Decimal, premium_spent: Optional[Decimal]) -> Sequence[Signal]:
         self.state.scalp_high_pnl = max(self.state.scalp_high_pnl, current_pnl)

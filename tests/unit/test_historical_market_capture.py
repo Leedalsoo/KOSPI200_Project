@@ -47,7 +47,7 @@ def option_trade_frame():
 def futures_trade_frame():
     values = [""] * 37
     values[0], values[1], values[5], values[10] = "101V6000", "101529", "512.50", "10"
-    values[35], values[36] = "512.55", "512.45"
+    values[34], values[35] = "512.55", "512.45"
     return f"0|H0IFCNT0|{len(values)}|{'^'.join(values)}"
 
 

@@ -54,6 +54,19 @@ class VirtualSecuritiesFirmRuntime:
             self.account.update_tick_price(mark_price, getattr(tick, "symbol", None) or getattr(tick, "instrument_id", None))
         self.process_pending_orders()
 
+    def process_futures_market_data(self, quote):
+        """Consume authoritative futures quote data without changing option VMS state."""
+        self.metrics["market_ticks"] += 1
+        self._market_time = quote.observed_at
+        self.order_book.update_bid_ask(
+            quote.bid_price,
+            quote.ask_price,
+            instrument_id=quote.instrument_id,
+        )
+        if quote.last_price is not None and float(quote.last_price) > 0:
+            self.account.update_tick_price(quote.last_price, quote.instrument_id)
+        self.process_pending_orders()
+
     def process_order(self, command):
         self.metrics["order_commands"] += 1
         now = self._now()

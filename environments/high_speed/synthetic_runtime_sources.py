@@ -167,19 +167,20 @@ class SyntheticOptionContractMaster(InMemoryOptionContractMaster):
         found = super().find_contract_identity(expiry, option_type, strike)
         if found is not None:
             return found
-        target = str(expiry).replace("-", "")[:6]
+        target = str(expiry).replace("-", "")
+        month_target = target[:6]
         for identity in self.list_contract_identities():
-            if str(identity.expiry).replace("-", "")[:6] == target and str(identity.option_type).upper() == str(option_type).upper() and identity.strike == Decimal(str(strike)):
+            if str(identity.expiry).replace("-", "")[:6] == month_target and str(identity.option_type).upper() == str(option_type).upper() and identity.strike == Decimal(str(strike)):
                 return identity
         # Execution plans may intentionally choose strikes between the dataset's
         # observed grid points. In the synthetic environment only, create an
         # explicit synthetic contract identity for that requested strike.
         requested_strike = Decimal(str(strike))
-        synthetic_id = f"SYN-{target}-{str(option_type).upper()}-{requested_strike:.4f}"
+        synthetic_id = f"SYN-{month_target}-{str(option_type).upper()}-{requested_strike:.4f}"
         identity = KisOptionContractIdentity(
             shrn_iscd=synthetic_id,
             stnd_iscd=synthetic_id,
-            expiry=target,
+            expiry=target[:8],
             option_type=str(option_type).upper(),
             strike=requested_strike,
             info_type="SYNTHETIC",

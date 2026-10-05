@@ -62,3 +62,19 @@ def test_equity_threshold_unwinds_existing_hedge_and_blocks_new_hedge() -> None:
 def test_basecamp_cutoff_at_1515_blocks_new_entry() -> None:
     strategy = Track4GammaScalping()
     assert strategy.evaluate(context(data(delta="0", time_str="15:15:00"))) == ()
+
+
+def test_repeated_delta_rebalances_use_only_target_adjustment() -> None:
+    strategy = Track4GammaScalping()
+    signals = []
+    for delta in ("0.41", "0.41", "-0.41", "-0.41", "0.80", "0.80", "-0.80", "-0.80", "0.41"):
+        out = strategy.evaluate(context(data(delta=delta)))
+        signals.extend([x for x in out if x.execution_proposal is not None])
+    assert len(signals) == 5
+    assert [(x.execution_proposal.side, x.execution_proposal.proposed_quantity) for x in signals] == [
+        ("SELL", 3),
+        ("BUY", 6),
+        ("SELL", 7),
+        ("BUY", 8),
+        ("SELL", 7),
+    ]

@@ -54,6 +54,16 @@ def _passthrough(observation, unit):
 
 def build_track9_evaluators() -> Mapping[str, object]:
     return {
+        "price.last": _passthrough("current_price", "index-points"),
+        "options.atm_call_strike": _passthrough("atm_call_strike", "index-points"),
+        "options.atm_put_strike": _passthrough("atm_put_strike", "index-points"),
+        "options.contract_multiplier": _passthrough("contract_multiplier", "contract-unit"),
+        "options.track9_put_entry_price": _passthrough("track9_put_entry_price", "option-price"),
+        "options.track9_call_entry_price": _passthrough("track9_call_entry_price", "option-price"),
+        "options.track9_put_mark_price": _passthrough("track9_put_mark_price", "option-price"),
+        "options.track9_call_mark_price": _passthrough("track9_call_mark_price", "option-price"),
+        # Legacy event/IV evaluators are intentionally retained as non-required
+        # compatibility metrics; Strategy9 no longer declares or consumes them.
         "portfolio.active_sell_qty": _passthrough("active_sell_qty", "contracts"),
         "portfolio.insurance_qty": _passthrough("insurance_qty", "contracts"),
         "events.upcoming": _passthrough("event_upcoming", "bool"),
@@ -61,9 +71,6 @@ def build_track9_evaluators() -> Mapping[str, object]:
         "options.iv_crush": _passthrough("iv_crush", "percentage-points"),
         "portfolio.event_budget": _passthrough("event_budget", "currency"),
         "portfolio.estimated_event_cost": _passthrough("estimated_event_cost", "currency"),
-        "options.atm_call_strike": _passthrough("atm_call_strike", "index-points"),
-        "options.atm_put_strike": _passthrough("atm_put_strike", "index-points"),
-        "options.contract_multiplier": _passthrough("contract_multiplier", "contract-unit"),
         "portfolio.premium_spent": _passthrough("premium_spent", "currency"),
     }
 

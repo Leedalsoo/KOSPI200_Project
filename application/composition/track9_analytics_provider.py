@@ -24,6 +24,7 @@ def build_track9_analytics_snapshot(
     event_budget=None,
     estimated_event_cost=None,
     premium_spent=None,
+    option_prices=None,
 ):
     """Build Track9-specific analytics and merge canonical Common Analytics."""
     observations = {
@@ -37,6 +38,10 @@ def build_track9_analytics_snapshot(
         "event_budget": event_budget,
         "estimated_event_cost": estimated_event_cost,
         "premium_spent": premium_spent,
+        "track9_put_entry_price": (option_prices or {}).get("put_entry_price"),
+        "track9_call_entry_price": (option_prices or {}).get("call_entry_price"),
+        "track9_put_mark_price": (option_prices or {}).get("put_mark_price"),
+        "track9_call_mark_price": (option_prices or {}).get("call_mark_price"),
     })
     if option_contract_selection is not None:
         put = option_contract_selection.put
@@ -68,6 +73,10 @@ def build_track9_analytics_snapshot(
         "options.atm_put_strike": ("atm_put_strike",),
         "options.contract_multiplier": ("contract_multiplier",),
         "portfolio.premium_spent": ("premium_spent",),
+        "options.track9_put_entry_price": ("track9_put_entry_price",),
+        "options.track9_call_entry_price": ("track9_call_entry_price",),
+        "options.track9_put_mark_price": ("track9_put_mark_price",),
+        "options.track9_call_mark_price": ("track9_call_mark_price",),
     }
     requests = tuple(
         AnalyticsRequest(key, "tick", 1, dependencies, 1.0, "authoritative", "1")

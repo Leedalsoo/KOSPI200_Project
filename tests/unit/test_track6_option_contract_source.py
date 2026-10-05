@@ -54,6 +54,6 @@ def test_fails_closed_on_multiplier_missing():
     atm_c = SimpleNamespace(shrn_iscd="ATM-C", expiry="2026-09-10", option_type="CALL", strike=Decimal("350"), contract_multiplier=Decimal("250000"))
     atm_p = SimpleNamespace(shrn_iscd="ATM-P", expiry="2026-09-10", option_type="PUT", strike=Decimal("350"), contract_multiplier=Decimal("250000"))
     source = Track6OptionContractSource(SimpleNamespace(list_contract_identities=lambda expiry: (atm_c, atm_p, bad, good)))
-    with pytest.raises(ValueError, match="TRACK6_CONTRACT_MULTIPLIER_REQUIRED"):
+    with pytest.raises(ValueError, match="TRACK6_LISTED_STRIKE_NOT_FOUND"):
         source.select(expiry="202609", current_price=351)
 

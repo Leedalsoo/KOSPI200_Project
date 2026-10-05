@@ -31,8 +31,8 @@ def trade_frame() -> str:
     values[1] = "093000"
     values[5] = "350.10"
     values[10] = "1234"
-    values[35] = "350.20"
-    values[36] = "350.00"
+    values[34] = "350.20"
+    values[35] = "350.00"
     return "0|H0IFCNT0|37|" + "^".join(values)
 
 

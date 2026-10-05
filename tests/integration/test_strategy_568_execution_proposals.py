@@ -51,55 +51,86 @@ def test_track8_entry_has_option_execution_proposal():
     assert s.evaluate(StrategyContext(strategy_id=s.strategy_id, input=StrategyInput())) == ()
 
 
-def track9_context():
+def track9_context(*, date_str="2026-09-04", time_str="15:00:00", price="350", put_mark="12", call_mark="12"):
     market = MarketSnapshot(
-        "T9-TEST", datetime.fromisoformat("2026-09-04T10:00:00"),
+        "T9-TEST", datetime.fromisoformat(f"{date_str}T{time_str}"),
         AnalyticsProvenance("test"), None,
-        {"active_sell_qty": 4, "insurance_qty": 0, "event_upcoming": True,
-         "iv_spike": Decimal("4"), "iv_crush": Decimal("0"),
-         "current_pnl": Decimal("0"), "total_fees": Decimal("0"),
-         "margin_ratio": Decimal("0"), "risk_guard_active": False,
-         "event_budget": Decimal("1000000"), "estimated_event_cost": Decimal("100"),
+        {"current_price": Decimal(price),
          "atm_put_strike": Decimal("335"), "atm_call_strike": Decimal("365"),
-         "contract_multiplier": Decimal("250000"), "premium_spent": Decimal("100000")}
+         "contract_multiplier": Decimal("250000"),
+         "track9_put_entry_price": Decimal("10"), "track9_call_entry_price": Decimal("10"),
+         "track9_put_mark_price": Decimal(put_mark), "track9_call_mark_price": Decimal(call_mark)}
     )
     keys = (
-        ("portfolio.active_sell_qty", ("active_sell_qty",)),
-        ("portfolio.insurance_qty", ("insurance_qty",)),
-        ("events.upcoming", ("event_upcoming",)),
-        ("options.iv_spike", ("iv_spike",)),
-        ("options.iv_crush", ("iv_crush",)),
-        ("portfolio.current_pnl", ("current_pnl",)),
-        ("portfolio.total_fees", ("total_fees",)),
-        ("portfolio.net_pnl", ("current_pnl", "total_fees")),
-        ("portfolio.margin_ratio", ("margin_ratio",)),
-        ("risk.guard_active", ("risk_guard_active",)),
-        ("portfolio.event_budget", ("event_budget",)),
-        ("portfolio.estimated_event_cost", ("estimated_event_cost",)),
+        ("price.last", ("current_price",)),
         ("options.atm_call_strike", ("atm_call_strike",)),
         ("options.atm_put_strike", ("atm_put_strike",)),
         ("options.contract_multiplier", ("contract_multiplier",)),
-        ("portfolio.premium_spent", ("premium_spent",)),
+        ("options.track9_put_entry_price", ("track9_put_entry_price",)),
+        ("options.track9_call_entry_price", ("track9_call_entry_price",)),
+        ("options.track9_put_mark_price", ("track9_put_mark_price",)),
+        ("options.track9_call_mark_price", ("track9_call_mark_price",)),
     )
     analytics = AnalyticsEngine(build_track9_evaluators()).evaluate(
         market, tuple(AnalyticsRequest(k, "tick", 1, d, 1.0, "authoritative", "1") for k, d in keys)
     )
     common = CommonStrategyInput(
-        as_of=analytics.as_of, time_str="10:00:00", date_str="2026-09-04"
+        as_of=analytics.as_of,
+        current_price=Decimal(price),
+        time_str=time_str,
+        date_str=date_str,
     )
-    return StrategyContext(MarketState(as_of=analytics.as_of, ticks={}, quality={}),
-                           "track9_event_overnight_insurance", StrategyInput(common), analytics=analytics)
+    return StrategyContext(
+        MarketState(as_of=analytics.as_of, ticks={}, quality={}),
+        "track9_event_overnight_insurance",
+        StrategyInput(common),
+        analytics=analytics,
+    )
 
 
-def test_track9_add_insurance_has_option_execution_proposal():
+def test_track9_entry_is_an_independent_put_call_pair():
     strategy = Track9EventOvernightInsurance()
-    sig = next(x for x in strategy.evaluate_overnight_insurance(track9_context()) if x.direction == "ADD_INSURANCE")
-    assert sig.execution_proposal is not None
-    assert sig.execution_proposal.asset_type == "OPTION"
-    assert sig.execution_proposal.side == "BUY"
-    assert sig.execution_proposal.proposed_quantity == 2
-    assert sig.execution_proposal.option_type == "PUT"
-    assert sig.execution_proposal.strike == Decimal("335")
+    signals = strategy.evaluate(track9_context(time_str="15:10:00"))
+    assert [x.direction for x in signals] == [
+        "ENTER_OVERNIGHT_STRANGLE_PUT",
+        "ENTER_OVERNIGHT_STRANGLE_CALL",
+    ]
+    assert signals[0].execution_proposal.option_type == "PUT"
+    assert signals[1].execution_proposal.option_type == "CALL"
+    assert signals[0].execution_proposal.proposed_quantity == 1
+    assert signals[1].execution_proposal.proposed_quantity == 1
+
+
+def test_track9_closes_after_next_open_shock_or_stops_without_shock():
+    strategy = Track9EventOvernightInsurance()
+    strategy.evaluate(track9_context(time_str="15:10:00"))
+
+    shock = strategy.evaluate(track9_context(
+        date_str="2026-09-05", time_str="09:00:01", price="353.5"
+    ))
+    assert shock == ()
+    assert strategy.state.trailing_active is True
+
+    trailing_close = strategy.evaluate(track9_context(
+        date_str="2026-09-05", time_str="09:01:01", price="353.5", put_mark="10.5", call_mark="10.5"
+    ))
+    assert [x.direction for x in trailing_close] == [
+        "CLOSE_OVERNIGHT_INSURANCE_PUT",
+        "CLOSE_OVERNIGHT_INSURANCE_CALL",
+    ]
+    assert all(x.execution_proposal is not None for x in trailing_close)
+
+    strategy.reset()
+    strategy.evaluate(track9_context(time_str="15:10:00"))
+    no_shock = strategy.evaluate(track9_context(
+        date_str="2026-09-05", time_str="09:00:01", price="350.7"
+    ))
+    assert [x.direction for x in no_shock] == [
+        "STOP_LOSS_OVERNIGHT_INSURANCE_PUT",
+        "STOP_LOSS_OVERNIGHT_INSURANCE_CALL",
+    ]
+    assert all(x.execution_proposal is not None for x in no_shock)
+
 
 def test_track6_8_9_proposals_reach_canonical_boundary():
     from application.composition.runtime_strategy_result_collection_adapter import RuntimeStrategyResultCollectionAdapter

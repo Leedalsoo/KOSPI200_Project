@@ -17,6 +17,10 @@ class RuntimeHub:
     def last_result(self) -> Any | None:
         return getattr(self._loop, "last_result", None)
 
+    @property
+    def last_strategy_status(self) -> tuple[Any, ...]:
+        return tuple(getattr(self._loop, "last_strategy_status", ()))
+
     def on_tick(self, tick: Any) -> Any:
         return self._loop.on_tick(tick)
 

@@ -109,7 +109,7 @@ class ControlTowerHub:
         if self._run_hub.active is not None: self._run_hub.close()
         context = self._run_hub.start(
             run_id=str(payload.get("run_id", "")).strip(), environment=str(payload.get("environment", "virtual")),
-            scenario=payload.get("scenario"), historical_source=payload.get("historical_source"), historical_store_path=payload.get("historical_store_path"),
+            scenario=payload.get("scenario"), historical_source=payload.get("historical_source"), historical_store_path=payload.get("historical_store_path"), historical_daily_store_path=payload.get("historical_daily_store_path"),
             strategy_keys=tuple(tuple(x) for x in payload.get("strategy_keys", ())),
             initial_capital=payload.get("initial_capital"), replay_speed=payload.get("replay_speed"),
         ).context

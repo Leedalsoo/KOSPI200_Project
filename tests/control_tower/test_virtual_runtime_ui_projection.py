@@ -16,6 +16,67 @@ def _bundle_with_runtime():
     bundle.connect(); bundle.start(); return bundle
 
 
+def test_option_program_read_model_projects_nine_strategies_and_runtime_flow():
+    from types import SimpleNamespace
+    from application.option_program_read_model import OptionProgramReadModel
+    from contracts.strategy_runtime_status import StrategyRuntimeStatus
+
+    bundle = _bundle_with_runtime()
+    tick = next(bundle.market.generate_tick_stream(total_days=1, ticks_per_day=1))
+    strategy_keys = tuple(
+        (f"track{i}", "v1.0") for i in range(1, 10)
+    )
+
+    class StrategyHub:
+        def __init__(self):
+            self.strategy_keys = strategy_keys
+        def is_enabled(self, _strategy_id, _version):
+            return True
+
+    runtime_hub = SimpleNamespace(
+        last_result=SimpleNamespace(
+            tick_sequence=tick.seq_id,
+            signals=2,
+            approved=1,
+            routed=1,
+            filled=1,
+            rejected=0,
+            execution_ids=("EXEC-1",),
+        ),
+        last_strategy_status=tuple(
+            StrategyRuntimeStatus(strategy_id, reaction_signals=1)
+            for strategy_id, _version in strategy_keys
+        ),
+    )
+    controller = SimpleNamespace(
+        status=lambda: SimpleNamespace(state="RUNNING")
+    )
+    context = SimpleNamespace(
+        run_id="RUN-OPTION-PROGRAM",
+        environment="virtual",
+        scenario="CALM",
+        historical_source="REAL_VTS",
+        historical_store_path=None,
+    )
+
+    projection = OptionProgramReadModel(
+        runtime_controller=controller,
+        runtime_hub=runtime_hub,
+        strategy_hub=StrategyHub(),
+        bundle=bundle,
+        context=context,
+    ).build()
+
+    assert projection["tab_id"] == "option_program"
+    assert projection["runtime_state"] == "RUNNING"
+    assert len(projection["strategies"]) == 9
+    assert projection["market_input"]["seq_id"] == tick.seq_id
+    assert projection["flow"]["signal"] == 2
+    assert projection["flow"]["order_routed"] == 1
+    assert "per_strategy_signal_detail" in projection["unavailable_sections"]
+    bundle.stop()
+
+
 def test_control_tower_projects_real_virtual_ticks_and_execution():
     bundle = _bundle_with_runtime(); market = bundle.market
     tick = next(market.generate_tick_stream(total_days=1, ticks_per_day=3))

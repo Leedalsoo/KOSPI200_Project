@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from typing import Iterable
+from zoneinfo import ZoneInfo
 
 from contracts.kis_index_futures_market_ws_adapter import KisIndexFuturesMarketObservation
 from contracts.kis_index_price_source import KISIndexPriceObservation
@@ -31,9 +32,10 @@ class KISTrack3RuntimeInputSource:
 
     source_name = "KIS:Track3:FuturesIndexBasis+OptionObservation"
     _FUTURES_SOURCES = {"KIS:H0IFCNT0", "KIS:H0IFASP0"}
-    _INDEX_SOURCE = "KIS:FHPUP02100000:2001"
+    _INDEX_SOURCES = {"KIS:FHPUP02100000:2001", "KIS:H0UPCNT0"}
     _MAX_MATCH_SECONDS = 2.0
     _HISTORY_SIZE = 512
+    _KST = ZoneInfo("Asia/Seoul")
 
     def __init__(
         self,
@@ -82,7 +84,7 @@ class KISTrack3RuntimeInputSource:
     def update_index(self, observation: KISIndexPriceObservation) -> None:
         if observation.underlying_symbol != "KOSPI200" or observation.index_code != "2001":
             raise ValueError("TRACK3_INDEX_IDENTITY_MISMATCH")
-        if observation.source != self._INDEX_SOURCE:
+        if observation.source not in self._INDEX_SOURCES:
             raise ValueError("TRACK3_INDEX_SOURCE_REQUIRED")
         if observation.price <= 0:
             return
@@ -213,12 +215,20 @@ class KISTrack3RuntimeInputSource:
             source=self.source_name,
         )
 
+    @classmethod
+    def _comparison_time(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
+            return value
+        return value.astimezone(cls._KST).replace(tzinfo=None)
+
     def _latest_futures(self, observed_at: datetime) -> _FuturesPoint | None:
-        values = [item for item in self._futures if item.observed_at <= observed_at]
+        comparison_at = self._comparison_time(observed_at)
+        values = [item for item in self._futures if item.observed_at <= comparison_at]
         return values[-1] if values else None
 
     def _latest_index(self, observed_at: datetime) -> _IndexPoint | None:
-        values = [item for item in self._index if item.observed_at <= observed_at]
+        comparison_at = self._comparison_time(observed_at)
+        values = [item for item in self._index if item.observed_at <= comparison_at]
         return values[-1] if values else None
 
     def _matched_basis(
@@ -232,8 +242,9 @@ class KISTrack3RuntimeInputSource:
 
     def _basis_history(self, observed_at: datetime) -> tuple[Decimal, ...]:
         points: list[Decimal] = []
+        comparison_at = self._comparison_time(observed_at)
         for future in self._futures:
-            if future.observed_at > observed_at:
+            if future.observed_at > comparison_at:
                 continue
             index = self._nearest_index(future.observed_at)
             if index is None:
@@ -246,23 +257,26 @@ class KISTrack3RuntimeInputSource:
     def _nearest_index(self, observed_at: datetime) -> _IndexPoint | None:
         if not self._index:
             return None
+        comparison_at = self._comparison_time(observed_at)
         candidate = min(
             self._index,
-            key=lambda item: abs((item.observed_at - observed_at).total_seconds()),
+            key=lambda item: abs((item.observed_at - comparison_at).total_seconds()),
         )
         return (
             candidate
-            if abs((candidate.observed_at - observed_at).total_seconds()) <= self._MAX_MATCH_SECONDS
+            if abs((candidate.observed_at - comparison_at).total_seconds()) <= self._MAX_MATCH_SECONDS
             else None
         )
 
     def _index_prices(self, observed_at: datetime) -> tuple[Decimal, ...]:
-        return tuple(item.price for item in self._index if item.observed_at <= observed_at)
+        comparison_at = self._comparison_time(observed_at)
+        return tuple(item.price for item in self._index if item.observed_at <= comparison_at)
 
     def _option_legs(self, observed_at: datetime) -> tuple[dict[str, object], ...]:
         legs: list[dict[str, object]] = []
+        comparison_at = self._comparison_time(observed_at)
         for values in self._options.values():
-            candidates = [item for item in values if item[0] <= observed_at]
+            candidates = [item for item in values if self._comparison_time(item[0]) <= comparison_at]
             if not candidates:
                 continue
             item = candidates[-1][1]
@@ -295,6 +309,7 @@ class KISTrack3RuntimeInputSource:
         return float(candidates[-1]) if candidates else None
 
     def _latest_option_quantity(self, instrument_id: str, observed_at: datetime) -> int | None:
+        comparison_at = self._comparison_time(observed_at)
         values = self._option_quantities.get(str(instrument_id), ())
-        candidates = [quantity for timestamp, quantity in values if timestamp <= observed_at]
+        candidates = [quantity for timestamp, quantity in values if self._comparison_time(timestamp) <= comparison_at]
         return candidates[-1] if candidates else None

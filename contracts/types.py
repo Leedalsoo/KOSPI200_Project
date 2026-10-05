@@ -21,6 +21,26 @@ class CanonicalMarketTick:
 
 
 @dataclass(frozen=True)
+class CanonicalFuturesQuote:
+    """Environment-neutral authoritative futures quote for Virtual execution."""
+
+    instrument_id: str
+    observed_at: datetime
+    bid_price: Decimal
+    ask_price: Decimal
+    last_price: Decimal | None = None
+    source: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.instrument_id.strip():
+            raise ValueError("FUTURES_QUOTE_INSTRUMENT_ID_REQUIRED")
+        if self.bid_price <= 0 or self.ask_price <= 0:
+            raise ValueError("FUTURES_QUOTE_BID_ASK_REQUIRED")
+        if self.ask_price < self.bid_price:
+            raise ValueError("FUTURES_QUOTE_CROSSED")
+
+
+@dataclass(frozen=True)
 class DataQuality:
     is_fresh: bool
     is_complete: bool

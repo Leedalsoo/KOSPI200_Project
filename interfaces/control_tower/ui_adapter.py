@@ -14,6 +14,7 @@ from interfaces.control_tower.view_models import (
     ControlTowerSummaryView,
     HighSpeedTestView,
     LiveTradingView,
+    OptionProgramView,
     PaperTradingView,
     TabEnvironmentId,
     VirtualBrokerView,
@@ -32,12 +33,14 @@ class ControlTowerUIAdapter:
         lifecycle_coordinator=None,
         multi_leg_bridge=None,
         broker_api=None,
+        option_program_read_model=None,
     ):
         self._runtime_controller = runtime_controller
         self._risk_engine = risk_engine
         self._lifecycle_coordinator = lifecycle_coordinator
         self._multi_leg_bridge = multi_leg_bridge
         self._broker_api = broker_api
+        self._option_program_read_model = option_program_read_model
         self._active_tab = TabEnvironmentId.VIRTUAL_EXCHANGE.value
         self._audit_logs: list[str] = ["Control Tower UI Adapter initialized"]
 
@@ -96,6 +99,13 @@ class ControlTowerUIAdapter:
                 "status": "OPERATIONAL" if (active_env_type == "virtual" and getattr(bundle, "connected", False)) else "NOT_INITIALIZED",
                 "connection": "CONNECTED" if (active_env_type == "virtual" and getattr(bundle, "connected", False)) else "DISCONNECTED",
                 "is_active": self._active_tab == TabEnvironmentId.VIRTUAL_BROKER.value,
+            },
+            {
+                "tab_id": TabEnvironmentId.OPTION_PROGRAM.value,
+                "name": "옵션프로그램",
+                "status": runtime_state if active_env_type == "virtual" else "STOPPED",
+                "connection": "CONNECTED" if active_env_type == "virtual" else "DISCONNECTED",
+                "is_active": self._active_tab == TabEnvironmentId.OPTION_PROGRAM.value,
             },
             {
                 "tab_id": TabEnvironmentId.PAPER.value,
@@ -376,6 +386,19 @@ class ControlTowerUIAdapter:
                 )
                 return asdict(view)
             return asdict(VirtualBrokerView(audit_logs=list(self._audit_logs)))
+
+        elif tab_id == TabEnvironmentId.OPTION_PROGRAM.value:
+            if self._option_program_read_model is None:
+                return asdict(
+                    OptionProgramView(
+                        runtime_state=runtime_state,
+                        unavailable_sections=["option_program_read_model"],
+                        audit_logs=list(self._audit_logs),
+                    )
+                )
+            projection = self._option_program_read_model.build()
+            projection["audit_logs"] = list(self._audit_logs)
+            return asdict(OptionProgramView(**projection))
 
         elif tab_id == TabEnvironmentId.PAPER.value:
             return asdict(PaperTradingView(audit_logs=list(self._audit_logs)))

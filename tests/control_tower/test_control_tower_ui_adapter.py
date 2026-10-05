@@ -43,19 +43,20 @@ class DummyMarket:
         )
 
 
-def test_ui_adapter_provides_summary_with_5_tabs():
+def test_ui_adapter_provides_summary_with_6_control_tower_tabs():
     adapter = ControlTowerUIAdapter()
     summary = adapter.get_summary()
 
     assert "active_environment" in summary
     assert "tabs" in summary
-    assert len(summary["tabs"]) == 5
+    assert len(summary["tabs"]) == 6
 
     tab_ids = [t["tab_id"] for t in summary["tabs"]]
     assert tab_ids == [
         "high_speed",
         "virtual_exchange",
         "virtual_broker",
+        "option_program",
         "paper",
         "live",
     ]

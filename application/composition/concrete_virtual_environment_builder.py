@@ -61,6 +61,7 @@ class ConcreteVirtualEnvironmentBuilder:
             )
             scope.vssf_runtime.attach_timeout_source(timeout_source)
         vms.subscribe(lambda tick: scope.broker.process_market_data(tick, option_quotes=vms.option_quotes))
+        vms.subscribe_futures_quote(scope.vssf_runtime.process_futures_market_data)
         broker_api = VirtualBrokerApi(scope.broker, scope.account)
         return VirtualEnvironmentBundle.create(
             config=config, policy=policy, market=vms, clock=runtime_clock,

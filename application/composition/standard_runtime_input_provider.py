@@ -70,6 +70,7 @@ class StandardRuntimeInputProvider:
         self.track6_option_contract_source = track6_option_contract_source
         self.track7_option_contract_source = track7_option_contract_source
         self.track8_option_contract_source = track8_option_contract_source
+        self.option_orderbook_source = option_orderbook_source
         self.data = VirtualRuntimeDataProvider(
             market, option_expiry_source=option_expiry_source, track7_order_timeout_source=track7_order_timeout_source, track7_support_resistance_source=track7_support_resistance_source, trading_calendar=trading_calendar, option_master=option_master,
             option_orderbook_source=option_orderbook_source,
@@ -254,22 +255,39 @@ class StandardRuntimeInputProvider:
         if self.strategy_keys == frozenset({"track2_asymmetric_trap"}):
             return contexts
 
-        # Track3 is materialized only through its authoritative source seam.
-        if hasattr(self.track3.source, "set_common_analytics") and common_analytics is not None:
-            active_metric = common_analytics.get("volatility.active")
-            base_metric = common_analytics.get("volatility.base")
-            regime_metric = common_analytics.get("market.current_regime")
-            if active_metric is not None and base_metric is not None and regime_metric is not None:
-                if active_metric.value is not None and base_metric.value is not None and regime_metric.value is not None:
-                    self.track3.source.set_common_analytics(
-                        observed_at=market_state.as_of,
-                        active_vol=float(active_metric.value),
-                        base_vol=float(base_metric.value),
-                        current_regime=str(regime_metric.value),
+
+        # Track3 is materialized only when Track3 is selected for this run. Other strategies must not depend on Track3-only analytics injection.
+        if "Strategy_3_StatArb" in self.strategy_keys:
+            if hasattr(self.track3.source, "set_common_analytics") and common_analytics is not None:
+                active_metric = common_analytics.get("volatility.active")
+                base_metric = common_analytics.get("volatility.base")
+                regime_metric = common_analytics.get("market.current_regime")
+                if active_metric is not None and base_metric is not None and regime_metric is not None:
+                    if active_metric.value is not None and base_metric.value is not None and regime_metric.value is not None:
+                        self.track3.source.set_common_analytics(
+                            observed_at=market_state.as_of,
+                            active_vol=float(active_metric.value),
+                            base_vol=float(base_metric.value),
+                            current_regime=str(regime_metric.value),
+                        )
+            if hasattr(self.track3.source, "set_execution_totals"):
+                total_fees = common.total_fees
+                premium_spent = None
+                if self.track9_position_execution_source is not None and self.run_id:
+                    position_snapshot = self.track9_position_execution_source.snapshot(
+                        run_id=self.run_id, strategy_id="Strategy_3_StatArb"
                     )
-        contexts["Strategy_3_StatArb"] = self.track3.build(
-            market_state, account=account, common_snapshot=common_analytics
-        )
+                    if position_snapshot is not None:
+                        premium_spent = position_snapshot.premium_spent
+                if total_fees is not None and premium_spent is not None:
+                    self.track3.source.set_execution_totals(
+                        observed_at=market_state.as_of,
+                        total_fees=Decimal(str(total_fees)),
+                        premium_spent=Decimal(str(premium_spent)),
+                    )
+            contexts["Strategy_3_StatArb"] = self.track3.build(
+                market_state, account=account, common_snapshot=common_analytics
+            )
 
         # Track4 consumes canonical analytics. Same-tick Greeks remain authoritative
         # inputs when supplied; optional attribution metrics remain unavailable without
@@ -469,29 +487,17 @@ class StandardRuntimeInputProvider:
                 ),
             )
 
-        track9_common_required = (
-            "market.current_regime",
-            "volatility.active",
-            "portfolio.current_pnl",
-            "portfolio.total_fees",
-            "portfolio.margin_ratio",
-            "portfolio.net_pnl",
-            "risk.guard_active",
-        )
+        # Strategy9 is deliberately independent of macro/event/IV indicators.
+        # Its only strategy-specific market dependency is the authoritative
+        # ATM PUT/CALL contract pair used for the overnight insurance.
+        track9_common_required = ("price.last",)
         track9_strategy_required = (
-            "portfolio.active_sell_qty",
-            "portfolio.insurance_qty",
-            "events.upcoming",
-            "options.iv_spike",
-            "options.iv_crush",
-            "portfolio.event_budget",
-            "portfolio.estimated_event_cost",
             "options.atm_call_strike",
             "options.atm_put_strike",
             "options.contract_multiplier",
-            "portfolio.premium_spent",
         )
         track9_required = track9_common_required + track9_strategy_required
+
         track9_selection = None
         if self.track6_option_contract_source is not None:
             try:
@@ -505,32 +511,60 @@ class StandardRuntimeInputProvider:
                 )
             except (ValueError, TypeError, AttributeError):
                 track9_selection = None
-        track9_position = (
-            self.track9_position_execution_source.snapshot(
-                run_id=self.run_id or "virtual", strategy_id="track9_event_overnight_insurance"
+
+        track9_option_prices = {}
+        if track9_selection is not None and self.option_orderbook_source is not None:
+            try:
+                put_book = self.option_orderbook_source.get_order_book(
+                    str(track9_selection.put.shrn_iscd)
+                )
+                call_book = self.option_orderbook_source.get_order_book(
+                    str(track9_selection.call.shrn_iscd)
+                )
+                if (
+                    put_book is not None
+                    and call_book is not None
+                    and put_book.ask_levels
+                    and call_book.ask_levels
+                    and put_book.bid_levels
+                    and call_book.bid_levels
+                ):
+                    track9_option_prices = {
+                        "put_mark_price": Decimal(str(put_book.bid_levels[0].price)),
+                        "call_mark_price": Decimal(str(call_book.bid_levels[0].price)),
+                    }
+            except (AttributeError, TypeError, ValueError):
+                track9_option_prices = {}
+
+        # Entry prices become authoritative only after the VSSF reports both
+        # option legs FILLED. Never substitute the pre-trade ASK as a fill price.
+        if self.track9_position_execution_source is not None and self.run_id:
+            execution_snapshot = self.track9_position_execution_source.snapshot(
+                run_id=self.run_id,
+                strategy_id="track9_event_overnight_insurance",
             )
-            if self.track9_position_execution_source is not None and self.run_id
-            else None
-        )
-        track9_event = (
-            self.track9_event_source.upcoming(run_id=self.run_id or "virtual", as_of=d.as_of)
-            if self.track9_event_source is not None and self.run_id
-            else None
-        )
-        track9_event_risk = (
-            self.track9_event_risk_source.snapshot(run_id=self.run_id or "virtual", as_of=d.as_of)
-            if self.track9_event_risk_source is not None and self.run_id
-            else None
-        )
+            if execution_snapshot is not None:
+                put_ts = execution_snapshot.put_entry_timestamp
+                call_ts = execution_snapshot.call_entry_timestamp
+                current_date = d.as_of.date()
+                if (
+                    put_ts is not None
+                    and call_ts is not None
+                    and getattr(put_ts, "date", lambda: None)() == current_date
+                    and getattr(call_ts, "date", lambda: None)() == current_date
+                    and execution_snapshot.put_entry_price is not None
+                    and execution_snapshot.call_entry_price is not None
+                ):
+                    track9_option_prices["put_entry_price"] = execution_snapshot.put_entry_price
+                    track9_option_prices["call_entry_price"] = execution_snapshot.call_entry_price
+
         track9_analytics = build_track9_analytics_snapshot(
-            d, run_id=self.run_id or "virtual", as_of=d.as_of,
-            option_contract_selection=track9_selection, common_snapshot=common_analytics,
-            active_sell_qty=(track9_position.active_sell_qty if track9_position else None),
-            insurance_qty=(track9_position.insurance_qty if track9_position else None),
-            event_upcoming=track9_event,
-            event_budget=(track9_event_risk.event_budget if track9_event_risk else None),
-            estimated_event_cost=(track9_event_risk.estimated_event_cost if track9_event_risk else None),
-            premium_spent=(track9_position.premium_spent if track9_position else None),
+            d,
+            run_id=self.run_id or "virtual",
+            as_of=d.as_of,
+            option_contract_selection=track9_selection,
+            option_prices=track9_option_prices,
+            common_snapshot=common_analytics,
         )
         track9_missing = tuple(
             key for key in track9_required
@@ -541,7 +575,9 @@ class StandardRuntimeInputProvider:
             )
         )
         if track9_selection is None:
-            track9_missing = tuple(dict.fromkeys(track9_missing + ("track9_authoritative_option_contract",)))
+            track9_missing = tuple(
+                dict.fromkeys(track9_missing + ("track9_authoritative_option_contract",))
+            )
         if track9_missing:
             contexts["track9_event_overnight_insurance"] = self._unavailable(
                 "track9_event_overnight_insurance",
@@ -550,7 +586,9 @@ class StandardRuntimeInputProvider:
             )
         else:
             contexts["track9_event_overnight_insurance"] = StrategyContext(
-                market_state, "track9_event_overnight_insurance", StrategyInput(common),
+                market_state,
+                "track9_event_overnight_insurance",
+                StrategyInput(common),
                 analytics=track9_analytics,
             )
         return contexts
