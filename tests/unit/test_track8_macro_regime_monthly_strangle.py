@@ -39,3 +39,12 @@ def test_strategy_id_mismatch_is_noop():
 def test_build_execution_plan_preserves_legs():
     s=Track8MacroRegimeMonthlyStrangle(); assert s.build_execution_plan("G-8") is None; s.evaluate(context(current_regime="HIGH_VOL")); plan=s.build_execution_plan("G-8")
     assert plan and len(plan.legs)==2 and plan.legs[0].quantity==2*plan.legs[1].quantity
+
+
+def test_macro_regime_hedge_does_not_repeat_same_active_lifecycle():
+    s=Track8MacroRegimeMonthlyStrangle()
+    s.evaluate(context(current_regime="NORMAL"))
+    first=s.evaluate_macro_regime_protection(context(current_regime="CRASH"))
+    second=s.evaluate_macro_regime_protection(context(current_regime="CRASH"))
+    assert len(first)==1 and first[0].execution_proposal is not None
+    assert second==()

@@ -20,6 +20,7 @@ class Track8State:
     high_watermark_intrinsic: Decimal = Decimal("0")
     trailing_stop_active: bool = False
     hysteresis_hold_counter: int = 0
+    macro_hedge_scaled: bool = False
 
 class Track8MacroRegimeMonthlyStrangle:
     strategy_id = "track8_macro_regime_monthly_strangle"
@@ -113,7 +114,10 @@ class Track8MacroRegimeMonthlyStrangle:
                 f"REGIME:{regime};HEDGE_MULTIPLIER:1.5",
                 kind="NON_EXECUTION",
                 non_execution_event=NonExecutionEvent("TRACK8_MACRO_HEDGE_STATE", "MONTHLY_STRANGLE_NOT_ACTIVE")),)
+        if self.state.macro_hedge_scaled:
+            return ()
         extra_put=max(1,(self.state.qty_put+1)//2)
+        self.state = replace(self.state, macro_hedge_scaled=True)
         return (Signal(self.strategy_id, "MACRO_HEDGE_SCALE_UP", 1.0,
             f"REGIME:{regime};HEDGE_MULTIPLIER:1.5;EXTRA_PUT_QTY:{extra_put}",
             execution_proposal=StrategyExecutionProposal(proposed_quantity=extra_put, asset_type="OPTION", requested_price=None, side="BUY",

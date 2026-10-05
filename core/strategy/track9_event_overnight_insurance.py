@@ -15,6 +15,8 @@ from contracts.analytics import AnalyticsStatus
 from core.market.session_policy import MarketSessionPolicy
 from core.strategy.contracts import Signal, StrategyContext, StrategyFeatureRequirement
 from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
+from core.strategy.multi_leg_plan import build_pair_plan
+from contracts.types import MultiLegExecutionPlan
 
 
 @dataclass(frozen=True)
@@ -326,6 +328,30 @@ class Track9EventOvernightInsurance:
             return close_signals
 
         return ()
+
+    def build_execution_plan(self, group_id: str, *, proposal: StrategyExecutionProposal) -> MultiLegExecutionPlan:
+        """Resolve the approved PUT proposal into the authoritative PUT/CALL pair."""
+        if proposal.asset_type != "OPTION" or proposal.track_id != self.strategy_id:
+            raise ValueError("TRACK9_OPTION_EXECUTION_PROPOSAL_REQUIRED")
+        if self.state.put_strike is None or self.state.call_strike is None or self.state.entry_qty <= 0:
+            raise ValueError("TRACK9_PAIR_STATE_REQUIRED")
+        side = str(proposal.side).upper()
+        if side == "BUY":
+            purpose = "OVERNIGHT_INSURANCE"
+        elif side == "SELL":
+            purpose = "OVERNIGHT_INSURANCE_CLOSE"
+        else:
+            raise ValueError("TRACK9_PAIR_SIDE_REQUIRED")
+        return build_pair_plan(
+            group_id=group_id,
+            strategy_id=self.strategy_id,
+            purpose=purpose,
+            put_strike=self.state.put_strike,
+            call_strike=self.state.call_strike,
+            put_quantity=self.state.entry_qty,
+            call_quantity=self.state.entry_qty,
+            side=side,
+        )
 
     def evaluate(self, context: StrategyContext) -> Sequence[Signal]:
         if context.strategy_id != self.strategy_id or context.analytics is None:

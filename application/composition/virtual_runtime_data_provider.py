@@ -191,9 +191,15 @@ class VirtualRuntimeDataProvider:
                 if greeks_provider is not None
                 else None
             )
+            if callable(snapshot):
+                snapshot = snapshot()
             provider_observed_at = getattr(snapshot, "observed_at", None) if snapshot is not None else None
             if provider_observed_at:
-                provider_as_of = datetime.fromisoformat(provider_observed_at)
+                provider_as_of = (
+                    provider_observed_at
+                    if isinstance(provider_observed_at, datetime)
+                    else datetime.fromisoformat(str(provider_observed_at))
+                )
                 if provider_as_of <= observed_at:
                     if delta is None:
                         delta = self.track4_greeks_provider.current_delta()

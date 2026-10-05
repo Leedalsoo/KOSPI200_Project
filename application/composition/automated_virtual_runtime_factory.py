@@ -300,11 +300,21 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
             f"{run_id}-{canonical.signal_id}"
         )
 
+    def resolve_track9(evaluation, canonical):
+        proposal = evaluation.result.execution_proposal
+        if proposal is None:
+            raise ValueError("TRACK9_EXECUTION_PROPOSAL_REQUIRED")
+        strategy = registry.get("track9_event_overnight_insurance", "3.0")
+        return strategy.build_execution_plan(
+            f"{run_id}-{canonical.signal_id}", proposal=proposal
+        )
+
     execution_resolvers.register("track2_asymmetric_trap", resolve_track2)
     execution_resolvers.register("Strategy_3_StatArb", resolve_track3)
     execution_resolvers.register("track6_daily_tail_insurance", resolve_track6)
     execution_resolvers.register("track7_volatility_skew_weekly_insurance", resolve_track7)
     execution_resolvers.register("track8_macro_regime_monthly_strangle", resolve_track8)
+    execution_resolvers.register("track9_event_overnight_insurance", resolve_track9)
 
     def multi_leg_plan_resolver(evaluation, canonical):
         strategy_id = str(getattr(evaluation.context, "strategy_id", "") or "")

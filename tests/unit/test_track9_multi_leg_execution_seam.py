@@ -28,3 +28,32 @@ def test_track9_actual_pair_plan_to_common_materializer_and_submission_seam():
     out = submit_multi_leg_intents(intents, to_broker_command=Command, approval_token_for=lambda intent, command: f"T:{intent.leg_id}", order_router=router)
     assert out == ("put", "call")
     assert [leg_id for leg_id, _ in router.calls] == list(out)
+
+
+def test_track9_strategy_builds_pair_plan_from_approved_proposal():
+    from core.strategy.track9_event_overnight_insurance import Track9EventOvernightInsurance, Track9State
+    from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
+
+    strategy = Track9EventOvernightInsurance(pair_quantity=2)
+    strategy.state = Track9State(
+        entry_date="2026-10-05",
+        entry_qty=2,
+        put_strike=Decimal("1090"),
+        call_strike=Decimal("1110"),
+        entered_today=True,
+        state="OVERNIGHT_INSURANCE_AWAITING_FILLS",
+    )
+    proposal = StrategyExecutionProposal(
+        proposed_quantity=2,
+        asset_type="OPTION",
+        side="BUY",
+        track_id=strategy.strategy_id,
+        tag_id="OVERNIGHT_INSURANCE_PUT",
+        option_type="PUT",
+        strike=Decimal("1090"),
+    )
+    plan = strategy.build_execution_plan("T9-G", proposal=proposal)
+    assert [(x.leg_id, x.side, x.option_type, x.strike, x.quantity) for x in plan.legs] == [
+        ("put", "BUY", "PUT", Decimal("1090"), 2),
+        ("call", "BUY", "CALL", Decimal("1110"), 2),
+    ]
