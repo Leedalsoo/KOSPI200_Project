@@ -186,6 +186,18 @@ class AutomatedVirtualTradingLoop:
                     rejected += 1
 
         for canonical in commands:
+            is_futures = canonical.asset_type.value == "FUTURES"
+            execution_price = Decimal(str(tick.underlying_price)) if is_futures else Decimal(str(tick.ask_price))
+            futures_identity = None
+            if is_futures:
+                futures_identity = self.identity_provider(
+                    next(e for e in evaluations if e.runtime_context.client_order_id(canonical.track_id) == canonical.client_order_id),
+                    tick,
+                )
+                vssf = self.bundle.execution._authoritative_execute.__self__.vssf_runtime
+                vssf.order_book.update_bid_ask(
+                    float(execution_price), float(execution_price), futures_identity.instrument_id
+                )
             broker_command = BrokerOrderCommand(
                 client_order_id=canonical.client_order_id,
                 instrument_id=canonical.instrument_id or canonical.symbol or "KOSPI200",
@@ -193,9 +205,9 @@ class AutomatedVirtualTradingLoop:
                 quantity=canonical.qty,
                 order_type="LIMIT",
                 broker_symbol=canonical.symbol or "KOSPI200",
-                instrument_identity=(self.identity_provider(next(e for e in evaluations if e.runtime_context.client_order_id(canonical.track_id) == canonical.client_order_id), tick) if canonical.asset_type.value in {"OPTION", "FUTURES"} else None),
+                instrument_identity=(futures_identity if is_futures else self.identity_provider(next(e for e in evaluations if e.runtime_context.client_order_id(canonical.track_id) == canonical.client_order_id), tick) if canonical.asset_type.value == "OPTION" else None),
                 asset_type=canonical.asset_type.value,
-                requested_price=Decimal(str(tick.ask_price)),
+                requested_price=execution_price,
                 strategy_id=canonical.track_id,
                 order_purpose="AUTOMATED_STRATEGY",
                 track_id=canonical.track_id,

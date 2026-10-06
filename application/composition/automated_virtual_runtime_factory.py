@@ -93,6 +93,32 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         if proposal is None:
             return None
         if str(proposal.asset_type) == "FUTURES":
+            if synthetic_runtime_sources is not None:
+                from contracts.futures_identity_source_port import FuturesInstrumentIdentity
+                # Synthetic replay ticks expose the underlying as a MarketTick,
+                # which intentionally has no broker futures contract field. Use the
+                # synthetic KRX-standard product specification explicitly rather than
+                # consulting the live/current KIS futures master.
+                multiplier = Decimal("250000")
+                product_type = FuturesProductType.STANDARD
+                observed_symbol = str(
+                    getattr(tick, "underlying_symbol", None)
+                    or getattr(tick, "symbol", None)
+                    or getattr(tick, "instrument_id", "")
+                ).strip()
+                if not observed_symbol:
+                    raise ValueError("VIRTUAL_SYNTHETIC_FUTURES_SYMBOL_REQUIRED")
+                # Keep the synthetic Futures identity distinct from the option
+                # replay tick symbol so VSSF cannot mark a Futures position with
+                # an option premium from the shared synthetic MarketTick.
+                futures_symbol = f"{observed_symbol}_FUTURES"
+                return FuturesInstrumentIdentity(
+                    instrument_id=futures_symbol,
+                    symbol=futures_symbol,
+                    product_type=product_type,
+                    contract_multiplier=multiplier,
+                    identity_source="SYNTHETIC:high-speed-market-model-v2",
+                )
             if futures_identity_source is None:
                 raise ValueError("VIRTUAL_AUTHORITATIVE_FUTURES_IDENTITY_SOURCE_REQUIRED")
             timestamp = getattr(tick, "timestamp", None) if tick is not None else None
@@ -260,8 +286,6 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         )
 
     def resolve_track3(evaluation, canonical):
-        if futures_identity_source is None:
-            raise ValueError("TRACK3_HEDGE_IDENTITY_SOURCE_REQUIRED")
         group_id = f"{run_id}-{canonical.signal_id}"
         observed_symbol = str(
             getattr(canonical, "instrument_id", None)
@@ -270,8 +294,20 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         ).strip()
         if not observed_symbol:
             raise ValueError("TRACK3_WS_FUTURES_SYMBOL_REQUIRED")
-        hedge_source = Track3HedgeIdentitySource(futures_identity_source)
-        observed_identity = hedge_source.identity_for_observed_symbol(observed_symbol)
+        if synthetic_runtime_sources is not None:
+            market_tick = next(iter(evaluation.context.market_state.ticks.values()))
+            observed_identity = identity(evaluation, market_tick)
+            class _SyntheticHedgeIdentitySource:
+                def current_identity(self):
+                    return observed_identity
+                def identity_for_observed_symbol(self, _symbol):
+                    return observed_identity
+            hedge_source = _SyntheticHedgeIdentitySource()
+        else:
+            if futures_identity_source is None:
+                raise ValueError("TRACK3_HEDGE_IDENTITY_SOURCE_REQUIRED")
+            hedge_source = Track3HedgeIdentitySource(futures_identity_source)
+            observed_identity = hedge_source.identity_for_observed_symbol(observed_symbol)
         return track3_plan_adapter.build_plan(
             strategy_id="Strategy_3_StatArb", group_id=group_id,
             side=canonical.side.value, quantity=canonical.qty,

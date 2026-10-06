@@ -31,6 +31,7 @@ class CollectionResult:
     symbol: str | None = None
     run_id: str | None = None
     cycle_id: str | None = None
+    diagnostic: dict[str, Any] | None = None
 
 
 class ManualClock:
@@ -203,15 +204,22 @@ class KISRestMarketObservationCollector:
                 ))
                 continue
 
+            stage = 'price_request'
+            price_status: int | None = None
+            order_book_status: int | None = None
+            price: dict[str, Any] = {}
+            order_book: dict[str, Any] = {}
             try:
                 self.limiter.wait()
                 price_status, price = self.transport.request_price(symbol)
                 if price_status < 200 or price_status >= 300:
-                    raise ValueError("KIS_REST_HTTP_ERROR")
+                    raise ValueError('KIS_REST_HTTP_ERROR')
+                stage = 'order_book_request'
                 self.limiter.wait()
                 order_book_status, order_book = self.transport.request_order_book(symbol)
                 if order_book_status < 200 or order_book_status >= 300:
-                    raise ValueError("KIS_REST_HTTP_ERROR")
+                    raise ValueError('KIS_REST_HTTP_ERROR')
+                stage = 'normalization'
                 collected_at = self.clock.now()
                 raw_hash = self._raw_hash(price, order_book)
                 raw_id = f"{run_id}:{cycle_id}:{symbol}:{raw_hash[:16]}"
@@ -267,11 +275,35 @@ class KISRestMarketObservationCollector:
                     cycle_id=cycle_id,
                 ))
             except (ValueError, urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
+                http_status = getattr(exc, 'code', None)
+                error_body: dict[str, Any] = {}
+                if isinstance(exc, urllib.error.HTTPError):
+                    try:
+                        raw_body = exc.read().decode('utf-8', errors='replace')
+                        parsed_body = json.loads(raw_body) if raw_body else {}
+                        error_body = parsed_body if isinstance(parsed_body, dict) else {'raw_body': raw_body}
+                    except Exception:
+                        error_body = {'raw_body': '<UNREADABLE_HTTP_ERROR_BODY>'}
+                response = order_book if stage == 'normalization' and order_book else price
+                diagnostic = {
+                    'stage': stage,
+                    'exception_type': type(exc).__name__,
+                    'exception_message': str(exc),
+                    'http_status': http_status if http_status is not None else (order_book_status if stage == 'order_book_request' else price_status),
+                    'tr_id': (KISRestMarketObservationTransport.ORDER_BOOK_TR_ID if stage == 'order_book_request' else KISRestMarketObservationTransport.PRICE_TR_ID),
+                    'response': {
+                        'rt_cd': response.get('rt_cd') if isinstance(response, dict) else None,
+                        'msg_cd': response.get('msg_cd') if isinstance(response, dict) else None,
+                        'msg1': response.get('msg1') if isinstance(response, dict) else None,
+                    },
+                    'http_error_response': error_body,
+                }
                 results.append(CollectionResult(
-                    status="BLOCKED",
-                    reason=str(exc) or "KIS_REST_COLLECTION_FAILED",
+                    status='BLOCKED',
+                    reason=str(exc) or 'KIS_REST_COLLECTION_FAILED',
                     symbol=symbol,
                     run_id=run_id,
                     cycle_id=cycle_id,
+                    diagnostic=diagnostic,
                 ))
         return tuple(results)

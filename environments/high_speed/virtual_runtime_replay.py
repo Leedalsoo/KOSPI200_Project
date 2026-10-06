@@ -40,20 +40,26 @@ class HighSpeedVirtualReplayReport:
 class HighSpeedVirtualRuntimeReplayRunner:
     """Feed high-speed replay events through the existing Virtual Runtime boundary."""
 
-    def __init__(self, dataset: str | Path, *, run_id: str | None = None, strategy_keys=None):
+    def __init__(self, dataset: str | Path, *, run_id: str | None = None, strategy_keys=None,
+                 track3_runtime_input_source=None, initial_capital: float = 250_000_000.0):
         self.dataset = Path(dataset)
         self.run_id = run_id or f"HS-{uuid4()}"
         self.strategy_keys = tuple(strategy_keys) if strategy_keys else None
+        self.track3_runtime_input_source = track3_runtime_input_source
+        self.initial_capital = float(initial_capital)
 
     def run(self, *, start: str | None = None, end: str | None = None,
             speed: float = float("inf"), max_events: int | None = None) -> HighSpeedVirtualReplayReport:
         synthetic_sources = SyntheticRuntimeSources()
         option_master = build_synthetic_option_master(self.dataset)
-        bootstrap = create_virtual_runtime_bootstrap(option_master=option_master)
+        bootstrap = create_virtual_runtime_bootstrap(
+            option_master=option_master, initial_capital=self.initial_capital
+        )
         loop = attach_standard_automated_loop(
             bootstrap,
             strategy_keys=self.strategy_keys,
             run_id=self.run_id,
+            track3_runtime_input_source=self.track3_runtime_input_source,
             synthetic_runtime_sources=synthetic_sources,
             track4_greeks_provider=synthetic_sources,
         )
@@ -75,9 +81,14 @@ class HighSpeedVirtualRuntimeReplayRunner:
 
         vssf_runtime = bootstrap.bundle.execution._authoritative_execute.__self__.vssf_runtime
 
-        def mark_positions() -> None:
+        def mark_positions(spot: float) -> None:
             account_source = vssf_runtime.account
             for symbol in tuple(account_source.positions):
+                if str(symbol).endswith("_FUTURES"):
+                    account_source.update_tick_price(
+                        float(spot), instrument_id=symbol
+                    )
+                    continue
                 identity = option_master.get_contract_identity(symbol)
                 if identity is None or identity.option_type is None or identity.strike is None:
                     continue
@@ -88,6 +99,9 @@ class HighSpeedVirtualRuntimeReplayRunner:
                     account_source.update_tick_price(quote["last"], instrument_id=symbol)
 
         def publish(tick) -> None:
+            # Keep the DERIVED_SCENARIO runtime-source snapshot aligned with the
+            # current replay tick before StandardRuntimeInputProvider consumes it.
+            synthetic_sources.set_tick(tick)
             spot = float(tick.underlying_price)
             base_last = float(tick.last_price)
             # DERIVED_SCENARIO quote materialization follows the authoritative synthetic
@@ -121,12 +135,24 @@ class HighSpeedVirtualRuntimeReplayRunner:
                 seen_keys.add(key)
                 intrinsic = max(0.0, spot - strike) if option_type == "CALL" else max(0.0, strike - spot)
                 mid = max(0.01, base_last * 0.35 + intrinsic * 0.10)
+                bid = max(0.01, mid - 0.02)
+                ask = mid + 0.02
+                symbol = identity.shrn_iscd or tick.symbol
                 bootstrap.bundle.market.register_replay_option_quote(
-                    symbol=identity.shrn_iscd or tick.symbol, option_type=option_type,
-                    strike=strike, expiry=current_expiry, bid=max(0.01, mid - 0.02),
-                    ask=mid + 0.02, last=mid, timestamp=tick.timestamp,
+                    symbol=symbol, option_type=option_type,
+                    strike=strike, expiry=current_expiry, bid=bid,
+                    ask=ask, last=mid, timestamp=tick.timestamp,
                     contract_multiplier=float(identity.contract_multiplier or tick.contract_multiplier),
                 )
+                # The DERIVED_SCENARIO quote must cross the same authoritative
+                # VSSF order-book boundary used by Virtual Broker execution.
+                # Market registration alone is not an execution quote.
+                for instrument_key in tuple(dict.fromkeys(
+                    value for value in (identity.stnd_iscd, identity.shrn_iscd, symbol) if value
+                )):
+                    vssf_runtime.order_book.update_bid_ask(
+                        bid, ask, instrument_id=instrument_key
+                    )
             bootstrap.bundle.market.publish_replay_tick(tick)
             result = loop.last_result
             if result is None:
@@ -150,7 +176,7 @@ class HighSpeedVirtualRuntimeReplayRunner:
                     routed=previous.routed + status.routed,
                     filled_quantity=previous.filled_quantity + status.filled_quantity,
                 )
-            mark_positions()
+            mark_positions(spot)
 
         report = HighSpeedReplayRunner(self.dataset).run(
             start=start, end=end, speed=speed, on_event=publish, max_events=max_events,

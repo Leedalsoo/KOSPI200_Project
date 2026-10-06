@@ -19,7 +19,8 @@ from pathlib import Path
 from infrastructure.kis.auth import KISAuthManager
 from infrastructure.kis.futures_market_transport import KISFuturesMarketTransport
 from infrastructure.kis.kis_realtime_collector import KISRealtimeCollector
-from infrastructure.kis.krx_kis_option_identity_resolver import load_kis_index_option_master, KRXKISOptionIdentityResolver
+from infrastructure.kis.krx_kis_option_identity_resolver import load_kis_index_option_master, KRXKISOptionIdentityResolver, KISOptionIdentityResolver
+from infrastructure.kis.kis_index_option_master_source import current_monthly_option_symbols
 from infrastructure.kis.kis_rest_market_observation_collector import (
     CollectionTarget,
     KISRestMarketObservationCollector,
@@ -466,30 +467,33 @@ def _kis_option_resolver_for_day(day: date) -> KRXKISOptionIdentityResolver:
 
 
 def build_daily_targets(day: date) -> tuple[CollectionTarget, ...]:
-    plan = build_plan_for_day(day)
-    monthly_paths, _ = resolve_option_master_paths_for_day(ROOT, day)
-    krx_master = load_option_master(monthly_paths)
-    resolver = _kis_option_resolver_for_day(day)
+    """Build REST option targets directly from the KIS broker master.
+
+    KRX Marketplace Option Master is deliberately not a prerequisite for raw
+    KIS collection. KIS supplies the broker symbol and contract identity used
+    by the REST transport; KRX remains available downstream for reconciliation.
+    """
+    reference_price = Decimal(_latest_krx_spot_price())
+    subscriptions = current_monthly_option_symbols(
+        day, reference_price,
+        (
+            Decimal("-15.0"), Decimal("-12.5"), Decimal("-10.0"),
+            Decimal("-7.5"), Decimal("-5.0"), Decimal("-2.5"), Decimal("0.0"),
+            Decimal("2.5"), Decimal("5.0"), Decimal("7.5"), Decimal("10.0"),
+            Decimal("12.5"), Decimal("15.0"),
+        ),
+    )
+    kis_resolver = KISOptionIdentityResolver(load_kis_index_option_master())
     targets: list[CollectionTarget] = []
-    for strike in plan.monthly_strikes:
-        for option_type in ("PUT", "CALL"):
-            matches = [
-                identity for identity in krx_master.identities.values()
-                if identity.expiry == plan.monthly_expiry
-                and identity.option_type == option_type
-                and identity.strike == strike
-                and identity.contract_multiplier == Decimal("250000")
-            ]
-            if len(matches) != 1:
-                raise ValueError(
-                    f"AUTHORITATIVE_OPTION_IDENTITY_REQUIRED:{plan.monthly_expiry}:{option_type}:{strike}:{len(matches)}"
-                )
-            resolved = resolver.get_contract_identity(matches[0].shrn_iscd, matches[0])
-            if resolved is None:
-                raise ValueError(
-                    f"KIS_OPTION_IDENTITY_REQUIRED:{plan.monthly_expiry}:{option_type}:{strike}"
-                )
-            targets.append(CollectionTarget(identity=resolved))
+    for tr_id, symbol in subscriptions:
+        if tr_id != "H0IOCNT0":
+            continue
+        identity = kis_resolver.get_contract_identity(symbol)
+        if identity is None:
+            raise ValueError(f"KIS_OPTION_IDENTITY_REQUIRED:{symbol}")
+        targets.append(CollectionTarget(identity=identity))
+    if not targets:
+        raise ValueError(f"KIS_OPTION_TARGETS_REQUIRED:{day.isoformat()}")
     center = sum((Decimal(str(target.identity.strike)) for target in targets), Decimal("0")) / len(targets)
     targets.sort(key=lambda target: (abs(Decimal(str(target.identity.strike)) - center), str(target.identity.option_type), target.identity.symbol))
     return tuple(targets)
@@ -523,7 +527,7 @@ def _manifest_target_rows(targets: tuple[CollectionTarget, ...]) -> list[dict[st
         "krx_isu_cd": getattr(target.identity, "instrument_id", ""),
         "expiry": target.identity.expiry,
         "strike": str(target.identity.strike), "option_type": target.identity.option_type,
-        "selection_source": "KRX_MARKETPLACE+KIS_INDEX_OPTION_MASTER",
+        "selection_source": "KIS_INDEX_OPTION_MASTER",
         "selection_reason": "MONTHLY_ATM_PLUS_MINUS_15_POINTS",
     } for target in targets]
 
@@ -563,6 +567,19 @@ def run_rest_cycle_for_day(day: date, manifest: DateSessionManifest, *, cycle_id
     }
     orchestrator = DailySessionOrchestrator(MARKET_DATA_ROOT, object())
     orchestrator.record_rest_results(manifest, results)
+    blocked_path = MARKET_DATA_ROOT / day.isoformat() / 'rest_blocked_diagnostics.jsonl'
+    for result in results:
+        diagnostic = getattr(result, 'diagnostic', None)
+        if str(getattr(result, 'status', '')) == 'BLOCKED':
+            _write_json_line(blocked_path, {
+                'trading_date': day.isoformat(),
+                'run_id': manifest.run_id,
+                'cycle_id': cycle_id,
+                'symbol': getattr(result, 'symbol', None),
+                'reason': getattr(result, 'reason', None),
+                'diagnostic': diagnostic,
+                'recorded_at': _now_kst().isoformat(),
+            })
     return results
 
 

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import asyncio
@@ -16,13 +16,11 @@ import websockets
 
 from infrastructure.kis.auth import KISAuthManager
 from infrastructure.kis.futures_market_transport import KISWebSocketApprovalKeyProvider
-from infrastructure.kis.kis_weekday_collection_plan import FUTURES_TRADE_TR_ID, OPTION_TRADE_TR_ID, STRATEGY_MONTHLY_OFFSETS
-from infrastructure.krx.krx_marketplace_master import load_option_master
-from infrastructure.krx.krx_option_master_store import resolve_option_master_paths_for_day
-from infrastructure.kis.kis_vts_weekday_collector import market_data_root_from_env, _kis_option_resolver_for_day
+from infrastructure.kis.kis_weekday_collection_plan import FUTURES_TRADE_TR_ID, STRATEGY_MONTHLY_OFFSETS
+from infrastructure.kis.kis_vts_weekday_collector import market_data_root_from_env
+from infrastructure.kis.kis_index_option_master_source import current_kospi200_futures_symbols, current_monthly_option_symbols
 from infrastructure.kis.index_price_source import KISKOSPI200IndexPriceSource
 from infrastructure.kis.realtime_raw_store import KISRealtimeRawStore
-from infrastructure.kis.futures_websocket_subscription_source import current_kospi200_futures_symbols
 
 KST = timezone(timedelta(hours=9))
 ROOT = Path(__file__).resolve().parents[1]
@@ -56,51 +54,19 @@ def configure_logging() -> None:
 
 
 def build_subscriptions(day: date) -> tuple[tuple[str, str], ...]:
-    """Build a broad VTS realtime set without depending on the expired weekly master.
+    """Build raw KIS realtime subscriptions from the KIS instrument master.
 
-    The monthly option set is the same ATM +/- 15-point family used by the existing
-    KIS collector, plus standard/mini futures trade+quote streams.
+    KIS is the broker-symbol source at the raw WebSocket boundary. KRX contract
+    identity reconciliation remains downstream and does not block frame capture.
     """
     reference_price = KISKOSPI200IndexPriceSource(KISAuthManager.from_env(is_vts=True)).refresh().price
-    monthly_paths, _ = resolve_option_master_paths_for_day(ROOT, day)
-    monthly_master = load_option_master(monthly_paths)
-    identities = tuple(monthly_master.identities.values())
-    expiry_candidates = sorted({identity.expiry for identity in identities if identity.expiry >= day.isoformat()})
-    if not expiry_candidates:
-        raise RuntimeError(f"KRX_MONTHLY_OPTION_EXPIRY_REQUIRED:{day.isoformat()}")
-    expiry = expiry_candidates[0]
-    atm = min(
-        (identity.strike for identity in identities if identity.expiry == expiry),
-        key=lambda strike: abs(strike - reference_price),
-    )
-    resolver = _kis_option_resolver_for_day(day)
-    subscriptions: list[tuple[str, str]] = []
-    for offset in STRATEGY_MONTHLY_OFFSETS:
-        strike = atm + offset
-        for option_type in ("PUT", "CALL"):
-            matches = [
-                identity for identity in identities
-                if identity.expiry == expiry
-                and identity.option_type == option_type
-                and identity.strike == strike
-            ]
-            if len(matches) != 1:
-                raise RuntimeError(
-                    f"AUTHORITATIVE_OPTION_IDENTITY_REQUIRED:{expiry}:{option_type}:{strike}:{len(matches)}"
-                )
-            resolved = resolver.get_contract_identity(matches[0].shrn_iscd, matches[0])
-            if resolved is None:
-                raise RuntimeError(f"KIS_OPTION_IDENTITY_REQUIRED:{expiry}:{option_type}:{strike}")
-            subscriptions.append((OPTION_TRADE_TR_ID, resolved.symbol))
-
-    # Resolve current standard/mini futures symbols from the authoritative KIS master.
-    for _, futures_symbol in current_kospi200_futures_symbols(ROOT):
+    subscriptions = list(current_monthly_option_symbols(day, reference_price, STRATEGY_MONTHLY_OFFSETS))
+    for _, futures_symbol in current_kospi200_futures_symbols(day):
         subscriptions.append((FUTURES_TRADE_TR_ID, futures_symbol))
     subscriptions.append(("H0UPCNT0", "2001"))
     if len(subscriptions) > MAX_SUBSCRIPTIONS:
         raise RuntimeError(f"KIS_WEBSOCKET_SUBSCRIPTION_LIMIT_EXCEEDED:{len(subscriptions)}")
     return tuple(subscriptions)
-
 
 def _approval_key(auth: KISAuthManager) -> str:
     provider = KISWebSocketApprovalKeyProvider(auth, timeout=10.0)
@@ -183,7 +149,7 @@ async def collect_day(day: date, *, market_data_root: Path) -> None:
         try:
             # One persistent WebSocket session for the whole collection window.
             approval_key = _approval_key(auth)
-            async with websockets.connect(ws_url, ping_interval=20, ping_timeout=20, open_timeout=10) as ws:
+            async with websockets.connect(ws_url, proxy=None, ping_interval=20, ping_timeout=20, open_timeout=10) as ws:
                 await _subscribe_all(ws, approval_key, subscriptions)
                 LOGGER.info("WS_CONNECTED date=%s subscriptions=%d", day, len(subscriptions))
                 last_heartbeat = time.monotonic()
