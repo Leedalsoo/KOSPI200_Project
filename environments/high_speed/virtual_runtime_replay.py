@@ -41,16 +41,17 @@ class HighSpeedVirtualRuntimeReplayRunner:
     """Feed high-speed replay events through the existing Virtual Runtime boundary."""
 
     def __init__(self, dataset: str | Path, *, run_id: str | None = None, strategy_keys=None,
-                 track3_runtime_input_source=None, initial_capital: float = 250_000_000.0):
+                 track3_runtime_input_source=None, initial_capital: float = 250_000_000.0, track5_opening_gap_points: float = 0.0):
         self.dataset = Path(dataset)
         self.run_id = run_id or f"HS-{uuid4()}"
         self.strategy_keys = tuple(strategy_keys) if strategy_keys else None
         self.track3_runtime_input_source = track3_runtime_input_source
         self.initial_capital = float(initial_capital)
+        self.track5_opening_gap_points = float(track5_opening_gap_points)
 
     def run(self, *, start: str | None = None, end: str | None = None,
             speed: float = float("inf"), max_events: int | None = None) -> HighSpeedVirtualReplayReport:
-        synthetic_sources = SyntheticRuntimeSources()
+        synthetic_sources = SyntheticRuntimeSources(track5_opening_gap_points=self.track5_opening_gap_points)
         option_master = build_synthetic_option_master(self.dataset)
         bootstrap = create_virtual_runtime_bootstrap(
             option_master=option_master, initial_capital=self.initial_capital

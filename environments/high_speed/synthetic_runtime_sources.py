@@ -14,11 +14,13 @@ from pathlib import Path
 from typing import Any
 
 from contracts.basis_source import BasisObservation
+from contracts.kis_kospi200_daily_source import KOSPI200DailyContext
 from contracts.option_orderbook_source import OptionOrderBookLevel, OptionOrderBookSnapshot
 from contracts.risk_guard import RiskGuardStatusSnapshot
 from contracts.track2_market_metrics_source import Track2MarketMetrics
 from contracts.track2_option_iv_source import Track2OptionIVObservation
 from contracts.track9_authoritative_sources import Track9EventRiskSnapshot
+from contracts.track6_volatility_source import Track6VolatilitySnapshot
 from contracts.trading_state import SensorLevel
 from core.option.option_master import InMemoryOptionContractMaster, KisOptionContractIdentity
 
@@ -26,7 +28,7 @@ SYNTHETIC_SOURCE = "SYNTHETIC:high-speed-market-model-v2"
 
 
 class SyntheticRuntimeSources:
-    def __init__(self) -> None:
+    def __init__(self, *, track5_opening_gap_points: Decimal = Decimal("0")) -> None:
         self._tick: Any | None = None
         self._iv: dict[tuple[str, str, Decimal], Decimal] = {}
         self._history: deque[tuple[datetime, Decimal, Decimal]] = deque(maxlen=60)
@@ -35,6 +37,8 @@ class SyntheticRuntimeSources:
         self._metrics: Track2MarketMetrics | None = None
         self.calendar = SyntheticTradingCalendar()
         self.source_name = SYNTHETIC_SOURCE
+        self._track5_daily_context: KOSPI200DailyContext | None = None
+        self._track5_opening_gap_points = Decimal(str(track5_opening_gap_points))
         self._greeks = {
             "delta": Decimal("0.50"),
             "gamma": Decimal("0.01"),
@@ -54,6 +58,18 @@ class SyntheticRuntimeSources:
             source=SYNTHETIC_SOURCE,
         )
 
+    def set_track5_daily_context(self, *, trading_date: date, open_price: Decimal, previous_close: Decimal) -> None:
+        self._track5_daily_context = KOSPI200DailyContext(
+            trading_date=trading_date,
+            open_price=Decimal(str(open_price)),
+            previous_close=Decimal(str(previous_close)),
+            source=f"{SYNTHETIC_SOURCE}:track5-daily-boundary",
+        )
+
+    def get_context(self, trading_date: date) -> KOSPI200DailyContext | None:
+        if self._track5_daily_context is not None and self._track5_daily_context.trading_date == trading_date:
+            return self._track5_daily_context
+        return None
     def current_delta(self) -> Decimal: return self._greeks["delta"]
     def current_gamma(self) -> Decimal: return self._greeks["gamma"]
     def current_theta(self) -> Decimal: return self._greeks["theta"]
@@ -63,6 +79,10 @@ class SyntheticRuntimeSources:
         self._tick = tick
         observed = datetime.fromisoformat(tick.timestamp)
         price = Decimal(str(tick.last_price))
+        if self._track5_daily_context is None:
+            trading_date = observed.date()
+            spot = Decimal(str(tick.underlying_price))
+            self.set_track5_daily_context(trading_date=trading_date, open_price=spot, previous_close=spot - self._track5_opening_gap_points)
         volume = Decimal(str(max(1, tick.volume)))
         self._history.append((observed, price, volume))
         expiry = str(tick.expiry)
@@ -100,9 +120,35 @@ class SyntheticRuntimeSources:
     def get_iv(self, *, expiry: str, option_type: str, strike: Decimal) -> Decimal | None:
         return self._iv.get((str(expiry), str(option_type).upper(), Decimal(str(strike))))
 
-    def get_order_book(self, symbol: str) -> OptionOrderBookSnapshot | None:
-        if self._tick is None or symbol != self._tick.symbol:
+    def get_track6_volatility(self, *, expiry: str, current_price: Decimal, observed_at: datetime, option_master: Any) -> Track6VolatilitySnapshot | None:
+        metrics = self._metrics
+        tick = self._tick
+        if metrics is None or tick is None or metrics.base_vol is None or metrics.active_vol is None or metrics.base_vol <= 0:
             return None
+        # DERIVED_SCENARIO only: the 10:00 observation is an explicit daily
+        # volatility-spike regime. The baseline remains computed from the generated
+        # market path; the spike is scenario metadata, not real KIS evidence.
+        active = Decimal(str(metrics.active_vol))
+        base = Decimal(str(metrics.base_vol))
+        spike_window = observed_at.hour == 10 and observed_at.minute == 0
+        if spike_window:
+            active = max(active, base * Decimal("1.50"))
+        identities = option_master.list_contract_identities(expiry=expiry)
+        strikes = sorted({Decimal(str(i.strike)) for i in identities if str(getattr(i, "option_type", "")).upper() in {"CALL", "PUT"} and getattr(i, "strike", None) is not None})
+        if not strikes:
+            return None
+        strike = min(strikes, key=lambda x: (abs(x - current_price), x))
+        call_iv = self.get_iv(expiry=expiry, option_type="CALL", strike=strike)
+        put_iv = self.get_iv(expiry=expiry, option_type="PUT", strike=strike)
+        if call_iv is None or put_iv is None:
+            return None
+        return Track6VolatilitySnapshot(active_vol=active, base_vol=base, call_iv=call_iv, put_iv=put_iv, strike=strike, expiry=expiry, observed_at=observed_at, source=f"{SYNTHETIC_SOURCE}:track6-volatility-spike")
+
+    def get_order_book(self, symbol: str) -> OptionOrderBookSnapshot | None:
+        if self._tick is None or not symbol:
+            return None
+        # DERIVED_SCENARIO supplies a synthetic top-of-book for every listed
+        # candidate so Strategy5 can exercise its 2nd/3rd-strike liquidity rule.
         mid = Decimal(str(self._tick.last_price))
         qty = Decimal(str(max(1, int(self._tick.volume))))
         trigger = int(self._tick.seq_id) % 17 == 0
@@ -142,6 +188,20 @@ class SyntheticRuntimeSources:
 
     def event_risk(self, *, run_id: str, as_of) -> Track9EventRiskSnapshot:
         return Track9EventRiskSnapshot(Decimal("500000"), Decimal("100000"), SYNTHETIC_SOURCE)
+
+
+class SyntheticTrack6VolatilitySource:
+    def __init__(self, runtime_source: SyntheticRuntimeSources, option_master: Any) -> None:
+        self.runtime_source = runtime_source
+        self.option_master = option_master
+
+    def snapshot(self, *, expiry: str, current_price: Decimal, observed_at: datetime):
+        return self.runtime_source.get_track6_volatility(
+            expiry=expiry, current_price=current_price, observed_at=observed_at, option_master=self.option_master
+        )
+
+    def reset_for_new_session(self, session_date) -> None:
+        return None
 
 
 class SyntheticEventRiskSource:

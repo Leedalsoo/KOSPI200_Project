@@ -78,6 +78,10 @@ class RiskEngine:
         positions_map: Mapping[str, Any] = positions.positions if positions is not None else {}
         instrument_key = command.get_instrument_key()
         current = positions_map.get(instrument_key)
+        if current is None:
+            command_symbol = str(getattr(command, "symbol", "") or "").strip()
+            if command_symbol:
+                current = positions_map.get(command_symbol)
         if current is None and len(positions_map) == 1:
             current = next(iter(positions_map.values()))
         curr_qty = int(getattr(current, "qty", 0)) if current is not None else 0
@@ -108,6 +112,35 @@ class RiskEngine:
             return RiskEvaluationResult(False, "DENY", original_qty, 0, f"EXCEEDED_MAX_DAILY_LOSS: {total_loss:,.0f} >= {self.config.max_daily_loss_krw:,.0f} KRW")
         effective_cmd = command
         expected = self.calculate_expected_position(effective_cmd, positions)
+        current_position = None
+        if positions is not None:
+            current_position = positions.positions.get(expected["instrument_key"])
+            if current_position is None:
+                command_symbol = str(getattr(effective_cmd, "symbol", "") or "").strip()
+                if command_symbol:
+                    current_position = positions.positions.get(command_symbol)
+            if current_position is None and len(positions.positions) == 1:
+                current_position = next(iter(positions.positions.values()))
+        current_qty = int(getattr(current_position, "qty", 0)) if current_position is not None else 0
+        current_side = getattr(current_position, "side", None) if current_position is not None else None
+        order_side = self._order_side(effective_cmd)
+        is_pure_reduction = (
+            current_qty > 0
+            and current_side in {"BUY", "SELL"}
+            and order_side in {"BUY", "SELL"}
+            and current_side != order_side
+            and effective_cmd.qty <= current_qty
+            and expected["qty"] == current_qty - effective_cmd.qty
+        )
+        if is_pure_reduction:
+            token = RiskApprovalToken(uuid.uuid4(), time.time_ns(), f"SIG-RISK-APPROVED-{effective_cmd.track_id}-{effective_cmd.client_order_id}")
+            return RiskEvaluationResult(
+                True, "ALLOW", original_qty, effective_cmd.qty, None,
+                Decimal("0"),
+                self._decimal(account.used_margin) / self._decimal(account.total_balance)
+                if self._decimal(account.total_balance) > 0 else Decimal("1"),
+                token, None,
+            )
         if expected["qty"] > self.config.max_position_per_instrument:
             current = positions.positions.get(expected["instrument_key"]) if positions is not None else None
             current_qty = int(getattr(current, "qty", 0)) if current is not None else 0

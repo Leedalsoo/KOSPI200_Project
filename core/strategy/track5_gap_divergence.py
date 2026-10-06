@@ -1,10 +1,25 @@
+from __future__ import annotations
+
 from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Sequence
 
 from contracts.analytics import AnalyticsSnapshot, AnalyticsStatus
-from core.strategy.contracts import NonExecutionEvent, Signal, SignalKind, StrategyContext, StrategyFeatureRequirement
+from contracts.types import ExecutionLeg, MultiLegExecutionPlan
+from core.strategy.contracts import Signal, SignalKind, StrategyContext, StrategyFeatureRequirement
 from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
+
+
+@dataclass(frozen=True)
+class Track5ExecutionInput:
+    expiry: str
+    atm_strike: Decimal
+    selected_strike: Decimal
+    option_type: str
+    strike_rank: int
+    liquidity_score: Decimal
+    option_quantity: int = 1
+    mini_futures_quantity: int = 5
 
 
 @dataclass(frozen=True)
@@ -19,12 +34,21 @@ class Track5State:
     trailing_active: bool = False
     liquidity_stage: int = 0
     expected_move_pts: Decimal = Decimal("0")
+    session_start_price: Decimal | None = None
+    session_start_at: object | None = None
+    gap_source: str | None = None
+    gap_extreme_price: Decimal | None = None
+    option_type: str | None = None
+    selected_strike: Decimal | None = None
+    futures_side: str | None = None
+    futures_closed: bool = False
 
 
 class Track5GapDivergence:
     strategy_id = "track5_gap_divergence"
-    version = "1.1"
+    version = "2.0"
     ENTRY_QUANTITY = 1
+    MINI_FUTURES_QUANTITY = 5
 
     def __init__(self, z_threshold: Decimal = Decimal("1.5")) -> None:
         self.z_threshold = z_threshold
@@ -73,35 +97,102 @@ class Track5GapDivergence:
         if not isinstance(regime, str) or previous_close <= 0 or expected_move <= 0:
             return None
         return open_price, last, previous_close, expected_move, z_score, regime
-    def evaluate_gap(self, snapshot: AnalyticsSnapshot) -> Sequence[Signal]:
+
+    def _session_minutes(self, snapshot: AnalyticsSnapshot) -> Decimal | None:
+        observed_at = getattr(snapshot, "as_of", None)
+        if observed_at is None or self.state.session_start_at is None:
+            return None
+        try:
+            return Decimal(str((observed_at - self.state.session_start_at).total_seconds())) / Decimal("60")
+        except (AttributeError, TypeError):
+            return None
+
+    def _intraday_gap_candidate(self, last, session_start_price, expected_move, regime, elapsed_minutes):
+        if elapsed_minutes is None or elapsed_minutes > Decimal("30"):
+            return None
+        move = last - session_start_price
+        if abs(move) < max(Decimal("1.0"), expected_move * Decimal("1.1")):
+            return None
+        z_score = move / max(Decimal("0.1"), expected_move)
+        effective_z = self.effective_z_threshold(regime)
+        if abs(z_score) < effective_z or abs(z_score) >= Decimal("4.0"):
+            return None
+        return ("OPENING_WINDOW_INTRADAY_GAP", last, session_start_price, z_score)
+
+    def _proposal(self, *, asset_type: str, side: str, quantity: int, tag_id: str,
+                  option_type: str | None = None, strike: Decimal | None = None):
+        return StrategyExecutionProposal(
+            proposed_quantity=quantity,
+            asset_type=asset_type,
+            side=side,
+            track_id=self.strategy_id,
+            tag_id=tag_id,
+            option_type=option_type,
+            strike=strike,
+        )
+
+    def evaluate_gap(self, snapshot: AnalyticsSnapshot, execution_input: Track5ExecutionInput | None = None) -> Sequence[Signal]:
         if self.state.is_active:
             return ()
         required = self._required(snapshot)
-        if required is None:
+        if required is None or execution_input is None:
             return ()
-        open_price, _, previous_close, expected_move, z_score, regime = required
+        open_price, last, previous_close, expected_move, z_score, regime = required
         gap = self._metric(snapshot, "price.gap")
         if not isinstance(gap, Decimal):
             return ()
-        effective_z = self.effective_z_threshold(regime)
-        if abs(z_score) < effective_z or abs(z_score) >= Decimal("4.0"):
-            return ()
 
+        observed_at = getattr(snapshot, "as_of", None)
+        if self.state.session_start_price is None:
+            self.state = replace(self.state, session_start_price=last, session_start_at=observed_at)
+        elapsed_minutes = self._session_minutes(snapshot)
+        effective_z = self.effective_z_threshold(regime)
+
+        if abs(z_score) >= effective_z and abs(z_score) < Decimal("4.0"):
+            source = "OPENING_GAP"
+            entry_price = open_price
+            target_price = previous_close
+            candidate_z = z_score
+        else:
+            candidate = self._intraday_gap_candidate(
+                last, self.state.session_start_price, expected_move, regime, elapsed_minutes
+            )
+            if candidate is None:
+                return ()
+            source, entry_price, target_price, candidate_z = candidate
+
+        direction = "SHORT" if candidate_z > 0 else "LONG"
+        option_type = "CALL" if direction == "SHORT" else "PUT"
+        futures_side = "SELL" if direction == "SHORT" else "BUY"
         stop_distance = max(Decimal("1.0"), expected_move * Decimal("0.8"))
-        direction = "SHORT" if z_score > 0 else "LONG"
-        stop = open_price + stop_distance if direction == "SHORT" else open_price - stop_distance
+        stop = entry_price + stop_distance if direction == "SHORT" else entry_price - stop_distance
         self.state = replace(
             self.state, is_active=True, direction=direction,
-            entry_price=open_price, target_price=previous_close,
+            entry_price=entry_price, target_price=target_price,
             stop_loss_price=stop, open_ticks=0, peak_pnl=Decimal("0"),
             trailing_active=False, liquidity_stage=0,
-            expected_move_pts=expected_move,
+            expected_move_pts=expected_move, gap_source=source,
+            gap_extreme_price=entry_price, option_type=option_type,
+            selected_strike=execution_input.selected_strike,
+            futures_side=futures_side, futures_closed=False,
         )
         return (Signal(
-            strategy_id=self.strategy_id, direction=direction,
-            confidence=float(min(Decimal("1"), abs(z_score) / Decimal("4"))),
-            reason=f"GAP:{gap};GAP_Z_SCORE:{z_score:.4f};ENTRY:{open_price};TARGET:{previous_close};STOP:{stop}",
-            execution_proposal=StrategyExecutionProposal(proposed_quantity=self.ENTRY_QUANTITY, asset_type="FUTURES", requested_price=None, side="BUY" if direction == "LONG" else "SELL", track_id=self.strategy_id, tag_id="GAP_DIVERGENCE_ENTRY", option_type=None, strike=None),
+            strategy_id=self.strategy_id,
+            direction=direction,
+            confidence=float(min(Decimal("1"), abs(candidate_z) / Decimal("4"))),
+            reason=(
+                f"GAP_SOURCE:{source};GAP:{gap};GAP_Z_SCORE:{candidate_z:.4f};"
+                f"ENTRY:{entry_price};TARGET:{target_price};STOP:{stop};"
+                f"WINDOW_MINUTES:{elapsed_minutes};OPTION:{option_type};"
+                f"STRIKE:{execution_input.selected_strike};STRIKE_RANK:{execution_input.strike_rank};"
+                f"MINI_FUTURES_QTY:{self.MINI_FUTURES_QUANTITY}"
+            ),
+            kind=SignalKind.EXECUTION,
+            execution_proposal=self._proposal(
+                asset_type="OPTION", side="BUY", quantity=self.ENTRY_QUANTITY,
+                tag_id="GAP_DIVERGENCE_ENTRY_OPTION",
+                option_type=option_type, strike=execution_input.selected_strike,
+            ),
         ),)
 
     def evaluate_mean_reversion(self, current_price: Decimal) -> Sequence[Signal]:
@@ -111,44 +202,151 @@ class Track5GapDivergence:
         direction = state.direction
         pnl = state.entry_price - current_price if direction == "SHORT" else current_price - state.entry_price
         state = replace(state, peak_pnl=max(state.peak_pnl, pnl))
+        if state.gap_extreme_price is None:
+            state = replace(state, gap_extreme_price=state.entry_price)
+        if direction == "SHORT":
+            state = replace(state, gap_extreme_price=max(state.gap_extreme_price, current_price))
+        else:
+            state = replace(state, gap_extreme_price=min(state.gap_extreme_price, current_price))
+
+        # The first leg to be released is always the MINI futures hedge.
+        # It is closed when the opening gap starts to fill from the entry side.
+        gap_started_filling = (
+            direction == "SHORT" and current_price < state.entry_price
+        ) or (
+            direction == "LONG" and current_price > state.entry_price
+        )
+        if not state.futures_closed and gap_started_filling:
+            self.state = replace(state, futures_closed=True)
+            futures_close_side = "BUY" if state.futures_side == "SELL" else "SELL"
+            return (Signal(
+                self.strategy_id,
+                "CLOSE_FUTURES",
+                1.0,
+                f"GAP_FILL_STARTED;PRICE:{current_price};ENTRY:{state.entry_price};MINI_FUTURES_QTY:{self.MINI_FUTURES_QUANTITY}",
+                kind=SignalKind.EXECUTION,
+                execution_proposal=self._proposal(
+                    asset_type="FUTURES", side=futures_close_side,
+                    quantity=self.MINI_FUTURES_QUANTITY,
+                    tag_id="GAP_DIVERGENCE_FUTURES_FIRST_EXIT",
+                ),
+            ),)
+
         trail_threshold = max(Decimal("0.3"), state.expected_move_pts * Decimal("0.3"))
         trail_reversal = max(Decimal("0.1"), state.expected_move_pts * Decimal("0.1"))
-        if (direction == "SHORT" and current_price <= state.target_price) or (direction == "LONG" and current_price >= state.target_price):
-            self.reset()
-            return (Signal(self.strategy_id, "CLOSE", 1.0, f"MEAN_REVERSION_TARGET:{state.target_price};PNL:{pnl}", execution_proposal=StrategyExecutionProposal(proposed_quantity=self.ENTRY_QUANTITY, asset_type="FUTURES", requested_price=None, side="SELL" if direction == "LONG" else "BUY", track_id=self.strategy_id, tag_id="GAP_DIVERGENCE_TARGET_EXIT", option_type=None, strike=None)),)
-        if (direction == "SHORT" and current_price >= state.stop_loss_price) or (direction == "LONG" and current_price <= state.stop_loss_price):
-            self.reset()
-            return (Signal(self.strategy_id, "CLOSE", 1.0, f"DYNAMIC_STOP:{state.stop_loss_price};PNL:{pnl}", execution_proposal=StrategyExecutionProposal(proposed_quantity=self.ENTRY_QUANTITY, asset_type="FUTURES", requested_price=None, side="SELL" if direction == "LONG" else "BUY", track_id=self.strategy_id, tag_id="GAP_DIVERGENCE_STOP_EXIT", option_type=None, strike=None)),)
-        if state.open_ticks >= 30:
-            self.reset()
-            return (Signal(self.strategy_id, "CLOSE", 1.0, f"TIMEOUT_15M;PNL:{pnl}", execution_proposal=StrategyExecutionProposal(proposed_quantity=self.ENTRY_QUANTITY, asset_type="FUTURES", requested_price=None, side="SELL" if direction == "LONG" else "BUY", track_id=self.strategy_id, tag_id="GAP_DIVERGENCE_TIMEOUT_EXIT", option_type=None, strike=None)),)
-
-        trailing_active = state.trailing_active or pnl >= trail_threshold
         pnl_ratio = pnl / max(Decimal("0.1"), state.expected_move_pts)
         scale = Decimal("0.67") if pnl_ratio >= 1 else Decimal("0.80") if pnl_ratio >= Decimal("0.3") else Decimal("1")
         effective_reversal = trail_reversal * scale
-        state = replace(state, trailing_active=trailing_active)
-        if trailing_active and state.peak_pnl - pnl >= effective_reversal:
+
+        # The option is the second leg. It remains open through the gap expansion
+        # and closes only after an extreme has been established and the price
+        # returns toward the previous close, or a trailing reversal is confirmed.
+        reached_target = (
+            (direction == "SHORT" and current_price <= state.target_price) or
+            (direction == "LONG" and current_price >= state.target_price)
+        )
+        had_expansion = (
+            (direction == "SHORT" and state.gap_extreme_price > state.entry_price) or
+            (direction == "LONG" and state.gap_extreme_price < state.entry_price)
+        )
+        if state.futures_closed and reached_target and (had_expansion or state.open_ticks > 1):
             self.reset()
-            return (Signal(self.strategy_id, "CLOSE", 1.0, f"TRAILING_LOCK;PEAK:{state.peak_pnl};REVERSAL:{effective_reversal};PNL:{pnl}", execution_proposal=StrategyExecutionProposal(proposed_quantity=self.ENTRY_QUANTITY, asset_type="FUTURES", requested_price=None, side="SELL" if direction == "LONG" else "BUY", track_id=self.strategy_id, tag_id="GAP_DIVERGENCE_TRAILING_EXIT", option_type=None, strike=None)),)
+            return (Signal(
+                self.strategy_id,
+                "CLOSE_OPTION",
+                1.0,
+                f"MEAN_REVERSION_TARGET:{state.target_price};EXTREME:{state.gap_extreme_price};PNL:{pnl}",
+                kind=SignalKind.EXECUTION,
+                execution_proposal=self._proposal(
+                    asset_type="OPTION", side="SELL", quantity=self.ENTRY_QUANTITY,
+                    tag_id="GAP_DIVERGENCE_OPTION_SECOND_EXIT",
+                    option_type=state.option_type, strike=state.selected_strike,
+                ),
+            ),)
+
+        if (direction == "SHORT" and current_price >= state.stop_loss_price) or (direction == "LONG" and current_price <= state.stop_loss_price):
+            self.reset()
+            return (Signal(
+                self.strategy_id, "CLOSE_OPTION", 1.0,
+                f"DYNAMIC_STOP:{state.stop_loss_price};PNL:{pnl}",
+                kind=SignalKind.EXECUTION,
+                execution_proposal=self._proposal(
+                    asset_type="OPTION", side="SELL", quantity=self.ENTRY_QUANTITY,
+                    tag_id="GAP_DIVERGENCE_OPTION_STOP_EXIT",
+                    option_type=state.option_type, strike=state.selected_strike,
+                ),
+            ),)
+
+        if state.open_ticks >= 30:
+            self.reset()
+            return (Signal(
+                self.strategy_id, "CLOSE_OPTION", 1.0,
+                f"TIMEOUT_15M;PNL:{pnl}",
+                kind=SignalKind.EXECUTION,
+                execution_proposal=self._proposal(
+                    asset_type="OPTION", side="SELL", quantity=self.ENTRY_QUANTITY,
+                    tag_id="GAP_DIVERGENCE_OPTION_TIMEOUT_EXIT",
+                    option_type=state.option_type, strike=state.selected_strike,
+                ),
+            ),)
+
+        trailing_active = state.trailing_active or pnl >= trail_threshold
+        state = replace(state, trailing_active=trailing_active)
+        if trailing_active and state.peak_pnl - pnl >= effective_reversal and state.futures_closed:
+            self.reset()
+            return (Signal(
+                self.strategy_id, "CLOSE_OPTION", 1.0,
+                f"TRAILING_LOCK;PEAK:{state.peak_pnl};REVERSAL:{effective_reversal};PNL:{pnl}",
+                kind=SignalKind.EXECUTION,
+                execution_proposal=self._proposal(
+                    asset_type="OPTION", side="SELL", quantity=self.ENTRY_QUANTITY,
+                    tag_id="GAP_DIVERGENCE_OPTION_TRAILING_EXIT",
+                    option_type=state.option_type, strike=state.selected_strike,
+                ),
+            ),)
+
         if pnl >= trail_threshold * Decimal("0.75") and state.liquidity_stage == 0:
             self.state = replace(state, liquidity_stage=1)
-            return (Signal(
-                self.strategy_id, "LIQUIDITY", 0.7,
-                f"LIQUIDITY_STAGE_1;PRICE:{current_price};PNL:{pnl}",
-                kind=SignalKind.NON_EXECUTION,
-                non_execution_event=NonExecutionEvent("LIQUIDITY_STAGE", "Strategy liquidity state update", {"stage": 1}),
-            ),)
+            return ()
         if pnl >= trail_threshold * Decimal("1.5") and state.liquidity_stage == 1:
             self.state = replace(state, liquidity_stage=2)
-            return (Signal(
-                self.strategy_id, "LIQUIDITY", 0.8,
-                f"LIQUIDITY_STAGE_2;PRICE:{current_price};PNL:{pnl}",
-                kind=SignalKind.NON_EXECUTION,
-                non_execution_event=NonExecutionEvent("LIQUIDITY_STAGE", "Strategy liquidity state update", {"stage": 2}),
-            ),)
+            return ()
         self.state = state
         return ()
+
+    def build_execution_plan(self, group_id: str, *, proposal: StrategyExecutionProposal, futures_identity) -> MultiLegExecutionPlan:
+        if proposal.track_id != self.strategy_id:
+            raise ValueError("TRACK5_STRATEGY_REQUIRED")
+        if proposal.asset_type == "OPTION" and proposal.side == "BUY":
+            if proposal.option_type not in {"CALL", "PUT"} or proposal.strike is None:
+                raise ValueError("TRACK5_OPTION_ENTRY_PROPOSAL_REQUIRED")
+            futures_side = "SELL" if proposal.option_type == "CALL" else "BUY"
+            return MultiLegExecutionPlan(
+                group_id=group_id,
+                strategy_id=self.strategy_id,
+                purpose="TRACK5_GAP_HEDGE_ENTRY",
+                legs=(
+                    ExecutionLeg("OPTION", "BUY", self.ENTRY_QUANTITY, proposal.option_type, proposal.strike, position_role="NONE"),
+                    ExecutionLeg("MINI_FUTURES", futures_side, self.MINI_FUTURES_QUANTITY, position_role="NONE"),
+                ),
+            )
+        if proposal.asset_type == "FUTURES":
+            return MultiLegExecutionPlan(
+                group_id=group_id,
+                strategy_id=self.strategy_id,
+                purpose="TRACK5_GAP_HEDGE_FUTURES_EXIT",
+                legs=(ExecutionLeg("MINI_FUTURES_EXIT", proposal.side or "", self.MINI_FUTURES_QUANTITY, position_role="NONE"),),
+            )
+        if proposal.asset_type == "OPTION" and proposal.side == "SELL":
+            if proposal.option_type not in {"CALL", "PUT"} or proposal.strike is None:
+                raise ValueError("TRACK5_OPTION_EXIT_PROPOSAL_REQUIRED")
+            return MultiLegExecutionPlan(
+                group_id=group_id,
+                strategy_id=self.strategy_id,
+                purpose="TRACK5_GAP_HEDGE_OPTION_EXIT",
+                legs=(ExecutionLeg("OPTION_EXIT", "SELL", self.ENTRY_QUANTITY, proposal.option_type, proposal.strike, position_role="NONE"),),
+            )
+        raise ValueError("TRACK5_EXECUTION_PROPOSAL_UNSUPPORTED")
 
     def evaluate(self, context: StrategyContext) -> Sequence[Signal]:
         if context.strategy_id != self.strategy_id or context.analytics is None:
@@ -158,4 +356,10 @@ class Track5GapDivergence:
             if not isinstance(current_price, Decimal):
                 return ()
             return self.evaluate_mean_reversion(current_price)
-        return self.evaluate_gap(context.analytics)
+        execution_input = context.input.payload if context.input is not None else None
+        if not isinstance(execution_input, Track5ExecutionInput):
+            return ()
+        return self.evaluate_gap(context.analytics, execution_input)
+
+
+__all__ = ("Track5GapDivergence", "Track5State", "Track5ExecutionInput")

@@ -11,7 +11,7 @@ def build_track5_analytics_snapshot(data, *, run_id: str, as_of, common_snapshot
     observations = {
         "open_price": data.open_price,
         "previous_close": data.previous_close,
-        "current_price": data.price,
+        "current_price": data.underlying_price,
         "active_vol": data.active_vol,
         "regime": data.macro_regime,
     }

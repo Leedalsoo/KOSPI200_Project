@@ -29,6 +29,7 @@ class RuntimeDataStatus:
 class VirtualRuntimeData:
     as_of: datetime
     price: Decimal
+    underlying_price: Decimal
     prices: tuple[Decimal, ...]
     open_price: Decimal
     high_price: Decimal
@@ -150,7 +151,7 @@ class VirtualRuntimeDataProvider:
         previous_close = prices[-2] if len(prices) >= 2 else prices[0]
         daily_context = None
         daily_error = None
-        if self.kospi200_daily_source is not None and str(getattr(tick, "underlying_symbol", "") or "KOSPI200") == "KOSPI200":
+        if self.kospi200_daily_source is not None and (str(getattr(tick, "underlying_symbol", "") or "KOSPI200") == "KOSPI200" or str(getattr(tick, "underlying_symbol", "" )).endswith("_SYNTHETIC")):
             try:
                 daily_context = self.kospi200_daily_source.get_context(observed_at.date())
             except Exception as exc:
@@ -373,7 +374,7 @@ class VirtualRuntimeDataProvider:
             "track6_volatility": track6_vol_status,
         }
         return VirtualRuntimeData(
-            as_of=observed_at, price=price, prices=prices, open_price=open_price,
+            as_of=observed_at, price=price, underlying_price=Decimal(str(tick.underlying_price)), prices=prices, open_price=open_price,
             high_price=high, low_price=low, previous_close=previous_close,
             active_vol=track6_active_vol if track6_active_vol is not None else (metrics_active_vol if metrics_active_vol is not None else active_vol),
             base_vol=track6_base_vol if track6_base_vol is not None else (metrics_base_vol if metrics_base_vol is not None else base_vol),

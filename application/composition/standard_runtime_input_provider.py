@@ -17,6 +17,7 @@ from core.strategy.track1_tail_defense import Track1Input
 from application.composition.track1_runtime_input_provider import Track1RuntimeInputProvider
 from application.composition.track3_runtime_input_provider import Track3RuntimeInputProvider
 from core.strategy.track4_gamma_scalping import Track4MarketInput
+from core.strategy.track5_gap_divergence import Track5ExecutionInput
 from core.strategy.track6_daily_tail_insurance import Track6ExecutionInput
 from core.strategy.track7_volatility_skew_weekly_insurance import Track7ExecutionInput
 from application.composition.track7_option_contract_source import Track7OptionContractSource
@@ -39,6 +40,7 @@ from contracts.track9_authoritative_sources import Track9PositionExecutionReadMo
 from contracts.kis_kospi200_daily_source import KOSPI200DailySource
 from contracts.track6_volatility_source import Track6VolatilitySource
 from application.composition.track6_option_contract_source import Track6OptionContractSource
+from application.composition.track5_option_contract_source import Track5OptionContractSource
 from application.composition.track8_option_contract_source import Track8OptionContractSource
 from application.composition.track2_analytics_provider import build_track2_analytics_snapshot
 from application.composition.track4_analytics_provider import build_track4_analytics_snapshot
@@ -68,6 +70,7 @@ class StandardRuntimeInputProvider:
         self.track7_order_timeout_source = track7_order_timeout_source
         self.track7_support_resistance_source = track7_support_resistance_source
         self.track6_option_contract_source = track6_option_contract_source
+        self.track5_option_contract_source = Track5OptionContractSource(option_master, option_orderbook_source) if option_master is not None else None
         self.track7_option_contract_source = track7_option_contract_source
         self.track8_option_contract_source = track8_option_contract_source
         self.option_orderbook_source = option_orderbook_source
@@ -322,24 +325,57 @@ class StandardRuntimeInputProvider:
                 ),
             )
 
-        # Track5 requires the authoritative KIS KOSPI200 daily boundary.
-        # VMS recent-tick/scenario OHLC is never promoted as a substitute.
+        # Track5 requires the authoritative KOSPI200 daily boundary and a
+        # liquid second/third OTM option selection for the execution contract.
         daily_status = d.status.get("kospi200_daily")
+        track5_execution_input = None
+        track5_missing = []
         if daily_status is None or not daily_status.available:
+            track5_missing.append("KOSPI200_daily_open_previous_close")
+        elif self.track5_option_contract_source is None:
+            track5_missing.append("track5_option_contract_source")
+        else:
+            try:
+                gap_direction = (
+                    "CALL" if Decimal(str(d.open_price)) > Decimal(str(d.previous_close))
+                    else "PUT"
+                )
+                # For an opening gap that is initially flat, choose from the
+                # current underlying move; the strategy itself still enforces
+                # the 30-minute opening-window condition.
+                if Decimal(str(d.open_price)) == Decimal(str(d.previous_close)):
+                    gap_direction = "CALL" if Decimal(str(d.underlying_price)) >= Decimal(str(d.open_price)) else "PUT"
+                selection = self.track5_option_contract_source.select(
+                    expiry=str(getattr(tick, "expiry", "") or ""),
+                    current_price=Decimal(str(d.underlying_price)),
+                    option_type=gap_direction,
+                )
+                track5_execution_input = Track5ExecutionInput(
+                    expiry=selection.expiry,
+                    atm_strike=selection.atm_strike,
+                    selected_strike=selection.selected_strike,
+                    option_type=selection.option_type,
+                    strike_rank=selection.strike_rank,
+                    liquidity_score=selection.liquidity_score,
+                )
+            except (ValueError, TypeError, AttributeError) as exc:
+                track5_missing.append(str(exc))
+        if track5_missing:
             contexts["track5_gap_divergence"] = self._unavailable(
-                "track5_gap_divergence", ("KOSPI200_daily_open_previous_close",),
-                daily_status.reason if daily_status is not None and daily_status.reason else "KOSPI200_DAILY_SOURCE_UNAVAILABLE",
+                "track5_gap_divergence",
+                tuple(dict.fromkeys(track5_missing)),
+                "TRACK5_REQUIRED_EXECUTION_SOURCES_UNAVAILABLE",
             )
         else:
             contexts["track5_gap_divergence"] = StrategyContext(
-            market_state,
-            "track5_gap_divergence",
-            StrategyInput(common),
-            analytics=build_track5_analytics_snapshot(
-                d, run_id=self.run_id or "virtual", as_of=d.as_of,
-                common_snapshot=common_analytics,
-            ),
-        )
+                market_state,
+                "track5_gap_divergence",
+                StrategyInput(common, track5_execution_input),
+                analytics=build_track5_analytics_snapshot(
+                    d, run_id=self.run_id or "virtual", as_of=d.as_of,
+                    common_snapshot=common_analytics,
+                ),
+            )
 
         if self.track6_option_contract_source is None:
             contexts["track6_daily_tail_insurance"] = self._unavailable(

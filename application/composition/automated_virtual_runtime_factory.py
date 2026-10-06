@@ -14,6 +14,7 @@ from application.composition.track6_option_contract_source import Track6OptionCo
 from application.composition.track7_option_contract_source import Track7OptionContractSource
 from application.composition.track8_option_contract_source import Track8OptionContractSource
 from core.strategy.track7_volatility_skew_weekly_insurance import Track7VolatilitySkewWeeklyInsurance
+from core.strategy.track5_gap_divergence import Track5GapDivergence
 from contracts.types import OptionInstrumentIdentity
 from infrastructure.kis.track2_option_iv_source import KISTrack2OptionIVSource
 from infrastructure.kis.track9_iv_observation_history_store import KISTrack9IVObservationHistoryStore
@@ -62,9 +63,11 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         if track9_iv_history_source is not None else None
     )
     track9_iv_event_materializer = Track9IVEventMaterializer() if track9_atm_iv_source is not None else None
-    kospi200_daily_source = KISKOSPI200DailySource(KISAuthManager.from_env(is_vts=True))
-    track6_volatility_source = None
-    if synthetic_runtime_sources is None:
+    kospi200_daily_source = synthetic_runtime_sources if synthetic_runtime_sources is not None else KISKOSPI200DailySource(KISAuthManager.from_env(is_vts=True))
+    if synthetic_runtime_sources is not None:
+        from environments.high_speed.synthetic_runtime_sources import SyntheticTrack6VolatilitySource
+        track6_volatility_source = SyntheticTrack6VolatilitySource(synthetic_runtime_sources, bootstrap.bundle.option_master)
+    else:
         track6_volatility_source = KISTrack6ATMVolatilitySource(
             option_master=bootstrap.bundle.option_master,
             option_iv_source=track2_option_iv_source,
@@ -336,6 +339,22 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
             f"{run_id}-{canonical.signal_id}"
         )
 
+    def resolve_track5(evaluation, canonical):
+        proposal = evaluation.result.execution_proposal
+        if proposal is None:
+            raise ValueError("TRACK5_EXECUTION_PROPOSAL_REQUIRED")
+        strategy = registry.get("track5_gap_divergence", "2.0")
+        if not isinstance(strategy, Track5GapDivergence):
+            raise ValueError("TRACK5_STRATEGY_REGISTRY_TYPE_REQUIRED")
+        futures_identity = None
+        if futures_identity_source is not None:
+            futures_identity = futures_identity_source.current_identity()
+        return strategy.build_execution_plan(
+            f"{run_id}-{canonical.signal_id}",
+            proposal=proposal,
+            futures_identity=futures_identity,
+        )
+
     def resolve_track9(evaluation, canonical):
         proposal = evaluation.result.execution_proposal
         if proposal is None:
@@ -346,6 +365,7 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         )
 
     execution_resolvers.register("track2_asymmetric_trap", resolve_track2)
+    execution_resolvers.register("track5_gap_divergence", resolve_track5)
     execution_resolvers.register("Strategy_3_StatArb", resolve_track3)
     execution_resolvers.register("track6_daily_tail_insurance", resolve_track6)
     execution_resolvers.register("track7_volatility_skew_weekly_insurance", resolve_track7)

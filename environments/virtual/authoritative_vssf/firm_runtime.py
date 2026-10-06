@@ -70,7 +70,23 @@ class VirtualSecuritiesFirmRuntime:
     def process_order(self, command):
         self.metrics["order_commands"] += 1
         now = self._now()
-        if self.account.free_margin < self.margin_engine.calculate_order_margin(command):
+        symbol = str(getattr(command, "symbol", None) or getattr(command, "instrument_id", None) or "").strip()
+        current_position = self.account.positions.get(symbol)
+        order_side = getattr(command.side, "value", command.side)
+        if isinstance(current_position, dict):
+            current_side = current_position.get("side")
+            current_qty = int(current_position.get("qty", 0))
+        else:
+            current_side = getattr(current_position, "side", None) if current_position is not None else None
+            current_qty = int(getattr(current_position, "qty", 0)) if current_position is not None else 0
+        is_pure_reduction = (
+            current_qty > 0
+            and str(current_side).upper() in {"BUY", "SELL"}
+            and str(order_side).upper() in {"BUY", "SELL"}
+            and str(current_side).upper() != str(order_side).upper()
+            and int(command.qty) <= current_qty
+        )
+        if not is_pure_reduction and self.account.free_margin < self.margin_engine.calculate_order_margin(command):
             return None
         self._submitted_at.setdefault(command.client_order_id, now)
         if self.timeout_source is not None:

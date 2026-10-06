@@ -83,7 +83,7 @@ class VirtualMultiLegExecutionBridge:
         self.leg_positions: dict[str, Any] = {}
 
     def identity_for_leg(self, plan: MultiLegExecutionPlan, leg) -> OptionInstrumentIdentity | FuturesInstrumentIdentity:
-        if leg.option_type is None and plan.strategy_id == "Strategy_3_StatArb":
+        if leg.option_type is None and plan.strategy_id in {"Strategy_3_StatArb", "track5_gap_divergence"}:
             return require_futures_identity(self.futures_identity_source)
         if leg.option_type not in {"CALL", "PUT"} or leg.strike is None:
             raise ValueError("MULTI_LEG_OPTION_IDENTITY_REQUIRED")
