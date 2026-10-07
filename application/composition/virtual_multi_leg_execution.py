@@ -38,6 +38,7 @@ class MultiLegExecutionResult:
     filled_legs: int
     reports: tuple[ExecutionReport, ...]
     group_complete: bool
+    pending_legs: int = 0
 
 
 class _AckAdapter:
@@ -58,10 +59,11 @@ class _AckAdapter:
 class VirtualMultiLegExecutionBridge:
     """Preserve group/leg identity while routing every leg through Risk -> OMS -> VSSF."""
 
-    def __init__(self, *, bundle: Any, run_id: str, option_master: IOptionContractMaster | None = None, futures_identity_source: FuturesIdentitySourcePort | None = None, risk_config: RiskConfig | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None) -> None:
+    def __init__(self, *, bundle: Any, run_id: str, option_master: IOptionContractMaster | None = None, futures_identity_source: FuturesIdentitySourcePort | None = None, option_expiry_source: Any | None = None, risk_config: RiskConfig | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None) -> None:
         self.bundle = bundle
         self.option_master = option_master or getattr(bundle, "option_master", None)
         self.futures_identity_source = futures_identity_source
+        self.option_expiry_source = option_expiry_source
         self.fsm = OrderStateMachine()
         self.ack = _AckAdapter(bundle.broker)
         self.router = StandardOrderRouter(order_state_machine=self.fsm, broker_adapter=self.ack)
@@ -81,6 +83,7 @@ class VirtualMultiLegExecutionBridge:
         self.provenance: dict[str, dict[str, str]] = {}
         self.execution_legs: dict[str, dict[str, object]] = {}
         self.leg_positions: dict[str, Any] = {}
+        self.pending_legs: dict[str, tuple[MultiLegExecutionPlan, Any]] = {}
 
     def identity_for_leg(self, plan: MultiLegExecutionPlan, leg) -> OptionInstrumentIdentity | FuturesInstrumentIdentity:
         if leg.option_type is None and plan.strategy_id in {"Strategy_3_StatArb", "track5_gap_divergence"}:
@@ -91,16 +94,17 @@ class VirtualMultiLegExecutionBridge:
             raise ValueError("MULTI_LEG_OPTION_MASTER_REQUIRED")
         current_tick = getattr(self.bundle.market, "last_tick", None)
         authoritative_expiry = str(getattr(current_tick, "expiry", "") or "").replace("-", "")[:8]
+        if len(authoritative_expiry) != 8 and self.option_expiry_source is not None and current_tick is not None:
+            observed_symbol = str(getattr(current_tick, "symbol", "") or "").strip()
+            if observed_symbol:
+                resolved_expiry = self.option_expiry_source.resolve_expiry(observed_symbol)
+                if resolved_expiry is not None:
+                    authoritative_expiry = str(resolved_expiry).replace("-", "")[:8]
         option_quotes = getattr(self.bundle.market, "option_quotes", {})
-        if len(authoritative_expiry) == 8:
-            quote_key = (
-                str(leg.option_type).upper(),
-                float(leg.strike),
-                authoritative_expiry,
-            )
-            if option_quotes.get(quote_key) is None:
-                raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_EXPIRY_REQUIRED")
-        else:
+        # Multi-leg identity is authoritative independently of quote availability.
+        # A missing quote for one leg must not block submission of another leg.
+        # The broker/VSSF owns NEW/PENDING -> FILLED lifecycle for the missing leg.
+        if len(authoritative_expiry) != 8:
             matching_expiries = sorted({
                 str(key[2]).replace("-", "")[:8]
                 for key in option_quotes
@@ -131,6 +135,7 @@ class VirtualMultiLegExecutionBridge:
             raise ValueError("MULTI_LEG_PLAN_EMPTY")
         reports: list[ExecutionReport] = []
         approved = routed = filled = 0
+        pending_legs = 0
         account = self.bundle.account.snapshot()
         position = self.bundle.position
         vssf = self.bundle.execution._authoritative_execute.__self__.vssf_runtime
@@ -163,19 +168,29 @@ class VirtualMultiLegExecutionBridge:
                     None,
                 )
                 quote = option_quotes.get(quote_key)
-                if quote is None:
-                    raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_QUOTE_NOT_FOUND")
                 authoritative = self.option_master.get_contract_identity(identity.instrument_id)
                 if authoritative is None or authoritative.contract_multiplier is None:
                     raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_MULTIPLIER_REQUIRED")
-                quote_multiplier = quote.get("contract_multiplier")
-                if quote_multiplier is None or Decimal(str(quote_multiplier)) != Decimal(str(authoritative.contract_multiplier)):
-                    raise ValueError("MULTI_LEG_OPTION_CONTRACT_MULTIPLIER_MISMATCH")
-                bid = Decimal(str(quote.get("bid", "0")))
-                ask = Decimal(str(quote.get("ask", "0")))
-                execution_reference = ask if leg.side == "BUY" else bid
-            if execution_reference <= 0:
-                raise ValueError("MULTI_LEG_OPTION_QUOTE_INVALID")
+                if quote is None:
+                    # A missing quote on this leg does not invalidate the logical
+                    # strategy group. Keep the leg as a deferred order intent and
+                    # submit it only when an authoritative quote becomes available.
+                    self.pending_legs[client_order_id] = (plan, leg)
+                    pending_legs += 1
+                    continue
+                else:
+                    quote_multiplier = quote.get("contract_multiplier")
+                    if quote_multiplier is None or Decimal(str(quote_multiplier)) != Decimal(str(authoritative.contract_multiplier)):
+                        raise ValueError("MULTI_LEG_OPTION_CONTRACT_MULTIPLIER_MISMATCH")
+                    bid = Decimal(str(quote.get("bid", "0")))
+                    ask = Decimal(str(quote.get("ask", "0")))
+                    execution_reference = ask if leg.side == "BUY" else bid
+                    if execution_reference <= 0:
+                        raise ValueError("MULTI_LEG_OPTION_QUOTE_INVALID")
+            if leg.requested_price is not None:
+                requested_price = Decimal(str(leg.requested_price))
+            else:
+                requested_price = execution_reference
             broker_command = BrokerOrderCommand(
                 client_order_id=client_order_id,
                 instrument_id=identity.instrument_id,
@@ -185,7 +200,7 @@ class VirtualMultiLegExecutionBridge:
                 broker_symbol=identity.symbol,
                 instrument_identity=identity,
                 asset_type="FUTURES" if is_futures else "OPTION",
-                requested_price=execution_reference,
+                requested_price=requested_price,
                 strategy_id=plan.strategy_id,
                 order_purpose=plan.purpose or "MULTI_LEG",
                 track_id=plan.strategy_id,
@@ -195,7 +210,8 @@ class VirtualMultiLegExecutionBridge:
                 position_role=leg.position_role,
             )
             canonical = self.command_context.build_command(broker_command)
-            vssf.order_book.update_bid_ask(float(bid), float(ask), identity.instrument_id)
+            if quote is not None:
+                vssf.order_book.update_bid_ask(float(bid), float(ask), identity.instrument_id)
             result = route_from_runtime_authoritative_sources(
                 canonical,
                 risk_gate=self.risk_gate,
@@ -241,6 +257,7 @@ class VirtualMultiLegExecutionBridge:
                     "side": leg.side,
                     "position_role": leg.position_role,
                     "asset_type": "OPTION" if isinstance(identity, OptionInstrumentIdentity) else "FUTURES",
+                    "option_type": getattr(identity, "option_type", None),
                     "contract_multiplier": identity.contract_multiplier,
                 }
             if report.status == "FILLED" and report.filled_quantity > 0:
@@ -311,7 +328,16 @@ class VirtualMultiLegExecutionBridge:
                 side=leg.side, quantity=leg.quantity,
                 contract_multiplier=self.identity_for_leg(plan, leg).contract_multiplier,
                 identity_source=self.identity_for_leg(plan, leg).identity_source or "",
-                status=LegStatus.FILLED if any(r.leg_id == leg.leg_id and r.status == "FILLED" for r in reports) else LegStatus.REJECTED,
+                status=(
+                    LegStatus.FILLED
+                    if any(r.leg_id == leg.leg_id and r.status == "FILLED" for r in reports)
+                    else LegStatus.PENDING
+                    if (
+                        any(r.leg_id == leg.leg_id and r.status == "NEW" for r in reports)
+                        or f"{plan.group_id}-{leg.leg_id}" in self.pending_legs
+                    )
+                    else LegStatus.REJECTED
+                ),
             ) for leg in plan.legs
         )
         group = PositionGroup(plan.group_id, plan.strategy_id, "MULTI_LEG", group_legs)
@@ -402,7 +428,45 @@ class VirtualMultiLegExecutionBridge:
             filled_legs=filled,
             reports=tuple(reports),
             group_complete=(len(reports) == len(plan.legs) and all(r.status == "FILLED" for r in reports)),
+            pending_legs=pending_legs + sum(
+                1 for leg in plan.legs
+                if f"{plan.group_id}-{leg.leg_id}" in self.pending_legs
+                and not any(r.leg_id == leg.leg_id and r.status == "FILLED" for r in reports)
+            ),
         )
+
+    def process_pending_quotes(self) -> int:
+        """Submit deferred legs independently when authoritative quote appears."""
+        completed = 0
+        for client_order_id, (plan, leg) in tuple(self.pending_legs.items()):
+            identity = self.identity_for_leg(plan, leg)
+            option_quotes = getattr(self.bundle.market, "option_quotes", {})
+            quote_key = next(
+                (
+                    key for key in option_quotes
+                    if isinstance(key, tuple) and len(key) == 3
+                    and str(key[0]).upper() == str(identity.option_type).upper()
+                    and float(key[1]) == float(identity.strike)
+                    and str(key[2]).replace("-", "")[:8] == identity.expiry.replace("-", "")[:8]
+                ),
+                None,
+            )
+            if quote_key is None or option_quotes.get(quote_key) is None:
+                continue
+            single_plan = MultiLegExecutionPlan(
+                group_id=plan.group_id,
+                strategy_id=plan.strategy_id,
+                purpose=plan.purpose,
+                legs=(leg,),
+            )
+            result = self.execute(single_plan)
+            if result.routed_legs <= 0 and result.filled_legs <= 0:
+                continue
+            self.pending_legs.pop(client_order_id, None)
+            existing = [report for report in self.groups.get(plan.group_id, ()) if report.leg_id != leg.leg_id]
+            self.groups[plan.group_id] = existing + list(result.reports)
+            completed += 1
+        return completed
 
     def group_reports(self, group_id: str) -> tuple[ExecutionReport, ...]:
         return tuple(self.groups.get(group_id, ()))

@@ -50,6 +50,8 @@ def build_track7_evaluators() -> Mapping[str, object]:
         "calendar.is_expiry_day": _passthrough("is_expiry_day", "bool"),
         "calendar.is_week_end": _passthrough("is_week_end", "bool"),
         "execution.order_timeout": _passthrough("order_timeout", "bool"),
+        "options.track7_put_mark_price": _passthrough("put_mark_price", "option-price"),
+        "options.track7_call_mark_price": _passthrough("call_mark_price", "option-price"),
     }
 
 

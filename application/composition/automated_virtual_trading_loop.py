@@ -68,6 +68,7 @@ class AutomatedVirtualTradingLoop:
                  identity_provider: Callable[[object], OptionInstrumentIdentity],
                  multi_leg_plan_resolver: Callable[[object, object], MultiLegExecutionPlan | None] | None = None,
                  multi_leg_executor: Callable[[MultiLegExecutionPlan], object] | None = None,
+                 pending_multi_leg_processor: Callable[[], int] | None = None,
                  risk_config: RiskConfig | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None) -> None:
         if not run_id.strip():
             raise ValueError("AUTOMATED_RUNTIME_RUN_ID_REQUIRED")
@@ -79,6 +80,7 @@ class AutomatedVirtualTradingLoop:
         self.identity_provider = identity_provider
         self.multi_leg_plan_resolver = multi_leg_plan_resolver
         self.multi_leg_executor = multi_leg_executor
+        self.pending_multi_leg_processor = pending_multi_leg_processor
         self.strategy_results = RuntimeStrategyResultCollectionAdapter()
         self.strategy_to_decision = RuntimeStrategyToDecisionAdapter(DecisionArbiter())
         self.decision_to_command = RuntimeDecisionCommandAdapter()
@@ -108,6 +110,8 @@ class AutomatedVirtualTradingLoop:
             })()},
             quality={},
         )
+        if self.pending_multi_leg_processor is not None:
+            self.pending_multi_leg_processor()
         contexts = self.context_builder(tick, state)
         strategy_result = self.strategy_hub.run(contexts)
         evaluations = self.strategy_results.collect(
@@ -182,7 +186,10 @@ class AutomatedVirtualTradingLoop:
                 status = status_by_strategy.get(strategy_id, StrategyRuntimeStatus(strategy_id))
                 status_by_strategy[strategy_id] = status.add(routed=routed_legs, filled_quantity=filled_legs)
                 execution_ids.extend(report.execution_id for report in getattr(executed, "reports", ()) if report.execution_id)
-                if not getattr(executed, "group_complete", False):
+                if (
+                    not getattr(executed, "group_complete", False)
+                    and getattr(executed, "pending_legs", 0) == 0
+                ):
                     rejected += 1
 
         for canonical in commands:

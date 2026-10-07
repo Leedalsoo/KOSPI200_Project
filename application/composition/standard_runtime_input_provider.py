@@ -414,17 +414,8 @@ class StandardRuntimeInputProvider:
         # Track7 consumes canonical analytics only when every required source and
         # the authoritative Option Master contract pair are available.
         track7_missing_sources: list[str] = []
-        if d.option_iv is None or d.put_iv is None:
-            track7_missing_sources.append("option_iv_chain")
-        if not all(value is not None for value in (d.ma_1m, d.ma_3m, d.ma_5m, d.ma_10m)):
-            track7_missing_sources.append("moving_average")
-        if not all(value is not None for value in (d.is_new_week_start, d.is_expiry_day, d.is_week_end)):
+        if not all(value is not None for value in (d.is_new_week_start, d.is_expiry_day)):
             track7_missing_sources.append("expiry_calendar")
-        if d.order_timeout is None:
-            track7_missing_sources.append("order_timeout")
-        support_status = d.status.get("track7_support_resistance")
-        if support_status is None or not support_status.available:
-            track7_missing_sources.append("support_resistance")
 
         track7_selection = None
         if self.track7_option_contract_source is None:
@@ -433,11 +424,28 @@ class StandardRuntimeInputProvider:
             try:
                 track7_selection = self.track7_option_contract_source.select(
                     expiry=str(getattr(tick, "expiry", "") or ""),
-                    strike=Decimal(str(getattr(tick, "strike_price", ""))),
+                    reference_price=Decimal(str(getattr(tick, "underlying_price"))),
                 )
             except (ValueError, TypeError, AttributeError):
                 track7_missing_sources.append("listed_option_contracts")
 
+        track7_option_prices = {}
+        if track7_selection is not None and self.option_orderbook_source is not None:
+            try:
+                put_book = self.option_orderbook_source.get_order_book(str(track7_selection.put.shrn_iscd))
+                call_book = self.option_orderbook_source.get_order_book(str(track7_selection.call.shrn_iscd))
+                if put_book is not None and call_book is not None and put_book.bid_levels and call_book.bid_levels:
+                    track7_option_prices = {
+                        "put_mark_price": Decimal(str(put_book.bid_levels[0].price)),
+                        "call_mark_price": Decimal(str(call_book.bid_levels[0].price)),
+                    }
+            except (AttributeError, TypeError, ValueError):
+                track7_option_prices = {}
+        # Option marks are required for Strategy7's trailing-profit exit, but they
+        # are not required to establish the weekly entry. On the first replay tick
+        # the historical book may legitimately have no prior bid for the selected
+        # pair. Keep the analytics metric UNAVAILABLE in that case instead of
+        # turning the whole strategy input into an unavailable payload.
         if track7_missing_sources:
             contexts["track7_volatility_skew_weekly_insurance"] = self._unavailable(
                 "track7_volatility_skew_weekly_insurance", tuple(track7_missing_sources),
@@ -447,8 +455,9 @@ class StandardRuntimeInputProvider:
             execution_input = Track7ExecutionInput(
                 strategy_id="track7_volatility_skew_weekly_insurance",
                 expiry=track7_selection.expiry,
-                listed_put_strike=track7_selection.put.strike,
-                listed_call_strike=track7_selection.call.strike,
+                reference_price=Decimal(str(getattr(tick, "underlying_price"))),
+                put_strike=track7_selection.put_strike,
+                call_strike=track7_selection.call_strike,
                 contract_multiplier=track7_selection.contract_multiplier,
             )
             contexts["track7_volatility_skew_weekly_insurance"] = StrategyContext(
@@ -457,6 +466,7 @@ class StandardRuntimeInputProvider:
                 analytics=build_track7_analytics_snapshot(
                     d, run_id=self.run_id or "virtual", as_of=d.as_of,
                     common_snapshot=common_analytics,
+                    option_prices=track7_option_prices,
                 ),
             )
 

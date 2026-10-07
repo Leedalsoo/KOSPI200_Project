@@ -27,7 +27,17 @@ class OrderBook:
         quote = self._quote_for(command)
         if quote is None:
             return 0.0
-        return quote[1] if str(getattr(command.side, "value", command.side)) == "BUY" else quote[0]
+        side = str(getattr(command.side, "value", command.side)).upper()
+        bid, ask = quote
+        limit_price = getattr(command, "requested_price", None)
+        if limit_price is None:
+            return ask if side == "BUY" else bid
+        limit = float(limit_price)
+        if limit <= 0:
+            return 0.0
+        if side == "BUY":
+            return ask if ask > 0 and ask <= limit else 0.0
+        return bid if bid > 0 and bid >= limit else 0.0
 
     def add_pending_order(self, command):
         self.orders[command.client_order_id] = command

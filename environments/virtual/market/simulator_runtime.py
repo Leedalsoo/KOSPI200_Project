@@ -43,6 +43,7 @@ class VirtualMarketSimulatorRuntime:
         self._underlying_history = deque(maxlen=600)
         self.last_tick = None
         self._option_quotes = {}
+        self._authoritative_option_quote_provider = None
         self._futures_price = self._price
 
     @property
@@ -60,6 +61,12 @@ class VirtualMarketSimulatorRuntime:
     @property
     def futures_price(self):
         return self._futures_price
+
+    def set_authoritative_option_quote_provider(self, provider) -> None:
+        """Set a source-side quote provider used only at replay publication time."""
+        if provider is not None and not callable(provider):
+            raise TypeError("VMS_AUTHORITATIVE_OPTION_QUOTE_PROVIDER_REQUIRED")
+        self._authoritative_option_quote_provider = provider
 
     def load_historical_store(self, store, *, source: str | None = None) -> None:
         """Load canonical historical events for Virtual Exchange replay."""
@@ -119,6 +126,9 @@ class VirtualMarketSimulatorRuntime:
         if not callable(callback):
             raise TypeError("VMS_MARKET_SUBSCRIBER_REQUIRED")
         self._subscribers.append(callback)
+
+    def unsubscribe(self, callback) -> None:
+        self._subscribers = [item for item in self._subscribers if item != callback]
 
     def register_replay_option_quote(self, *, symbol: str, option_type: str, strike: float, expiry: str, bid: float, ask: float, last: float, timestamp: str, contract_multiplier: float) -> None:
         """Register an external replay quote without triggering strategy evaluation."""
@@ -190,6 +200,9 @@ class VirtualMarketSimulatorRuntime:
             raise TypeError("VMS_REPLAY_TICK_REQUIRED")
         # Preserve the observed WS broker symbol at the Runtime boundary.
         # Contract metadata is resolved separately through the authoritative Master.
+        # Keep authoritative VSSF execution timestamps aligned with replay observation time.
+        observed_at = datetime.fromisoformat(tick.timestamp)
+        self.clock.current_time = observed_at
         self.last_tick = tick
         self._recent_ticks.append(tick)
         self._publish_futures_observations_until(tick.timestamp)
@@ -212,6 +225,15 @@ class VirtualMarketSimulatorRuntime:
                 "timestamp": tick.timestamp,
                 "contract_multiplier": tick.contract_multiplier,
             }
+        provider = self._authoritative_option_quote_provider
+        if provider is not None:
+            authoritative_quotes = provider(observed_at)
+            if authoritative_quotes is None:
+                authoritative_quotes = {}
+            if not isinstance(authoritative_quotes, dict):
+                raise TypeError("VMS_AUTHORITATIVE_OPTION_QUOTE_PROVIDER_RESULT_REQUIRED")
+            for key, quote in authoritative_quotes.items():
+                self.publish_authoritative_option_quote(key, quote)
         for subscriber in tuple(self._subscribers):
             subscriber(tick)
         return tick

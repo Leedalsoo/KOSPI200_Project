@@ -78,6 +78,9 @@ def create_virtual_run_session(context: RunContext, option_master: Any, risk_gua
         base_path = Path(str(context.historical_store_path)[: -len(".observations.jsonl")])
         from environments.virtual.market.historical_market_store import HistoricalMarketStore
         historical_observation_option_source = HistoricalObservationOptionSource(HistoricalMarketStore(base_path).load_observations())
+        bundle.market.set_authoritative_option_quote_provider(
+            historical_observation_option_source.latest_authoritative_option_quotes
+        )
 
     market_calendar_hub = MarketCalendarHub(getattr(bundle.option_master, "calendar", None))
     if context.historical_daily_store_path:

@@ -183,21 +183,6 @@ class Track9EventOvernightInsurance:
                     strike=put,
                 ),
             ),
-            Signal(
-                self.strategy_id,
-                "ENTER_OVERNIGHT_STRANGLE_CALL",
-                1.0,
-                f"ENTRY:15:10;PUT:{put};CALL:{call};QTY:{qty};MULTIPLIER:{multiplier}",
-                execution_proposal=StrategyExecutionProposal(
-                    proposed_quantity=qty,
-                    asset_type="OPTION",
-                    side="BUY",
-                    track_id=self.strategy_id,
-                    tag_id="OVERNIGHT_INSURANCE_CALL",
-                    option_type="CALL",
-                    strike=call,
-                ),
-            ),
         )
 
     def _close_pair_signals(self, *, reason: str, action: str = "CLOSE_OVERNIGHT_INSURANCE") -> Sequence[Signal]:
@@ -208,10 +193,6 @@ class Track9EventOvernightInsurance:
                 execution_proposal=StrategyExecutionProposal(
                     proposed_quantity=self.state.entry_qty, asset_type="OPTION", requested_price=None, side="SELL",
                     track_id=self.strategy_id, tag_id=f"{action}_PUT", option_type="PUT", strike=self.state.put_strike)),
-            Signal(self.strategy_id, f"{action}_CALL", 1.0, reason,
-                execution_proposal=StrategyExecutionProposal(
-                    proposed_quantity=self.state.entry_qty, asset_type="OPTION", requested_price=None, side="SELL",
-                    track_id=self.strategy_id, tag_id=f"{action}_CALL", option_type="CALL", strike=self.state.call_strike)),
         )
 
     def _close_next_open(self, context: StrategyContext) -> Sequence[Signal]:
@@ -267,22 +248,7 @@ class Track9EventOvernightInsurance:
                 close_signals = self._close_pair_signals(
                     reason=f"OPENING_SHOCK:{opening_move};CURRENT_PROFIT:{current_profit};PEAK_PROFIT:{peak_profit};TRAILING_FLOOR:{trailing_floor};GIVEBACK:{self.TRAILING_PROFIT_GIVEBACK};REASON:OPTION_PAIR_TRAILING_PROFIT"
                 )
-                self.state = replace(
-                    self.state,
-                    entry_date=common.date_str,
-                    entry_price=None,
-                    put_entry_price=None,
-                    call_entry_price=None,
-                    entry_premium=None,
-                    peak_profit=None,
-                    trailing_active=False,
-                    entry_qty=0,
-                    put_strike=None,
-                    call_strike=None,
-                    entered_today=False,
-                    closed_next_open=True,
-                    state="OPENING_INSURANCE_TRAILING_CLOSED",
-                )
+                self.state = replace(self.state, closed_next_open=True, trailing_active=False, state="OPENING_INSURANCE_TRAILING_CLOSED")
                 return close_signals
 
         if not shock and not self.state.trailing_active:
@@ -290,20 +256,7 @@ class Track9EventOvernightInsurance:
                 reason=f"OPENING_MOVE:{opening_move};THRESHOLD:{self.opening_shock_threshold};REASON:NO_OPENING_SHOCK",
                 action="STOP_LOSS_OVERNIGHT_INSURANCE",
             )
-            self.state = replace(
-                self.state,
-                entry_date=common.date_str,
-                entry_price=None,
-                put_entry_price=None,
-                call_entry_price=None,
-                entry_premium=None,
-                peak_profit=None,
-                trailing_active=False,
-                entry_qty=0,
-                entered_today=False,
-                closed_next_open=True,
-                state="OPENING_NO_SHOCK_STOPPED",
-            )
+            self.state = replace(self.state, closed_next_open=True, trailing_active=False, state="OPENING_NO_SHOCK_STOPPED")
             return close_signals
 
         if common.time_str == MarketSessionPolicy.text(self.OPENING_WINDOW_END) and not self.state.trailing_active:
@@ -311,20 +264,7 @@ class Track9EventOvernightInsurance:
                 reason=f"OPENING_SHOCK:{opening_move};CURRENT_PROFIT:{current_profit};REASON:TRAILING_PROFIT_NOT_ACTIVATED",
                 action="STOP_LOSS_OVERNIGHT_INSURANCE",
             )
-            self.state = replace(
-                self.state,
-                entry_date=common.date_str,
-                entry_price=None,
-                put_entry_price=None,
-                call_entry_price=None,
-                entry_premium=None,
-                peak_profit=None,
-                trailing_active=False,
-                entry_qty=0,
-                entered_today=False,
-                closed_next_open=True,
-                state="OPENING_INSURANCE_TRAILING_UNACTIVATED_STOPPED",
-            )
+            self.state = replace(self.state, closed_next_open=True, trailing_active=False, state="OPENING_INSURANCE_TRAILING_UNACTIVATED_STOPPED")
             return close_signals
 
         return ()
@@ -342,7 +282,7 @@ class Track9EventOvernightInsurance:
             purpose = "OVERNIGHT_INSURANCE_CLOSE"
         else:
             raise ValueError("TRACK9_PAIR_SIDE_REQUIRED")
-        return build_pair_plan(
+        plan = build_pair_plan(
             group_id=group_id,
             strategy_id=self.strategy_id,
             purpose=purpose,
@@ -352,6 +292,9 @@ class Track9EventOvernightInsurance:
             call_quantity=self.state.entry_qty,
             side=side,
         )
+        if side == "SELL":
+            self.reset()
+        return plan
 
     def evaluate(self, context: StrategyContext) -> Sequence[Signal]:
         if context.strategy_id != self.strategy_id or context.analytics is None:

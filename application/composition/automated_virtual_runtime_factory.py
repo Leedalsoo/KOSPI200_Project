@@ -210,6 +210,7 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         run_id=run_id,
         option_master=bootstrap.bundle.option_master,
         futures_identity_source=futures_identity_source,
+        option_expiry_source=expiry_source,
         risk_guard_status_source=(risk_guard_status_source or synthetic_runtime_sources),
     )
 
@@ -385,6 +386,7 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         identity_provider=identity,
         multi_leg_plan_resolver=multi_leg_plan_resolver,
         multi_leg_executor=multi_leg_bridge.execute,
+        pending_multi_leg_processor=multi_leg_bridge.process_pending_quotes,
         risk_guard_status_source=(risk_guard_status_source or synthetic_runtime_sources),
     )
     bootstrap.bundle.market.subscribe(loop.on_tick)

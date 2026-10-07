@@ -7,7 +7,7 @@ from core.analytics.track7 import build_track7_evaluators
 from core.analytics.common import COMMON_METRIC_CONTRACTS, merge_analytics_snapshots
 
 
-def build_track7_analytics_snapshot(data, *, run_id: str, as_of, common_snapshot=None):
+def build_track7_analytics_snapshot(data, *, run_id: str, as_of, common_snapshot=None, option_prices=None):
     observations = {
         "current_price": (
             data.underlying_price
@@ -26,6 +26,8 @@ def build_track7_analytics_snapshot(data, *, run_id: str, as_of, common_snapshot
         "is_expiry_day": data.is_expiry_day,
         "is_week_end": data.is_week_end,
         "order_timeout": data.order_timeout,
+        "put_mark_price": (option_prices or {}).get("put_mark_price"),
+        "call_mark_price": (option_prices or {}).get("call_mark_price"),
     }
     market = MarketSnapshot(
         run_id=run_id, as_of=as_of,
@@ -43,6 +45,8 @@ def build_track7_analytics_snapshot(data, *, run_id: str, as_of, common_snapshot
         ("calendar.is_expiry_day", ("is_expiry_day",)),
         ("calendar.is_week_end", ("is_week_end",)),
         ("execution.order_timeout", ("order_timeout",)),
+        ("options.track7_put_mark_price", ("put_mark_price",)),
+        ("options.track7_call_mark_price", ("call_mark_price",)),
     )
     requests = tuple(AnalyticsRequest(k, "tick", 1, d, 1.0, "authoritative", "1") for k, d in keys)
     common_keys = set(COMMON_METRIC_CONTRACTS) if common_snapshot is not None else set()
