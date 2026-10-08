@@ -93,20 +93,51 @@ $manifest=[ordered]@{
 }
 $manifest | ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 (Join-Path $datasetDir 'manifest.json')
 
+# Build one canonical observations stream from the exact 63 generated daily files.
+# Control Tower consumes a single historical_store_path; this keeps the UI source
+# byte-for-byte derived from the same scheduled dataset used by High-Speed Replay.
+$controlTowerStore = Join-Path $datasetDir 'control_tower_replay.jsonl'
+$writer = [System.IO.StreamWriter]::new($controlTowerStore, $false, [System.Text.UTF8Encoding]::new($false))
+try {
+  foreach($dailyFile in (Get-ChildItem $datasetDir -Filter "????-??-??.jsonl" | Sort-Object Name)){
+    foreach($line in [System.IO.File]::ReadLines($dailyFile.FullName)){
+      if(-not [string]::IsNullOrWhiteSpace($line)){ $writer.WriteLine($line) }
+    }
+  }
+} finally { $writer.Dispose() }
+$controlTowerEventCount = @(Get-Content $controlTowerStore).Count
+if($controlTowerEventCount -ne 49140){ throw "CONTROL_TOWER_STORE_SHAPE_INVALID events=$controlTowerEventCount expected=49140" }
+
 Set-Location $root
 & py -m environments.high_speed.virtual_runtime_replay --dataset $datasetDir 2>&1 | Tee-Object -FilePath $logPath
 $exit=$LASTEXITCODE
 
 # UI smoke is always attempted, including when replay fails.
-# Scheduled run PASS requires both replay and UI smoke to pass.
+# The UI check is bound to the SAME generated dataset through a temporary Control Tower
+# instance. This prevents an unrelated pre-existing server/run from producing a false PASS.
 $uiExit = 0
 $uiLogPath = Join-Path $verDir "$datasetName.ui_smoke.log"
+$tempServer = $null
 try {
-  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "verify_control_tower_ui.ps1") 2>&1 | Tee-Object -FilePath $uiLogPath
+  $env:PROJECT200_HISTORICAL_STORE = $controlTowerStore
+  $tempServer = Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoProfile","-ExecutionPolicy","Bypass","-Command","Set-Location '$root'; & py -c ""from interfaces.control_tower.server import run_server; run_server(port=18080)""") -PassThru -WindowStyle Hidden
+  $ready = $false
+  for($i=0; $i -lt 30; $i++){
+    Start-Sleep -Milliseconds 500
+    try {
+      $probe = Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:18080/" -TimeoutSec 2
+      if($probe.StatusCode -eq 200){ $ready = $true; break }
+    } catch {}
+  }
+  if(-not $ready){ throw "CONTROL_TOWER_TEMP_SERVER_NOT_READY" }
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "verify_control_tower_ui.ps1") -Port 18080 -ExpectedHistoricalStorePath $controlTowerStore -ExpectedDatasetName $datasetName 2>&1 | Tee-Object -FilePath $uiLogPath
   $uiExit = $LASTEXITCODE
 } catch {
   $_ | Out-String | Tee-Object -FilePath $uiLogPath -Append | Out-Null
   $uiExit = 1
+} finally {
+  if($tempServer){ try { Stop-Process -Id $tempServer.Id -Force -ErrorAction SilentlyContinue } catch {} }
+  Remove-Item Env:PROJECT200_HISTORICAL_STORE -ErrorAction SilentlyContinue
 }
 $finalExit = if($exit -eq 0 -and $uiExit -eq 0){0}else{1}
 $summary=[ordered]@{dataset=$datasetName;pattern=$Pattern;seed=$Seed;data_path=$datasetDir;log_path=$logPath;events=$total;trading_days=$days;replay_exit_code=$exit;ui_smoke_exit_code=$uiExit;exit_code=$finalExit;ui_log_path=$uiLogPath;completed_at=(Get-Date).ToString("o")}
