@@ -101,12 +101,6 @@ def create_virtual_run_session(context: RunContext, option_master: Any, risk_gua
             scenario_engine.set_scenario(context.scenario)
     vssf = bundle.execution._authoritative_execute.__self__.vssf_runtime
     risk_engine = RiskEngine(config=RiskConfig(), margin_engine=vssf.margin_engine)
-    bridge = VirtualMultiLegExecutionBridge(bundle=bundle, run_id=context.run_id, option_master=bundle.option_master, risk_config=RiskConfig(), risk_guard_status_source=virtual_risk_guard)
-    bundle.broker_api.attach_group_read_model(
-        snapshot_reader=bridge.position_groups.snapshot,
-        reports_reader=bridge.group_reports,
-        group_ids_reader=lambda: tuple(bridge.position_groups.all().keys()),
-    )
     strategy_hub = None
     track3_replay_source = None
     if historical_observation_option_source is not None:
@@ -127,6 +121,12 @@ def create_virtual_run_session(context: RunContext, option_master: Any, risk_gua
         track3_runtime_input_source=track3_replay_source,
     )
     strategy_hub = loop.strategy_hub
+    execution_bridge = loop.multi_leg_bridge
+    bundle.broker_api.attach_group_read_model(
+        snapshot_reader=execution_bridge.position_groups.snapshot,
+        reports_reader=execution_bridge.group_reports,
+        group_ids_reader=lambda: tuple(execution_bridge.position_groups.all().keys()),
+    )
     raw_futures_path = None
     if context.historical_store_path and Path(context.historical_store_path).name.endswith(".observations.jsonl"):
         base_path = Path(str(context.historical_store_path)[: -len(".observations.jsonl")])

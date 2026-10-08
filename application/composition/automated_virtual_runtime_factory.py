@@ -391,4 +391,7 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
     )
     bootstrap.bundle.market.subscribe(loop.on_tick)
     loop.track2_market_observation_sink = track2_market_observation_sink
+    # Expose the actual execution bridge used by the loop so Run/Control Tower
+    # read models observe the same PositionGroup/ExecutionReport registry.
+    loop.multi_leg_bridge = multi_leg_bridge
     return loop
