@@ -1,331 +1,331 @@
-# AGENTS.md — KOSPI200 Project200 작업 기준
+# AGENTS.md — KOSPI200 Project200 현재 작업 기준
 
-## 1. 프로젝트 목적
-KOSPI200 선물·옵션 자동매매 시스템을 구축한다.
-표준 실행 경로는 시장 데이터 → Runtime Input → Strategy → Decision → Risk → OMS/Router → Broker → Execution → Position/Margin/PnL → Control Tower Read Model이다.
-Control Tower는 감독·운영 계층이며 정상 주문을 직접 만드는 주 실행 경로가 아니다.
+## 1. 문서의 역할과 현재 기준
 
-## 2. 현재 개발 기준
-기본 개발·통합 환경은 Virtual Trading이다.
-Standard Core는 Virtual/Paper/Live/High-Speed 환경과 분리된 표준 계약을 사용한다.
-현재 전략 계층의 공통 계산은 Common Analytics가 소유하고 Strategy는 전략 고유 의사결정만 담당한다.
-Strategy 2~9의 Common Analytics 통합은 동일한 계약과 fail-closed 원칙으로 유지·검증한다.
-실제 KIS 주문은 어떤 개발·검증 단계에서도 실행하지 않는다.
+이 문서는 **현재 작업에 필요한 지속 기준만** 정의한다. 완료된 과거 작업의 상세 수치, 특정 실행 결과, 과거 BLOCKED/PASS 판정, 일회성 우선순위, 폐기된 기준은 기록하지 않는다.
 
-## 3. Common Analytics 기준
-Common Analytics의 계산 결과는 표준 `AnalyticsSnapshot`으로 제공한다.
-Strategy는 `AnalyticsSnapshot`과 명시된 Strategy Plugin Contract를 통해 공통 지표를 소비한다.
-전략 내부에서 공통 지표를 다시 계산하거나 동일 의미의 별도 Runtime Input payload를 재생성하지 않는다.
-Strategy 고유 진입·청산·헤지·상태 전이·포지션 규칙은 Strategy에 남긴다.
-공통 계산의 authoritative source가 없으면 임의 계산·고정값·0/False·synthetic 값으로 대체하지 않고 `UNAVAILABLE` 또는 `BLOCKED`로 종료한다.
-AnalyticsSnapshot은 immutable 경계를 유지하고 source/provenance를 보존한다.
+프로젝트를 다시 참조할 때의 우선순위는 다음과 같다.
 
-## 4. authoritative source와 fail-closed
-코드·문서의 존재만으로 PASS를 선언하지 않는다. 실제 실행·통합 검증 증거를 기준으로 판정한다.
-authoritative source가 없으면 `BLOCKED`, `UNAVAILABLE`, `NotImplemented` 중 실제 상태를 명시한다.
-값이 없다고 0, False, 고정값, 임의 계산값 또는 synthetic 값으로 정상 runtime을 채우지 않는다.
-Mock/Synthetic 데이터를 실제 시장 검증으로 주장하지 않는다.
-기존 generic 객체를 이름만 바꾸어 authoritative source로 승격하지 않는다.
+1. 현재 대화의 직접 지시
+2. Notion `결정로그`의 최신 `상태=확정` 항목
+3. 이 `AGENTS.md`
+4. 현재 코드·실제 데이터/source·새 검증 결과
+
+Notion `질문과답변`은 작업 연속성 및 실행 기록의 기준이다. 과거 Q&A/Decision Log는 변경 이력이나 원문 증거가 필요할 때만 참고한다.
+
+현재 개발 단계는 **Control Tower / Option Program / 실제 KIS VTS 연결 / 장기 E2E 검증**이다. Virtual/VTS 검증을 중심으로 진행하며 Live KIS 주문은 실행하지 않는다.
+
+---
+
+## 2. 절대 안전 기준
+
+- 실제 KIS Live 주문을 실행하지 않는다.
+- Live credential과 실제 Live market-data frame 증거가 없으면 Live E2E PASS를 선언하지 않는다.
+- KIS VTS 모의계좌 자격정보와 Live 자격정보를 혼용하지 않는다.
+- credential, token, `.env` 내용을 로그·Notion·Git에 기록하지 않는다.
+- authoritative source가 없는 값은 고정값, 0/False, 추정값, synthetic 값으로 정상 runtime을 가장하지 않는다. 필요한 경우 `UNAVAILABLE` 또는 `BLOCKED`로 종료한다.
+- Mock/Synthetic/DERIVED_SCENARIO 결과를 REAL_VTS 또는 Live 검증 결과로 표현하지 않는다.
+- 검증할 수 없는 결과를 PASS로 표현하지 않는다.
+- 실제 데이터·계정·파일의 손상/유실 가능성이 있거나 credential 노출 가능성이 있으면 즉시 중단하고 보고한다.
+- 같은 오류가 연속 두 번 발생하면 동일한 우회 시도를 반복하지 않고 원인을 재분석한다.
+
+---
+
+## 3. 현재 표준 실행 경로
+
+표준 실행 경로는 다음 경계를 유지한다.
+
+**Market Data Source → Runtime Input → Strategy → Decision → Risk → OMS/Order Router → Broker → Execution → Position/Margin/PnL → Control Tower Read Model**
+
+Control Tower는 감독·운영·read-model 계층이며 정상적인 주문 생성이나 전략 로직을 소유하지 않는다.
+
+표준 코드 경계:
+
+- `contracts/` — 표준 계약·DTO·port
+- `core/` — 환경 독립 domain·strategy·risk·OMS 규칙
+- `application/` — orchestration·composition·Hub
+- `environments/` — Virtual/Paper/Live/High-Speed 구현
+- `infrastructure/` — KIS/KRX 등 외부 adapter/source
+- `interfaces/` — Control Tower 및 외부 API/UI
+- `tests/` — 실행 가능한 회귀·통합 검증
+
+Legacy 구현을 새 표준 경계에 다시 연결하지 않는다. 필요한 기능은 현재 표준 경계로 명시적으로 이관하고, 이관 완료 후 호출자가 없는 Legacy 구현은 별도 검토 후 제거한다.
+
+---
+
+## 4. Strategy / Common Analytics 기준
+
+Strategy 1~9는 각각 독립적인 Strategy Plugin/Registry 경계를 유지한다.
+
+공통 시장지표와 공통 계산은 Common Analytics가 소유하고 표준 `AnalyticsSnapshot`으로 제공한다. Strategy는 명시된 Strategy Plugin Contract를 통해 이를 소비하며 동일 의미의 공통 계산을 Strategy 내부에서 다시 만들지 않는다.
+
+Strategy가 소유하는 범위는 전략 고유의 진입·청산·헤지·상태전이·포지션 규칙이다.
+
+공통 계산 또는 Runtime Input의 authoritative source가 없으면 임의의 대체값으로 정상 신호를 만들지 않는다.
+
+---
+
+## 5. Source / Instrument / Broker 계약
+
+시장데이터 경계는 다음과 같다.
+
+**Broker Adapter / Historical Provider / Other Provider → MarketDataHub → Runtime / Strategy**
+
+Option Master, Quote, OrderBook, Execution에서 사용하는 계약 identity는 authoritative source의 동일한 계약 identity를 따라야 한다.
+
 종목 identity, expiry, strike, option type, broker symbol, contract multiplier는 authoritative source 없이 추정하지 않는다.
-quote/mark와 fill price의 의미를 혼용하지 않는다.
 
-## 5. 표준 코드 경계
-`contracts/` → 표준 계약·DTO·port
-`core/` → 환경 독립 domain·strategy·risk·OMS 규칙
-`application/` → orchestration·composition·Hub
-`environments/` → Virtual/Paper/Live/High-Speed 구현
-`infrastructure/` → KIS/KRX 등 외부 adapter/source
-`interfaces/` → Control Tower 및 외부 API/UI
-`tests/` → 실행 가능한 회귀·통합 검증
-Legacy 구현을 새 표준 경로에 다시 연결하지 않는다.
-필요한 기능은 현재 표준 경계로 명시적으로 이관하고, 이관이 끝난 미사용 Legacy 코드는 제거한다.
-## 6. 거래소·증권사·Broker API 경계
-실제 환경은 KRX 실제 거래소 → Broker Adapter → 증권사 API → Option Program의 broker-agnostic 경계를 따른다.
-KIS는 현재 구현된 broker adapter이며, 향후 LS증권 및 제3 증권사를 동일한 표준 Port 뒤에 연결한다.
-Virtual 환경은 Virtual Exchange → Virtual Broker → Virtual Broker API → Option Program 경계를 따른다.
-Option Program은 거래소나 증권사의 내부 구현을 직접 호출하지 않고 Standard Broker API/Adapter Port를 사용한다.
-Broker별 인증, rate limit, transport, symbol은 Adapter 내부에 격리하고 Standard Core에 유출하지 않는다.
+quote/mark와 fill price를 혼용하지 않는다.
 
-## 7. Multi-Leg 실행과 provenance
-표준 경로는 MultiLegExecutionPlan → ExecutionLeg → OrderIntent → Risk → OMS / Order Router → Broker → ExecutionReport이다.
-각 leg에 `strategy_id → group_id → leg_id → client_order_id → execution_id` provenance를 보존한다.
-Virtual Position provenance는 lot 단위로 유지하고 run_id, instrument identity, strategy/group/leg, client_order_id, execution_id, position role, remaining quantity를 보존한다.
-partial close는 FIFO, reversal은 기존 lot 소진 후 초과분만 신규 lot로 처리한다.
-Insurance role은 `NONE / OVERNIGHT_INSURANCE / EVENT_INSURANCE / REHEDGE_INSURANCE` 중 명시적으로 부여한다.
+Broker Adapter는 broker별 authentication, rate limit, transport, symbol mapping, capability를 내부에 격리하고 Standard Core에 broker-specific 구현을 유출하지 않는다.
 
-## 8. 시장데이터·Historical·Replay
-시장데이터 경계는 Broker Adapter / Historical Provider / Other Provider → MarketDataHub → Runtime / Strategy이다.
-Virtual 시장 데이터는 authoritative source 수집/정규화 → Historical Market Store → Virtual Exchange → Virtual Broker → Virtual Broker API → Option Program 경계를 따른다.
-Historical Store의 source/provenance를 유지하고 거래일별 partition을 사용할 수 있어야 한다.
-Multi-Broker 저장 구조는 `data/<market-data-root>/<broker_id>/YYYY-MM-DD/`를 기본 설계로 하며 broker별 raw/canonical evidence를 분리한다. **KIS VTS 일별 수집 데이터의 현재 운영 저장 루트는 `data/kis_market_data_restart/YYYY-MM-DD/`로 고정한다.**
-동일 canonical instrument를 여러 broker가 관측하면 broker별 독립 observation으로 보존하며 `canonical_instrument_id`만으로 중복 제거하지 않는다.
-Replay/Scenario/Synthetic 결과를 실제 시장 원본과 혼동하지 않는다.
-실제 authoritative 데이터셋이 없으면 해당 실데이터 검증은 `BLOCKED`이다.
+Virtual 환경은 다음 경계를 따른다.
 
-## 9. KIS Live 시장데이터 경계
-KIS index-option realtime 거래/체결 TR은 `H0IOCNT0`, 호가 TR은 `H0IOASP0`를 사용한다.
-VTS에서는 `H0IOASP0` 지원 범위를 실제 수신 증거로 확인하며 WebSocket 연결 성공만으로 옵션호가 수신 PASS를 선언하지 않는다.
-Live 시장데이터 PASS에는 Live 자격증명과 실제 market-data frame 수신 증거가 모두 필요하다.
-Live 검증 전까지 시장데이터 수신과 Virtual Execution을 주문 없이 검증한다.
+**Virtual Exchange → Virtual Broker → Virtual Broker API → Option Program**
 
-## 10. VTS 실데이터 수집·Replay·E2E 검증
-모의계좌에서 수집한 실제 시장데이터는 VTS E2E 검증용 원본 데이터 자산으로 축적할 수 있다.
-일별 수집은 `infrastructure/kis/kis_vts_weekday_collector.py`의 Daily Session Orchestrator가 관리하며 REST 시장관측 수집기를 주 수집 경계로 사용한다.
-`infrastructure/kis/kis_rest_market_observation_collector.py`는 KRX 계약 identity를 보존하고 KIS 지수옵션 종목마스터의 `stnd_iscd`로 broker `shrn_iscd`를 authoritative하게 reconcile한 뒤 Price/OrderBook을 수집한다. KRX Marketplace는 계약 선택의 authoritative source이고 KIS Index Option Master는 broker symbol의 authoritative source다.
-`infrastructure/kis/kis_realtime_collector.py`는 WebSocket raw frame 경계이며 REST 수집과 독립적으로 동작한다. WS 연결 성공만으로 frame 수신 PASS를 선언하지 않는다.
-WS가 실패하거나 approval-key timeout이 발생해도 REST 수집은 계속할 수 있으며 manifest에 `DEGRADED_REST_PRIMARY` 상태를 기록한다.
-수집 데이터와 Replay 데이터의 source/provenance 및 원본/가공 여부를 명확히 보존한다. **KIS VTS 수집/Replay 기준 데이터는 `data/kis_market_data_restart/` 아래의 날짜 partition을 사용하며, 과거 `data/kis_market_data/` 경로를 현재 수집 기준으로 재사용하지 않는다.**
-거래일과 휴장일은 broker별 `data/<market-data-root>/<broker_id>/YYYY-MM-DD/` partition으로 분리하며, authoritative calendar 조회 실패는 휴장으로 추정하지 않고 `UNKNOWN`으로 기록한다.
-UNKNOWN 상태에서는 주문 endpoint를 호출하지 않고 read-only 시장데이터 경계만 시도할 수 있다.
-실제 VTS 원본의 기본 Replay E2E 속도는 100배속 이상으로 한다. 1배속은 실제 시간 의존성·타이밍 의미를 별도로 확인해야 하는 경우에만 사용한다.
-가속 Replay에서도 원본 event timestamp의 순서와 시간관계를 보존하며, 벽시계 시간만 압축한다.
-9/28 → 9/29 → 이후 거래일은 날짜별 독립 테스트셋이 아니라 하나의 연속된 실제 VTS 시장데이터 스트림으로 이어서 E2E 검증한다.
-전략 1~9는 가능한 authoritative input 범위에서 각각 실제 source → Runtime Input → Strategy → Decision → Risk → OMS/Router → Virtual Execution → Position/PnL 경계를 독립적으로 검증한다. authoritative source가 없는 입력을 synthetic 값으로 채워 PASS를 만들지 않는다.
-실제 연속 데이터 기준선 E2E가 확보된 뒤에는 동일 원본을 템플릿으로 사용해 가격·변동성·옵션·호가·유동성·데이터 지연/누락 등의 조건을 통제된 방식으로 변형하여 Scenario Dataset을 생성하고, REAL_VTS / DERIVED_SCENARIO / VIRTUAL_EXECUTION provenance를 분리한다.
-Scenario Generator → 100배속~1000배속 Replay → Strategy 1~9 → 자동 PASS/FAIL → 실패 Scenario 보존의 고속 반복 테스트를 수행할 수 있도록 설계한다. 반복 실행마다 독립 Run ID와 상태를 사용한다.
-VTS 검증은 Live 주문 검증이 아니며 실제 KIS 주문을 실행하지 않는다.
-VTS 결과가 실제 Live E2E PASS를 의미하지 않으며, Live PASS에는 실제 Live credential과 실제 market-data frame 증거가 별도로 필요하다.
+향후 다른 broker를 연결할 때도 동일한 표준 Port를 사용한다.
 
-## 11. Runtime Input과 Strategy 정의
-전략별 정의는 Notion의 사용자 요구사항과 실제 strategy 구현을 대조한다.
-초기 진입 leg 방향, 사다리 조건, 만기 제한, 수량/자본 규칙, 필요한 Runtime Input을 각각 확인한다.
-Runtime Input은 authoritative source에서 공급되어야 하며 source 계약과 provenance를 보존한다.
-Common Analytics가 소유하는 값은 Strategy에서 중복 산출하지 않는다.
-source가 없으면 정상 runtime을 가장하지 않고 fail-closed 한다.
-Track별 완료·BLOCKED 상태와 입력 목록은 최신 Notion 작업 기록을 기준으로 확인한다.
-## 12. Hub 경계
-Strategy Hub는 Strategy Registry/Orchestrator와 strategy selection/lifecycle을 담당한다.
-Runtime Hub는 Runtime loop와 Strategy → Decision → Risk → OMS/Router 연결을 소유한다.
-Environment Hub는 Environment Bundle lifecycle을 담당한다.
-Run/Scenario Hub는 RunContext, scenario/replay 선택, 독립 실행 상태를 담당한다.
-Control Tower Hub는 UI/API에 runtime status, environment 정보, 운영 명령을 제공한다.
-전략은 StrategyContext를 사용하며 KIS, VirtualBroker, Control Tower, Scenario Store를 직접 호출하지 않는다.
-Hub 간 통신은 공개 `contracts/` 또는 명시된 application port를 사용하고 private attribute 의존을 새로 만들지 않는다.
+---
 
-## 13. 반복 실행 격리
-반복 테스트는 매 실행마다 독립된 Run ID와 새 Environment Bundle/VSSF account/position/execution/strategy state를 사용한다.
-이전 run의 주문·체결·포지션·PnL·strategy state를 다음 run에 재사용하지 않는다.
-현재 테스트 숫자, 특정 checkpoint, 완료 Track 목록, 임시 우선순위는 이 문서에 고정하지 않고 Notion 상태 기록에서 확인한다.
+## 6. Multi-Leg Execution / Provenance
 
-## 14. Source → Runtime → Execution 검증
-Authoritative source 연결은 source 계약 → composition → runtime 소비 → 실행 경계 순으로 확인한다.
-Option Master, Quote, OrderBook, Execution의 계약단위와 instrument identity는 동일한 authoritative contract identity를 사용해야 한다.
-Virtual Runtime에서 실제 source 연결과 Multi-Leg 실행 경계를 검증하며, source가 없는 leg는 fail-closed 한다.
-Execution 결과가 없는 상태에서 Position/PnL을 추정하지 않는다.
-Live credential이 준비되지 않은 경우 Live runtime evidence는 `BLOCKED`이며 Virtual 검증 결과로 대체하지 않는다.
+표준 Multi-Leg 실행 경계는 다음과 같다.
 
-## 15. 일별 수집 운영 기준
-Daily Session Orchestrator는 KST 날짜를 기준으로 거래일·휴장일을 분리한다. **KIS VTS 일별 수집은 `data/kis_market_data_restart/YYYY-MM-DD/`를 기준 저장 구조로 사용한다.** Multi-Broker 일반 설계의 broker별 partition 규칙은 별도로 유지한다.
-거래일에는 장 시작 전 readiness/smoke를 수행하고, broker별 수집 task가 독립 rate limit과 heartbeat를 관리한다.
-휴장일에는 manifest와 상태만 생성하고 시장데이터 파일은 만들지 않는다.
-동일 날짜 재시작은 기존 저장분을 보존하고 이어쓰기하며, 날짜 전환 시 새 Run ID와 날짜 partition을 사용한다.
-각 broker의 REST/WS transport와 rate limit 상태는 독립적으로 관리하며 한 broker의 제한·장애가 다른 broker 수집을 중단시키지 않는다.
-WebSocket은 보조 raw-frame 경계이며 실패·approval-key timeout이 해당 broker의 REST fallback을 중단시키지 않는다.
-토큰 값·credential 값은 로그, manifest, Notion, Git에 기록하지 않는다.
-캘린더 조회 실패 또는 판정 불가를 휴장으로 단정하지 않고 `UNKNOWN`으로 기록한다.
-UNKNOWN 상태에서 가능한 read-only 시장데이터 수집은 수행할 수 있으나 주문 endpoint는 호출하지 않는다.
+**MultiLegExecutionPlan → ExecutionLeg → OrderIntent → Risk → OMS/Order Router → Broker → ExecutionReport**
 
-## 16. 검증 절차
-모든 검증은 과거 기억, 과거 실행 결과, 페이지 제목 또는 오래된 BLOCKED/PASS 상태를 현재 근거로 삼지 않는다.
-**검증 판단 순서는 항상 현재 코드 → 현재 확정 결정 → 현재 AGENTS.md → 현재 실제 데이터/source → 새로 작성한 검증 순으로 고정한다.**
-과거 테스트가 존재한다는 이유만으로 그 테스트의 전제나 결과를 현재 검증에 끌어오지 않는다. 기존 테스트는 현재 계약을 보호하는 회귀 안전망인지 별도로 판단하고, 현재 기준과 맞지 않으면 수정·삭제하거나 현재 기준의 새 검증을 작성한다.
-프로젝트를 다시 참조할 때의 기준 순서는 **Current Baseline → 최신 활성 결정로그 → AGENTS.md → 현재 코드/실제 증거**이다. Historical Q&A / Historical Decision Log는 세부 과거 근거·변경 이력·원문 증거가 필요할 때만 조회한다.
-작업 전후 `git status`와 변경 파일을 확인한다.
-TDD 변경은 테스트 작성/실패 관찰 → 최소 구현 → focused pytest → 필요한 Virtual E2E → `py -m pytest -q` → `git diff --check` → project200_gate → `git status` → 원격 HEAD 확인 → Notion 기록 순으로 진행한다.
-Python은 Windows launcher `py`로 실행한다.
-실제 명령·출력·exit code를 기준으로 PASS / FAIL / BLOCKED를 판정한다.
-FAIL 또는 BLOCKED를 PASS처럼 표현하지 않는다.
+각 execution leg에는 다음 provenance를 보존한다.
 
-## 17. Multi-Broker 설계 기준
-이 기준은 기존의 일회성 작업 상태나 완료된 검증 수치를 대체하는 현재 설계 기준이다.
-Canonical market observation은 `broker_id`와 `broker_instrument_id`를 보존하고, broker와 무관한 `canonical_instrument_id`를 별도로 유지한다.
-`price`, bid/ask 및 수량은 최대 5단계 canonical 표현을 사용하며 제공되지 않는 단계는 null로 둔다. 값을 복제·추정하지 않는다.
-`collected_at`과 `observed_at`은 분리한다. provenance는 `ORIGINAL / SCENARIO / SYNTHETIC`을 보존하고 source schema version과 raw payload reference를 유지한다.
-Broker Adapter Port는 authenticate, refresh_token, option master mapping, quote, orderbook, realtime subscription, capabilities를 공통 의미로 제공한다.
-WebSocket을 지원하지 않는 broker는 명시적 unsupported/NotImplemented 상태를 내고 broker별 REST polling으로 fallback한다.
-Broker별 authentication, rate limit, transport, health/reconnect state는 독립적으로 관리한다.
-Position/PnL의 실제 원장은 계좌별 독립 유지하며 cross-broker 합산은 derived view로만 취급한다.
-Broker 선택 기준은 Strategy가 아니라 Order Router/Broker Allocation Policy에 둔다.
-이번 Multi-Broker 설계 승인 단계에서는 LS 실제 연동 코드, credential 처리, 네트워크 호출을 작성하지 않는다. 구현은 별도 사용자 승인 후 진행한다.
-LS증권 상세 master field mapping 또는 credential 분리 여부가 공식 문서로 확인되지 않으면 `UNKNOWN`으로 유지하고 추측하지 않는다.
+`strategy_id → group_id → leg_id → client_order_id → execution_id`
 
-## 18. 문서·Git 관리
-Notion `질문과답변`은 작업 연속성의 기준 기록이다.
-의미 있는 구현·정리·검증은 `[No.xxx 답변내용요약]` 페이지에 목적, 변경 내용, 검증 명령/결과, exit code, commit SHA, push 상태, 남은 BLOCKED 사항을 기록한다.
-AGENTS.md와 PROJECT_STATUS.md에는 테스트 숫자, 특정 checkpoint, 완료 Track 목록, 임시 우선순위를 고정하지 않는다. 완료된 과거 작업의 세부사항은 최신 기준으로 대체하고 반복 보존하지 않는다.
+Position provenance는 run_id, instrument identity, strategy/group/leg, client_order_id, execution_id, position role, remaining quantity를 보존한다.
+
+partial close는 FIFO로 처리하고 reversal은 기존 lot을 먼저 소진한 뒤 초과분만 신규 lot으로 처리한다.
+
+Insurance role은 필요한 경우 명시적으로 구분한다.
+
+---
+
+## 7. REAL_VTS 데이터 기준
+
+KIS VTS 모의계좌에서 수집한 실제 시장데이터는 **REAL_VTS 원본 데이터**로 취급한다. 이는 Live 데이터가 아니며 Live E2E PASS를 의미하지 않는다.
+
+현재 운영 저장 루트는 다음으로 고정한다.
+
+`data/kis_market_data_restart/YYYY-MM-DD/`
+
+거래일별 partition의 raw/canonical observation, manifest, status, heartbeat 및 관련 evidence는 source/provenance와 함께 보존한다.
+
+REST와 WebSocket은 서로 다른 수집 경계로 유지한다.
+
+- REST: 시장관측/Historical Store 원본
+- WebSocket: raw frame 원본
+- 두 transport의 provenance와 timestamp를 섞지 않는다.
+- WebSocket 연결 성공만으로 frame 수신 PASS를 선언하지 않는다.
+- REST/WS 비교는 각 source time과 received/collected time을 구분하여 동일 KST 장중 시간축에서 실제 frame evidence로 판단한다.
+- 한 transport의 시작/종료 시각만으로 다른 transport의 품질이나 시장 종료를 추정하지 않는다.
+
+KIS VTS Collector의 manifest 상태는 실제 raw/canonical evidence와 일치해야 한다. manifest와 실제 evidence가 불일치하면 collector lifecycle/상태 기록 문제로 분류하여 별도로 검증한다.
+
+Calendar authoritative source를 확인할 수 없으면 휴장으로 추정하지 않고 `UNKNOWN`으로 기록한다. `UNKNOWN` 상태에서 주문 endpoint를 호출하지 않는다.
+
+---
+
+## 8. REAL_VTS 연속 Replay / E2E
+
+REAL_VTS는 특정 이틀이나 특정 파일로 고정하지 않고 **날짜별 partition이 이어지는 누적 연속 stream**으로 취급한다.
+
+새 거래일 데이터가 수집되면 기존 데이터를 교체하지 않고 timestamp 순서로 누적하여 검증한다.
+
+기본 검증 순서는 다음과 같다.
+
+**Source → Runtime Input → Strategy Signal → Decision → Risk → OMS/Router → Virtual Execution → Position/PnL → Regression**
+
+Strategy 1~9는 가능한 authoritative input 범위에서 각각 독립적으로 검증한다.
+
+- 실제 signal이 관찰되지 않은 전략은 signal-driven execution lifecycle PASS를 선언하지 않는다.
+- 실제 signal이 발생한 경우에만 Decision/Risk/OMS/Execution/Position/PnL의 해당 lifecycle을 실제 evidence로 연결하여 검증한다.
+- 실제 signal을 만들기 위해 fixed/zero/false/synthetic/inferred authoritative input을 주입하지 않는다.
+- 각 실행은 독립 Run ID와 독립적인 execution/position/strategy state를 사용한다.
+- 이전 run의 주문·체결·포지션·PnL·strategy state를 다음 run에 재사용하지 않는다.
+- High-Speed Replay은 실시간 의미가 필요한 경우를 제외하고 가속 실행을 기본으로 하며 원본 event timestamp의 순서와 시간관계를 보존한다.
+
+REAL_VTS, DERIVED_SCENARIO, SYNTHETIC, VIRTUAL_EXECUTION provenance를 명확히 구분한다.
+
+---
+
+## 9. 현재 Control Tower 기준
+
+Control Tower는 현재 다음 구조를 유지한다.
+
+- 6개 운영 탭
+- Strategy 1~9
+- 3×3 동일 크기 Strategy Grid
+- Strategy별 독립 Composition Graph
+- Strategy Control의 USE / ENTRY / EXIT
+- Strategy Trade P/L과 Account P/L의 분리
+- 각 Strategy 카드의 월별 계약 Trade P/L: ENTRY → CLOSE/EXPIRY
+- 카드 하단의 Strategy Integrated P/L
+- Graph에서는 BUY/SELL trade value와 계약 구조를 표시하고 P/L을 계산하지 않는다.
+
+UI는 직접 Strategy/Core를 호출하지 않는다.
+
+표준 경로는 다음과 같다.
+
+**Authoritative Runtime / Execution / Position Read Model → Option Program Read Model → Control Tower API → UI**
+
+authoritative read model이 없으면 임의 데이터를 만들어 UI에 표시하지 않고 `UNAVAILABLE` 또는 `BLOCKED`로 표현한다.
+
+---
+
+## 10. 현재 Filled → Position → Trade P/L → UI 기준
+
+실제 KIS VTS에서 발생한 Filled execution은 다음 경계를 통해 Control Tower에 반영되어야 한다.
+
+**ExecutionReport → Position Group → Strategy Trade P/L → Strategy Card P/L**
+
+Runtime execution과 Control Tower Read Model은 동일한 authoritative execution/position-group 상태를 바라보아야 한다. 서로 다른 bridge/registry instance를 만들어 execution state와 read model state가 분리되지 않도록 한다.
+
+Strategy Trade P/L은 실제 execution/group provenance를 기반으로 계산한다. Account P/L과 Strategy Trade P/L은 의미가 다를 수 있으므로 임의로 동일한 값으로 맞추지 않는다.
+
+Position의 open/closed 상태와 Trade Ledger의 CLOSE/EXPIRY 상태가 불일치하면 이를 정상으로 간주하지 않고 accounting/read-model semantics를 별도로 조사한다.
+
+현재 Strategy 7의 실제 VTS Filled → Position → Strategy Trade P/L → Control Tower 연결은 확보된 검증 범위에 포함되지만, 이를 Strategy 1~9 전체의 Full E2E PASS로 확대 해석하지 않는다.
+
+---
+
+## 11. 3개월 자동 E2E / Scheduler 기준
+
+3개월 자동 검증은 독립적인 Run ID와 결과 파일을 사용하고 순차 실행한다.
+
+Scenario pattern은 다음 순서로 순환한다.
+
+**trend_up → trend_down → mean_revert → high_volatility → low_volatility → shock**
+
+Scheduled replay와 Control Tower smoke는 별도 결과로 기록한다.
+
+현재 판정 규칙:
+
+- Replay PASS + UI smoke PASS → 최종 PASS
+- Replay FAIL → 최종 FAIL
+- UI smoke FAIL → 최종 FAIL
+- Replay가 FAIL이어도 UI smoke는 실행한다.
+- UI smoke가 FAIL이면 다음 pattern으로 회전한다.
+- Replay만 FAIL이고 UI smoke가 PASS이면 같은 pattern을 재시도한다.
+
+현재 자동 UI smoke는 HTTP/API/정적 UI contract를 검증한다. **동일한 3개월 replay 실행 상태를 실제 브라우저 DOM Playwright로 직접 검증하는 것은 별도 미완료 항목**이며, 이를 현재 scheduler PASS와 동일한 증거로 취급하지 않는다.
+
+Scheduler의 기존 실행 주기/큐잉 설정은 명시적인 변경 지시가 없는 한 임의로 변경하지 않는다.
+
+---
+
+## 12. P/L 및 실행 검증 원칙
+
+테스트 파일의 PASS는 production 기능의 실제 동작 PASS와 동일하지 않다.
+
+테스트 fixture/mock/expected value/assertion을 PASS를 만들기 위해 변경한 경우 해당 결과를 실제 기능 검증 evidence로 사용하지 않는다.
+
+각 Strategy의 검증에서는 필요에 따라 다음을 분리하여 기록한다.
+
+1. 테스트 결과
+2. 실제 production execution path
+3. REAL_VTS source/replay evidence
+4. Runtime Input
+5. 실제 Signal 또는 `NO_SIGNAL_OBSERVED`
+6. Decision/Risk/OMS/Router
+7. Virtual Execution/Fill
+8. Position/PnL
+
+Execution evidence가 없으면 Position/PnL을 추정하지 않는다.
+
+---
+
+## 13. Hub / Architecture 기준
+
+- Strategy Hub: Strategy Registry/Orchestrator 및 strategy selection/lifecycle
+- Runtime Hub: Runtime loop와 Strategy → Decision → Risk → OMS/Router
+- Environment Hub: Environment Bundle lifecycle
+- Run/Scenario Hub: RunContext, scenario/replay 선택, 독립 실행 상태
+- Control Tower Hub: UI/API에 runtime status와 environment/운영 명령 제공
+
+Strategy는 StrategyContext를 사용하며 KIS, VirtualBroker, Control Tower, Scenario Store를 직접 호출하지 않는다.
+
+Hub 간 통신은 공개 `contracts/` 또는 명시된 application port를 사용한다. 새로운 private attribute 의존을 표준 경계로 추가하지 않는다.
+
+Calendar의 거래일/휴장일 및 previous/next trading boundary 계산은 공통 MarketCalendarHub/MarketCalendarSnapshot 경계를 사용한다.
+
+전략별 execution 특례가 계속 증가하면 Composition Root에 if-chain을 추가하는 대신 Strategy별 resolver/registry 경계로 분리하는 방향을 우선한다.
+
+---
+
+## 14. Architecture / Dependency 검증
+
+`ARCHITECTURE_LINT_SPEC.md`에 정의된 dependency 규칙은 실행 가능한 검사로 유지한다.
+
+현재 표준 경계를 벗어나는 import/dependency를 새로 추가하지 않는다.
+
+변경 전 영향 범위를 확인하고, 변경 후 실제 diff의 영향 범위와 dependency 상태를 다시 확인한다.
+
+Graft를 사용할 수 있으면 보조적인 코드 탐색·영향 분석에 사용한다. Graft 결과는 코드·AGENTS·Notion·실행 결과를 대체하는 authoritative evidence가 아니다.
+
+Graft가 없거나 stale/실패해도 직접 코드 탐색과 테스트로 검증한다. Graft cache 및 일회성 분석 산출물은 commit하지 않는다.
+
+---
+
+## 15. 검증 절차
+
+모든 검증은 현재 증거를 기준으로 한다.
+
+기본 순서:
+
+**Current Baseline → 최신 활성 Decision Log → AGENTS.md → 현재 코드/실제 데이터/source → 새 검증**
+
+실행 전후 다음을 확인한다.
+
+- `git status`
+- 변경 파일 범위
+- 실제 실행 명령과 exit code
+- focused test
+- 필요한 Virtual/REAL_VTS E2E
+- `git diff --check`
+- project gate가 필요한 경우 gate 실행
+- 원격 branch HEAD
+
+Windows Python 실행은 `py`를 사용한다.
+
+판정은 반드시 실제 evidence에 따라 `PASS / FAIL / BLOCKED`로 구분한다.
+
+---
+
+## 16. 작업·Git 기준
+
 작업 폴더에는 현재 구현과 유지에 필요한 파일만 둔다.
-단계별 기록, 일회성 verification runner, 실행 로그/검증 JSON, 캐시 및 폐기된 Legacy UI는 저장소에 두지 않는다.
-`.env` 및 credential은 절대로 commit하지 않는다.
-commit/push는 변경 범위가 의도한 상태이고 검증이 PASS일 때 수행한다.
-단, project200_gate의 다른 모든 항목이 PASS이고 runtime_evidence_probe만 Live credential 미완비로 BLOCKED인 경우는 예외로 commit/push할 수 있다.
-Push 후 원격 `Project200` HEAD가 해당 commit SHA를 가리키는지 확인한다.
-## 19. 절대 금지
-실제 KIS 주문 실행
-Live credential 또는 market-data frame이 없는 상태에서 Live E2E PASS 선언
-authoritative source가 없는 값을 임의 fallback으로 정상 runtime에 주입
-Mock/Synthetic 결과를 실제 시장 검증으로 표현
-private attribute 의존을 새로운 표준 경계로 추가
-Legacy 경로를 새 표준 경계에 재연결
 
-## 20. Multi-Broker 구현 승인 게이트
-Multi-Broker 설계 문서의 구현은 사용자 명시 승인 후에만 시작한다.
-LS증권 실제 연동, credential 처리, 네트워크 호출은 승인 전 금지한다.
-구현 시에도 broker별 실제 capability와 공식 문서 증거를 먼저 확인하고, 확인되지 않은 항목은 UNKNOWN/BLOCKED로 유지한다.
-## 21. 프로그램 작업 승인 기준 — 사용자 최신 지시
-일반적인 프로그램 관련 작업은 사전 사용자 승인 없이 진행한다. 여기에는 전략 로직, 실행 계약, 아키텍처/설계, 데이터 처리 및 검증 코드 변경도 포함한다.
-단, 다음과 같은 치명적 오류가 예상되거나 확인되면 즉시 중단하고 사용자에게 보고한다: 실제 주문 오발 가능성, 실제 계좌/자금의 비인가 변경 가능성, credential/secret 노출, authoritative 데이터의 손상·유실 가능성, 복구 불가능한 상태 변경, 또는 검증 불가능한 상태에서 PASS를 선언해야 하는 상황.
-일반 프로그램 작업은 실제 검증 결과에 따라 PASS/FAIL/BLOCKED를 판정하고, PASS이면 기존 commit/push 절차에 따라 처리한다.
-전략/아키텍처/데이터 기준 변경도 이 최신 사용자 승인 범위에 따라 실행할 수 있으며, 변경 근거와 결과는 Notion 질문과답변에 기록하고 필요하면 결정로그에 남긴다.
-기존의 개별 사전승인 게이트보다 이 항목이 우선한다.
+일회성 verification runner, 실행 로그, 검증 JSON, cache, 폐기된 Legacy UI 등은 저장소에 commit하지 않는다. 필요한 실행 결과는 지정된 verification 결과 영역과 Notion 기록 정책에 따라 관리한다.
 
-## 22. KIS VTS 시장데이터 저장 기준
-KIS VTS 일별 수집 데이터의 운영·검증·Replay 기준 저장 루트는 `data/kis_market_data_restart/YYYY-MM-DD/`이다.
-각 거래일 partition의 `manifest.json`, `daily_status.json`, raw/canonical observation, heartbeat 및 underlying REST evidence를 source/provenance와 함께 보존한다.
-향후 KIS VTS 수집 및 해당 원본을 이용한 Replay/E2E 검증에서는 이 루트를 기준으로 실제 파일과 manifest를 확인한다.
-기존 `data/kis_market_data/` 경로의 과거 데이터는 현재 수집 기준 경로로 재사용하지 않는다.
-구체적인 기준 거래일, 검증 완료 상태 및 임시 실행 우선순위는 Notion 작업 기록에서 관리한다.
+`.env`와 credential은 절대로 commit하지 않는다.
 
-루트에는 KRX authoritative Master 기준자료가 실제로 존재한다.
-- KRX 옵션 Master: KOSPI200 월물 옵션 Master Excel
-- KRX 선물 Master: KOSPI200 표준 선물 Master Excel
-- KRX Weekly 옵션 Master: 목요일 Weekly 옵션 및 월요일 Weekly 옵션 Master Excel
-- 기존 코드에서도 위 KRX Excel Master 파일들을 사용한다.
+작업은 다음 흐름을 따른다.
 
-현재 KRX Master의 최신 파일 부재 사유와 공급 경계는 Notion에 이미 확정 기록되어 있으므로, 이를 다시 추적하거나 임의의 미래 snapshot으로 대체하지 않는다.
-## 23. Graft 보조 코드 탐색·영향 분석
-Graft는 GitHub·Notion·RDC를 대체하지 않는 보조 코드 탐색 및 영향 분석 도구로 사용한다.
-Graft의 결과는 코드 자체, AGENTS.md, Notion 작업 기록 및 실제 실행 검증을 대체하는 authoritative evidence가 아니다.
+**현재 기준 확인 → 실제 코드/데이터 확인 → 영향 범위 확인 → 변경 → 검증 → diff/status 확인 → commit → push → 원격 HEAD 확인 → Notion 기록**
 
-코드 작업 전에는 가능한 경우 Graft index를 최신 코드 상태로 갱신하고 다음 순서로 영향 범위를 확인한다.
-1. `graft check`로 Graft graph가 현재 코드와 동기화되어 있는지 확인한다.
-2. `graft ask`로 작업 대상의 관련 파일·심볼·계약을 빠르게 탐색한다.
-3. `graft callers`로 대상 심볼의 호출자를 확인하고, 필요하면 `--direction out` 및 `--depth all`로 호출/의존 관계와 전이 영향 범위를 확인한다.
-4. `graft grep`로 계약명·클래스·필드·핵심 식별자의 전체 사용처를 확인한다.
-5. `graft skeleton`으로 변경 대상 파일의 public API/시그니처를 확인하고, `graft map`으로 관련 영역과 주요 hub를 파악한다.
-특히 `contracts/`, `core/strategy/`, `application/composition/`, `core/oms/`, `core/risk/`, `environments/virtual/`, `infrastructure/kis/` 사이의 계약 연결과 영향 범위를 사전 확인한다.
+사용자가 명시적으로 작업을 지시한 경우 일반적인 코드·아키텍처·데이터 처리·검증 변경은 진행할 수 있다.
 
-코드 변경 후에는 `graft blast`로 실제 diff의 영향 범위를 확인하고, `graft check`로 graph freshness를 재확인한다.
-Graft 결과에서 발견된 영향 대상은 실제 코드 검토 및 필요한 focused test/E2E 검증 대상에 반영한다.
-Graft의 자연어 질의는 현재 graph의 lexical/symbol 검색 특성상 실제 코드 식별자·영문 용어를 포함하여 작성한다.
-Graft가 설치되어 있지 않거나 graph가 stale/실패 상태인 경우에도 작업을 중단하지 않고 직접 코드 탐색·Git diff·테스트로 검증하되, Graft가 제공하지 못한 분석은 PASS 근거로 간주하지 않는다.
-Graft가 생성하는 `graft/` 캐시 및 일회성 분석 산출물은 저장소에 commit하지 않는다.
+Commit/push 전에는 변경 범위가 의도한 것인지 확인한다. 사용자 작업 중인 unrelated 변경은 건드리거나 함께 commit하지 않는다.
 
-표준 작업 흐름은 다음과 같다.
-Notion 작업 기록 확인 → 원격/로컬 코드 확인 → Graft 사전 영향 분석 → 변경 범위 확정 → 코드 수정 → Graft blast/재검사 → 실제 테스트(RDC, `py`) → git diff/status 검증 → commit/push → 원격 HEAD 확인 → Notion `[No.xxx 답변내용요약]` 기록.
+Push 후 반드시 원격 `Project200` HEAD가 해당 commit SHA를 가리키는지 확인한다.
 
-## 24. KIS VTS 실제시장 연속 데이터 원칙
-KIS VTS 모의계좌 API를 통해 수집되는 시장데이터는 임의의 Synthetic/Test Dataset이 아니라 실제 시장의 시세를 KIS VTS API에서 매 거래일 연속 수집하여 축적하는 운영 원본 데이터로 취급한다.
-- data/kis_market_data_restart/YYYY-MM-DD/의 날짜별 partition은 서로 독립적인 테스트 데이터셋이 아니라 하나의 연속적인 시장 데이터 스트림의 날짜별 저장 단위다.
-- REAL_VTS Replay/E2E is a continuously growing stream: 2026-09-28 -> 2026-09-29 -> every subsequent trading day collected by the Collector. Do not freeze the validation scope to 9/28 and 9/29; append each newly collected trading-day partition in timestamp order and keep validating the cumulative stream.
-- 정상적으로 KIS VTS API 수집이 이루어진 데이터에 대해 매 거래일마다 '실제 데이터인지'를 반복적으로 재검증하지 않는다.
-- 일상 운영 검증의 핵심은 데이터의 진위 재검증이 아니라 Collector/API 응답, 수집 연속성, timestamp, 필수 시장데이터 공급, 누락/장애 여부를 확인하는 것이다.
-- 상세 데이터 조사는 수집 장애, 누락, 비정상 응답, 연속성 단절 등 실제 이상 징후가 발견된 경우에 수행한다.
-- Runtime Input validation uses all continuously collected REAL_VTS source data, not a fixed two-day set. When a new trading day is collected, connect it after the existing cumulative stream without dropping prior dates; judge warm-up and source-supply differences from actual execution evidence.
-- 9/29의 23개 all-zero orderbook observation은 9/29 전체 데이터의 진위를 재검증해야 한다는 의미가 아니다. 해당 시점의 quote/orderbook unavailable 상황과 fail-closed 처리를 검증하는 실제 운영 데이터 사례로 취급한다.
-- session_status=UNKNOWN은 calendar authoritative source의 상태 문제를 나타내는 메타데이터 상태이며, 이미 수집된 실제 VTS 시장데이터 자체를 Synthetic/Test Data로 격하시키지 않는다.
-- KOSPI200 underlying의 authoritative source는 계속 KIS raw price.output3.bstp_nmix_prpr로 유지한다.
-이 원칙을 향후 Replay/E2E 및 일별 수집 운영 판단의 기본 기준으로 사용한다.
+---
 
+## 17. 현재 미완료 사항의 표현 기준
 
-## 25. KIS VTS REST + ?? WebSocket ?? ?? ?? (2026-09-30 ??)
-KIS VTS ?? ?????? ?? REST ??? ?? ????? WebSocket?? ?? ???? ???. ?? ????? **?? REST ???? ?? WebSocket ???? ?? ??**?? ?? ???? ?? ??? ?? ???? ????.
+현재 완료된 한정적 검증을 전체 시스템 완료로 확대하지 않는다.
 
-- ?? REST ???(`infrastructure/kis/kis_vts_weekday_collector.py`)? ????. REST ???? ?? ??? REAL_VTS ?? ???? ???? ??????? ???.
-- ?? WebSocket ???? `scripts/kis_vts_websocket_collector.py`? ????. WebSocket raw frame? `data/kis_market_data_restart/YYYY-MM-DD/kis_vts_websocket_raw.jsonl`? ?? ????.
-- WebSocket ???? 1??? ? ??? ???? ???. ?? **??? WebSocket ??? ??**?? 1? timeout/heartbeat ??? ?? ??? ????. approval key? ??? ??? ???? ???????? KIS rate limit? ????.
-- Windows Task Scheduler? `Project200-KIS-VTS-WebSocket-Collector`? 08:20? ????, ???? 08:29~16:01 KST ?? ???? ???? ????.
-- REST? WebSocket? ??? ??? ??? ?? ?? ??? provenance? ????. ? ??? ??? ?? ??? source?? ???? ???.
-- ?? ???? ?? ??? ??? ??, timestamp ???, ?? ??, ????/???, ?????, ??, ??????, Replay/E2E ?????.
-- **WebSocket? ?? ?? ??? ?? ?? market-data frame? ???Replay ??? ??? ? ????.** ?? WebSocket connect/subscription ????? ?? ?? PASS? ???? ???.
-- WebSocket? ?? ??? ???????Replay ????? ??? ????? ??? ???? ?? KIS VTS ?? ??? ? transport? WebSocket ???? ??? ? ??. ? ?? ??? REST ??? ?? ????.
-- ? ??? ?? ??? 'WebSocket ?? ? REST fallback?? ?? ?? ??? ????'? ???? ?? ????, **REST? ?? WS? ?? ?? ????? ? ??** ??? ????.
-- ?? KIS ??? ???? ???.
+현재 중요한 미완료 범주는 다음과 같다.
 
-## 26. KIS VTS REST + WebSocket 동일시간축 비교 기준 (2026-10-01)
-REST와 WebSocket은 서로 다른 수집 경계로 유지하며, 한 원본의 timestamp를 다른 원본의 수집 시작/종료 시각으로 해석하지 않는다.
+- Strategy 1~9 전체의 REAL_VTS signal → execution → Position/PnL Full E2E
+- 동일 3개월 replay 실행과 동일 runtime state를 대상으로 한 실제 browser DOM Playwright 자동 검증
+- Strategy Trade P/L과 Account P/L 및 Position open/closed semantics의 완전한 회계 의미 정합성
+- KIS VTS Collector manifest/lifecycle 상태와 실제 evidence의 완전한 정합성
+- KIS Live credential 및 실제 Live E2E
 
-- REST: infrastructure/kis/kis_vts_weekday_collector.py 및 Historical Store 원본을 유지한다.
-- WebSocket: scripts/kis_vts_websocket_collector.py의 raw frame을 독립 원본으로 보존한다.
-- 비교 시 반드시 KST 기준 거래일 장중 시간축으로 정렬한다.
-- REST의 observed_at / collected_at과 WebSocket의 KIS source time / received_at을 분리하여 비교한다.
-- 한 원본의 마지막 timestamp와 다른 원본의 첫 timestamp만으로 수집 공백, Option 종료, Futures 시작 또는 WS 품질을 판단하지 않는다.
-- TR별 실제 frame 존재 구간을 확인한 뒤 동일시간 overlap, 연속성, 누락, 체결/호가 범위 및 Replay 활용성을 비교한다.
-- REST와 WebSocket의 데이터가 동일한 장중 구간에서 실제로 함께 존재하는지 원본 evidence로 확인한 후 Runtime/Replay 입력 결합 여부를 판단한다.
-- WebSocket이 REST보다 더 적합하다는 실제 증거가 확보되기 전에는 WebSocket 중심 장기 수집 전환을 선언하지 않는다.
-- 기존 결정 No.953의 REST 유지 + 독립 WebSocket 병렬 수집 + 실증 비교 후 전환 결정 원칙을 유지한다.
-- 실제 VTS 데이터는 REAL_VTS 원본으로 취급하되, 서로 다른 transport의 provenance를 섞지 않는다.
-## 27. Project-wide architecture efficiency and independence baseline (2026-10-01)
-Strategy 1~9는 전략 자체를 하나로 통합하지 않고 독립된 Strategy Plugin/Registry 경계를 유지한다. 공통 시장지표는 Common Analytics가 단일 소유하고, Strategy-specific metric은 각 전략에 남긴다.
-Calendar의 거래일/휴장일/previous-next trading day/week boundary 계산은 공통 MarketCalendarHub/MarketCalendarSnapshot을 단일 계산 경계로 유지한다. Strategy별 Calendar source가 동일 의미를 재계산하지 않으며, Strategy는 snapshot을 소비한다.
-StandardRuntimeInputProvider는 Common Runtime Input 조립과 Strategy-specific Input 조립을 분리할 수 있는 구조를 우선 검토한다. Common Analytics를 전략별 assembler가 다시 계산하지 않는다.
-AutomatedVirtualRuntimeFactory/Composition은 전략별 execution/multi-leg 특례를 직접 if-chain으로 계속 확대하지 않고, 필요 시 Strategy별 ExecutionPlan/MultiLeg Resolver Registry로 분리하여 Composition Root가 resolver 선택만 담당하도록 한다.
-Control Tower는 감독·운영/read-model facade로 유지하며 정상 주문 생성 경로와 전략 로직을 소유하지 않는다.
-REAL_VTS, DERIVED_SCENARIO, SYNTHETIC, VIRTUAL_EXECUTION의 provenance 경계는 유지한다. 고속 Replay 공통화가 필요하더라도 source provenance를 변경하거나 실제 VTS를 synthetic으로 취급하지 않는다.
-
-## 28. Architecture dependency verification
-ARCHITECTURE_LINT_SPEC.md에 정의된 core/application/environment/infrastructure/interfaces/contracts/strategy 의존성 규칙은 문서만으로 유지하지 않고 실행 가능한 자동검사로 보강한다.
-현재 tests/architecture/test_dependency_rules.py가 없는 상태는 구조 위반의 증거가 아니라 자동 예방검사 부재로 판정한다. 신규 아키텍처 규칙 검증기는 실제 import graph를 검사하되 현재 허용된 표준 경계를 기준으로 작성한다.
-Legacy 구현은 production 표준 경계에 재연결하지 않으며, 호출자가 없는 Legacy adapter는 테스트/호환성 의존 여부를 확인한 후 제거 대상으로 분류한다.
-
-## 29. Collector manifest/evidence consistency
-KIS VTS collector의 manifest.json 상태는 실제 raw/canonical evidence와 일치해야 한다. 실제 WebSocket raw frame이 존재하는데 manifest가 NOT_STARTED로 남는 등의 불일치는 collector lifecycle 기록 문제로 분류하고 별도 검증/수정한다.
-Manifest 상태만으로 실제 frame 수신 여부를 판단하지 않는다. REST/WS 각각의 raw evidence, source time, received_at, TR별 frame 존재구간을 함께 확인한다.
-Calendar UNKNOWN은 휴장으로 추정하지 않으며, 이미 수집된 실제 VTS 데이터를 synthetic/test 데이터로 격하하지 않는다.
-
-## 30. Project-wide E2E 판정 기준
-Strategy 1~9의 현재 E2E 상태는 CONTRACT/INTEGRATION, SOURCE, RUNTIME, SIGNAL, EXECUTION, POSITION/PnL, REGRESSION을 분리하여 판정한다.
-CONTRACT/INTEGRATION PASS 또는 runtime failure 0만으로 전체 Strategy E2E PASS를 선언하지 않는다.
-실제 REAL_VTS signal이 발생하지 않은 전략은 signal-driven execution lifecycle을 PASS로 선언하지 않고 미검증/BLOCKED로 유지한다.
-현재까지 확보된 REAL_VTS는 2026-09-28 → 2026-09-29 → 이후 거래일의 연속 stream으로 계속 누적하며, 새 거래일을 기존 검증범위와 교체하지 않는다.
-## 31. Strategy 1-9 Integrated E2E Execution Standard (2026-10-02)
-Strategy 1-9 must be validated independently; contract/integration PASS alone does not establish full E2E PASS.
-Per-strategy validation order: Source -> Runtime Input -> Strategy Signal -> Decision -> Risk -> OMS/Router -> Virtual Execution -> Position/PnL -> Regression.
-Strategy 1: OPTION + FUTURES hedge/unwind; verify option identity, initial fence/runtime input, execution and Position/PnL.
-Strategy 2: OPTION 4-leg; verify PUT/CALL, strike, authoritative expiry, quote/orderbook, Multi-Leg execution and Position/PnL.
-Strategy 3: current execution proposal is FUTURES using Futures-Index basis; verify canonical KOSPI200 runtime alias, authoritative futures/index source and execution lifecycle.
-Strategy 4: FUTURES gamma hedge/rebalance/unwind/trailing close; verify authoritative Greeks, account/equity, OHLC and futures identity.
-Strategy 5: no authoritative execution contract currently exists; separate signal/state validation from execution-contract availability and never invent an order contract.
-Strategy 6: OPTION PUT + strike/pair; search the continuous REAL_VTS stream for the confirmed active_vol >= base_vol x 1.3 condition and validate execution/Position/PnL when a real signal occurs.
-Strategy 7: OPTION PUT/CALL + strike Multi-Leg; keep the already-resolved OHLC/calendar standard closed and verify Option Master/expiry/quote, Multi-Leg execution and Position/PnL.
-Strategy 8: OPTION CALL and PUT/CALL pair; verify authoritative runtime inputs and signal-driven execution lifecycle.
-Strategy 9: ATM OPTION PUT + strike; verify authoritative IV/source/runtime path and signal-driven execution lifecycle.
-Use an independent Run ID per strategy; do not reuse prior position/order/PnL/strategy state.
-REAL_VTS is one continuously growing stream: 2026-09-28 -> 2026-09-29 -> every subsequent trading day under data/kis_market_data_restart/YYYY-MM-DD/.
-High-Speed Replay defaults to >=100x where practical; Scenario repetition may use 100x-1000x.
-Never inject synthetic/fixed/zero/false values for missing authoritative inputs to manufacture E2E PASS. Keep REAL_VTS, DERIVED_SCENARIO and SYNTHETIC provenance separate.
-For blockers: identify the cause from code/source/execution evidence, apply the minimum allowed change, run focused regression, then replay the same strategy.
-After the same error occurs twice consecutively, stop workaround repetition and record BLOCKED before moving to independent analysis.
-Keep intraday KIS VTS REST/WS collection through market close; after close finalize raw/TR counts, source time, received_at, overlap, gaps, duplicates and manifest consistency.
-Strategy 1-9 completion requires actual signal/execution evidence and regression evidence for the applicable lifecycle. No real signal means signal-driven lifecycle remains unverified/BLOCKED.
-Before Live credentials exist, all validation remains Virtual/VTS and must not place real KIS orders.
-
-## 32. Strategy 1-9 2026-10-02 REAL_VTS WebSocket E2E baseline
-2026-10-02 REAL_VTS WebSocket canonical data is the primary E2E input for the current Strategy 1-9 validation baseline; REST may be used only as reference and not as the E2E signal source.
-
-The 10/2 baseline contains actual REAL_VTS WebSocket evidence across option, KOSPI200 index and futures streams. Strategy 1-9 E2E verdicts are evidence-based and remain independent:
-- Strategy 1: actual signal and order approval/routing evidence; target quote absence prevents final fill lifecycle PASS.
-- Strategy 2: required authoritative inputs were present, but no actual strategy signal occurred in this dataset; signal-driven lifecycle remains unverified/BLOCKED.
-- Strategy 3: contract/integration validation passed, but the actual data-analysis result was not confirmed; remain BLOCKED rather than infer PASS.
-- Strategy 4: actual WS signals occurred; futures contract identity must resolve from observed WS symbol through the authoritative Master before execution/PnL validation.
-- Strategy 5: no actual signal occurred in this dataset; do not invent an execution contract or signal.
-- Strategy 6: actual ATM PUT/CALL evaluations occurred, but the confirmed volatility trigger did not occur; remain BLOCKED.
-- Strategy 7: keep the already-resolved OHLC/calendar standard closed; do not reopen it as an unresolved issue. Signal-driven execution remains unverified unless actual WS-to-runtime evidence is available.
-- Strategy 8: actual signal reached Runtime, but any remaining identity/Master coverage blocker must be resolved from evidence before full lifecycle PASS.
-- Strategy 9: Runtime fail-closed behavior is preserved; signal-driven execution remains unverified when authoritative ATM IV pair supply is not evidenced.
-
-For all Strategy 1-9 E2E:
-- Contract/integration PASS is not full E2E PASS.
-- Validate Source -> Runtime Input -> Strategy Signal -> Decision -> Risk -> OMS/Router -> Virtual Execution -> Position/PnL -> Regression as applicable.
-- A strategy with no real signal in the observed REAL_VTS interval remains signal-lifecycle BLOCKED/unverified; do not manufacture a signal with fixed, zero/false, synthetic or inferred authoritative inputs.
-- Continue the REAL_VTS stream cumulatively: 2026-09-28 -> 2026-09-29 -> every subsequently collected trading day. Do not replace the cumulative validation scope with a single two-day or single-day dataset.
-- The common contract identity rule remains: observed actual WS instrument code -> exact authoritative Master lookup -> contract identity -> strategy/order/execution/Position/PnL.
-- Monthly/yearly contract changes must be handled by Master data refresh/coverage, not by hardcoded strategy-specific contract selection.
-- Current overall Strategy 1-9 E2E status is BLOCKED because complete signal -> execution -> Position/PnL evidence has not been established across all strategies. This is a validation status, not a claim that the strategy implementations are invalid.
-
-## 33. Test PASS vs Actual Production Function Verification (2026-10-04)
-- A PASS from a test file is not, by itself, evidence that the corresponding production functionality is correct.
-- If a test file, fixture, mock, expected value, or assertion is modified merely to make the test PASS, that PASS MUST be excluded from actual functionality verification evidence.
-- Final Strategy 1-9 verdicts MUST prioritize evidence from the actual production execution path and actual REAL_VTS execution.
-- For every strategy, record separately: (1) test result, (2) actual production files/execution path changed, (3) REAL_VTS source/replay evidence, (4) Runtime Input status, (5) actual Signal or NO_SIGNAL_OBSERVED, (6) Decision/Risk/OMS/Router evidence, (7) Virtual Execution/Fill evidence, and (8) Position/PnL evidence.
-- Contract/unit/integration test PASS may support regression confidence, but MUST NOT be reported as full Strategy E2E PASS without applicable real execution evidence.
-- When no real signal occurs in the validated REAL_VTS interval, report NO_SIGNAL_OBSERVED and keep the signal-driven execution lifecycle unverified; never manufacture a signal with synthetic/fixed/zero/false/inferred authoritative inputs.
+이 항목들은 실제 증거가 확보될 때까지 PASS로 승격하지 않는다.
