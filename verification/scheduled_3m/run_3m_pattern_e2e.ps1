@@ -11,11 +11,20 @@ $verDir = Join-Path $root "verification\results\scheduled_3m"
 New-Item -ItemType Directory -Force $outRoot,$verDir | Out-Null
 if($Seed -eq 0){ $Seed = [int](Get-Date -Format "HHmmss") }
 $patterns = @("trend_up","trend_down","mean_revert","high_volatility","low_volatility","shock")
-if($Pattern -eq "auto"){
-  # Scheduler runs every 3 hours; choose the pattern from the execution hour.
-  # Using HHmmss % 6 collapses every 3-hour boundary to 0, so it always selected trend_up.
-  $slot = [int]((Get-Date).Hour / 3)
-  $Pattern = $patterns[$slot % $patterns.Count]
+$patternStatePath = Join-Path $verDir "pattern_rotation_state.json"
+$autoPattern = ($Pattern -eq "auto")
+if($autoPattern){
+  # Hourly scheduler uses Queue, so runs are serialized when each 3-month replay takes >1 hour.
+  # Persist the rotation index so queued executions advance one pattern at a time,
+  # independent of the actual wall-clock start time after queueing.
+  $nextIndex = $null
+  if(Test-Path $patternStatePath){
+    try { $state = Get-Content $patternStatePath -Raw | ConvertFrom-Json; $nextIndex = [int]$state.next_index } catch { $nextIndex = $null }
+  }
+  if($null -eq $nextIndex -or $nextIndex -lt 0 -or $nextIndex -ge $patterns.Count){
+    $nextIndex = (Get-Date).Hour % $patterns.Count
+  }
+  $Pattern = $patterns[$nextIndex]
 }
 if($Pattern -notin $patterns){ throw "Unknown pattern: $Pattern" }
 
@@ -89,4 +98,9 @@ Set-Location $root
 $exit=$LASTEXITCODE
 $summary=[ordered]@{dataset=$datasetName;pattern=$Pattern;seed=$Seed;data_path=$datasetDir;log_path=$logPath;events=$total;trading_days=$days;exit_code=$exit;completed_at=(Get-Date).ToString("o")}
 $summary | ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 $reportPath
+if($exit -eq 0 -and $Pattern -eq $patterns[[int]$nextIndex]){
+  $next = ([int]$nextIndex + 1) % $patterns.Count
+  [ordered]@{next_index=$next;last_pattern=$Pattern;updated_at=(Get-Date).ToString("o")} |
+    ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 $patternStatePath
+}
 exit $exit
