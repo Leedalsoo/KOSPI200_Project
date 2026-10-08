@@ -96,16 +96,26 @@ $manifest | ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 (Join-Path $dat
 Set-Location $root
 & py -m environments.high_speed.virtual_runtime_replay --dataset $datasetDir 2>&1 | Tee-Object -FilePath $logPath
 $exit=$LASTEXITCODE
+
+# UI smoke is always attempted, including when replay fails.
+# Scheduled run PASS requires both replay and UI smoke to pass.
 $uiExit = 0
 $uiLogPath = Join-Path $verDir "$datasetName.ui_smoke.log"
-if($exit -eq 0){
+try {
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "verify_control_tower_ui.ps1") 2>&1 | Tee-Object -FilePath $uiLogPath
   $uiExit = $LASTEXITCODE
+} catch {
+  $_ | Out-String | Tee-Object -FilePath $uiLogPath -Append | Out-Null
+  $uiExit = 1
 }
 $finalExit = if($exit -eq 0 -and $uiExit -eq 0){0}else{1}
 $summary=[ordered]@{dataset=$datasetName;pattern=$Pattern;seed=$Seed;data_path=$datasetDir;log_path=$logPath;events=$total;trading_days=$days;replay_exit_code=$exit;ui_smoke_exit_code=$uiExit;exit_code=$finalExit;ui_log_path=$uiLogPath;completed_at=(Get-Date).ToString("o")}
 $summary | ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 $reportPath
-if($finalExit -eq 0 -and $Pattern -eq $patterns[[int]$nextIndex]){
+
+# A UI smoke failure must not pin the rotation on the failed pattern.
+# Replay failure alone keeps the same pattern for retry; replay PASS + UI PASS advances normally.
+$advanceRotation = ($uiExit -ne 0) -or ($finalExit -eq 0)
+if($autoPattern -and $advanceRotation -and $null -ne $nextIndex -and $Pattern -eq $patterns[[int]$nextIndex]){
   $next = ([int]$nextIndex + 1) % $patterns.Count
   [ordered]@{next_index=$next;last_pattern=$Pattern;updated_at=(Get-Date).ToString("o")} |
     ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 $patternStatePath
