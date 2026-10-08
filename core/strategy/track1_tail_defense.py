@@ -131,7 +131,7 @@ class Track1TailDefense(Strategy):
                             proposed_quantity=self.FENCE_QUANTITY,
                             asset_type="OPTION",
                             requested_price=None,
-                            side=None,
+                            side=("BUY" if self.state.active_fence_type == "PUT" else "SELL"),
                             track_id=self.strategy_id,
                             tag_id=str(self.state.active_fence_tag),
                             option_type=self.state.active_fence_type,

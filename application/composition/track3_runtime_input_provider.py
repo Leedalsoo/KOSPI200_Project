@@ -31,6 +31,9 @@ class Track3RuntimeInputProvider:
 
         payload = self.source.get_input(symbol, observed_at)
         if payload is None:
+            recent = tuple(getattr(getattr(self.source, "market", None), "recent_ticks", ()))
+            if len(recent) <= 20:
+                return self._unavailable("TRACK3_WARMUP_INSUFFICIENT_HISTORY")
             return self._unavailable("TRACK3_REQUIRED_AUTHORITATIVE_SOURCES_UNAVAILABLE")
         if payload.observed_at != observed_at:
             return self._unavailable("TRACK3_INPUT_TIMESTAMP_MISMATCH")
@@ -39,6 +42,9 @@ class Track3RuntimeInputProvider:
         if len(payload.spread_history) < 10:
             return self._unavailable("TRACK3_SPREAD_HISTORY_UNAVAILABLE")
         if payload.active_vol <= 0 or payload.base_vol <= 0:
+            recent = tuple(getattr(getattr(self.source, "market", None), "recent_ticks", ()))
+            if len(recent) <= 20:
+                return self._unavailable("TRACK3_WARMUP_INSUFFICIENT_HISTORY")
             return self._unavailable("TRACK3_VOLATILITY_SOURCE_INVALID")
         if payload.total_fees < 0 or payload.premium_spent < 0:
             return self._unavailable("TRACK3_COST_SOURCE_INVALID")

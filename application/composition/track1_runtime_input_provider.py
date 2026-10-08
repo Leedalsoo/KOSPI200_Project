@@ -140,8 +140,8 @@ class Track1RuntimeInputProvider:
                 momentum = None
             else:
                 momentum = self._momentum_confirmed(underlying_history, as_of, fence_type)
-            if momentum is None:
-                missing.append("momentum")
+            # Insufficient ROC lookback is normal warm-up, not missing authoritative data.
+            # Track1 safely evaluates this state as momentum_confirmed=False.
 
         coverage_ratio, short_option_net_delta = self._position_metrics(lots, as_of)
         if active_vol is None:

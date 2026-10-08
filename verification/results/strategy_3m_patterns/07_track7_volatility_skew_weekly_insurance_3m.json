@@ -1,0 +1,136 @@
+{
+  "dataset": "S7_high_volatility_3m",
+  "run_id": "CURRENT-3M-S7",
+  "events": 49140,
+  "signals": 4793,
+  "approved": 4793,
+  "routed": 4,
+  "filled": 4,
+  "rejected": 4791,
+  "execution_ids": [
+    "EXEC-000001",
+    "EXEC-000002",
+    "EXEC-000003",
+    "EXEC-000004"
+  ],
+  "elapsed_seconds": 1113.5931303002872,
+  "events_per_second": 44.1274273906028,
+  "exhausted": true,
+  "pnl_status": "VSSF_ACCOUNT_PNL_CONNECTED",
+  "multi_leg_decisions": 4793,
+  "strategy_signal_counts": [
+    [
+      "track7_volatility_skew_weekly_insurance",
+      4793
+    ]
+  ],
+  "strategy_status": [
+    {
+      "strategy_id": "TRACK1_TAIL_DEFENSE",
+      "reaction_signals": 0,
+      "execution_signals": 0,
+      "non_execution_signals": 0,
+      "unavailable": 0,
+      "runtime_failures": 0,
+      "decision_rejected": 0,
+      "risk_rejected": 0,
+      "approved": 0,
+      "routed": 0,
+      "filled_quantity": 0
+    },
+    {
+      "strategy_id": "track2_asymmetric_trap",
+      "reaction_signals": 0,
+      "execution_signals": 0,
+      "non_execution_signals": 0,
+      "unavailable": 0,
+      "runtime_failures": 0,
+      "decision_rejected": 0,
+      "risk_rejected": 0,
+      "approved": 0,
+      "routed": 0,
+      "filled_quantity": 0
+    },
+    {
+      "strategy_id": "track4_gamma_scalping",
+      "reaction_signals": 0,
+      "execution_signals": 0,
+      "non_execution_signals": 0,
+      "unavailable": 0,
+      "runtime_failures": 0,
+      "decision_rejected": 0,
+      "risk_rejected": 0,
+      "approved": 0,
+      "routed": 0,
+      "filled_quantity": 0
+    },
+    {
+      "strategy_id": "track5_gap_divergence",
+      "reaction_signals": 0,
+      "execution_signals": 0,
+      "non_execution_signals": 0,
+      "unavailable": 0,
+      "runtime_failures": 0,
+      "decision_rejected": 0,
+      "risk_rejected": 0,
+      "approved": 0,
+      "routed": 0,
+      "filled_quantity": 0
+    },
+    {
+      "strategy_id": "track6_daily_tail_insurance",
+      "reaction_signals": 0,
+      "execution_signals": 0,
+      "non_execution_signals": 0,
+      "unavailable": 0,
+      "runtime_failures": 0,
+      "decision_rejected": 0,
+      "risk_rejected": 0,
+      "approved": 0,
+      "routed": 0,
+      "filled_quantity": 0
+    },
+    {
+      "strategy_id": "track7_volatility_skew_weekly_insurance",
+      "reaction_signals": 4793,
+      "execution_signals": 4793,
+      "non_execution_signals": 0,
+      "unavailable": 0,
+      "runtime_failures": 0,
+      "decision_rejected": 0,
+      "risk_rejected": 0,
+      "approved": 4793,
+      "routed": 4,
+      "filled_quantity": 4
+    },
+    {
+      "strategy_id": "track8_macro_regime_monthly_strangle",
+      "reaction_signals": 0,
+      "execution_signals": 0,
+      "non_execution_signals": 0,
+      "unavailable": 0,
+      "runtime_failures": 0,
+      "decision_rejected": 0,
+      "risk_rejected": 0,
+      "approved": 0,
+      "routed": 0,
+      "filled_quantity": 0
+    },
+    {
+      "strategy_id": "track9_event_overnight_insurance",
+      "reaction_signals": 0,
+      "execution_signals": 0,
+      "non_execution_signals": 0,
+      "unavailable": 0,
+      "runtime_failures": 0,
+      "decision_rejected": 0,
+      "risk_rejected": 0,
+      "approved": 0,
+      "routed": 0,
+      "filled_quantity": 0
+    }
+  ],
+  "realized_pnl": -14675639.774999999,
+  "unrealized_pnl": 0.0,
+  "net_pnl": -14675639.774999999
+}

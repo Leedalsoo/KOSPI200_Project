@@ -1,0 +1,327 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: P200 CONTROL TOWER
+      - generic [ref=e6]:
+        - generic [ref=e7]: ACTIVE ENV
+        - generic [ref=e8]: 옵션프로그램 (Option Program)
+    - generic [ref=e10]:
+      - generic [ref=e11]: SYSTEM TIME
+      - generic [ref=e12]: 2026-10-08 14:56:07
+    - generic [ref=e13]:
+      - generic [ref=e14]: FAIL-SAFE ENGAGED
+      - button "PANIC HALT" [ref=e17] [cursor=pointer]
+  - tablist "Environment Navigation" [ref=e20]:
+    - tab "01 High-Speed Test STOPPED" [ref=e21]:
+      - generic [ref=e22]: "01"
+      - generic [ref=e23]: High-Speed Test
+      - generic "DISCONNECTED" [ref=e24]: STOPPED
+    - button "02 가상거래소 OPEN" [ref=e25] [cursor=pointer]:
+      - generic [ref=e26]: "02"
+      - generic [ref=e27]: 가상거래소
+      - generic "CONNECTED" [ref=e28]: OPEN
+    - tab "03 가상증권사 OPERATIONAL" [ref=e29]:
+      - generic [ref=e30]: "03"
+      - generic [ref=e31]: 가상증권사
+      - generic "CONNECTED" [ref=e32]: OPERATIONAL
+    - tab "04 옵션프로그램 RUNNING" [selected] [ref=e33]:
+      - generic [ref=e34]: "04"
+      - generic [ref=e35]: 옵션프로그램
+      - generic "CONNECTED" [ref=e36]: RUNNING
+    - tab "05 모의투자 BLOCKED" [ref=e37]:
+      - generic [ref=e38]: "05"
+      - generic [ref=e39]: 모의투자
+      - generic "DISCONNECTED" [ref=e40]: BLOCKED
+    - tab "06 실투자 BLOCKED" [ref=e41]:
+      - generic [ref=e42]: "06"
+      - generic [ref=e43]: 실투자
+      - generic "DISCONNECTED" [ref=e44]: BLOCKED
+  - region [ref=e45]:
+    - generic [ref=e46]:
+      - heading "Strategy / Scenario / Run Control" [level=3] [ref=e47]
+      - generic [ref=e48]: VIRTUAL ONLY
+    - generic [ref=e49]:
+      - generic [ref=e50]:
+        - text: Strategy
+        - combobox "Strategy" [ref=e51]:
+          - option "TRACK1_TAIL_DEFENSE v1.1.0" [selected]
+          - option "track2_asymmetric_trap v1.0"
+          - option "Strategy_3_StatArb v1.0"
+          - option "track4_gamma_scalping v1.0"
+          - option "track5_gap_divergence v2.0"
+          - option "track6_daily_tail_insurance v1.0"
+          - option "track7_volatility_skew_weekly_insurance v1.0"
+          - option "track8_macro_regime_monthly_strangle v2.0"
+          - option "track9_event_overnight_insurance v3.0"
+      - generic [ref=e52]:
+        - text: Scenario
+        - combobox "Scenario" [ref=e53]:
+          - option "CALM" [selected]
+          - option "HIGH_VOLATILITY"
+          - option "UP_TREND"
+          - option "DOWN_TREND"
+          - option "SIDEWAYS"
+          - option "SHARP_UP"
+          - option "SHARP_DOWN"
+          - option "VOL_EXPANSION"
+          - option "VOL_CONTRACTION"
+          - option "SHOCK_UP"
+          - option "SHOCK_DOWN"
+      - generic [ref=e54]:
+        - text: Run ID
+        - textbox "Run ID" [ref=e55]:
+          - /placeholder: RUN-001
+      - button "RUN 생성" [ref=e56] [cursor=pointer]
+      - button "START" [ref=e57] [cursor=pointer]
+      - button "STOP" [ref=e58] [cursor=pointer]
+      - button "REPLAY NEXT" [active] [ref=e59] [cursor=pointer]
+      - text: "RUN: UI-TRACK7-FILL-PNL-REALVTS-20260929-1791438842696 / RUNNING"
+      - generic "Run Read Model" [ref=e60]: "{ \"run_id\": \"UI-TRACK7-FILL-PNL-REALVTS-20260929-1791438842696\", \"runtime_state\": \"RUNNING\", \"historical_source\": \"kis_vts_rest\", \"last_replay_tick\": { \"timestamp\": \"2026-09-28T23:29:38.419849+00:00\", \"seq_id\": 15, \"symbol\": \"B01610A34\", \"expiry\": \"2026-10-08\", \"strike\": 1100, \"option_type\": \"CALL\", \"bid\": 0, \"ask\": 0, \"last\": 22.15 }, \"account\": { \"as_of\": \"2026-10-08T14:56:07\", \"balances\": { \"cash\": \"250000000.0\", \"margin_used\": \"0\", \"realized_pnl\": \"0\", \"available_cash\": \"250000000.0\", \"unrealized_pnl\": \"0\" }, \"freshness\": \"DataQuality(is_fresh=True, is_complete=True, source_available=True, reason='vssf_authoritative_account_summary')\" }, \"position\": {}, \"margin\": { \"margin_used\": \"0\", \"available_cash\": \"250000000.0\" }, \"pnl\": { \"realized_pnl\": \"0\", \"unrealized_pnl\": \"0\" }, \"execution_reports\": [] }"
+  - main [ref=e61]:
+    - generic [ref=e62]:
+      - generic [ref=e63]:
+        - generic [ref=e64]:
+          - heading "옵션프로그램 (Runtime / Strategy / Decision / Risk / OMS)" [level=2] [ref=e65]
+          - paragraph [ref=e66]: "가상거래소?\x80 가상증권사 ?ъ씠???ㅼ젣 ?듭뀡 Runtime ?대? ?먮쫫??Read Model濡?愿\x80痢≫빀?덈떎. UI媛\x80 Strategy/Core ?대? 媛앹껜瑜?吏곸젒 ?몄텧?섏? ?딆뒿?덈떎."
+        - generic [ref=e67]:
+          - generic [ref=e68]: RUNNING
+          - generic [ref=e69]: "RUN: UI-TRACK7-FILL-PNL-REALVTS-20260929-1791438842696"
+      - generic [ref=e70]:
+        - generic [ref=e71]:
+          - generic [ref=e72]: MARKET INPUT
+          - text: B01610A34 @ 22.1500
+        - generic [ref=e73]:
+          - generic [ref=e74]: SIGNALS
+          - text: "0"
+        - generic [ref=e75]:
+          - generic [ref=e76]: APPROVED / REJECTED
+          - text: 0 / 0
+        - generic [ref=e77]:
+          - generic [ref=e78]: ROUTED / FILLED
+          - text: 0 / 0
+      - generic [ref=e79]:
+        - heading "Runtime Flow — Market → Strategy → Signal → Decision → Risk/OMS → Execution → Position/PnL" [level=3] [ref=e81]
+        - generic [ref=e83]:
+          - generic [ref=e84]:
+            - generic [ref=e85]: Market Input
+            - strong [ref=e86]: AVAILABLE
+          - generic [ref=e87]:
+            - generic [ref=e88]: Strategy
+            - strong [ref=e89]: AVAILABLE
+          - generic [ref=e90]:
+            - generic [ref=e91]: Signal
+            - strong [ref=e92]: "0"
+          - generic [ref=e93]:
+            - generic [ref=e94]: Decision Approved
+            - strong [ref=e95]: "0"
+          - generic [ref=e96]:
+            - generic [ref=e97]: Risk / Router Rejected
+            - strong [ref=e98]: "0"
+          - generic [ref=e99]:
+            - generic [ref=e100]: Order Routed
+            - strong [ref=e101]: "0"
+          - generic [ref=e102]:
+            - generic [ref=e103]: Execution Filled
+            - strong [ref=e104]: "0"
+          - generic [ref=e105]:
+            - generic [ref=e106]: Position / PnL
+            - strong [ref=e107]: AVAILABLE
+      - generic [ref=e108]:
+        - generic [ref=e109]:
+          - heading "Strategy Control — 사용 전략 / Entry / Exit" [level=3] [ref=e110]
+          - text: VIRTUAL VERIFICATION CONTROL
+        - generic [ref=e111]:
+          - paragraph [ref=e112]: 전략별 전체 ON/OFF와 Entry/Exit를 독립 제어합니다. 변경은 현재 Virtual Run의 Strategy Hub 제어 경계에 즉시 반영됩니다.
+          - generic [ref=e114]:
+            - generic [ref=e115]:
+              - generic [ref=e116]: STRATEGY 01
+              - strong [ref=e117]: track7_volatility_skew_weekly_insurance
+            - generic [ref=e118]: v1.0
+            - generic [ref=e119]:
+              - checkbox "USE ON" [checked] [ref=e120]
+              - text: USE
+              - generic [ref=e121]: "ON"
+            - generic [ref=e122]:
+              - checkbox "ENTRY ON" [checked] [ref=e123]
+              - text: ENTRY
+              - generic [ref=e124]: "ON"
+            - generic [ref=e125]:
+              - checkbox "EXIT ON" [checked] [ref=e126]
+              - text: EXIT
+              - generic [ref=e127]: "ON"
+      - generic [ref=e128]:
+        - generic [ref=e129]:
+          - heading "9개 핵심 전략 — 3×3 Equal Grid · 독립 BUY/SELL 합성 그래프 + 전략별 손익" [level=3] [ref=e130]
+          - text: 1 / 9
+        - article [ref=e132]:
+          - generic [ref=e133]:
+            - generic [ref=e134]: TRACK 01
+            - generic [ref=e135]: ENABLED
+          - heading "track7_volatility_skew_weekly_insurance" [level=4] [ref=e136]
+          - generic [ref=e137]: "1.0"
+          - generic [ref=e138]:
+            - generic [ref=e139]: OPTION / FUTURES COMPOSITION
+            - generic [ref=e140]: BUY · SELL
+          - generic [ref=e141]: BUY / SELL DATA UNAVAILABLE
+          - generic [ref=e142]: TRADE-LEVEL P/L UNAVAILABLE
+          - generic [ref=e143]:
+            - generic [ref=e144]: signals 0
+            - generic [ref=e145]: approved 0
+            - generic [ref=e146]: routed 0
+            - generic [ref=e147]: filled 0
+          - generic [ref=e148]:
+            - generic [ref=e149]:
+              - text: Source
+              - generic [ref=e150]: REAL_VTS_SOURCE_SELECTED
+            - generic [ref=e151]:
+              - text: Runtime Input
+              - generic [ref=e152]: AVAILABLE
+            - generic [ref=e153]:
+              - text: Signal
+              - generic [ref=e154]: NO_SIGNAL_OBSERVED
+          - generic [ref=e155]: NO_SIGNAL_OBSERVED
+          - generic [ref=e156]: STRATEGY INTEGRATED P/L UNAVAILABLE
+      - generic [ref=e157]:
+        - generic [ref=e158]:
+          - heading "Current Baseline Verification — Strategy 1~9" [level=3] [ref=e159]
+          - text: "TARGET: 5,000 TICKS"
+        - generic [ref=e160]:
+          - generic [ref=e161]:
+            - generic [ref=e162]:
+              - generic [ref=e163]: Basis
+              - strong [ref=e164]: CURRENT_BASELINE
+            - generic [ref=e165]:
+              - generic [ref=e166]: Target
+              - strong [ref=e167]: 5,000 ticks / strategy
+            - generic [ref=e168]:
+              - generic [ref=e169]: Completed reports
+              - strong [ref=e170]: 1 / 9
+            - generic [ref=e171]:
+              - generic [ref=e172]: 5,000-tick complete
+              - strong [ref=e173]: 0 / 9
+            - generic [ref=e174]:
+              - generic [ref=e175]: Blocked / incomplete
+              - strong [ref=e176]: 1 / 9
+          - generic [ref=e177]:
+            - generic [ref=e178]:
+              - generic [ref=e179]: TRACK 01
+              - strong [ref=e180]: TRACK1_TAIL_DEFENSE
+              - generic [ref=e181]: Ticks / source
+              - text: 4771 / 5000 · kis_vts_rest
+              - generic [ref=e182]: Signal / Approved / Routed / Filled
+              - text: 0 / 0 / 0 / 0
+              - generic [ref=e183]: Verdict
+              - text: BLOCKED / INCOMPLETE
+            - generic [ref=e184]:
+              - generic [ref=e185]: TRACK 02
+              - strong [ref=e186]: track2_asymmetric_trap
+              - generic [ref=e187]: Current baseline
+              - text: NOT RUN
+            - generic [ref=e188]:
+              - generic [ref=e189]: TRACK 03
+              - strong [ref=e190]: Strategy_3_StatArb
+              - generic [ref=e191]: Current baseline
+              - text: NOT RUN
+            - generic [ref=e192]:
+              - generic [ref=e193]: TRACK 04
+              - strong [ref=e194]: track4_gamma_scalping
+              - generic [ref=e195]: Current baseline
+              - text: NOT RUN
+            - generic [ref=e196]:
+              - generic [ref=e197]: TRACK 05
+              - strong [ref=e198]: track5_gap_divergence
+              - generic [ref=e199]: Current baseline
+              - text: NOT RUN
+            - generic [ref=e200]:
+              - generic [ref=e201]: TRACK 06
+              - strong [ref=e202]: track6_daily_tail_insurance
+              - generic [ref=e203]: Current baseline
+              - text: NOT RUN
+            - generic [ref=e204]:
+              - generic [ref=e205]: TRACK 07
+              - strong [ref=e206]: track7_volatility_skew_weekly_insurance
+              - generic [ref=e207]: Current baseline
+              - text: NOT RUN
+            - generic [ref=e208]:
+              - generic [ref=e209]: TRACK 08
+              - strong [ref=e210]: track8_macro_regime_monthly_strangle
+              - generic [ref=e211]: Current baseline
+              - text: NOT RUN
+            - generic [ref=e212]:
+              - generic [ref=e213]: TRACK 09
+              - strong [ref=e214]: track9_event_overnight_insurance
+              - generic [ref=e215]: Current baseline
+              - text: NOT RUN
+      - generic [ref=e216]:
+        - generic [ref=e217]:
+          - heading "현재 Market Input" [level=3] [ref=e219]
+          - generic [ref=e220]: "{ \"timestamp\": \"2026-09-28T23:29:38.419849+00:00\", \"seq_id\": 15, \"symbol\": \"B01610A34\", \"expiry\": \"2026-10-08\", \"strike\": 1100, \"option_type\": \"CALL\", \"bid\": 0, \"ask\": 0, \"last\": 22.15, \"underlying_price\": 1089.28, \"volume\": 0 }"
+        - generic [ref=e222]:
+          - heading "Execution / Position / PnL" [level=3] [ref=e224]
+          - generic [ref=e225]: "{ \"account\": { \"as_of\": \"2026-10-08T14:56:07\", \"balances\": { \"cash\": \"250000000.0\", \"margin_used\": \"0\", \"realized_pnl\": \"0\", \"available_cash\": \"250000000.0\", \"unrealized_pnl\": \"0\" }, \"freshness\": \"DataQuality(is_fresh=True, is_complete=True, source_available=True, reason='vssf_authoritative_account_summary')\" }, \"margin\": { \"margin_used\": \"0\", \"available_cash\": \"250000000.0\" }, \"pnl\": { \"realized_pnl\": \"0\", \"unrealized_pnl\": \"0\" }, \"position\": {}, \"execution_reports\": [] }"
+      - generic [ref=e227]:
+        - generic [ref=e228]:
+          - heading "전략별 현재 검증 관측 상태" [level=3] [ref=e229]
+          - text: "FULL E2E: NOT_CLAIMED"
+        - generic [ref=e230]:
+          - generic [ref=e231]:
+            - generic [ref=e232]:
+              - generic [ref=e233]: Scope
+              - strong [ref=e234]: RUN_OBSERVATION_ONLY
+            - generic [ref=e235]:
+              - generic [ref=e236]: Source
+              - strong [ref=e237]: kis_vts_rest
+            - generic [ref=e238]:
+              - generic [ref=e239]: Environment
+              - strong [ref=e240]: virtual
+            - generic [ref=e241]:
+              - generic [ref=e242]: Scenario
+              - strong [ref=e243]: UNSPECIFIED
+          - generic [ref=e245]:
+            - generic [ref=e246]: TRACK 01
+            - strong [ref=e247]: track7_volatility_skew_weekly_insurance
+            - generic [ref=e248]: Current run observation
+            - text: NO_SIGNAL_OBSERVED
+            - generic [ref=e249]: Signals / Approved / Routed / Filled
+            - text: 0 / 0 / 0 / 0
+      - generic [ref=e251]:
+        - heading "Read Model 증거 상태" [level=4] [ref=e252]
+        - paragraph [ref=e253]: per_strategy_signal_detail, decision_reason_detail, risk_reason_detail, order_command_detail
+  - contentinfo "Audit and Event Log" [ref=e254]:
+    - generic [ref=e255]:
+      - generic [ref=e256]: AUDIT & EVENT STREAM
+      - generic [ref=e257]: 옵션프로그램 (Option Program)
+    - generic [ref=e258]:
+      - generic [ref=e259]: "[BOOTSTRAP] Control Tower initialized. 5 execution environments + Option Program runtime view registered."
+      - generic [ref=e260]: "[SECURITY] UI Data Interface isolation active. No internal Core objects exposed."
+      - generic [ref=e261]: "[오후 2:28:01] [OPTION_PROGRAM] Control Tower UI Adapter initialized"
+      - generic [ref=e262]: "[오후 2:54:55] [RUN] REPLAY completed"
+      - generic [ref=e263]: "[오후 2:54:55] [OPTION_PROGRAM] Control Tower UI Adapter initialized"
+      - generic [ref=e264]: "[오후 2:55:02] [RUN] REPLAY completed"
+      - generic [ref=e265]: "[오후 2:55:03] [OPTION_PROGRAM] Control Tower UI Adapter initialized"
+      - generic [ref=e266]: "[오후 2:55:06] [RUN] REPLAY completed"
+      - generic [ref=e267]: "[오후 2:55:07] [OPTION_PROGRAM] Control Tower UI Adapter initialized"
+      - generic [ref=e268]: "[오후 2:55:10] [RUN] REPLAY completed"
+      - generic [ref=e269]: "[오후 2:55:11] [OPTION_PROGRAM] Control Tower UI Adapter initialized"
+      - generic [ref=e270]: "[오후 2:55:14] [RUN] REPLAY completed"
+      - generic [ref=e271]: "[오후 2:55:15] [OPTION_PROGRAM] Control Tower UI Adapter initialized"
+      - generic [ref=e272]: "[오후 2:55:18] [RUN] REPLAY completed"
+      - generic [ref=e273]: "[오후 2:55:19] [OPTION_PROGRAM] Control Tower UI Adapter initialized"
+      - generic [ref=e274]: "[오후 2:55:34] [RUN] REPLAY completed"
+      - generic [ref=e275]: "[오후 2:55:35] [OPTION_PROGRAM] Control Tower UI Adapter initialized"
+      - generic [ref=e276]: "[오후 2:55:38] [RUN] REPLAY completed"
+      - generic [ref=e277]: "[오후 2:55:39] [OPTION_PROGRAM] Control Tower UI Adapter initialized"
+      - generic [ref=e278]: "[오후 2:55:42] [RUN] REPLAY completed"
+      - generic [ref=e279]: "[오후 2:55:43] [OPTION_PROGRAM] Control Tower UI Adapter initialized"
+      - generic [ref=e280]: "[오후 2:55:46] [RUN] REPLAY completed"
+      - generic [ref=e281]: "[오후 2:55:47] [OPTION_PROGRAM] Control Tower UI Adapter initialized"
+      - generic [ref=e282]: "[오후 2:55:50] [RUN] REPLAY completed"
+      - generic [ref=e283]: "[오후 2:55:51] [OPTION_PROGRAM] Control Tower UI Adapter initialized"
+      - generic [ref=e284]: "[오후 2:55:55] [RUN] REPLAY completed"
+      - generic [ref=e285]: "[오후 2:55:55] [OPTION_PROGRAM] Control Tower UI Adapter initialized"
+      - generic [ref=e286]: "[오후 2:55:59] [RUN] REPLAY completed"
+      - generic [ref=e287]: "[오후 2:55:59] [OPTION_PROGRAM] Control Tower UI Adapter initialized"
+      - generic [ref=e288]: "[오후 2:56:02] [RUN] REPLAY completed"
+      - generic [ref=e289]: "[오후 2:56:03] [OPTION_PROGRAM] Control Tower UI Adapter initialized"
+      - generic [ref=e290]: "[오후 2:56:07] [RUN] REPLAY completed"
+      - generic [ref=e291]: "[오후 2:56:07] [OPTION_PROGRAM] Control Tower UI Adapter initialized"

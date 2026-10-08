@@ -1,0 +1,11 @@
+﻿{
+    "dataset":  "synthetic-3m-5min-low_volatility-20261007_231435",
+    "pattern":  "low_volatility",
+    "seed":  777,
+    "data_path":  "C:\\Users\\white\\Desktop\\MovingProject\\KOSPI200_Project\\data\\synthetic_market_data\\scheduled_3m\\synthetic-3m-5min-low_volatility-20261007_231435",
+    "log_path":  "C:\\Users\\white\\Desktop\\MovingProject\\KOSPI200_Project\\verification\\results\\scheduled_3m\\synthetic-3m-5min-low_volatility-20261007_231435.log",
+    "events":  49140,
+    "trading_days":  63,
+    "exit_code":  1,
+    "completed_at":  "2026-10-08T00:23:00.2276424+09:00"
+}

@@ -1,0 +1,139 @@
+- generic [ref=f2e2]:
+  - banner [ref=f2e3]:
+    - generic [ref=f2e4]:
+      - generic [ref=f2e5]: P200 CONTROL TOWER
+      - generic [ref=f2e6]:
+        - generic [ref=f2e7]: ACTIVE ENV
+        - generic [ref=f2e8]: 가상거래소 (Virtual Market)
+    - generic [ref=f2e10]:
+      - generic [ref=f2e11]: SYSTEM TIME
+      - generic [ref=f2e12]: 2026-10-07 00:17:27
+    - generic [ref=f2e13]:
+      - generic [ref=f2e14]: FAIL-SAFE ENGAGED
+      - button "PANIC HALT" [ref=f2e17] [cursor=pointer]
+  - tablist "Environment Navigation" [ref=f2e20]:
+    - tab "01 High-Speed Test STOPPED" [ref=f2e21]:
+      - generic [ref=f2e22]: "01"
+      - generic [ref=f2e23]: High-Speed Test
+      - generic "DISCONNECTED" [ref=f2e24]: STOPPED
+    - button "02 가상거래소 OPEN" [ref=f2e25] [cursor=pointer]:
+      - generic [ref=f2e26]: "02"
+      - generic [ref=f2e27]: 가상거래소
+      - generic "CONNECTED" [ref=f2e28]: OPEN
+    - tab "03 가상증권사 OPERATIONAL" [ref=f2e29]:
+      - generic [ref=f2e30]: "03"
+      - generic [ref=f2e31]: 가상증권사
+      - generic "CONNECTED" [ref=f2e32]: OPERATIONAL
+    - tab "04 옵션프로그램 RUNNING" [ref=f2e33]:
+      - generic [ref=f2e34]: "04"
+      - generic [ref=f2e35]: 옵션프로그램
+      - generic "CONNECTED" [ref=f2e36]: RUNNING
+    - tab "05 모의투자 BLOCKED" [ref=f2e37]:
+      - generic [ref=f2e38]: "05"
+      - generic [ref=f2e39]: 모의투자
+      - generic "DISCONNECTED" [ref=f2e40]: BLOCKED
+    - tab "06 실투자 BLOCKED" [ref=f2e41]:
+      - generic [ref=f2e42]: "06"
+      - generic [ref=f2e43]: 실투자
+      - generic "DISCONNECTED" [ref=f2e44]: BLOCKED
+  - region [ref=f2e45]:
+    - generic [ref=f2e46]:
+      - heading "Strategy / Scenario / Run Control" [level=3] [ref=f2e47]
+      - generic [ref=f2e48]: VIRTUAL ONLY
+    - generic [ref=f2e49]:
+      - generic [ref=f2e50]:
+        - text: Strategy
+        - combobox "Strategy" [ref=f2e51]:
+          - option "TRACK1_TAIL_DEFENSE v1.1.0" [selected]
+          - option "track2_asymmetric_trap v1.0"
+          - option "Strategy_3_StatArb v1.0"
+          - option "track4_gamma_scalping v1.0"
+          - option "track5_gap_divergence v1.1"
+          - option "track6_daily_tail_insurance v1.0"
+          - option "track7_volatility_skew_weekly_insurance v1.0"
+          - option "track8_macro_regime_monthly_strangle v2.0"
+          - option "track9_event_overnight_insurance v3.0"
+      - generic [ref=f2e52]:
+        - text: Scenario
+        - combobox "Scenario" [ref=f2e53]:
+          - option "CALM" [selected]
+          - option "HIGH_VOLATILITY"
+          - option "UP_TREND"
+          - option "DOWN_TREND"
+          - option "SIDEWAYS"
+          - option "SHARP_UP"
+          - option "SHARP_DOWN"
+          - option "VOL_EXPANSION"
+          - option "VOL_CONTRACTION"
+          - option "SHOCK_UP"
+          - option "SHOCK_DOWN"
+      - generic [ref=f2e54]:
+        - text: Run ID
+        - textbox "Run ID" [ref=f2e55]:
+          - /placeholder: RUN-001
+      - button "RUN 생성" [ref=f2e56] [cursor=pointer]
+      - button "START" [ref=f2e57] [cursor=pointer]
+      - button "STOP" [ref=f2e58] [cursor=pointer]
+      - button "REPLAY NEXT" [ref=f2e59] [cursor=pointer]
+      - text: "RUN: 92755a2f-9741-462c-9958-2c6015b19cdf / RUNNING"
+      - generic "Run Read Model" [ref=f2e60]: "{ \"run_id\": \"92755a2f-9741-462c-9958-2c6015b19cdf\", \"runtime_state\": \"RUNNING\", \"historical_source\": null, \"last_replay_tick\": { \"timestamp\": \"2026-01-02T09:00:00\", \"seq_id\": 1, \"symbol\": \"KOSPI200\", \"expiry\": \"202609\", \"strike\": 350, \"option_type\": \"CALL\", \"bid\": 350.0476, \"ask\": 350.1476, \"last\": 350.0976 }, \"account\": { \"as_of\": \"2026-10-07T00:17:27\", \"balances\": { \"cash\": \"250000000.0\", \"margin_used\": \"0\", \"realized_pnl\": \"0\", \"available_cash\": \"250000000.0\", \"unrealized_pnl\": \"0\" }, \"freshness\": \"DataQuality(is_fresh=True, is_complete=True, source_available=True, reason='vssf_authoritative_account_summary')\" }, \"position\": {}, \"margin\": { \"margin_used\": \"0\", \"available_cash\": \"250000000.0\" }, \"pnl\": { \"realized_pnl\": \"0\", \"unrealized_pnl\": \"0\" }, \"execution_reports\": [] }"
+  - main [ref=f2e61]:
+    - generic [ref=f2e62]:
+      - generic [ref=f2e63]:
+        - generic [ref=f2e64]:
+          - heading "가상거래소 (Virtual Market)" [level=2] [ref=f2e65]
+          - paragraph [ref=f2e66]: "KRX ?쒖꽭 洹쒓꺽???꾨꼍??誘몃윭留곹븯???ㅼ떆媛??? ?멸? ?ㅽ봽?덈뱶, 吏\x80???쇰뱶瑜??≪텧?섎뒗 媛\x80??嫄곕옒???섍꼍?낅땲??"
+        - generic [ref=f2e67]:
+          - generic [ref=f2e68]: OPEN
+          - generic [ref=f2e69]: "LATENCY: ?"
+      - generic [ref=f2e70]:
+        - generic [ref=f2e71]:
+          - generic [ref=f2e72]: UNDERLYING KOSPI200
+          - text: "350.10"
+        - generic [ref=f2e73]:
+          - generic [ref=f2e74]: VOLATILITY (VKOSPI)
+          - text: "?"
+        - generic [ref=f2e75]:
+          - generic [ref=f2e76]: ACTIVE INSTRUMENTS
+          - text: "1"
+        - generic [ref=f2e77]:
+          - generic [ref=f2e78]: FEED STATUS
+          - text: CONNECTED
+      - generic [ref=f2e79]:
+        - generic [ref=f2e80]:
+          - heading "?ㅼ떆媛??쒖꽭 ?먮쫫 (Option & Futures Ticks)" [level=3] [ref=f2e82]
+          - table [ref=f2e84]:
+            - rowgroup [ref=f2e85]:
+              - row [ref=f2e86]:
+                - columnheader "Code" [ref=f2e87]
+                - columnheader "Name" [ref=f2e88]
+                - columnheader "Price" [ref=f2e89]
+                - columnheader "Chg" [ref=f2e90]
+                - columnheader "Volume" [ref=f2e91]
+                - columnheader "Time" [ref=f2e92]
+            - rowgroup [ref=f2e93]:
+              - row [ref=f2e94]:
+                - cell "KOSPI200" [ref=f2e95]
+                - cell "KOSPI200 Virtual Underlying" [ref=f2e96]
+                - cell "350.10" [ref=f2e97]
+                - cell "?" [ref=f2e98]
+                - cell "1,000" [ref=f2e99]
+                - cell "09:00:00" [ref=f2e100]
+        - generic [ref=f2e101]:
+          - heading "?멸? 源딆씠 諛??쒖옣 ?ㅽ봽?덈뱶 (Order Book Depth)" [level=3] [ref=f2e103]
+          - generic [ref=f2e105]:
+            - generic [ref=f2e106]:
+              - generic [ref=f2e107]: "350.15"
+              - generic [ref=f2e108]: "?"
+            - generic [ref=f2e109]: "?"
+            - generic [ref=f2e110]:
+              - generic [ref=f2e111]: "350.05"
+              - generic [ref=f2e112]: "?"
+  - contentinfo "Audit and Event Log" [ref=f2e113]:
+    - generic [ref=f2e114]:
+      - generic [ref=f2e115]: AUDIT & EVENT STREAM
+      - generic [ref=f2e116]: 가상거래소 (Virtual Market)
+    - generic [ref=f2e117]:
+      - generic [ref=f2e118]: "[BOOTSTRAP] Control Tower initialized. 5 execution environments + Option Program runtime view registered."
+      - generic [ref=f2e119]: "[SECURITY] UI Data Interface isolation active. No internal Core objects exposed."
+      - generic [ref=f2e120]: "[오전 12:17:27] [VIRTUAL_EXCHANGE] Control Tower UI Adapter initialized"

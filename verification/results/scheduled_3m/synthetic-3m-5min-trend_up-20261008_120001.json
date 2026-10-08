@@ -1,0 +1,11 @@
+﻿{
+    "dataset":  "synthetic-3m-5min-trend_up-20261008_120001",
+    "pattern":  "trend_up",
+    "seed":  120001,
+    "data_path":  "C:\\Users\\white\\Desktop\\MovingProject\\KOSPI200_Project\\data\\synthetic_market_data\\scheduled_3m\\synthetic-3m-5min-trend_up-20261008_120001",
+    "log_path":  "C:\\Users\\white\\Desktop\\MovingProject\\KOSPI200_Project\\verification\\results\\scheduled_3m\\synthetic-3m-5min-trend_up-20261008_120001.log",
+    "events":  49140,
+    "trading_days":  63,
+    "exit_code":  0,
+    "completed_at":  "2026-10-08T13:37:39.1380813+09:00"
+}

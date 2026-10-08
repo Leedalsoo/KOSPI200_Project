@@ -123,10 +123,15 @@ class AutomatedVirtualTradingLoop:
         }
         for failure in strategy_result.failures:
             status = status_by_strategy.get(failure.strategy_id, StrategyRuntimeStatus(failure.strategy_id))
-            unavailable = int(failure.error_type == "UnavailableData" or "UNAVAILABLE" in failure.message)
+            warmup_reasons = {"TRACK3_WARMUP_INSUFFICIENT_HISTORY"}
+            is_warmup = failure.message in warmup_reasons
+            unavailable = int(
+                (failure.error_type == "UnavailableData" or "UNAVAILABLE" in failure.message)
+                and not is_warmup
+            )
             status_by_strategy[failure.strategy_id] = status.add(
                 unavailable=unavailable,
-                runtime_failures=1,
+                runtime_failures=0 if unavailable or is_warmup else 1,
             )
         for evaluation in evaluations:
             strategy_id = str(getattr(evaluation.context, "strategy_id", "") or "")

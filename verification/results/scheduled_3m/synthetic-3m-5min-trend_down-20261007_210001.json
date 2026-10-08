@@ -1,0 +1,9 @@
+﻿{
+    "dataset":  "synthetic-3m-5min-trend_down-20261007_210001",
+    "pattern":  "trend_down",
+    "seed":  210001,
+    "data_path":  "C:\\Users\\white\\Desktop\\MovingProject\\KOSPI200_Project\\data\\synthetic_market_data\\scheduled_3m\\synthetic-3m-5min-trend_down-20261007_210001.jsonl",
+    "log_path":  "C:\\Users\\white\\Desktop\\MovingProject\\KOSPI200_Project\\verification\\results\\scheduled_3m\\synthetic-3m-5min-trend_down-20261007_210001.log",
+    "exit_code":  0,
+    "completed_at":  "2026-10-07T21:07:15.2832203+09:00"
+}

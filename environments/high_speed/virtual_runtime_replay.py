@@ -56,6 +56,12 @@ class HighSpeedVirtualRuntimeReplayRunner:
         bootstrap = create_virtual_runtime_bootstrap(
             option_master=option_master, initial_capital=self.initial_capital
         )
+        # create_virtual_runtime_bootstrap already creates the UI/runtime loop.
+        # High-Speed replay needs a second composition with DERIVED_SCENARIO
+        # sources, so detach the bootstrap loop before attaching the replay loop.
+        existing_loop = getattr(bootstrap, "automated_loop", None)
+        if existing_loop is not None:
+            bootstrap.bundle.market.unsubscribe(existing_loop.on_tick)
         loop = attach_standard_automated_loop(
             bootstrap,
             strategy_keys=self.strategy_keys,

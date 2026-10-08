@@ -79,10 +79,14 @@ class SyntheticRuntimeSources:
         self._tick = tick
         observed = datetime.fromisoformat(tick.timestamp)
         price = Decimal(str(tick.last_price))
-        if self._track5_daily_context is None:
-            trading_date = observed.date()
+        trading_date = observed.date()
+        if self._track5_daily_context is None or self._track5_daily_context.trading_date != trading_date:
             spot = Decimal(str(tick.underlying_price))
-            self.set_track5_daily_context(trading_date=trading_date, open_price=spot, previous_close=spot - self._track5_opening_gap_points)
+            self.set_track5_daily_context(
+                trading_date=trading_date,
+                open_price=spot,
+                previous_close=spot - self._track5_opening_gap_points,
+            )
         volume = Decimal(str(max(1, tick.volume)))
         self._history.append((observed, price, volume))
         expiry = str(tick.expiry)
