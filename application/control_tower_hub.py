@@ -61,8 +61,30 @@ class ControlTowerHub:
         rows = []
         for key in keys:
             strategy_id, version = (key[0], key[1]) if isinstance(key, tuple) else (key.strategy_id, key.version)
-            rows.append({"strategy_id": strategy_id, "version": version, "enabled": bool(hub.is_enabled(strategy_id, version))})
+            rows.append({
+                "strategy_id": strategy_id,
+                "version": version,
+                "enabled": bool(hub.is_enabled(strategy_id, version)),
+                "entry_enabled": bool(hub.is_entry_enabled(strategy_id, version)),
+                "exit_enabled": bool(hub.is_exit_enabled(strategy_id, version)),
+            })
         return {"strategies": rows}
+
+    def strategy_control(self, strategy_id: str, version: str, *, enabled: bool | None = None,
+                         entry_enabled: bool | None = None, exit_enabled: bool | None = None) -> dict[str, Any]:
+        hub = self._strategy_hub
+        if hub is None:
+            raise RuntimeError("STRATEGY_HUB_UNAVAILABLE")
+        if enabled is not None:
+            hub.set_enabled(strategy_id, version, enabled)
+        if entry_enabled is not None:
+            hub.set_entry_enabled(strategy_id, version, entry_enabled)
+        if exit_enabled is not None:
+            hub.set_exit_enabled(strategy_id, version, exit_enabled)
+        return next(
+            row for row in self.strategy_read_model()["strategies"]
+            if row["strategy_id"] == strategy_id and row["version"] == version
+        )
 
     def run_read_model(self) -> dict[str, Any]:
         session = getattr(self._run_hub, "active", None) if self._run_hub else None

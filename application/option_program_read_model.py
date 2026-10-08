@@ -87,6 +87,7 @@ class OptionProgramReadModel:
             return []
 
         grouped: dict[str, list[dict[str, Any]]] = {}
+        pnl_by_strategy: dict[str, list[float]] = {}
         for group_id in group_ids:
             try:
                 snap = broker_api.get_group_position_snapshot(group_id)
@@ -96,6 +97,14 @@ class OptionProgramReadModel:
             if not strategy_id:
                 continue
             rows = grouped.setdefault(strategy_id, [])
+            realized = getattr(snap, "realized_pnl", None)
+            unrealized = getattr(snap, "unrealized_pnl", None)
+            if realized is not None or unrealized is not None:
+                current = pnl_by_strategy.setdefault(strategy_id, [0.0, 0.0])
+                if realized is not None:
+                    current[0] += float(realized)
+                if unrealized is not None:
+                    current[1] += float(unrealized)
             for leg in getattr(snap, "legs", ()):
                 instrument_id = str(getattr(leg, "instrument_id", "") or "")
                 pos = positions.get(instrument_id) if hasattr(positions, "get") else None
@@ -127,10 +136,20 @@ class OptionProgramReadModel:
                     "identity_source": getattr(identity, "identity_source", None) if identity is not None else getattr(leg, "identity_source", None),
                 })
 
-        return [
-            {"strategy_id": strategy_id, "legs": legs, "data_status": "AVAILABLE" if legs else "UNAVAILABLE"}
-            for strategy_id, legs in sorted(grouped.items())
-        ]
+        rows: list[dict[str, Any]] = []
+        for strategy_id, legs in sorted(grouped.items()):
+            rows.append({
+                "strategy_id": strategy_id,
+                "legs": legs,
+                "data_status": "AVAILABLE" if legs else "UNAVAILABLE",
+                "realized_pnl": (pnl_by_strategy.get(strategy_id) or [None, None])[0],
+                "unrealized_pnl": (pnl_by_strategy.get(strategy_id) or [None, None])[1],
+                "net_pnl": (
+                    sum(pnl_by_strategy[strategy_id])
+                    if strategy_id in pnl_by_strategy else None
+                ),
+            })
+        return rows
 
     def build(self) -> dict[str, Any]:
         runtime_status = self._runtime_controller.status()

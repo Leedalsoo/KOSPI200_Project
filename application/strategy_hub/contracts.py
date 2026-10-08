@@ -24,5 +24,17 @@ class StrategyHubPort:
     def is_enabled(self, strategy_id: str, version: str) -> bool:
         raise NotImplementedError
 
+    def set_entry_enabled(self, strategy_id: str, version: str, enabled: bool) -> None:
+        raise NotImplementedError
+
+    def is_entry_enabled(self, strategy_id: str, version: str) -> bool:
+        raise NotImplementedError
+
+    def set_exit_enabled(self, strategy_id: str, version: str, enabled: bool) -> None:
+        raise NotImplementedError
+
+    def is_exit_enabled(self, strategy_id: str, version: str) -> bool:
+        raise NotImplementedError
+
     def reset(self) -> None:
         raise NotImplementedError

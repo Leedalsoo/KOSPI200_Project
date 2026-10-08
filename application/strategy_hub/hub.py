@@ -28,5 +28,17 @@ class StrategyHub(StrategyHubPort):
     def is_enabled(self, strategy_id: str, version: str) -> bool:
         return self._orchestrator.is_enabled(strategy_id, version)
 
+    def set_entry_enabled(self, strategy_id: str, version: str, enabled: bool) -> None:
+        self._orchestrator.set_entry_enabled(strategy_id, version, enabled)
+
+    def is_entry_enabled(self, strategy_id: str, version: str) -> bool:
+        return self._orchestrator.is_entry_enabled(strategy_id, version)
+
+    def set_exit_enabled(self, strategy_id: str, version: str, enabled: bool) -> None:
+        self._orchestrator.set_exit_enabled(strategy_id, version, enabled)
+
+    def is_exit_enabled(self, strategy_id: str, version: str) -> bool:
+        return self._orchestrator.is_exit_enabled(strategy_id, version)
+
     def reset(self) -> None:
         self._orchestrator.reset()

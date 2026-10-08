@@ -137,3 +137,40 @@ def test_control_tower_server_run_api_injects_configured_historical_store(monkey
     assert json.loads(payload)["run"]["historical_store_path"] == store
     tower.create_run.assert_called_once()
     assert tower.create_run.call_args.args[0]["historical_store_path"] == store
+
+
+def test_control_tower_server_strategy_control_api(monkeypatch):
+    tower = MagicMock()
+    tower.strategy_control.return_value = {
+        "strategy_id": "test_strategy",
+        "version": "1.0",
+        "enabled": True,
+        "entry_enabled": False,
+        "exit_enabled": True,
+    }
+    monkeypatch.setattr(ControlTowerRequestHandler, "tower", tower)
+    body = json.dumps({
+        "strategy_id": "test_strategy",
+        "version": "1.0",
+        "enabled": True,
+        "entry_enabled": False,
+        "exit_enabled": True,
+    }).encode("utf-8")
+    request_data = (
+        b"POST /api/strategy/control HTTP/1.1\r\n"
+        b"Host: localhost\r\n"
+        b"Content-Type: application/json\r\n"
+        b"Content-Length: " + str(len(body)).encode("ascii") + b"\r\n\r\n" + body
+    )
+    sock = _MockSocket(request_data)
+    ControlTowerRequestHandler(sock, ("127.0.0.1", 12345), MagicMock())
+    response = sock._wfile.getvalue()
+    assert b"200 OK" in response
+    assert b"entry_enabled" in response
+    tower.strategy_control.assert_called_once_with(
+        "test_strategy",
+        "1.0",
+        enabled=True,
+        entry_enabled=False,
+        exit_enabled=True,
+    )

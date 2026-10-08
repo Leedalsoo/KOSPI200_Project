@@ -39,6 +39,12 @@ class StrategyOrchestrator:
         self._enabled: Dict[StrategyKey, bool] = {
             key: True for key in self._strategy_keys
         }
+        self._entry_enabled: Dict[StrategyKey, bool] = {
+            key: True for key in self._strategy_keys
+        }
+        self._exit_enabled: Dict[StrategyKey, bool] = {
+            key: True for key in self._strategy_keys
+        }
         self._initialized: set[StrategyKey] = set()
 
     def set_enabled(
@@ -54,6 +60,51 @@ class StrategyOrchestrator:
 
     def is_enabled(self, strategy_id: str, version: str) -> bool:
         return self._enabled[(strategy_id, version)]
+
+    def set_entry_enabled(self, strategy_id: str, version: str, enabled: bool) -> None:
+        key = (strategy_id, version)
+        if key not in self._entry_enabled:
+            raise KeyError(f"strategy not managed: {key}")
+        self._entry_enabled[key] = enabled
+
+    def is_entry_enabled(self, strategy_id: str, version: str) -> bool:
+        return self._entry_enabled[(strategy_id, version)]
+
+    def set_exit_enabled(self, strategy_id: str, version: str, enabled: bool) -> None:
+        key = (strategy_id, version)
+        if key not in self._exit_enabled:
+            raise KeyError(f"strategy not managed: {key}")
+        self._exit_enabled[key] = enabled
+
+    def is_exit_enabled(self, strategy_id: str, version: str) -> bool:
+        return self._exit_enabled[(strategy_id, version)]
+
+    @staticmethod
+    def _signal_lifecycle(signal: Signal) -> str:
+        proposal = getattr(signal, "execution_proposal", None)
+        tag = str(getattr(proposal, "tag_id", "") or "").upper()
+        reason = str(getattr(signal, "reason", "") or "").upper()
+        text = f"{tag} {reason}"
+        if any(token in text for token in ("ENTRY", "OPEN")):
+            return "ENTRY"
+        if any(token in text for token in ("EXIT", "CLOSE", "UNWIND", "FLATTEN", "TAKE_PROFIT", "STOP_LOSS", "TIMEOUT")):
+            return "EXIT"
+        return "UNKNOWN"
+
+    def _apply_lifecycle_controls(self, signals: Sequence[Signal]) -> tuple[Signal, ...]:
+        filtered: list[Signal] = []
+        for signal in signals:
+            key = next((candidate for candidate in self._strategy_keys if candidate[0] == signal.strategy_id), None)
+            if key is None:
+                filtered.append(signal)
+                continue
+            lifecycle = self._signal_lifecycle(signal)
+            if lifecycle == "ENTRY" and not self._entry_enabled[key]:
+                continue
+            if lifecycle == "EXIT" and not self._exit_enabled[key]:
+                continue
+            filtered.append(signal)
+        return tuple(filtered)
 
     def reset(self) -> None:
         for strategy_id, version in self._strategy_keys:
@@ -144,6 +195,6 @@ class StrategyOrchestrator:
                 )
 
         return StrategyRunResult(
-            signals=tuple(signals),
+            signals=self._apply_lifecycle_controls(tuple(signals)),
             failures=tuple(failures),
         )

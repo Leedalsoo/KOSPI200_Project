@@ -131,6 +131,23 @@ class ControlTowerRequestHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._send_json({"success": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
+        if path == "/api/strategy/control":
+            try:
+                strategy_id = str(payload.get("strategy_id", "")).strip()
+                version = str(payload.get("version", "")).strip()
+                if not strategy_id or not version:
+                    raise ValueError("STRATEGY_ID_AND_VERSION_REQUIRED")
+                allowed = {"enabled", "entry_enabled", "exit_enabled"}
+                updates = {key: payload[key] for key in allowed if key in payload}
+                if not updates:
+                    raise ValueError("STRATEGY_CONTROL_UPDATE_REQUIRED")
+                if any(not isinstance(value, bool) for value in updates.values()):
+                    raise ValueError("STRATEGY_CONTROL_VALUES_MUST_BE_BOOLEAN")
+                result = self.tower.strategy_control(strategy_id, version, **updates)
+                self._send_json({"success": True, "strategy": result})
+            except Exception as exc:
+                self._send_json({"success": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
         if path == "/api/active_tab":
             tab_id = payload.get("tab_id", "")
             valid = tab_id in {tab.value for tab in TabEnvironmentId}

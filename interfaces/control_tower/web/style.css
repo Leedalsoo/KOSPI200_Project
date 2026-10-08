@@ -547,6 +547,57 @@ body {
 .flow-node span { display: block; color: var(--text-muted); font-size: 11px; margin-bottom: 5px; }
 .flow-node strong { font-family: var(--font-mono); font-size: 13px; color: var(--text-primary); }
 .option-program-strategies { margin-bottom: 20px; }
+.option-program-strategy-controls { margin-bottom: 20px; }
+.strategy-control-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 16px;
+}
+.strategy-control-card {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-elevated);
+}
+.strategy-control-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.strategy-control-title span { color: var(--accent-blue); }
+.strategy-control-title strong { color: var(--text-primary); overflow-wrap: anywhere; }
+.strategy-control-version {
+  display: block;
+  color: var(--text-muted);
+  font: 9px var(--font-mono);
+  margin: 4px 0 9px;
+}
+.strategy-control-card label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font: 10px var(--font-mono);
+}
+.strategy-control-card input { accent-color: var(--accent-green); }
+.strategy-control-card label b { margin-left: auto; color: var(--accent-green); }
+.strategy-control-card input:not(:checked) + b { color: var(--text-muted); }
+.strategy-pnl {
+  margin-top: 8px;
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  background: rgba(2,6,23,.45);
+  font: 11px var(--font-mono);
+  font-weight: 700;
+}
+.strategy-pnl.pnl-positive { color: var(--accent-green); }
+.strategy-pnl.pnl-negative { color: var(--accent-red); }
+.strategy-pnl.pnl-neutral { color: var(--text-muted); }
 .strategy-grid-3x3 {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -753,6 +804,7 @@ body {
   .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grid-two-col { grid-template-columns: 1fr; }
   .strategy-grid-3x3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .strategy-control-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .flow-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
@@ -772,6 +824,7 @@ body {
   .panel-actions { flex-wrap: wrap; width: 100%; }
   .metric-grid { grid-template-columns: 1fr; gap: 10px; }
   .strategy-grid-3x3 { grid-template-columns: 1fr; }
+  .strategy-control-grid { grid-template-columns: 1fr; }
   .flow-grid { grid-template-columns: 1fr; }
   .metric-card { padding: 13px; }
   .metric-val { font-size: 18px; }

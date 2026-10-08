@@ -106,6 +106,27 @@ document.addEventListener("DOMContentLoaded", () => {
     try { const data=await apiFetch("/api/run/action", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action})}); addAuditLog(`[RUN] ${action} completed`); refreshRunControls(); return data; }
     catch(error) { addAuditLog(`[RUN] ${action} failed: ${error.message}`, "error"); alert(error.message); }
   }
+
+  async function setStrategyControl(strategyId, version, field, value) {
+    try {
+      await apiFetch("/api/strategy/control", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({strategy_id: strategyId, version, [field]: value}),
+      });
+      addAuditLog(`[STRATEGY] ${strategyId} ${field}=${value ? "ON" : "OFF"}`);
+      await fetchTabDetail("option_program");
+    } catch (error) {
+      addAuditLog(`[STRATEGY] ${strategyId} control failed: ${error.message}`, "error");
+      alert(error.message);
+    }
+  }
+
+  document.getElementById("op-strategy-controls")?.addEventListener("change", (event) => {
+    const input = event.target.closest("input[data-strategy-id]");
+    if (!input) return;
+    setStrategyControl(input.dataset.strategyId, input.dataset.version, input.dataset.control, input.checked);
+  });
   runCreateBtn?.addEventListener("click", async () => {
     const key=(strategySelect?.value || "").split(":");
     if (!runIdInput?.value.trim() || key.length !== 2) return alert("Run ID? Strategy瑜??좏깮?섏꽭??");
@@ -324,6 +345,23 @@ document.addEventListener("DOMContentLoaded", () => {
     </div>`;
   }
 
+  function renderStrategyControls(strategies) {
+    const root = document.getElementById("op-strategy-controls");
+    if (!root) return;
+    root.innerHTML = strategies.map((item, index) => {
+      const sid = escapeHtml(item.strategy_id);
+      const version = escapeHtml(item.version);
+      const key = `s${index + 1}`;
+      return `<div class="strategy-control-card">
+        <div class="strategy-control-title"><span>STRATEGY ${String(index + 1).padStart(2, "0")}</span><strong>${sid}</strong></div>
+        <span class="strategy-control-version">v${version}</span>
+        <label><input type="checkbox" data-strategy-id="${sid}" data-version="${version}" data-control="enabled" ${item.enabled ? "checked" : ""}> USE <b>${item.enabled ? "ON" : "OFF"}</b></label>
+        <label><input type="checkbox" data-strategy-id="${sid}" data-version="${version}" data-control="entry_enabled" ${item.entry_enabled ? "checked" : ""} ${item.enabled ? "" : "disabled"}> ENTRY <b>${item.entry_enabled ? "ON" : "OFF"}</b></label>
+        <label><input type="checkbox" data-strategy-id="${sid}" data-version="${version}" data-control="exit_enabled" ${item.exit_enabled ? "checked" : ""} ${item.enabled ? "" : "disabled"}> EXIT <b>${item.exit_enabled ? "ON" : "OFF"}</b></label>
+      </div>`;
+    }).join("");
+  }
+
   function renderOptionProgram(data) {
     setText("op-runtime-state", data.runtime_state || "STOPPED");
     setText("op-run-id", "RUN: " + (data.run_id || "?"));
@@ -338,6 +376,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const flowGrid = document.getElementById("op-flow-grid");
     if (flowGrid) flowGrid.innerHTML = flowItems.map(([label,value]) => `<div class="flow-node"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value ?? "?")}</strong></div>`).join("");
     const strategies = Array.isArray(data.strategies) ? data.strategies : [];
+    renderStrategyControls(strategies);
     const strategyGraphs = new Map((Array.isArray(data.strategy_graphs) ? data.strategy_graphs : []).map((item) => [item.strategy_id, item]));
     const grid = document.getElementById("op-strategy-grid");
     setText("op-strategy-count", strategies.length + " / 9");
@@ -345,7 +384,10 @@ document.addEventListener("DOMContentLoaded", () => {
       const status=item.status||{}; const state=item.enabled?"ENABLED":"DISABLED"; const observation=item.observation_state||"NO_SIGNAL_OBSERVED";
       const cls=observation.includes("BLOCKED")||observation==="INPUT_UNAVAILABLE"?"blocked":(observation.includes("OBSERVED")?"observed":"neutral");
       const graph = strategyGraphs.get(item.strategy_id) || { data_status: "UNAVAILABLE", legs: [] };
-      return `<article class="strategy-card"><div class="strategy-card-top"><span>TRACK ${String(index+1).padStart(2,"0")}</span><b>${escapeHtml(state)}</b></div><h4>${escapeHtml(item.strategy_id)}</h4><div class="strategy-version">${escapeHtml(item.version)}</div><div class="strategy-graph-heading"><span>OPTION / FUTURES COMPOSITION</span><b>BUY · SELL</b></div>${renderStrategyCompositionGraph(graph)}<div class="strategy-stats"><span>signals <b>${escapeHtml(status.reaction_signals??0)}</b></span><span>approved <b>${escapeHtml(status.approved??0)}</b></span><span>routed <b>${escapeHtml(status.routed??0)}</b></span><span>filled <b>${escapeHtml(status.filled_quantity??0)}</b></span></div><div class="strategy-evidence"><span>Source <b>${escapeHtml(item.source_status||"SOURCE_UNSPECIFIED")}</b></span><span>Runtime Input <b>${escapeHtml(item.runtime_input_status||"UNAVAILABLE")}</b></span><span>Signal <b>${escapeHtml(item.signal_status||observation)}</b></span></div><span class="verification-state ${cls}">${escapeHtml(observation)}</span><div class="strategy-version">FULL E2E: NOT CLAIMED</div></article>`;
+      const pnl = graph.net_pnl;
+      const pnlClass = pnl == null ? "pnl-neutral" : Number(pnl) >= 0 ? "pnl-positive" : "pnl-negative";
+      const pnlLabel = pnl == null ? "P/L UNAVAILABLE" : `STRATEGY P/L ${moneyText(pnl)}`;
+      return `<article class="strategy-card"><div class="strategy-card-top"><span>TRACK ${String(index+1).padStart(2,"0")}</span><b>${escapeHtml(state)}</b></div><h4>${escapeHtml(item.strategy_id)}</h4><div class="strategy-version">${escapeHtml(item.version)}</div><div class="strategy-pnl ${pnlClass}">${escapeHtml(pnlLabel)}</div><div class="strategy-graph-heading"><span>OPTION / FUTURES COMPOSITION</span><b>BUY · SELL</b></div>${renderStrategyCompositionGraph(graph)}<div class="strategy-stats"><span>signals <b>${escapeHtml(status.reaction_signals??0)}</b></span><span>approved <b>${escapeHtml(status.approved??0)}</b></span><span>routed <b>${escapeHtml(status.routed??0)}</b></span><span>filled <b>${escapeHtml(status.filled_quantity??0)}</b></span></div><div class="strategy-evidence"><span>Source <b>${escapeHtml(item.source_status||"SOURCE_UNSPECIFIED")}</b></span><span>Runtime Input <b>${escapeHtml(item.runtime_input_status||"UNAVAILABLE")}</b></span><span>Signal <b>${escapeHtml(item.signal_status||observation)}</b></span></div><span class="verification-state ${cls}">${escapeHtml(observation)}</span><div class="strategy-version">FULL E2E: NOT CLAIMED</div></article>`;
     }).join("");
     const marketDetail=document.getElementById("op-market-detail"); if(marketDetail) marketDetail.textContent=JSON.stringify(market||{status:"UNAVAILABLE"},null,2);
     const accountDetail=document.getElementById("op-account-detail"); if(accountDetail) accountDetail.textContent=JSON.stringify({account:data.account,margin:data.margin,pnl:data.pnl,position:data.position,execution_reports:data.execution_reports},null,2);
