@@ -70,6 +70,68 @@ class OptionProgramReadModel:
             )
         return rows
 
+    def _strategy_graphs(self, broker_api: Any, option_master: Any) -> list[dict[str, Any]]:
+        """Project authoritative executed BUY/SELL leg values for UI-only composition graphs.
+
+        This deliberately exposes trade-side/value identity only. It does not calculate
+        payoff, PnL, BEP, or any synthetic price curve.
+        """
+        if broker_api is None:
+            return []
+
+        try:
+            group_ids = tuple(broker_api.get_group_ids())
+            position_snapshot = broker_api.get_position_snapshot()
+            positions = getattr(position_snapshot, "positions", {}) if position_snapshot is not None else {}
+        except Exception:
+            return []
+
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for group_id in group_ids:
+            try:
+                snap = broker_api.get_group_position_snapshot(group_id)
+            except Exception:
+                continue
+            strategy_id = str(getattr(snap, "strategy_id", "") or "")
+            if not strategy_id:
+                continue
+            rows = grouped.setdefault(strategy_id, [])
+            for leg in getattr(snap, "legs", ()):
+                instrument_id = str(getattr(leg, "instrument_id", "") or "")
+                pos = positions.get(instrument_id) if hasattr(positions, "get") else None
+                side = str(getattr(pos, "side", "") or "").upper() if pos is not None else ""
+                if side not in {"BUY", "SELL"}:
+                    side = "UNKNOWN"
+                trade_price = getattr(leg, "avg_price", None)
+                if trade_price is None and pos is not None:
+                    trade_price = getattr(pos, "avg_price", None)
+
+                identity = None
+                if option_master is not None and hasattr(option_master, "get_contract_identity") and instrument_id:
+                    try:
+                        identity = option_master.get_contract_identity(instrument_id)
+                    except Exception:
+                        identity = None
+
+                rows.append({
+                    "group_id": str(getattr(leg, "group_id", group_id)),
+                    "leg_id": str(getattr(leg, "leg_id", "")),
+                    "instrument_id": instrument_id,
+                    "side": side,
+                    "quantity": int(getattr(leg, "quantity", 0) or 0),
+                    "trade_price": float(trade_price) if trade_price is not None else None,
+                    "asset_type": "OPTION" if identity is not None else "UNKNOWN",
+                    "expiry": getattr(identity, "expiry", None) if identity is not None else None,
+                    "option_type": getattr(identity, "option_type", None) if identity is not None else None,
+                    "strike": float(identity.strike) if identity is not None and getattr(identity, "strike", None) is not None else None,
+                    "identity_source": getattr(identity, "identity_source", None) if identity is not None else getattr(leg, "identity_source", None),
+                })
+
+        return [
+            {"strategy_id": strategy_id, "legs": legs, "data_status": "AVAILABLE" if legs else "UNAVAILABLE"}
+            for strategy_id, legs in sorted(grouped.items())
+        ]
+
     def build(self) -> dict[str, Any]:
         runtime_status = self._runtime_controller.status()
         runtime_state = getattr(runtime_status, "state", "STOPPED")
@@ -144,6 +206,10 @@ class OptionProgramReadModel:
             self._asdict(item)
             for item in getattr(self._runtime_hub, "last_strategy_status", ())
         ]
+        strategy_graphs = self._strategy_graphs(
+            broker_api,
+            getattr(self._bundle, "option_master", None),
+        )
 
         unavailable: list[str] = []
         if market_input is None:
@@ -179,6 +245,7 @@ class OptionProgramReadModel:
             },
             "market_input": market_input,
             "strategies": self._strategy_rows(),
+            "strategy_graphs": strategy_graphs,
             "last_result": last_result,
             "strategy_status": status_rows,
             "account": account,

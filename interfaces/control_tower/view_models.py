@@ -133,6 +133,7 @@ class OptionProgramView:
     historical_store_path: str | None = None
     market_input: dict[str, Any] | None = None
     strategies: list[dict[str, Any]] = field(default_factory=list)
+    strategy_graphs: list[dict[str, Any]] = field(default_factory=list)
     strategy_status: list[dict[str, Any]] = field(default_factory=list)
     last_result: dict[str, Any] | None = None
     flow: dict[str, Any] = field(default_factory=dict)

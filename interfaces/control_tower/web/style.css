@@ -558,7 +558,91 @@ body {
   padding: 14px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background: var(--bg-surface);
+  background: linear-gradient(180deg, rgba(30,41,59,.72), rgba(15,23,42,.92));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
+}
+.strategy-graph-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--text-muted);
+  font-size: 9px;
+  letter-spacing: .35px;
+}
+.strategy-graph-heading b {
+  color: var(--accent-blue);
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+.strategy-graph-wrap {
+  margin-top: 6px;
+  border: 1px solid rgba(56,189,248,.14);
+  border-radius: var(--radius-sm);
+  background: rgba(2,6,23,.5);
+  padding: 7px 7px 5px;
+}
+.strategy-graph-legend {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  flex-wrap: wrap;
+  color: var(--text-muted);
+  font-size: 8px;
+  font-family: var(--font-mono);
+}
+.legend-buy { color: var(--accent-green); }
+.legend-sell { color: var(--accent-red); }
+.strategy-composition-svg {
+  width: 100%;
+  height: 116px;
+  display: block;
+  margin-top: 2px;
+}
+.strategy-graph-axis {
+  stroke: rgba(148,163,184,.25);
+  stroke-width: 1;
+}
+.strategy-graph-line-buy {
+  fill: none;
+  stroke: var(--accent-green);
+  stroke-width: 2;
+}
+.strategy-graph-line-sell {
+  fill: none;
+  stroke: var(--accent-red);
+  stroke-width: 2;
+}
+.strategy-graph-buy {
+  fill: var(--accent-green);
+  stroke: #0f172a;
+  stroke-width: 1.5;
+}
+.strategy-graph-sell {
+  fill: var(--accent-red);
+  stroke: #0f172a;
+  stroke-width: 1.5;
+}
+.strategy-graph-unknown {
+  fill: var(--text-muted);
+  stroke: #0f172a;
+  stroke-width: 1.5;
+}
+.strategy-graph-scale {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font: 8px var(--font-mono);
+}
+.strategy-graph-unavailable {
+  height: 116px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: var(--text-muted);
+  font: 9px var(--font-mono);
+  letter-spacing: .3px;
 }
 .strategy-card-top {
   display: flex;

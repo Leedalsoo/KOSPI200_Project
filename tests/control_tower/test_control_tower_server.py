@@ -62,6 +62,7 @@ def test_control_tower_server_option_program_detail_api():
     assert b"200 OK" in response_bytes
     assert b"option_program" in response_bytes
     assert b"strategies" in response_bytes
+    assert b"strategy_graphs" in response_bytes
 
 
 def test_control_tower_server_serves_index_html():

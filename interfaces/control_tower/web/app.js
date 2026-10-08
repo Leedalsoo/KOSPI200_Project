@@ -278,6 +278,52 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function renderStrategyCompositionGraph(graph) {
+    const legs = Array.isArray(graph?.legs) ? graph.legs.filter((leg) => leg && leg.trade_price != null) : [];
+    if (!legs.length) {
+      return '<div class="strategy-graph-unavailable">BUY / SELL DATA UNAVAILABLE</div>';
+    }
+    const plotted = legs.map((leg, index) => ({
+      ...leg,
+      xValue: Number.isFinite(Number(leg.strike)) ? Number(leg.strike) : index + 1,
+      yValue: Number(leg.trade_price),
+    })).filter((leg) => Number.isFinite(leg.yValue));
+    if (!plotted.length) {
+      return '<div class="strategy-graph-unavailable">TRADE VALUE UNAVAILABLE</div>';
+    }
+    const xs = plotted.map((leg) => leg.xValue);
+    const ys = plotted.map((leg) => leg.yValue);
+    const xmin = Math.min(...xs), xmax = Math.max(...xs);
+    const ymin = Math.min(...ys), ymax = Math.max(...ys);
+    const xspan = xmax === xmin ? 1 : xmax - xmin;
+    const yspan = ymax === ymin ? Math.max(1, Math.abs(ymax) * 0.08) : ymax - ymin;
+    const left = 28, right = 286, top = 12, bottom = 104;
+    const x = (value) => left + ((value - xmin) / xspan) * (right - left);
+    const y = (value) => bottom - ((value - ymin) / yspan) * (bottom - top);
+    const bySide = (side) => plotted.filter((leg) => leg.side === side).sort((a,b) => a.xValue - b.xValue);
+    const line = (items, cls) => items.length > 1
+      ? `<polyline class="${cls}" points="${items.map((leg) => `${x(leg.xValue)},${y(leg.yValue)}`).join(" ")}"/>`
+      : "";
+    const points = plotted.map((leg) => {
+      const cls = leg.side === "BUY" ? "strategy-graph-buy" : leg.side === "SELL" ? "strategy-graph-sell" : "strategy-graph-unknown";
+      const label = `${leg.side} ${leg.option_type || leg.asset_type || ""} ${leg.strike ?? ""} @ ${leg.trade_price}`;
+      return `<circle class="${cls}" cx="${x(leg.xValue)}" cy="${y(leg.yValue)}" r="4"><title>${escapeHtml(label)}</title></circle>`;
+    }).join("");
+    const buyCount = plotted.filter((leg) => leg.side === "BUY").length;
+    const sellCount = plotted.filter((leg) => leg.side === "SELL").length;
+    return `<div class="strategy-graph-wrap">
+      <div class="strategy-graph-legend"><span class="legend-buy">BUY ${buyCount}</span><span class="legend-sell">SELL ${sellCount}</span><span>TRADE VALUE ONLY</span></div>
+      <svg class="strategy-composition-svg" viewBox="0 0 300 120" role="img" aria-label="Strategy BUY SELL composition graph">
+        <line class="strategy-graph-axis" x1="${left}" y1="${bottom}" x2="${right}" y2="${bottom}"/>
+        <line class="strategy-graph-axis" x1="${left}" y1="${top}" x2="${left}" y2="${bottom}"/>
+        ${line(bySide("BUY"), "strategy-graph-line-buy")}
+        ${line(bySide("SELL"), "strategy-graph-line-sell")}
+        ${points}
+      </svg>
+      <div class="strategy-graph-scale"><span>${escapeHtml(String(xmin))}</span><span>STRIKE / LEG</span><span>${escapeHtml(String(xmax))}</span></div>
+    </div>`;
+  }
+
   function renderOptionProgram(data) {
     setText("op-runtime-state", data.runtime_state || "STOPPED");
     setText("op-run-id", "RUN: " + (data.run_id || "?"));
@@ -292,12 +338,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const flowGrid = document.getElementById("op-flow-grid");
     if (flowGrid) flowGrid.innerHTML = flowItems.map(([label,value]) => `<div class="flow-node"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value ?? "?")}</strong></div>`).join("");
     const strategies = Array.isArray(data.strategies) ? data.strategies : [];
+    const strategyGraphs = new Map((Array.isArray(data.strategy_graphs) ? data.strategy_graphs : []).map((item) => [item.strategy_id, item]));
     const grid = document.getElementById("op-strategy-grid");
     setText("op-strategy-count", strategies.length + " / 9");
     if (grid) grid.innerHTML = strategies.map(function(item,index) {
       const status=item.status||{}; const state=item.enabled?"ENABLED":"DISABLED"; const observation=item.observation_state||"NO_SIGNAL_OBSERVED";
       const cls=observation.includes("BLOCKED")||observation==="INPUT_UNAVAILABLE"?"blocked":(observation.includes("OBSERVED")?"observed":"neutral");
-      return `<article class="strategy-card"><div class="strategy-card-top"><span>TRACK ${String(index+1).padStart(2,"0")}</span><b>${escapeHtml(state)}</b></div><h4>${escapeHtml(item.strategy_id)}</h4><div class="strategy-version">${escapeHtml(item.version)}</div><div class="strategy-stats"><span>signals <b>${escapeHtml(status.reaction_signals??0)}</b></span><span>approved <b>${escapeHtml(status.approved??0)}</b></span><span>routed <b>${escapeHtml(status.routed??0)}</b></span><span>filled <b>${escapeHtml(status.filled_quantity??0)}</b></span></div><div class="strategy-evidence"><span>Source <b>${escapeHtml(item.source_status||"SOURCE_UNSPECIFIED")}</b></span><span>Runtime Input <b>${escapeHtml(item.runtime_input_status||"UNAVAILABLE")}</b></span><span>Signal <b>${escapeHtml(item.signal_status||observation)}</b></span></div><span class="verification-state ${cls}">${escapeHtml(observation)}</span><div class="strategy-version">FULL E2E: NOT CLAIMED</div></article>`;
+      const graph = strategyGraphs.get(item.strategy_id) || { data_status: "UNAVAILABLE", legs: [] };
+      return `<article class="strategy-card"><div class="strategy-card-top"><span>TRACK ${String(index+1).padStart(2,"0")}</span><b>${escapeHtml(state)}</b></div><h4>${escapeHtml(item.strategy_id)}</h4><div class="strategy-version">${escapeHtml(item.version)}</div><div class="strategy-graph-heading"><span>OPTION / FUTURES COMPOSITION</span><b>BUY · SELL</b></div>${renderStrategyCompositionGraph(graph)}<div class="strategy-stats"><span>signals <b>${escapeHtml(status.reaction_signals??0)}</b></span><span>approved <b>${escapeHtml(status.approved??0)}</b></span><span>routed <b>${escapeHtml(status.routed??0)}</b></span><span>filled <b>${escapeHtml(status.filled_quantity??0)}</b></span></div><div class="strategy-evidence"><span>Source <b>${escapeHtml(item.source_status||"SOURCE_UNSPECIFIED")}</b></span><span>Runtime Input <b>${escapeHtml(item.runtime_input_status||"UNAVAILABLE")}</b></span><span>Signal <b>${escapeHtml(item.signal_status||observation)}</b></span></div><span class="verification-state ${cls}">${escapeHtml(observation)}</span><div class="strategy-version">FULL E2E: NOT CLAIMED</div></article>`;
     }).join("");
     const marketDetail=document.getElementById("op-market-detail"); if(marketDetail) marketDetail.textContent=JSON.stringify(market||{status:"UNAVAILABLE"},null,2);
     const accountDetail=document.getElementById("op-account-detail"); if(accountDetail) accountDetail.textContent=JSON.stringify({account:data.account,margin:data.margin,pnl:data.pnl,position:data.position,execution_reports:data.execution_reports},null,2);
