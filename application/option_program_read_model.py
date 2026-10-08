@@ -136,18 +136,49 @@ class OptionProgramReadModel:
                     "identity_source": getattr(identity, "identity_source", None) if identity is not None else getattr(leg, "identity_source", None),
                 })
 
+        trades_by_strategy: dict[str, list[dict[str, Any]]] = {}
+        for strategy_id, legs in grouped.items():
+            for group_id in sorted({str(leg.get("group_id", "")) for leg in legs if leg.get("group_id")}):
+                try:
+                    snap = broker_api.get_group_position_snapshot(group_id)
+                    reports = tuple(broker_api.get_group_reports(group_id))
+                except Exception:
+                    continue
+                if snap is None:
+                    continue
+                expiry_values = [leg.get("expiry") for leg in legs if leg.get("group_id") == group_id and leg.get("expiry")]
+                timestamps = [getattr(report, "execution_timestamp", None) for report in reports]
+                timestamps = [ts for ts in timestamps if ts is not None]
+                realized = getattr(snap, "realized_pnl", None)
+                unrealized = getattr(snap, "unrealized_pnl", None)
+                total = getattr(snap, "total_pnl", None)
+                if total is None and (realized is not None or unrealized is not None):
+                    total = (realized or 0) + (unrealized or 0)
+                trades_by_strategy.setdefault(strategy_id, []).append({
+                    "group_id": group_id,
+                    "expiry": expiry_values[0] if expiry_values else None,
+                    "entry_at": min(timestamps).isoformat() if timestamps else None,
+                    "last_execution_at": max(timestamps).isoformat() if timestamps else None,
+                    "complete": bool(getattr(snap, "complete", False)),
+                    "realized_pnl": float(realized) if realized is not None else None,
+                    "unrealized_pnl": float(unrealized) if unrealized is not None else None,
+                    "total_pnl": float(total) if total is not None else None,
+                    "execution_count": len(reports),
+                    "pnl_source": "AUTHORITATIVE_GROUP_POSITION_SNAPSHOT",
+                })
+
         rows: list[dict[str, Any]] = []
         for strategy_id, legs in sorted(grouped.items()):
+            strategy_trades = trades_by_strategy.get(strategy_id, [])
             rows.append({
                 "strategy_id": strategy_id,
                 "legs": legs,
+                "trades": strategy_trades,
                 "data_status": "AVAILABLE" if legs else "UNAVAILABLE",
                 "realized_pnl": (pnl_by_strategy.get(strategy_id) or [None, None])[0],
                 "unrealized_pnl": (pnl_by_strategy.get(strategy_id) or [None, None])[1],
-                "net_pnl": (
-                    sum(pnl_by_strategy[strategy_id])
-                    if strategy_id in pnl_by_strategy else None
-                ),
+                "net_pnl": (sum(pnl_by_strategy[strategy_id]) if strategy_id in pnl_by_strategy else None),
+                "trade_pnl_status": "AVAILABLE" if strategy_trades else "UNAVAILABLE",
             })
         return rows
 
