@@ -89,7 +89,7 @@ def _next_backoff(current: int) -> int:
 
 
 def configure_logging() -> logging.Logger:
-    DATA_ROOT.mkdir(parents=True, exist_ok=True)
+    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
     LOGGER.setLevel(logging.INFO)
     LOGGER.propagate = False
     for handler in list(LOGGER.handlers):
