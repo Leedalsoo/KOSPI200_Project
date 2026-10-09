@@ -22,7 +22,7 @@ _virtual_bootstrap = None
 
 
 def _get_virtual_bootstrap():
-    """Create the Virtual runtime only when a request handler is instantiated."""
+    """Create the Virtual runtime only when a non-injected handler needs it."""
     global _virtual_bootstrap
     if _virtual_bootstrap is None:
         bootstrap = create_virtual_runtime_bootstrap()
@@ -31,19 +31,32 @@ def _get_virtual_bootstrap():
     return _virtual_bootstrap
 
 
+def reset_virtual_bootstrap_for_tests() -> None:
+    """Clear the lazy Virtual runtime singleton between isolated tests."""
+    global _virtual_bootstrap
+    _virtual_bootstrap = None
+
+
 class ControlTowerRequestHandler(BaseHTTPRequestHandler):
     """HTTP request handler for the Control Tower UI."""
     tower = None
     adapter = None
     web_dir = Path(__file__).resolve().parent / "web"
+    _skip_bootstrap = False
 
     def __init__(self, *args, **kwargs):
-        bootstrap = _get_virtual_bootstrap()
-        self._virtual_bootstrap = bootstrap
-        if self.tower is None:
-            self.tower = bootstrap.control_tower_hub
-        if self.adapter is None:
-            self.adapter = bootstrap.ui_adapter
+        injected = type(self).tower is not None and type(self).adapter is not None
+        if injected or type(self)._skip_bootstrap:
+            self._virtual_bootstrap = _virtual_bootstrap
+            self.tower = type(self).tower
+            self.adapter = type(self).adapter
+        else:
+            bootstrap = _get_virtual_bootstrap()
+            self._virtual_bootstrap = bootstrap
+            if self.tower is None:
+                self.tower = bootstrap.control_tower_hub
+            if self.adapter is None:
+                self.adapter = bootstrap.ui_adapter
         super().__init__(*args, **kwargs)
 
     def _send_json(self, data: dict, status: int = HTTPStatus.OK):
@@ -214,7 +227,20 @@ class ControlTowerRequestHandler(BaseHTTPRequestHandler):
         if "client_order_id" in payload and (not isinstance(payload["client_order_id"], str) or not payload["client_order_id"].strip()):
             self._send_json({"success": False, "error": {"code": "INVALID_CLIENT_ORDER_ID", "message": "client_order_id must be a non-empty string when supplied."}}, HTTPStatus.BAD_REQUEST)
             return
-        market = self._virtual_bootstrap.bundle.market
+        bootstrap = self._virtual_bootstrap
+        if bootstrap is None:
+            self._send_json(
+                {
+                    "success": False,
+                    "error": {
+                        "code": "VIRTUAL_RUNTIME_UNAVAILABLE",
+                        "message": "Virtual runtime bootstrap is not available.",
+                    },
+                },
+                HTTPStatus.SERVICE_UNAVAILABLE,
+            )
+            return
+        market = bootstrap.bundle.market
         last_tick = getattr(market, "last_tick", None)
         if last_tick is None:
             self._send_json({"success": False, "error": "VIRTUAL_MARKET_TICK_REQUIRED"}, HTTPStatus.SERVICE_UNAVAILABLE)
@@ -224,7 +250,7 @@ class ControlTowerRequestHandler(BaseHTTPRequestHandler):
             self._send_json({"success": False, "error": "VIRTUAL_MARKET_ASK_REQUIRED"}, HTTPStatus.SERVICE_UNAVAILABLE)
             return
         client_order_id = str(payload.get("client_order_id", "HTTP-VIRTUAL-BUY-001"))
-        option_master = getattr(self._virtual_bootstrap.bundle, "option_master", None)
+        option_master = getattr(bootstrap.bundle, "option_master", None)
         option_type = getattr(last_tick, "option_type", None)
         strike_price = getattr(last_tick, "strike_price", None)
         expiry = getattr(last_tick, "expiry", None)
@@ -262,7 +288,7 @@ class ControlTowerRequestHandler(BaseHTTPRequestHandler):
             tag_id="CONTROL_TOWER",
         )
         try:
-            report = self._virtual_bootstrap.bundle.broker_api.submit_order(command)
+            report = bootstrap.bundle.broker_api.submit_order(command)
         except Exception as exc:
             self._send_json({"success": False, "error": {"code": "VIRTUAL_ORDER_SUBMIT_FAILED", "message": "Virtual Broker order submission failed.", "detail": str(exc)}}, HTTPStatus.SERVICE_UNAVAILABLE)
             return

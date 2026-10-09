@@ -42,6 +42,7 @@ class Track5State:
     futures_side: str | None = None
     futures_close_requested: bool = False
     futures_closed: bool = False
+    futures_close_error: str | None = None
 
 
 class Track5GapDivergence:
@@ -49,6 +50,7 @@ class Track5GapDivergence:
     version = "2.0"
     ENTRY_QUANTITY = 1
     MINI_FUTURES_QUANTITY = 5
+    # Counts evaluate_mean_reversion calls while a position is open, not elapsed minutes or bars.
     MAX_OPEN_EVALUATIONS = 30
 
     def __init__(self, z_threshold: Decimal = Decimal("1.5")) -> None:
@@ -199,12 +201,21 @@ class Track5GapDivergence:
     def _request_futures_exit(self, state: Track5State, current_price: Decimal, reason: str) -> Sequence[Signal]:
         """Request the hedge close; only a confirmed full fill closes the hedge state."""
         if state.futures_side not in {"BUY", "SELL"}:
-            self.state = state
+            # Preserve the active option state and surface the unknown hedge leg; never
+            # infer a successful futures close from missing/corrupt side metadata.
+            self.state = replace(
+                state,
+                futures_closed=False,
+                futures_close_requested=False,
+                futures_close_error="INVALID_FUTURES_SIDE;POSITION_RECONCILIATION_REQUIRED",
+            )
             return ()
         if state.futures_closed or state.futures_close_requested:
             self.state = state
             return ()
-        self.state = replace(state, futures_close_requested=True, futures_closed=False)
+        self.state = replace(
+            state, futures_close_requested=True, futures_closed=False, futures_close_error=None
+        )
         futures_close_side = "BUY" if state.futures_side == "SELL" else "SELL"
         return (Signal(
             self.strategy_id,
