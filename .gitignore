@@ -20,3 +20,11 @@ verification/*_report.json
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
+.playwright-mcp/
+verification/results/
+/control-tower-strategy-controls-verified.png
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
+htmlcov/
+.coverage
