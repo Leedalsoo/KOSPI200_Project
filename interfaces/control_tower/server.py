@@ -18,14 +18,33 @@ from application.bootstrap import create_virtual_runtime_bootstrap
 from contracts.types import BrokerOrderCommand, OptionInstrumentIdentity
 from interfaces.control_tower.view_models import TabEnvironmentId
 
-_virtual_bootstrap = create_virtual_runtime_bootstrap()
-next(_virtual_bootstrap.bundle.market.generate_tick_stream(total_days=1, ticks_per_day=1))
+_virtual_bootstrap = None
+
+
+def _get_virtual_bootstrap():
+    """Create the Virtual runtime only when a request handler is instantiated."""
+    global _virtual_bootstrap
+    if _virtual_bootstrap is None:
+        bootstrap = create_virtual_runtime_bootstrap()
+        next(bootstrap.bundle.market.generate_tick_stream(total_days=1, ticks_per_day=1))
+        _virtual_bootstrap = bootstrap
+    return _virtual_bootstrap
+
 
 class ControlTowerRequestHandler(BaseHTTPRequestHandler):
     """HTTP request handler for the Control Tower UI."""
-    tower = _virtual_bootstrap.control_tower_hub
-    adapter = _virtual_bootstrap.ui_adapter
+    tower = None
+    adapter = None
     web_dir = Path(__file__).resolve().parent / "web"
+
+    def __init__(self, *args, **kwargs):
+        bootstrap = _get_virtual_bootstrap()
+        self._virtual_bootstrap = bootstrap
+        if self.tower is None:
+            self.tower = bootstrap.control_tower_hub
+        if self.adapter is None:
+            self.adapter = bootstrap.ui_adapter
+        super().__init__(*args, **kwargs)
 
     def _send_json(self, data: dict, status: int = HTTPStatus.OK):
         payload = json.dumps(data, ensure_ascii=False, default=str).encode("utf-8")
@@ -195,7 +214,7 @@ class ControlTowerRequestHandler(BaseHTTPRequestHandler):
         if "client_order_id" in payload and (not isinstance(payload["client_order_id"], str) or not payload["client_order_id"].strip()):
             self._send_json({"success": False, "error": {"code": "INVALID_CLIENT_ORDER_ID", "message": "client_order_id must be a non-empty string when supplied."}}, HTTPStatus.BAD_REQUEST)
             return
-        market = _virtual_bootstrap.bundle.market
+        market = self._virtual_bootstrap.bundle.market
         last_tick = getattr(market, "last_tick", None)
         if last_tick is None:
             self._send_json({"success": False, "error": "VIRTUAL_MARKET_TICK_REQUIRED"}, HTTPStatus.SERVICE_UNAVAILABLE)
@@ -205,7 +224,7 @@ class ControlTowerRequestHandler(BaseHTTPRequestHandler):
             self._send_json({"success": False, "error": "VIRTUAL_MARKET_ASK_REQUIRED"}, HTTPStatus.SERVICE_UNAVAILABLE)
             return
         client_order_id = str(payload.get("client_order_id", "HTTP-VIRTUAL-BUY-001"))
-        option_master = getattr(_virtual_bootstrap.bundle, "option_master", None)
+        option_master = getattr(self._virtual_bootstrap.bundle, "option_master", None)
         option_type = getattr(last_tick, "option_type", None)
         strike_price = getattr(last_tick, "strike_price", None)
         expiry = getattr(last_tick, "expiry", None)
@@ -243,7 +262,7 @@ class ControlTowerRequestHandler(BaseHTTPRequestHandler):
             tag_id="CONTROL_TOWER",
         )
         try:
-            report = _virtual_bootstrap.bundle.broker_api.submit_order(command)
+            report = self._virtual_bootstrap.bundle.broker_api.submit_order(command)
         except Exception as exc:
             self._send_json({"success": False, "error": {"code": "VIRTUAL_ORDER_SUBMIT_FAILED", "message": "Virtual Broker order submission failed.", "detail": str(exc)}}, HTTPStatus.SERVICE_UNAVAILABLE)
             return

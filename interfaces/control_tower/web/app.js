@@ -1,6 +1,6 @@
 /**
  * Project200 Control Tower ??Frontend Controller
- * Backend DTO瑜??⑥씪 ?곗씠???먯쿇?쇰줈 ?ъ슜?섎ŉ, 媛吏??곹깭/?쒖옣媛믪쓣 ?앹꽦?섏? ?딅뒗??
+ * Backend DTO projection only; the frontend renders server-provided state.
  */
 document.addEventListener("DOMContentLoaded", () => {
   const storedTab = localStorage.getItem("p200:lastTab");
@@ -34,7 +34,7 @@ document.addEventListener("DOMContentLoaded", () => {
     virtual_broker: "가상증권사 (Virtual Broker)",
     option_program: "옵션프로그램 (Option Program)",
     paper: "모의투자 (KIS Paper)",
-    live: "?ㅽ닾??(KIS Live)",
+    live: "\uc2e4\ud22c\uc790 (KIS Live)",
   };
 
   const escapeHtml = (value) => String(value ?? "?")
@@ -129,9 +129,9 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   runCreateBtn?.addEventListener("click", async () => {
     const key=(strategySelect?.value || "").split(":");
-    if (!runIdInput?.value.trim() || key.length !== 2) return alert("Run ID? Strategy瑜??좏깮?섏꽭??");
+    if (!runIdInput?.value.trim() || key.length !== 2) return alert("Run ID\uc640 Strategy\ub97c \uc120\ud0dd\ud574 \uc8fc\uc138\uc694.");
     try { await apiFetch("/api/run", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({run_id:runIdInput.value.trim(),environment:"virtual",scenario:scenarioSelect?.value || null,strategy_keys:[[key[0],key[1]]]})}); refreshRunControls(); }
-    catch(error) { alert(`RUN ?앹꽦 ?ㅽ뙣: ${error.message}`); }
+    catch(error) { alert(`RUN \uc0dd\uc131 \uc2e4\ud328: ${error.message}`); }
   });
   runStartBtn?.addEventListener("click", () => runAction("START"));
   runStopBtn?.addEventListener("click", () => runAction("STOP"));
@@ -169,14 +169,14 @@ document.addEventListener("DOMContentLoaded", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tab_id: tabId }),
-    }).catch((error) => addAuditLog(`[UI] ???곹깭 ????ㅽ뙣: ${error.message}`, "error"));
+    }).catch((error) => addAuditLog(`[UI] \ud0ed \uc804\ud658 \uc2e4\ud328: ${error.message}`, "error"));
 
     fetchTabDetail(tabId);
   }
 
   panicHaltBtn?.addEventListener("click", async () => {
     if (panicHaltBtn.disabled) return;
-    if (!confirm("鍮꾩긽?뺤?(PANIC HALT)瑜?諛쒕룞?섏떆寃좎뒿?덇퉴?\n?ㅼ젣 RiskEngine/Runtime???뺤? 紐낅졊???꾨떖?⑸땲??")) return;
+    if (!confirm("\uae34\uae09 \uc815\uc9c0(PANIC HALT)? \uc694\uccad\ud569\ub2c8\uae4c?\n\uc2e4\ud589 \uc5ec\ubd80\ub294 \uc2dc\uc2a4\ud15c \uc0c1\ud0dc\uc640 \uc5f0\uacb0 \uc5ec\ubd80\uc5d0 \ub530\ub77c \ub2ec\ub77c\uc9c8 \uc218 \uc788\uc2b5\ub2c8\ub2e4.")) return;
     panicHaltBtn.disabled = true;
     try {
       const data = await apiFetch("/api/command", {
@@ -184,11 +184,11 @@ document.addEventListener("DOMContentLoaded", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ command: "PANIC_HALT" }),
       });
-      addAuditLog(`[PANIC_HALT] ${data.message || "鍮꾩긽?뺤? ?꾨즺"}`, "warning");
+      addAuditLog(`[PANIC_HALT] ${data.message || "\uae34\uae09 \uc815\uc9c0 \uc694\uccad\uc774 \ucc28\ub2e8\ub418\uc5c8\uc2b5\ub2c8\ub2e4"}`, "warning");
       updateSafetyState(data.kill_switch_active === true, data.runtime_state);
     } catch (error) {
-      addAuditLog(`[PANIC_HALT] ?ㅽ뻾 ?ㅽ뙣: ${error.message}`, "error");
-      alert(`鍮꾩긽?뺤? ?붿껌 ?ㅽ뙣: ${error.message}`);
+      addAuditLog(`[PANIC_HALT] \uc694\uccad \uc2e4\ud328: ${error.message}`, "error");
+      alert(`\uae34\uae09 \uc815\uc9c0 \uc694\uccad \uc2e4\ud328: ${error.message}`);
     } finally {
       panicHaltBtn.disabled = false;
       fetchSummary();
@@ -219,8 +219,8 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     } catch (error) {
-      addAuditLog(`[STATUS] ?곹깭 議고쉶 ?ㅽ뙣: ${error.message}`, "error");
-      setConnectionMessage(`panel-${currentTab}`, `?곹깭 議고쉶 ?ㅽ뙣: ${error.message}`);
+      addAuditLog(`[STATUS] \uc0c1\ud0dc \uc870\ud68c \uc2e4\ud328: ${error.message}`, "error");
+      setConnectionMessage(`panel-${currentTab}`, `\uc0c1\ud0dc \uc870\ud68c \uc2e4\ud328: ${error.message}`);
     }
   }
 
@@ -249,8 +249,8 @@ document.addEventListener("DOMContentLoaded", () => {
       else if (tabId === "live") renderLive(data);
       (data.audit_logs || []).slice(-3).forEach((log) => addAuditLog(`[${tabId.toUpperCase()}] ${log}`));
     } catch (error) {
-      setConnectionMessage(`panel-${tabId}`, `?섍꼍 ?곗씠??議고쉶 ?ㅽ뙣: ${error.message}`);
-      addAuditLog(`[${tabId.toUpperCase()}] 議고쉶 ?ㅽ뙣: ${error.message}`, "error");
+      setConnectionMessage(`panel-${tabId}`, `\uc5f0\uacb0 \uc0c1\ud0dc \uc870\ud68c \uc2e4\ud328: ${error.message}`);
+      addAuditLog(`[${tabId.toUpperCase()}] \uc5f0\uacb0 \uc0c1\ud0dc \uc870\ud68c \uc2e4\ud328: ${error.message}`, "error");
     } finally {
       setPanelLoading(panel, false);
     }
@@ -480,7 +480,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const tbody = document.getElementById(id);
     if (!tbody) return;
     if (!Array.isArray(rows) || rows.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="${colspan}" class="empty-state">?ㅼ젣 ?곗씠???놁쓬</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="${colspan}" class="empty-state">\ud45c\uc2dc\ud560 \ub370\uc774\ud130\uac00 \uc5c6\uc2b5\ub2c8\ub2e4</td></tr>`;
       return;
     }
     tbody.innerHTML = rows.map(renderer).join("");

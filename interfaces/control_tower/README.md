@@ -43,3 +43,7 @@ Live production assembly: `LiveRuntimeLifecycleCoordinator` is the authoritative
 ## Legacy 보존 원칙
 
 기존 option_program/control 및 web_interface의 기능은 신규 View Model로 이전 가능한 항목을 먼저 매핑한다. 기존 UI는 Phase 14 reference tracing 전까지 삭제하지 않는다.
+
+## Local server security boundary
+
+The bundled `interfaces.control_tower.server` uses Python's single-threaded stdlib `HTTPServer` and defaults to `127.0.0.1:8080`. It is a **local development/test UI only**: it does not provide user authentication or production-grade request concurrency. Do not bind it to `0.0.0.0`, expose it to a LAN/public network, or use it as a production endpoint. A remotely accessible deployment requires an authenticated, hardened server boundary first. Importing `interfaces.control_tower.server` must not create the runtime; the Virtual bootstrap is initialized lazily when a request handler is instantiated.
