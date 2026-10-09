@@ -266,7 +266,14 @@ class StandardRuntimeInputProvider:
                 base_metric = common_analytics.get("volatility.base")
                 regime_metric = common_analytics.get("market.current_regime")
                 if active_metric is not None and base_metric is not None and regime_metric is not None:
-                    if active_metric.value is not None and base_metric.value is not None and regime_metric.value is not None:
+                    if (
+                        active_metric.value is not None
+                        and base_metric.value is not None
+                        and float(active_metric.value) > 0
+                        and float(base_metric.value) > 0
+                        and regime_metric.value is not None
+                        and str(regime_metric.value).strip()
+                    ):
                         self.track3.source.set_common_analytics(
                             observed_at=market_state.as_of,
                             active_vol=float(active_metric.value),
@@ -418,7 +425,10 @@ class StandardRuntimeInputProvider:
             track7_missing_sources.append("expiry_calendar")
 
         track7_selection = None
-        if self.track7_option_contract_source is None:
+        contract_class = str(getattr(tick, "contract_class", "monthly") or "monthly").lower()
+        if contract_class != "weekly":
+            track7_missing_sources.append("authoritative_weekly_option_contract_required")
+        elif self.track7_option_contract_source is None:
             track7_missing_sources.append("listed_option_contracts")
         else:
             try:
@@ -471,7 +481,7 @@ class StandardRuntimeInputProvider:
             )
 
         track8_selection = None
-        if self.track8_option_contract_source is not None:
+        if contract_class == "monthly" and self.track8_option_contract_source is not None:
             try:
                 expiry = str(d.option_expiry or getattr(tick, "expiry", ""))
                 current_price = Decimal(str(getattr(tick, "underlying_price"))) if getattr(tick, "underlying_price", None) is not None else None

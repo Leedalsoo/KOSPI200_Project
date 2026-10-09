@@ -16,8 +16,11 @@ class VirtualBrokerApi:
         self._group_snapshot_reader: Callable[[str], Any] | None = None
         self._group_reports_reader: Callable[[str], tuple[ExecutionReport, ...]] | None = None
         self._group_ids_reader: Callable[[], tuple[str, ...]] | None = None
+        self._group_reader: Callable[[str], Any] | None = None
 
-    def attach_group_read_model(self, *, snapshot_reader, reports_reader=None, group_ids_reader=None) -> None:
+    def attach_group_read_model(
+        self, *, snapshot_reader, reports_reader=None, group_ids_reader=None, group_reader=None
+    ) -> None:
         """Attach the authoritative Multi-Leg group read model at the Broker API boundary."""
         if not callable(snapshot_reader):
             raise ValueError("VIRTUAL_BROKER_GROUP_SNAPSHOT_READER_REQUIRED")
@@ -25,9 +28,12 @@ class VirtualBrokerApi:
             raise ValueError("VIRTUAL_BROKER_GROUP_REPORTS_READER_INVALID")
         if group_ids_reader is not None and not callable(group_ids_reader):
             raise ValueError("VIRTUAL_BROKER_GROUP_IDS_READER_INVALID")
+        if group_reader is not None and not callable(group_reader):
+            raise ValueError("VIRTUAL_BROKER_GROUP_READER_INVALID")
         self._group_snapshot_reader = snapshot_reader
         self._group_reports_reader = reports_reader
         self._group_ids_reader = group_ids_reader
+        self._group_reader = group_reader
 
     def get_market_snapshot(self) -> dict:
         return self._broker.get_market_snapshot()
@@ -58,6 +64,14 @@ class VirtualBrokerApi:
         if self._group_ids_reader is None:
             raise RuntimeError("VIRTUAL_BROKER_GROUP_IDS_READ_MODEL_UNAVAILABLE")
         return tuple(self._group_ids_reader())
+
+    def get_position_group(self, group_id: str) -> Any:
+        if self._group_reader is None:
+            raise RuntimeError("VIRTUAL_BROKER_GROUP_READ_MODEL_UNAVAILABLE")
+        group = self._group_reader(str(group_id))
+        if group is None:
+            raise KeyError(str(group_id))
+        return group
 
     def get_group_position_snapshot(self, group_id: str) -> Any:
         if self._group_snapshot_reader is None:

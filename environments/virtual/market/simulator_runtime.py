@@ -9,6 +9,7 @@ from decimal import Decimal
 from typing import Optional
 
 from core.option.option_master import IOptionContractMaster
+from contracts.option_expiry import normalize_option_expiry
 
 from environments.virtual.market.canonical import ReferenceCanonicalMarketTick
 from contracts.types import CanonicalFuturesQuote
@@ -97,23 +98,40 @@ class VirtualMarketSimulatorRuntime:
             return max(0.01, spot * cls._norm_cdf(d1) - strike * cls._norm_cdf(d2))
         return max(0.01, strike * cls._norm_cdf(-d2) - spot * cls._norm_cdf(-d1))
 
+    def _authoritative_strike(self, expiry: str, option_type: str, target: float) -> tuple[Decimal, object]:
+        if self.option_master is None:
+            raise ValueError("VIRTUAL_AUTHORITATIVE_OPTION_MULTIPLIER_SOURCE_REQUIRED")
+        candidates = tuple(
+            identity for identity in self.option_master.list_contract_identities(expiry)
+            if identity.option_type == option_type
+            and identity.contract_multiplier is not None
+            and identity.expiry.replace("-", "")[:8] == expiry.replace("-", "")[:8]
+        )
+        if not candidates:
+            raise ValueError("VIRTUAL_AUTHORITATIVE_OPTION_IDENTITY_REQUIRED")
+        identity = min(candidates, key=lambda item: (abs(float(item.strike) - target), float(item.strike)))
+        return Decimal(str(identity.strike)), identity
+
     def _refresh_option_quotes(self, tick, volatility_multiplier: float) -> None:
         observed = datetime.fromisoformat(tick.timestamp)
-        expiry = datetime.strptime(tick.expiry, "%Y%m").replace(day=1)
-        t = max(1.0 / 365.0, (expiry - observed.replace(day=1)).total_seconds() / 31536000.0)
+        canonical_expiry = normalize_option_expiry(tick.expiry)
+        exact_expiry = canonical_expiry.require_exact()
+        expiry = datetime.strptime(exact_expiry, "%Y%m%d")
+        t = max(1.0 / 365.0, (expiry - observed).total_seconds() / 31536000.0)
         vol = max(0.05, 0.20 * float(volatility_multiplier) * self.config.volatility_scale)
         atm = round(tick.underlying_price / 2.5) * 2.5
         quotes = {}
         if self.option_master is None:
             raise ValueError("VIRTUAL_AUTHORITATIVE_OPTION_MULTIPLIER_SOURCE_REQUIRED")
         for option_type in ("CALL", "PUT"):
+            selected_strikes: set[Decimal] = set()
             for offset in (-15.0, 0.0, 15.0):
-                strike = atm + offset
-                identity = self.option_master.find_contract_identity(tick.expiry, option_type, Decimal(str(strike)))
-                if identity is None or identity.contract_multiplier is None:
-                    raise ValueError("VIRTUAL_AUTHORITATIVE_OPTION_MULTIPLIER_REQUIRED")
-                mid = self._option_mid(tick.underlying_price, strike, t, vol, option_type)
-                quotes[(option_type, strike, tick.expiry)] = {
+                strike, identity = self._authoritative_strike(tick.expiry, option_type, atm + offset)
+                if strike in selected_strikes:
+                    continue
+                selected_strikes.add(strike)
+                mid = self._option_mid(tick.underlying_price, float(strike), t, vol, option_type)
+                quotes[(option_type, float(strike), tick.expiry)] = {
                     "bid": max(0.01, mid - 0.05), "ask": mid + 0.05, "last": mid,
                     "iv": vol, "bid_qty": self.config.option_quote_qty,
                     "ask_qty": self.config.option_quote_qty,
@@ -272,16 +290,19 @@ class VirtualMarketSimulatorRuntime:
             strike_price = round(last / 2.5) * 2.5
             if self.option_master is None:
                 raise ValueError("VIRTUAL_AUTHORITATIVE_OPTION_MULTIPLIER_SOURCE_REQUIRED")
-            identity = self.option_master.find_contract_identity("202609", "CALL", Decimal(str(strike_price)))
-            if identity is None or identity.contract_multiplier is None:
-                raise ValueError("VIRTUAL_AUTHORITATIVE_OPTION_MULTIPLIER_REQUIRED")
+            identity = self.option_master.find_contract_identity(
+                "202609", "CALL", Decimal(str(strike_price))
+            )
+            if identity is None or identity.contract_multiplier is None or not identity.expiry:
+                raise ValueError("VIRTUAL_AUTHORITATIVE_OPTION_IDENTITY_REQUIRED")
+            exact_expiry = normalize_option_expiry(identity.expiry).require_exact()
             tick = ReferenceCanonicalMarketTick(
                 timestamp=(start + interval * (seq - 1)).isoformat(),
                 underlying_price=last, strike_price=strike_price,
                 option_type="CALL", contract_multiplier=identity.contract_multiplier,
                 bid_price=max(0.01, last - spread),
                 ask_price=last + spread, last_price=last, volume=1000,
-                seq_id=seq, expiry="202609", symbol="KOSPI200",
+                seq_id=seq, expiry=exact_expiry, symbol="KOSPI200",
             )
             self.last_tick = tick
             self._recent_ticks.append(tick)

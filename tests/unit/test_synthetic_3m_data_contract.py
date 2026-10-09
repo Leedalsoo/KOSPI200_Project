@@ -94,7 +94,9 @@ def test_monthly_strike_selection_preserves_strategy8_pair_on_five_point_ladder(
 
     assert len(selected) == 5
     assert monthly_pair_available
-    assert not daily_pair_available
+    # Strategy 6 can use the nearest listed OTM PUT/CALL pair when an exact
+    # 12.5-point symmetric pair is absent from a five-point far-month ladder.
+    assert daily_pair_available
     assert any(center - Decimal("15") in selected and center + Decimal("15") in selected
                for center in strikes if abs(float(center) - 1081.0) <= 25.0)
 

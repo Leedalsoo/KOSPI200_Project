@@ -44,3 +44,21 @@ def test_strategy7_trailing_uses_actual_put_call_mark_prices():
     Analytics.values["options.track7_call_mark_price"]=Decimal("1.0")
     signals=s.evaluate(ctx)
     assert signals and "TRAILING_20PCT" in signals[0].reason
+
+
+def test_strategy7_expiry_exit_uses_positions_own_exact_expiry():
+    s=Track7VolatilitySkewWeeklyInsurance()
+    s.state=Track7State(insurance_active=True, expiry="2026-10-08", put_strike=Decimal("350"), call_strike=Decimal("360"), contract_multiplier=Decimal("250000"))
+
+    class Analytics:
+        as_of=datetime(2026, 10, 6, 15, 0)
+        values={"options.track7_put_mark_price": Decimal("2.0"), "options.track7_call_mark_price": Decimal("2.0"), "calendar.is_expiry_day": True}
+        def get(self, key):
+            value=self.values.get(key)
+            return SimpleNamespace(value=value, status=AnalyticsStatus.AVAILABLE) if value is not None else None
+
+    ctx=SimpleNamespace(strategy_id=s.strategy_id, analytics=Analytics())
+    assert s.evaluate(ctx) == ()
+    Analytics.as_of=datetime(2026, 10, 8, 15, 0)
+    signals=s.evaluate(ctx)
+    assert signals and signals[0].reason == "WEEKLY_EXACT_EXPIRY_15:00"

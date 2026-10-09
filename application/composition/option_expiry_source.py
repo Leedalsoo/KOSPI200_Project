@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+from contracts.option_expiry import normalize_option_expiry
 from contracts.option_expiry_source import OptionExpirySourceError
 
 
@@ -19,8 +20,9 @@ class KisOptionMasterExpirySource:
         if not expiry_text:
             return None
         try:
-            return date.fromisoformat(str(expiry_text))
-        except ValueError as exc:
+            normalized = normalize_option_expiry(str(expiry_text))
+            return date.fromisoformat(normalized.require_exact())
+        except (ValueError, TypeError) as exc:
             raise OptionExpirySourceError(
                 "AUTHORITATIVE_OPTION_EXPIRY_INVALID"
             ) from exc

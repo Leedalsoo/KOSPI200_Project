@@ -40,6 +40,21 @@ class AutomatedTickResult:
     strategy_status: tuple[StrategyRuntimeStatus, ...] = ()
 
 
+def summarize_pending_multi_leg_results(
+    results: tuple[object, ...]
+) -> tuple[int, int, tuple[str, ...]]:
+    """Count routes/fills completed by deferred legs and retain their execution IDs."""
+    routed = sum(int(getattr(result, "routed_legs", 0) or 0) for result in results)
+    filled = sum(int(getattr(result, "filled_legs", 0) or 0) for result in results)
+    execution_ids = tuple(
+        report.execution_id
+        for result in results
+        for report in (getattr(result, "reports", ()) or ())
+        if getattr(report, "execution_id", None)
+    )
+    return routed, filled, execution_ids
+
+
 class _VirtualBrokerAckAdapter:
     def __init__(self, broker) -> None:
         self.broker = broker
@@ -110,8 +125,14 @@ class AutomatedVirtualTradingLoop:
             })()},
             quality={},
         )
+        pending_execution_results: tuple[object, ...] = ()
         if self.pending_multi_leg_processor is not None:
-            self.pending_multi_leg_processor()
+            pending_result = self.pending_multi_leg_processor()
+            if isinstance(pending_result, (tuple, list)):
+                pending_execution_results = tuple(pending_result)
+        pending_routed, pending_filled, pending_execution_ids = summarize_pending_multi_leg_results(
+            pending_execution_results
+        )
         contexts = self.context_builder(tick, state)
         strategy_result = self.strategy_hub.run(contexts)
         evaluations = self.strategy_results.collect(
@@ -121,6 +142,15 @@ class AutomatedVirtualTradingLoop:
             strategy_id: StrategyRuntimeStatus(strategy_id)
             for strategy_id in contexts
         }
+        for pending_result in pending_execution_results:
+            strategy_id = str(getattr(pending_result, "strategy_id", "") or "")
+            if not strategy_id:
+                continue
+            status = status_by_strategy.get(strategy_id, StrategyRuntimeStatus(strategy_id))
+            status_by_strategy[strategy_id] = status.add(
+                routed=int(getattr(pending_result, "routed_legs", 0) or 0),
+                filled_quantity=int(getattr(pending_result, "filled_legs", 0) or 0),
+            )
         for failure in strategy_result.failures:
             status = status_by_strategy.get(failure.strategy_id, StrategyRuntimeStatus(failure.strategy_id))
             warmup_reasons = {"TRACK3_WARMUP_INSUFFICIENT_HISTORY"}
@@ -160,10 +190,10 @@ class AutomatedVirtualTradingLoop:
         multi_leg_signal_ids = {item.signal_id for item in decision.multi_leg_decisions}
         approved_single_leg = tuple(signal for signal in approved if signal.signal_id not in multi_leg_signal_ids)
         commands = self.decision_to_command.build_commands(evaluations, approved_single_leg)
-        routed = 0
-        filled = 0
+        routed = pending_routed
+        filled = pending_filled
         rejected = len(decision.arbitration.rejected_signals)
-        execution_ids: list[str] = []
+        execution_ids: list[str] = list(pending_execution_ids)
 
         for cancel_request in decision.cancel_requests:
             status = status_by_strategy.get(cancel_request.strategy_id, StrategyRuntimeStatus(cancel_request.strategy_id))

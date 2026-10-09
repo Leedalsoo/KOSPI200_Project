@@ -146,7 +146,6 @@ def select_monthly_strikes_for_coverage(
         center for center in ordered
         if center - daily_offset in available
         and center + daily_offset in available
-        and abs(float(center) - spot) <= 25.0
     ]
     monthly_centers = [
         center for center in ordered
@@ -185,9 +184,14 @@ def select_monthly_strikes_for_coverage(
         raise RuntimeError(f"KRX_OPTION_MASTER_STRIKE_SELECTION_INVALID:{len(monthly_five)}")
 
     selected_set = set(monthly_five)
-    daily_pair_available = any(
-        center - daily_offset in selected_set and center + daily_offset in selected_set
-        for center in daily_centers
+    # Strategy 6 prefers the 12.5-point pair but its contract specification
+    # permits any authoritative listed PUT/CALL pair. The runtime resolver
+    # falls back to nearest listed OTM strikes when the far-month ladder lacks
+    # an exact 12.5-point combination.
+    spot_decimal = Decimal(str(spot))
+    daily_pair_available = (
+        any(strike < spot_decimal for strike in selected_set)
+        and any(strike > spot_decimal for strike in selected_set)
     )
     monthly_pair_available = any(
         center - monthly_offset in selected_set and center + monthly_offset in selected_set

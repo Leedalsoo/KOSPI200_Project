@@ -292,11 +292,19 @@ class SyntheticTradingCalendar:
         return candidate
 
     def resolve_option_expiry(self, tick: Any) -> date:
-        raw = str(tick.expiry).replace("-", "")
-        year, month = int(raw[:4]), int(raw[4:6])
+        raw = str(tick.expiry).strip()
+        if len(raw) == 10 and raw[4] == "-":
+            return date.fromisoformat(raw)
+        compact = raw.replace("-", "").replace("/", "")
+        if len(compact) == 8 and compact.isdigit():
+            return date(int(compact[:4]), int(compact[4:6]), int(compact[6:8]))
+        if len(compact) != 6 or not compact.isdigit():
+            raise ValueError(f"SYNTHETIC_OPTION_EXPIRY_INVALID:{raw}")
+        year, month = int(compact[:4]), int(compact[4:6])
+        if not 1 <= month <= 12:
+            raise ValueError(f"SYNTHETIC_OPTION_EXPIRY_INVALID:{raw}")
         first = date(year, month, 1)
-        third_thursday = first + timedelta(days=(3 - first.weekday()) % 7 + 14)
-        return third_thursday
+        return first + timedelta(days=(3 - first.weekday()) % 7 + 7)
 
     def flags(self, observed_date: date, option_expiry: date | None):
         if option_expiry is None:

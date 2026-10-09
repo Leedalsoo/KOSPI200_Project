@@ -26,14 +26,14 @@ def trading_days() -> list[date]:
         current += timedelta(days=1)
     return days
 
-def third_thursday(year: int, month: int) -> date:
+def second_thursday(year: int, month: int) -> date:
     first = date(year, month, 1)
     offset = (3 - first.weekday()) % 7
-    return first + timedelta(days=offset + 14)
+    return first + timedelta(days=offset + 7)
 
 def next_expiry(day: date) -> str:
     year, month = day.year, day.month
-    expiry = third_thursday(year, month)
+    expiry = second_thursday(year, month)
     if day >= expiry:
         month += 1
         if month == 13:
@@ -68,7 +68,7 @@ def regime(day_index: int, bar_index: int) -> tuple[float, float]:
 def make_tick(day: date, day_index: int, bar_index: int, kind: str, strike: float,
               spot: float, rng: random.Random, sequence: int) -> dict:
     expiry = next_expiry(day)
-    expiry_day = third_thursday(int(expiry[:4]), int(expiry[4:]))
+    expiry_day = second_thursday(int(expiry[:4]), int(expiry[4:]))
     years = max(1.0 / 365.0, (expiry_day - day).days / 365.0)
     _, regime_vol = regime(day_index, bar_index)
     iv = max(0.08, 0.18 + regime_vol * 12.0 + 0.015 * abs(strike - spot) / max(spot, 1.0))

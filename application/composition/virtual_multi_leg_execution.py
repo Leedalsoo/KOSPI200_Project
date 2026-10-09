@@ -53,7 +53,23 @@ class _AckAdapter:
             from contracts.types import BrokerOrderResponse
             return BrokerOrderResponse(command.client_order_id, False, message="VIRTUAL_ORDER_NOT_EXECUTED")
         from contracts.types import BrokerOrderResponse
-        return BrokerOrderResponse(command.client_order_id, True, broker_order_id=f"VIRTUAL-{report.execution_id}")
+        status = str(getattr(report, "status", "")).strip().upper()
+        if status in {"REJECTED", "FAILED", "CANCELLED", "EXPIRED"}:
+            return BrokerOrderResponse(
+                command.client_order_id,
+                False,
+                broker_code=status,
+                message=str(getattr(report, "rejected_reason", None) or status),
+            )
+        broker_order_id = getattr(report, "broker_order_id", None)
+        if not broker_order_id:
+            execution_id = getattr(report, "execution_id", None)
+            broker_order_id = (
+                f"VIRTUAL-{execution_id}"
+                if execution_id
+                else f"VIRTUAL-ORDER-{command.client_order_id}"
+            )
+        return BrokerOrderResponse(command.client_order_id, True, broker_order_id=str(broker_order_id))
 
 
 class VirtualMultiLegExecutionBridge:
@@ -131,7 +147,16 @@ class VirtualMultiLegExecutionBridge:
             identity_source="OPTION_MASTER",
         )
 
-    def execute(self, plan: MultiLegExecutionPlan, *, price: Decimal | None = None) -> MultiLegExecutionResult:
+    def execute(
+        self,
+        plan: MultiLegExecutionPlan,
+        *,
+        price: Decimal | None = None,
+        group_plan: MultiLegExecutionPlan | None = None,
+    ) -> MultiLegExecutionResult:
+        group_plan = group_plan or plan
+        if group_plan.group_id != plan.group_id or group_plan.strategy_id != plan.strategy_id:
+            raise ValueError("MULTI_LEG_GROUP_PLAN_MISMATCH")
         if not plan.legs:
             raise ValueError("MULTI_LEG_PLAN_EMPTY")
         reports: list[ExecutionReport] = []
@@ -247,7 +272,9 @@ class VirtualMultiLegExecutionBridge:
                 remaining_quantity=raw.remaining_quantity,
                 execution_price=raw.execution_price,
                 execution_timestamp=raw.execution_timestamp,
-                fee=Decimal(str(getattr(raw, "fee", "0"))),
+                fee=(Decimal(str(raw.fee)) if getattr(raw, "fee", None) is not None else None),
+                source_freshness=getattr(raw, "source_freshness", None),
+                rejected_reason=getattr(raw, "rejected_reason", None),
                 group_id=plan.group_id,
                 leg_id=leg.leg_id,
             )
@@ -301,13 +328,19 @@ class VirtualMultiLegExecutionBridge:
                         source="VSSF:CanonicalExecutionReport.fee",
                     )
                 )
-            from environments.virtual.position.virtual_position_aggregate import VirtualPositionAggregate
-            from environments.virtual.position.virtual_position_fill_adapter import VirtualPositionFillAdapter
-            leg_position = self.leg_positions.get(identity.instrument_id)
-            if leg_position is None:
-                leg_position = VirtualPositionAggregate(instrument_id=identity.instrument_id)
-                self.leg_positions[identity.instrument_id] = leg_position
-            VirtualPositionFillAdapter(leg_position).apply(broker_command, report)
+            # Only an actual positive-quantity fill may mutate position state.
+            # Rejected/no-fill broker reports are still retained for audit, but
+            # must not be passed to the fill adapter (which correctly rejects qty=0).
+            if report.status == "FILLED" and report.filled_quantity <= 0:
+                raise RuntimeError("MULTI_LEG_FILLED_QUANTITY_REQUIRED")
+            if report.filled_quantity > 0:
+                from environments.virtual.position.virtual_position_aggregate import VirtualPositionAggregate
+                from environments.virtual.position.virtual_position_fill_adapter import VirtualPositionFillAdapter
+                leg_position = self.leg_positions.get(identity.instrument_id)
+                if leg_position is None:
+                    leg_position = VirtualPositionAggregate(instrument_id=identity.instrument_id)
+                    self.leg_positions[identity.instrument_id] = leg_position
+                VirtualPositionFillAdapter(leg_position).apply(broker_command, report)
             self.provenance[report.execution_id or client_order_id] = {
                 "strategy_id": plan.strategy_id, "group_id": plan.group_id,
                 "leg_id": leg.leg_id, "client_order_id": client_order_id,
@@ -321,27 +354,28 @@ class VirtualMultiLegExecutionBridge:
             if report.status == "FILLED":
                 filled += report.filled_quantity
 
-        self.groups[plan.group_id] = list(reports)
+        merged_reports = self._merge_group_reports(group_plan, reports)
+        self.groups[group_plan.group_id] = list(merged_reports)
         group_legs = tuple(
             PositionGroupLeg(
-                leg_id=leg.leg_id, group_id=plan.group_id,
-                instrument_id=self.identity_for_leg(plan, leg).instrument_id,
+                leg_id=leg.leg_id, group_id=group_plan.group_id,
+                instrument_id=self.identity_for_leg(group_plan, leg).instrument_id,
                 side=leg.side, quantity=leg.quantity,
-                contract_multiplier=self.identity_for_leg(plan, leg).contract_multiplier,
-                identity_source=self.identity_for_leg(plan, leg).identity_source or "",
+                contract_multiplier=self.identity_for_leg(group_plan, leg).contract_multiplier,
+                identity_source=self.identity_for_leg(group_plan, leg).identity_source or "",
                 status=(
                     LegStatus.FILLED
-                    if any(r.leg_id == leg.leg_id and r.status == "FILLED" for r in reports)
+                    if any(r.leg_id == leg.leg_id and r.status == "FILLED" for r in merged_reports)
                     else LegStatus.PENDING
                     if (
-                        any(r.leg_id == leg.leg_id and r.status == "NEW" for r in reports)
-                        or f"{plan.group_id}-{leg.leg_id}" in self.pending_legs
+                        any(r.leg_id == leg.leg_id and r.status in {"NEW", "PARTIALLY_FILLED"} for r in merged_reports)
+                        or f"{group_plan.group_id}-{leg.leg_id}" in self.pending_legs
                     )
                     else LegStatus.REJECTED
                 ),
-            ) for leg in plan.legs
+            ) for leg in group_plan.legs
         )
-        group = PositionGroup(plan.group_id, plan.strategy_id, "MULTI_LEG", group_legs)
+        group = PositionGroup(group_plan.group_id, group_plan.strategy_id, "MULTI_LEG", group_legs)
         if plan.group_id not in self.position_groups.all():
             self.position_groups.register(group)
         else:
@@ -349,11 +383,11 @@ class VirtualMultiLegExecutionBridge:
         current_futures = float(getattr(self.bundle.market, "futures_price", price))
         option_quotes = getattr(self.bundle.market, "option_quotes", {})
         pnl_legs = []
-        for leg in plan.legs:
-            rep = next((r for r in reports if r.leg_id == leg.leg_id), None)
-            if rep is None or rep.execution_price is None:
+        for leg in group_plan.legs:
+            rep = next((r for r in merged_reports if r.leg_id == leg.leg_id), None)
+            if rep is None or rep.execution_price is None or rep.filled_quantity <= 0:
                 continue
-            identity = self.identity_for_leg(plan, leg)
+            identity = self.identity_for_leg(group_plan, leg)
             if isinstance(identity, FuturesInstrumentIdentity):
                 current = current_futures
             else:
@@ -405,7 +439,7 @@ class VirtualMultiLegExecutionBridge:
                 ) * quantity * multiplier
             pnl_legs.append(
                 PositionGroupLegPnL(
-                    leg.leg_id, plan.group_id, identity.instrument_id, rep.filled_quantity,
+                    leg.leg_id, group_plan.group_id, identity.instrument_id, rep.filled_quantity,
                     multiplier, identity.identity_source or "",
                     float(rep.execution_price), current, float(leg_unrealized),
                     self.run_id, rep.client_order_id, rep.execution_id or ""
@@ -416,32 +450,32 @@ class VirtualMultiLegExecutionBridge:
         unrealized_pnl = sum(Decimal(str(x.unrealized_pnl)) for x in pnl_legs)
         total_pnl = realized_pnl + unrealized_pnl
         snapshot = PositionGroupSnapshot(
-            plan.group_id, plan.strategy_id, group.is_complete, tuple(pnl_legs),
+            group_plan.group_id, group_plan.strategy_id, group.is_complete, tuple(pnl_legs),
             float(realized_pnl), float(unrealized_pnl), float(total_pnl)
         )
         self.position_groups.update_snapshot(snapshot)
         result = MultiLegExecutionResult(
-            group_id=plan.group_id,
-            strategy_id=plan.strategy_id,
-            planned_legs=len(plan.legs),
+            group_id=group_plan.group_id,
+            strategy_id=group_plan.strategy_id,
+            planned_legs=len(group_plan.legs),
             approved_legs=approved,
             routed_legs=routed,
             filled_legs=filled,
             reports=tuple(reports),
-            group_complete=(len(reports) == len(plan.legs) and all(r.status == "FILLED" for r in reports)),
+            group_complete=(len(merged_reports) == len(group_plan.legs) and all(r.status == "FILLED" for r in merged_reports)),
             pending_legs=pending_legs + sum(
-                1 for leg in plan.legs
-                if f"{plan.group_id}-{leg.leg_id}" in self.pending_legs
-                and not any(r.leg_id == leg.leg_id and r.status == "FILLED" for r in reports)
+                1 for leg in group_plan.legs
+                if f"{group_plan.group_id}-{leg.leg_id}" in self.pending_legs
+                and not any(r.leg_id == leg.leg_id and r.status == "FILLED" for r in merged_reports)
             ),
         )
         if self.execution_result_callback is not None:
             self.execution_result_callback(plan, result)
         return result
 
-    def process_pending_quotes(self) -> int:
+    def process_pending_quotes(self) -> tuple[MultiLegExecutionResult, ...]:
         """Submit deferred legs independently when authoritative quote appears."""
-        completed = 0
+        completed: list[MultiLegExecutionResult] = []
         for client_order_id, (plan, leg) in tuple(self.pending_legs.items()):
             identity = self.identity_for_leg(plan, leg)
             option_quotes = getattr(self.bundle.market, "option_quotes", {})
@@ -463,14 +497,31 @@ class VirtualMultiLegExecutionBridge:
                 purpose=plan.purpose,
                 legs=(leg,),
             )
-            result = self.execute(single_plan)
+            result = self.execute(single_plan, group_plan=plan)
             if result.routed_legs <= 0 and result.filled_legs <= 0:
                 continue
             self.pending_legs.pop(client_order_id, None)
-            existing = [report for report in self.groups.get(plan.group_id, ()) if report.leg_id != leg.leg_id]
-            self.groups[plan.group_id] = existing + list(result.reports)
-            completed += 1
-        return completed
+            completed.append(result)
+        return tuple(completed)
+
+    def _merge_group_reports(
+        self, group_plan: MultiLegExecutionPlan, new_reports: Sequence[ExecutionReport]
+    ) -> tuple[ExecutionReport, ...]:
+        """Keep the latest report for every leg, including fills completed after deferral."""
+        by_leg = {
+            report.leg_id: report
+            for report in self.groups.get(group_plan.group_id, ())
+            if report.leg_id
+        }
+        for report in new_reports:
+            if report.leg_id:
+                by_leg[report.leg_id] = report
+        ordered = [
+            by_leg[leg.leg_id]
+            for leg in group_plan.legs
+            if leg.leg_id in by_leg
+        ]
+        return tuple(ordered)
 
     def group_reports(self, group_id: str) -> tuple[ExecutionReport, ...]:
         return tuple(self.groups.get(group_id, ()))

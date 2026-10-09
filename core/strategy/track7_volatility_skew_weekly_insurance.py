@@ -86,10 +86,12 @@ class Track7VolatilitySkewWeeklyInsurance:
                     peak = current
             if peak > 0 and current is not None and current <= peak * (Decimal("1")-self.TRAILING_DRAWDOWN):
                 return (self._close_signal(f"TRAILING_20PCT;CURRENT:{current};PEAK:{peak}"),)
-            if self._metric(context.analytics, "calendar.is_expiry_day") is True:
+            # The stream may contain multiple contract families and expiries.
+            # Close only when this position's own authoritative weekly expiry arrives.
+            if self.state.expiry == context.analytics.as_of.date().isoformat():
                 hhmm = context.analytics.as_of.hour * 100 + context.analytics.as_of.minute
                 if hhmm >= 1500:
-                    return (self._close_signal("D_MINUS_1_15:00"),)
+                    return (self._close_signal("WEEKLY_EXACT_EXPIRY_15:00"),)
             return ()
         if self._metric(context.analytics, "calendar.is_new_week_start") is not True:
             return ()

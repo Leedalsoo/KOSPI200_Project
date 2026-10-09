@@ -126,6 +126,7 @@ def create_virtual_run_session(context: RunContext, option_master: Any, risk_gua
         snapshot_reader=execution_bridge.position_groups.snapshot,
         reports_reader=execution_bridge.group_reports,
         group_ids_reader=lambda: tuple(execution_bridge.position_groups.all().keys()),
+        group_reader=execution_bridge.position_groups.get,
     )
     raw_futures_path = None
     if context.historical_store_path and Path(context.historical_store_path).name.endswith(".observations.jsonl"):

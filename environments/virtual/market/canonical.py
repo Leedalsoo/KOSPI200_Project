@@ -22,6 +22,12 @@ class ReferenceCanonicalMarketTick:
     option_source: str = ""
     underlying_sequence: int = 0
     instrument_id: str = ""
+    contract_class: str = "monthly"
+    contract_month: str = ""
+    theoretical_mid_price: float | None = None
+    intrinsic_value: float | None = None
+    time_value: float | None = None
+    time_to_expiry_seconds: int | None = None
     # Per-option analytics carried from authoritative MarketObservation.
     implied_volatility: float | None = None
     delta: float | None = None

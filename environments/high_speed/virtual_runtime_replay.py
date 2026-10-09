@@ -70,6 +70,16 @@ class HighSpeedVirtualRuntimeReplayRunner:
             synthetic_runtime_sources=synthetic_sources,
             track4_greeks_provider=synthetic_sources,
         )
+        # High-speed replay replaces the bootstrap loop; rebind the broker read model
+        # to the bridge actually executing this replay instead of the detached bridge.
+        replay_bridge = getattr(loop, "multi_leg_bridge", None)
+        if replay_bridge is None:
+            raise RuntimeError("HIGH_SPEED_REPLAY_MULTI_LEG_BRIDGE_REQUIRED")
+        bootstrap.bundle.broker_api.attach_group_read_model(
+            snapshot_reader=replay_bridge.position_groups.snapshot,
+            reports_reader=replay_bridge.group_reports,
+            group_ids_reader=lambda: tuple(replay_bridge.position_groups.all().keys()),
+        )
         totals = {"events": 0, "signals": 0, "approved": 0, "routed": 0, "filled": 0, "rejected": 0}
         execution_ids: list[str] = []
         multi_leg_decisions = 0

@@ -47,7 +47,12 @@ class Track8OptionContractSource:
             raise ValueError("TRACK8_LISTED_STRIKE_NOT_FOUND")
 
         underlying = Decimal(str(current_price))
-        atm = min(listed_strikes, key=lambda strike: (abs(strike - underlying), strike))
+        valid_centers = [strike for strike in listed_strikes if strike-self.OFFSET in puts and strike+self.OFFSET in calls]
+        if not valid_centers:
+            raise ValueError("TRACK8_LISTED_STRIKE_NOT_FOUND")
+        # Resolve a center only when the authoritative monthly PUT/CALL pair
+        # exists at the configured offset; nearest strike alone is insufficient.
+        atm = min(valid_centers, key=lambda strike: (abs(strike - underlying), strike))
         put_strike = atm - self.OFFSET
         call_strike = atm + self.OFFSET
         put = puts.get(put_strike)

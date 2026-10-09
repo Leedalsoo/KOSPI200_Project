@@ -97,6 +97,14 @@ class OptionProgramReadModel:
             if not strategy_id:
                 continue
             rows = grouped.setdefault(strategy_id, [])
+            try:
+                position_group = broker_api.get_position_group(group_id)
+                group_legs_by_id = {
+                    str(getattr(group_leg, "leg_id", "")): group_leg
+                    for group_leg in getattr(position_group, "legs", ())
+                }
+            except Exception:
+                group_legs_by_id = {}
             realized = getattr(snap, "realized_pnl", None)
             unrealized = getattr(snap, "unrealized_pnl", None)
             if realized is not None or unrealized is not None:
@@ -108,7 +116,10 @@ class OptionProgramReadModel:
             for leg in getattr(snap, "legs", ()):
                 instrument_id = str(getattr(leg, "instrument_id", "") or "")
                 pos = positions.get(instrument_id) if hasattr(positions, "get") else None
-                side = str(getattr(pos, "side", "") or "").upper() if pos is not None else ""
+                group_leg = group_legs_by_id.get(str(getattr(leg, "leg_id", "")))
+                side = str(getattr(group_leg, "side", "") or "").upper() if group_leg is not None else ""
+                if side not in {"BUY", "SELL"}:
+                    side = str(getattr(pos, "side", "") or "").upper() if pos is not None else ""
                 if side not in {"BUY", "SELL"}:
                     side = "UNKNOWN"
                 trade_price = getattr(leg, "avg_price", None)
@@ -133,7 +144,14 @@ class OptionProgramReadModel:
                     "expiry": getattr(identity, "expiry", None) if identity is not None else None,
                     "option_type": getattr(identity, "option_type", None) if identity is not None else None,
                     "strike": float(identity.strike) if identity is not None and getattr(identity, "strike", None) is not None else None,
-                    "identity_source": getattr(identity, "identity_source", None) if identity is not None else getattr(leg, "identity_source", None),
+                    "identity_source": (
+                        getattr(identity, "identity_source", None)
+                        or getattr(leg, "identity_source", None)
+                    ),
+                    "contract_multiplier": str(getattr(leg, "contract_multiplier", "")) or None,
+                    "run_id": getattr(leg, "run_id", None),
+                    "client_order_id": getattr(leg, "client_order_id", None),
+                    "execution_id": getattr(leg, "execution_id", None),
                 })
 
         trades_by_strategy: dict[str, list[dict[str, Any]]] = {}
@@ -154,8 +172,41 @@ class OptionProgramReadModel:
                 total = getattr(snap, "total_pnl", None)
                 if total is None and (realized is not None or unrealized is not None):
                     total = (realized or 0) + (unrealized or 0)
+                snapshot_legs = tuple(getattr(snap, "legs", ()))
+                run_ids = {str(getattr(leg, "run_id", "") or "") for leg in snapshot_legs}
+                client_order_ids = tuple(
+                    str(getattr(leg, "client_order_id", "") or "")
+                    for leg in snapshot_legs if getattr(leg, "client_order_id", None)
+                )
+                snapshot_execution_ids = tuple(
+                    str(getattr(leg, "execution_id", "") or "")
+                    for leg in snapshot_legs if getattr(leg, "execution_id", None)
+                )
+                report_execution_ids = tuple(
+                    str(getattr(report, "execution_id", "") or "")
+                    for report in reports if getattr(report, "execution_id", None)
+                )
+                expected_run_id = str(getattr(self._context, "run_id", "") or "")
+                provenance_complete = bool(snapshot_legs) and all(
+                    getattr(leg, "run_id", None)
+                    and getattr(leg, "client_order_id", None)
+                    and getattr(leg, "execution_id", None)
+                    for leg in snapshot_legs
+                )
+                provenance_run_match = provenance_complete and run_ids == {expected_run_id}
+                report_ids_match = set(report_execution_ids) == set(snapshot_execution_ids)
                 trades_by_strategy.setdefault(strategy_id, []).append({
                     "group_id": group_id,
+                    "run_id": next(iter(run_ids)) if len(run_ids) == 1 and next(iter(run_ids)) else None,
+                    "provenance_status": (
+                        "UNAVAILABLE" if not provenance_complete
+                        else "RUN_ID_MISMATCH" if not provenance_run_match
+                        else "AVAILABLE" if report_ids_match
+                        else "EXECUTION_REPORT_MISMATCH"
+                    ),
+                    "client_order_ids": list(client_order_ids),
+                    "execution_ids": list(snapshot_execution_ids),
+                    "report_execution_ids": list(report_execution_ids),
                     "expiry": expiry_values[0] if expiry_values else None,
                     "entry_at": min(timestamps).isoformat() if timestamps else None,
                     "last_execution_at": max(timestamps).isoformat() if timestamps else None,
@@ -243,12 +294,12 @@ class OptionProgramReadModel:
                     elif name == "pnl":
                         pnl = error_value
             try:
-                group_ids = broker_api.get_group_ids()
-                if group_ids:
-                    execution_reports = [
-                        self._asdict(item)
-                        for item in broker_api.get_group_reports(next(iter(group_ids), ""))
-                    ]
+                group_ids = tuple(broker_api.get_group_ids())
+                execution_reports = [
+                    self._asdict(item)
+                    for group_id in group_ids
+                    for item in broker_api.get_group_reports(group_id)
+                ]
             except Exception:
                 execution_reports = []
 

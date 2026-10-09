@@ -44,9 +44,28 @@ class Track6OptionContractSource:
         listed_strikes = sorted(set(calls) & set(puts))
         if not listed_strikes:
             raise ValueError("TRACK6_LISTED_STRIKE_NOT_FOUND")
-        atm = min(listed_strikes, key=lambda strike: (abs(strike - current_price), strike))
-        put_strike = atm - Decimal("12.5")
-        call_strike = atm + Decimal("12.5")
+        offset = Decimal("12.5")
+        valid_centers = [strike for strike in listed_strikes if strike-offset in puts and strike+offset in calls]
+        if valid_centers:
+            # Prefer the configured 12.5-point structure whenever the listed
+            # master actually contains both legs.
+            atm = min(valid_centers, key=lambda strike: (abs(strike - current_price), strike))
+            put_strike = atm - offset
+            call_strike = atm + offset
+        else:
+            # Far-month KRX strike ladders may not contain an exact 12.5-point
+            # symmetric pair. Strategy 6 requires listed PUT/CALL identities,
+            # not a fixed offset, so choose the nearest listed OTM legs without
+            # inventing strikes or accepting a one-sided ladder.
+            put_candidates = [strike for strike in puts if strike < current_price]
+            call_candidates = [strike for strike in calls if strike > current_price]
+            if not put_candidates or not call_candidates:
+                raise ValueError("TRACK6_LISTED_STRIKE_NOT_FOUND")
+            put_strike = min(put_candidates, key=lambda strike: (abs(strike - (current_price-offset)), strike))
+            call_strike = min(call_candidates, key=lambda strike: (abs(strike - (current_price+offset)), strike))
+            if put_strike > call_strike:
+                raise ValueError("TRACK6_LISTED_STRIKE_NOT_FOUND")
+            atm = (put_strike + call_strike) / Decimal("2")
         put = puts.get(put_strike)
         call = calls.get(call_strike)
         if put is None or call is None:
