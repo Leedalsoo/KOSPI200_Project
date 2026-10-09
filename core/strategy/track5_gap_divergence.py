@@ -32,7 +32,6 @@ class Track5State:
     open_ticks: int = 0
     peak_pnl: Decimal = Decimal("0")
     trailing_active: bool = False
-    liquidity_stage: int = 0
     expected_move_pts: Decimal = Decimal("0")
     session_start_price: Decimal | None = None
     session_start_at: object | None = None
@@ -49,6 +48,7 @@ class Track5GapDivergence:
     version = "2.0"
     ENTRY_QUANTITY = 1
     MINI_FUTURES_QUANTITY = 5
+    MAX_OPEN_EVALUATIONS = 30
 
     def __init__(self, z_threshold: Decimal = Decimal("1.5")) -> None:
         self.z_threshold = z_threshold
@@ -170,7 +170,7 @@ class Track5GapDivergence:
             self.state, is_active=True, direction=direction,
             entry_price=entry_price, target_price=target_price,
             stop_loss_price=stop, open_ticks=0, peak_pnl=Decimal("0"),
-            trailing_active=False, liquidity_stage=0,
+            trailing_active=False,
             expected_move_pts=expected_move, gap_source=source,
             gap_extreme_price=entry_price, option_type=option_type,
             selected_strike=execution_input.selected_strike,
@@ -192,6 +192,25 @@ class Track5GapDivergence:
                 asset_type="OPTION", side="BUY", quantity=self.ENTRY_QUANTITY,
                 tag_id="GAP_DIVERGENCE_ENTRY_OPTION",
                 option_type=option_type, strike=execution_input.selected_strike,
+            ),
+        ),)
+
+    def _request_futures_exit(self, state: Track5State, current_price: Decimal, reason: str) -> Sequence[Signal]:
+        """Request the hedge close before any terminal option exit."""
+        if state.futures_side not in {"BUY", "SELL"}:
+            return ()
+        self.state = replace(state, futures_closed=True)
+        futures_close_side = "BUY" if state.futures_side == "SELL" else "SELL"
+        return (Signal(
+            self.strategy_id,
+            "CLOSE_FUTURES",
+            1.0,
+            f"{reason};PRICE:{current_price};ENTRY:{state.entry_price};MINI_FUTURES_QTY:{self.MINI_FUTURES_QUANTITY}",
+            kind=SignalKind.EXECUTION,
+            execution_proposal=self._proposal(
+                asset_type="FUTURES", side=futures_close_side,
+                quantity=self.MINI_FUTURES_QUANTITY,
+                tag_id="GAP_DIVERGENCE_FUTURES_FIRST_EXIT",
             ),
         ),)
 
@@ -217,20 +236,7 @@ class Track5GapDivergence:
             direction == "LONG" and current_price > state.entry_price
         )
         if not state.futures_closed and gap_started_filling:
-            self.state = replace(state, futures_closed=True)
-            futures_close_side = "BUY" if state.futures_side == "SELL" else "SELL"
-            return (Signal(
-                self.strategy_id,
-                "CLOSE_FUTURES",
-                1.0,
-                f"GAP_FILL_STARTED;PRICE:{current_price};ENTRY:{state.entry_price};MINI_FUTURES_QTY:{self.MINI_FUTURES_QUANTITY}",
-                kind=SignalKind.EXECUTION,
-                execution_proposal=self._proposal(
-                    asset_type="FUTURES", side=futures_close_side,
-                    quantity=self.MINI_FUTURES_QUANTITY,
-                    tag_id="GAP_DIVERGENCE_FUTURES_FIRST_EXIT",
-                ),
-            ),)
+            return self._request_futures_exit(state, current_price, "GAP_FILL_STARTED")
 
         trail_threshold = max(Decimal("0.3"), state.expected_move_pts * Decimal("0.3"))
         trail_reversal = max(Decimal("0.1"), state.expected_move_pts * Decimal("0.1"))
@@ -264,7 +270,14 @@ class Track5GapDivergence:
                 ),
             ),)
 
-        if (direction == "SHORT" and current_price >= state.stop_loss_price) or (direction == "LONG" and current_price <= state.stop_loss_price):
+        stop_triggered = (
+            direction == "SHORT" and current_price >= state.stop_loss_price
+        ) or (
+            direction == "LONG" and current_price <= state.stop_loss_price
+        )
+        if stop_triggered:
+            if not state.futures_closed:
+                return self._request_futures_exit(state, current_price, "OPTION_STOP_REQUIRES_HEDGE_CLOSE")
             self.reset()
             return (Signal(
                 self.strategy_id, "CLOSE_OPTION", 1.0,
@@ -277,11 +290,13 @@ class Track5GapDivergence:
                 ),
             ),)
 
-        if state.open_ticks >= 30:
+        if state.open_ticks >= self.MAX_OPEN_EVALUATIONS:
+            if not state.futures_closed:
+                return self._request_futures_exit(state, current_price, "TIMEOUT_REQUIRES_HEDGE_CLOSE")
             self.reset()
             return (Signal(
                 self.strategy_id, "CLOSE_OPTION", 1.0,
-                f"TIMEOUT_15M;PNL:{pnl}",
+                f"TIMEOUT_{self.MAX_OPEN_EVALUATIONS}_EVALUATIONS;PNL:{pnl}",
                 kind=SignalKind.EXECUTION,
                 execution_proposal=self._proposal(
                     asset_type="OPTION", side="SELL", quantity=self.ENTRY_QUANTITY,
@@ -292,7 +307,9 @@ class Track5GapDivergence:
 
         trailing_active = state.trailing_active or pnl >= trail_threshold
         state = replace(state, trailing_active=trailing_active)
-        if trailing_active and state.peak_pnl - pnl >= effective_reversal and state.futures_closed:
+        if trailing_active and state.peak_pnl - pnl >= effective_reversal:
+            if not state.futures_closed:
+                return self._request_futures_exit(state, current_price, "TRAILING_EXIT_REQUIRES_HEDGE_CLOSE")
             self.reset()
             return (Signal(
                 self.strategy_id, "CLOSE_OPTION", 1.0,
@@ -305,12 +322,6 @@ class Track5GapDivergence:
                 ),
             ),)
 
-        if pnl >= trail_threshold * Decimal("0.75") and state.liquidity_stage == 0:
-            self.state = replace(state, liquidity_stage=1)
-            return ()
-        if pnl >= trail_threshold * Decimal("1.5") and state.liquidity_stage == 1:
-            self.state = replace(state, liquidity_stage=2)
-            return ()
         self.state = state
         return ()
 

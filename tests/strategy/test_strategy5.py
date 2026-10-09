@@ -137,3 +137,113 @@ def test_strategy5_plan_contains_option_one_and_mini_futures_five():
         ("CALL", 1, "BUY"),
         (None, 5, "SELL"),
     ]
+
+
+def _mini_futures_identity():
+    from contracts.futures_identity_source_port import FuturesInstrumentIdentity
+    from contracts.futures_contract_spec import FuturesProductType
+
+    return FuturesInstrumentIdentity(
+        instrument_id="MFUT", symbol="MFUT",
+        product_type=FuturesProductType.MINI,
+        contract_multiplier=Decimal("50000"),
+        identity_source="TEST",
+    )
+
+
+def test_strategy5_stop_requests_futures_exit_before_option_exit():
+    s = Track5GapDivergence()
+    at = datetime(2026, 10, 6, 9, 0)
+    assert s.evaluate(_context(s, at, 102, 100, 102))
+
+    futures_exit = s.evaluate_mean_reversion(Decimal("103"))
+    assert len(futures_exit) == 1
+    assert futures_exit[0].direction == "CLOSE_FUTURES"
+    assert "OPTION_STOP_REQUIRES_HEDGE_CLOSE" in futures_exit[0].reason
+    assert s.state.is_active and s.state.futures_closed
+
+    option_exit = s.evaluate_mean_reversion(Decimal("103"))
+    assert len(option_exit) == 1
+    assert option_exit[0].direction == "CLOSE_OPTION"
+    assert option_exit[0].execution_proposal.tag_id == "GAP_DIVERGENCE_OPTION_STOP_EXIT"
+    assert not s.state.is_active
+
+
+def test_strategy5_timeout_is_counted_in_evaluations_and_closes_hedge_first():
+    s = Track5GapDivergence()
+    at = datetime(2026, 10, 6, 9, 0)
+    assert s.evaluate(_context(s, at, 102, 100, 102))
+
+    for _ in range(s.MAX_OPEN_EVALUATIONS - 1):
+        assert s.evaluate_mean_reversion(Decimal("102.2")) == ()
+    futures_exit = s.evaluate_mean_reversion(Decimal("102.2"))
+    assert len(futures_exit) == 1
+    assert futures_exit[0].direction == "CLOSE_FUTURES"
+    assert "TIMEOUT_REQUIRES_HEDGE_CLOSE" in futures_exit[0].reason
+    assert s.state.futures_closed
+
+    option_exit = s.evaluate_mean_reversion(Decimal("102.2"))
+    assert len(option_exit) == 1
+    assert option_exit[0].direction == "CLOSE_OPTION"
+    assert f"TIMEOUT_{s.MAX_OPEN_EVALUATIONS}_EVALUATIONS" in option_exit[0].reason
+    assert not s.state.is_active
+
+
+def test_strategy5_same_price_path_keeps_futures_first_then_closes_option():
+    s = Track5GapDivergence()
+    at = datetime(2026, 10, 6, 9, 0)
+    assert s.evaluate(_context(s, at, 102, 100, 102))
+
+    futures_exit = s.evaluate_mean_reversion(Decimal("99"))
+    assert len(futures_exit) == 1 and futures_exit[0].direction == "CLOSE_FUTURES"
+    assert s.state.is_active
+    option_exit = s.evaluate_mean_reversion(Decimal("99"))
+    assert len(option_exit) == 1 and option_exit[0].direction == "CLOSE_OPTION"
+    assert not s.state.is_active
+
+
+def test_strategy5_missing_or_invalid_execution_input_fails_closed():
+    s = Track5GapDivergence()
+    at = datetime(2026, 10, 6, 9, 0)
+    analytics = _snapshot(at, 102, 100, 102)
+    assert s.evaluate(StrategyContext(strategy_id=s.strategy_id, analytics=analytics, input=None)) == ()
+    assert s.evaluate(StrategyContext(
+        strategy_id=s.strategy_id, analytics=analytics,
+        input=StrategyInput(payload={"selected_strike": "105"}),
+    )) == ()
+    assert not s.state.is_active
+
+
+def test_strategy5_extreme_z_score_is_rejected():
+    s = Track5GapDivergence()
+    at = datetime(2026, 10, 6, 9, 0)
+    signals = s.evaluate(_context(s, at, 104, 100, 104))
+    assert signals == ()
+    assert not s.state.is_active
+
+
+def test_strategy5_build_execution_plan_supports_futures_and_option_exits():
+    s = Track5GapDivergence()
+    at = datetime(2026, 10, 6, 9, 0)
+    assert s.evaluate(_context(s, at, 102, 100, 102))
+    futures_signal = s.evaluate_mean_reversion(Decimal("101.5"))[0]
+    futures_plan = s.build_execution_plan(
+        "T5-FUTURES-EXIT", proposal=futures_signal.execution_proposal,
+        futures_identity=_mini_futures_identity(),
+    )
+    assert futures_plan.purpose == "TRACK5_GAP_HEDGE_FUTURES_EXIT"
+    assert len(futures_plan.legs) == 1
+    assert futures_plan.legs[0].leg_id == "MINI_FUTURES_EXIT"
+    assert futures_plan.legs[0].side == "BUY"
+    assert futures_plan.legs[0].quantity == 5
+
+    option_signal = s.evaluate_mean_reversion(Decimal("100"))[0]
+    option_plan = s.build_execution_plan(
+        "T5-OPTION-EXIT", proposal=option_signal.execution_proposal,
+        futures_identity=_mini_futures_identity(),
+    )
+    assert option_plan.purpose == "TRACK5_GAP_HEDGE_OPTION_EXIT"
+    assert len(option_plan.legs) == 1
+    assert option_plan.legs[0].leg_id == "OPTION_EXIT"
+    assert option_plan.legs[0].side == "SELL"
+    assert option_plan.legs[0].quantity == 1
