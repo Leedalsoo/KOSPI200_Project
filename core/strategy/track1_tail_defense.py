@@ -107,6 +107,9 @@ class Track1TailDefense(Strategy):
     def evaluate(self, context: StrategyContext) -> Sequence[Signal]:
         if context.strategy_id != self.strategy_id:
             raise ValueError("strategy context mismatch")
+        # Missing authoritative market state must not produce an order proposal.
+        if context.market_state is None or not context.market_state.ticks:
+            return ()
         if not self._initialized:
             self.initialize(context)
 
