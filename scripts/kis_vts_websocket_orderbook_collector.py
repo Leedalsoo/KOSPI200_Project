@@ -33,7 +33,7 @@ SUBSCRIBE_INTERVAL_SECONDS = 0.12
 RECONNECT_BACKOFF_SECONDS = 5.0
 MAX_SUBSCRIPTIONS = 41
 OPTION_QUOTE_TR_ID = "H0IOASP0"
-LOG_PATH = ROOT / "data" / "kis_realtime" / "websocket_collector.log"
+LOG_PATH = market_data_root_from_env() / "logs" / "websocket_collector.log"
 LOGGER = logging.getLogger("kis_vts_websocket_collector")
 
 

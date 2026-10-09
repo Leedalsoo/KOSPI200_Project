@@ -53,7 +53,6 @@ from infrastructure.kis.realtime_raw_store import KISRealtimeRawStore
 KST = timezone(timedelta(hours=9))
 LOGGER = logging.getLogger("kis_vts_weekday_collector")
 
-WINDOW = CollectionWindow(start=date(2026, 9, 21), end=date(2026, 9, 23))
 SESSION_START = time(8, 29)
 SESSION_END = time(16, 1)
 ALERT_CHECK_TIME = time(9, 10)
@@ -64,8 +63,21 @@ LOG_MAX_BYTES = 10 * 1024 * 1024
 LOG_BACKUP_COUNT = 5
 
 ROOT = Path(__file__).resolve().parents[2]
-DATA_ROOT = ROOT / "data" / "kis_realtime"
-LOG_PATH = DATA_ROOT / "collector.log"
+DEFAULT_MARKET_DATA_DIR = "kis_market_data_restart"
+
+
+def market_data_root_from_env() -> Path:
+    configured = os.environ.get("PROJECT200_MARKET_DATA_DIR", DEFAULT_MARKET_DATA_DIR).strip()
+    if not configured:
+        configured = DEFAULT_MARKET_DATA_DIR
+    path = Path(configured).expanduser()
+    return path if path.is_absolute() else ROOT / "data" / path
+
+
+MARKET_DATA_ROOT = market_data_root_from_env()
+# All dated KIS collection artifacts use the documented authoritative data root.
+DATA_ROOT = MARKET_DATA_ROOT
+LOG_PATH = DATA_ROOT / "logs" / "collector.log"
 
 
 def _now_kst() -> datetime:
@@ -108,8 +120,9 @@ def _latest_krx_spot_price() -> str:
     return str(matches[-1]["SPOT_PRC"])
 
 
-def build_plan() -> CollectionPlan:
-    return build_plan_for_day(WINDOW.start)
+def build_plan(day: date | None = None) -> CollectionPlan:
+    """Build a plan for the requested day, defaulting to the current KST date."""
+    return build_plan_for_day(day or _now_kst().date())
 
 
 def write_daily_collection_diagnostic(day: date, plan: CollectionPlan) -> dict[str, Path]:
@@ -268,35 +281,12 @@ async def _collect_day(day: date, plan: CollectionPlan) -> None:
 
 
 async def run() -> None:
-    configure_logging()
-    LOGGER.info("COLLECTOR_PROCESS_STARTED window=%s..%s", WINDOW.start, WINDOW.end)
-    plan = build_plan()
-    LOGGER.info("COLLECTION_PLAN_READY subscriptions=%d", len(plan.subscriptions))
-    restart_backoff = RESTART_BACKOFF_INITIAL_SECONDS
-
-    while True:
-        now = _now_kst()
-        if should_stop(now.isoformat(), WINDOW):
-            LOGGER.info("COLLECTOR_AUTO_STOP reached=%s", now.isoformat())
-            return
-
-        if is_collection_day(now.date(), WINDOW):
-            if SESSION_START <= now.time() < SESSION_END:
-                try:
-                    await _collect_day(now.date(), plan)
-                    restart_backoff = RESTART_BACKOFF_INITIAL_SECONDS
-                except Exception as exc:
-                    LOGGER.exception("COLLECTION_SESSION_ERROR date=%s error=%s", now.date().isoformat(), exc)
-                    await asyncio.sleep(restart_backoff)
-                    restart_backoff = _next_backoff(restart_backoff)
-            else:
-                await asyncio.sleep(10)
-        else:
-            await asyncio.sleep(30)
+    """Compatibility entry point; use the date-independent daily orchestrator."""
+    await run_daily_forever()
 
 
 def main() -> None:
-    asyncio.run(run())
+    daily_main()
 
 
 # Date-independent daily REST-first orchestration additions.
@@ -441,18 +431,6 @@ class DailySessionOrchestrator:
         self._write_status(manifest_day := date.fromisoformat(manifest.trading_date), manifest)
 
 
-DEFAULT_MARKET_DATA_DIR = "kis_market_data_restart"
-
-
-def market_data_root_from_env() -> Path:
-    configured = os.environ.get("PROJECT200_MARKET_DATA_DIR", DEFAULT_MARKET_DATA_DIR).strip()
-    if not configured:
-        configured = DEFAULT_MARKET_DATA_DIR
-    path = Path(configured).expanduser()
-    return path if path.is_absolute() else ROOT / "data" / path
-
-
-MARKET_DATA_ROOT = market_data_root_from_env()
 REST_CYCLE_INTERVAL_SECONDS = 30
 REST_ROUND_REQUESTS_PER_TARGET = 2
 _KIS_OPTION_RESOLVER_CACHE: dict[date, KRXKISOptionIdentityResolver] = {}

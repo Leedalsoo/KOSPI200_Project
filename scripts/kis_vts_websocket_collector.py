@@ -30,7 +30,7 @@ HEARTBEAT_SECONDS = 1.0
 SUBSCRIBE_INTERVAL_SECONDS = 0.12
 RECONNECT_BACKOFF_SECONDS = 5.0
 MAX_SUBSCRIPTIONS = 41
-LOG_PATH = ROOT / "data" / "kis_realtime" / "websocket_collector.log"
+LOG_PATH = market_data_root_from_env() / "logs" / "websocket_collector.log"
 LOGGER = logging.getLogger("kis_vts_websocket_collector")
 
 
