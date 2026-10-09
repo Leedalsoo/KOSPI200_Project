@@ -40,6 +40,7 @@ class Track5State:
     option_type: str | None = None
     selected_strike: Decimal | None = None
     futures_side: str | None = None
+    futures_close_requested: bool = False
     futures_closed: bool = False
 
 
@@ -196,10 +197,14 @@ class Track5GapDivergence:
         ),)
 
     def _request_futures_exit(self, state: Track5State, current_price: Decimal, reason: str) -> Sequence[Signal]:
-        """Request the hedge close before any terminal option exit."""
+        """Request the hedge close; only a confirmed full fill closes the hedge state."""
         if state.futures_side not in {"BUY", "SELL"}:
+            self.state = state
             return ()
-        self.state = replace(state, futures_closed=True)
+        if state.futures_closed or state.futures_close_requested:
+            self.state = state
+            return ()
+        self.state = replace(state, futures_close_requested=True, futures_closed=False)
         futures_close_side = "BUY" if state.futures_side == "SELL" else "SELL"
         return (Signal(
             self.strategy_id,
@@ -213,6 +218,44 @@ class Track5GapDivergence:
                 tag_id="GAP_DIVERGENCE_FUTURES_FIRST_EXIT",
             ),
         ),)
+
+    def on_execution_result(self, purpose: str, result: object) -> None:
+        """Advance the hedge lifecycle only from its correlated execution report."""
+        if purpose != "TRACK5_GAP_HEDGE_FUTURES_EXIT":
+            return
+        if not self.state.is_active or not self.state.futures_close_requested:
+            return
+
+        reports = tuple(getattr(result, "reports", ()) or ())
+        if not reports:
+            if (
+                int(getattr(result, "pending_legs", 0) or 0) == 0
+                and int(getattr(result, "routed_legs", 0) or 0) == 0
+            ):
+                self.state = replace(self.state, futures_close_requested=False)
+            return
+
+        for report in reports:
+            if getattr(report, "leg_id", None) != "MINI_FUTURES_EXIT":
+                continue
+            status = str(getattr(report, "status", "")).strip().upper()
+            if status in {"REJECTED", "FAILED", "CANCELLED", "EXPIRED"}:
+                self.state = replace(
+                    self.state, futures_close_requested=False, futures_closed=False
+                )
+                return
+            if (
+                status == "FILLED"
+                and int(getattr(report, "filled_quantity", 0) or 0) == self.MINI_FUTURES_QUANTITY
+                and int(getattr(report, "remaining_quantity", -1)) == 0
+                and bool(getattr(report, "execution_id", None))
+                and getattr(report, "execution_timestamp", None) is not None
+                and getattr(report, "execution_price", None) is not None
+            ):
+                self.state = replace(
+                    self.state, futures_close_requested=False, futures_closed=True
+                )
+                return
 
     def evaluate_mean_reversion(self, current_price: Decimal) -> Sequence[Signal]:
         if not self.state.is_active or self.state.direction is None:

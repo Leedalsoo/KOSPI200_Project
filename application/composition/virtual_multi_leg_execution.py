@@ -59,7 +59,7 @@ class _AckAdapter:
 class VirtualMultiLegExecutionBridge:
     """Preserve group/leg identity while routing every leg through Risk -> OMS -> VSSF."""
 
-    def __init__(self, *, bundle: Any, run_id: str, option_master: IOptionContractMaster | None = None, futures_identity_source: FuturesIdentitySourcePort | None = None, option_expiry_source: Any | None = None, risk_config: RiskConfig | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None) -> None:
+    def __init__(self, *, bundle: Any, run_id: str, option_master: IOptionContractMaster | None = None, futures_identity_source: FuturesIdentitySourcePort | None = None, option_expiry_source: Any | None = None, risk_config: RiskConfig | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None, execution_result_callback: Callable[[MultiLegExecutionPlan, MultiLegExecutionResult], None] | None = None) -> None:
         self.bundle = bundle
         self.option_master = option_master or getattr(bundle, "option_master", None)
         self.futures_identity_source = futures_identity_source
@@ -76,6 +76,7 @@ class VirtualMultiLegExecutionBridge:
         if not run_id.strip():
             raise ValueError("MULTI_LEG_RUN_ID_REQUIRED")
         self.run_id = run_id
+        self.execution_result_callback = execution_result_callback
         self.position_lot_store = VirtualPositionLotStore()
         self.fee_ledger = VirtualTrack9FeeLedger()
         self.option_position_attribution = Track9OptionPositionAttributionReadModel(self.position_lot_store)
@@ -419,7 +420,7 @@ class VirtualMultiLegExecutionBridge:
             float(realized_pnl), float(unrealized_pnl), float(total_pnl)
         )
         self.position_groups.update_snapshot(snapshot)
-        return MultiLegExecutionResult(
+        result = MultiLegExecutionResult(
             group_id=plan.group_id,
             strategy_id=plan.strategy_id,
             planned_legs=len(plan.legs),
@@ -434,6 +435,9 @@ class VirtualMultiLegExecutionBridge:
                 and not any(r.leg_id == leg.leg_id and r.status == "FILLED" for r in reports)
             ),
         )
+        if self.execution_result_callback is not None:
+            self.execution_result_callback(plan, result)
+        return result
 
     def process_pending_quotes(self) -> int:
         """Submit deferred legs independently when authoritative quote appears."""

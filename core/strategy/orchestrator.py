@@ -106,6 +106,16 @@ class StrategyOrchestrator:
             filtered.append(signal)
         return tuple(filtered)
 
+    def on_execution_result(self, strategy_id: str, purpose: str, result: object) -> None:
+        """Deliver an execution result through the registered strategy boundary."""
+        key = next((item for item in self._strategy_keys if item[0] == strategy_id), None)
+        if key is None:
+            return
+        strategy = self._registry.get(*key)
+        callback = getattr(strategy, "on_execution_result", None)
+        if callable(callback):
+            callback(purpose, result)
+
     def reset(self) -> None:
         for strategy_id, version in self._strategy_keys:
             strategy = self._registry.get(strategy_id, version)

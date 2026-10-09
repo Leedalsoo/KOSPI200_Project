@@ -36,5 +36,8 @@ class StrategyHubPort:
     def is_exit_enabled(self, strategy_id: str, version: str) -> bool:
         raise NotImplementedError
 
+    def on_execution_result(self, strategy_id: str, purpose: str, result: object) -> None:
+        raise NotImplementedError
+
     def reset(self) -> None:
         raise NotImplementedError

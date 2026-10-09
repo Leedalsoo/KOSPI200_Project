@@ -212,6 +212,9 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         futures_identity_source=futures_identity_source,
         option_expiry_source=expiry_source,
         risk_guard_status_source=(risk_guard_status_source or synthetic_runtime_sources),
+        execution_result_callback=lambda plan, result: strategy_hub.on_execution_result(
+            plan.strategy_id, plan.purpose or "", result
+        ),
     )
 
     def track1_fence_type_source():

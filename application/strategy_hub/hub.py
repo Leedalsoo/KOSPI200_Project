@@ -40,5 +40,8 @@ class StrategyHub(StrategyHubPort):
     def is_exit_enabled(self, strategy_id: str, version: str) -> bool:
         return self._orchestrator.is_exit_enabled(strategy_id, version)
 
+    def on_execution_result(self, strategy_id: str, purpose: str, result: object) -> None:
+        self._orchestrator.on_execution_result(strategy_id, purpose, result)
+
     def reset(self) -> None:
         self._orchestrator.reset()
