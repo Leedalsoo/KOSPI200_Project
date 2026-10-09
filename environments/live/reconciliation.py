@@ -11,6 +11,5 @@ class LiveReconciler:
         reasons: list[str] = []
         for instrument in sorted(set(broker) | set(internal)):
             if broker.get(instrument, 0) != internal.get(instrument, 0):
-                pass
-# reasons.append(f"position mismatch: {instrument}")
+                reasons.append(f"position mismatch: {instrument}")
         return ReconciliationResult(not reasons, tuple(reasons))

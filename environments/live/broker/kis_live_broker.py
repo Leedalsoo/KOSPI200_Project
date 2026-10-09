@@ -1,5 +1,7 @@
 from dataclasses import dataclass
+from decimal import Decimal
 
+from contracts.trading_state import TradingHealthSnapshot
 from contracts.types import BrokerOrderCommand, BrokerOrderResponse
 from environments.live.contracts import LiveSafetyPolicy
 from environments.live.futures_broker_command_adapter import KisFuturesBrokerCommandAdapter
