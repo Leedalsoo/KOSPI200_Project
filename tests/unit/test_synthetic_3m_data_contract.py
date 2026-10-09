@@ -11,6 +11,7 @@ from scripts.generate_authoritative_option_synthetic_3m import (
     option_valuation,
     round_option_price,
     session_bar_count,
+    select_monthly_strikes_for_coverage,
     trading_days_between,
 )
 
@@ -81,3 +82,42 @@ def test_missing_daily_snapshot_multiplier_uses_named_exchange_spec_source():
     multiplier, source = contract_multiplier_from_master_row({"ISU_CD": "REGULAR", "PROD_NM": "KOSPI200"})
     assert multiplier == Decimal("250000")
     assert source == MULTIPLIER_SPEC_SOURCE
+
+
+
+def test_monthly_strike_selection_preserves_strategy8_pair_on_five_point_ladder():
+    strikes = [Decimal("1000") + Decimal("5") * index for index in range(41)]
+
+    selected, daily_pair_available, monthly_pair_available = select_monthly_strikes_for_coverage(
+        strikes, 1081.0
+    )
+
+    assert len(selected) == 5
+    assert monthly_pair_available
+    assert not daily_pair_available
+    assert any(center - Decimal("15") in selected and center + Decimal("15") in selected
+               for center in strikes if abs(float(center) - 1081.0) <= 25.0)
+
+
+def test_monthly_strike_selection_preserves_both_pairs_when_shared_center_exists():
+    strikes = [Decimal("1000") + Decimal("2.5") * index for index in range(81)]
+
+    selected, daily_pair_available, monthly_pair_available = select_monthly_strikes_for_coverage(
+        strikes, 1101.2
+    )
+
+    assert len(selected) == 5
+    assert daily_pair_available
+    assert monthly_pair_available
+
+
+def test_monthly_strike_selection_does_not_claim_pair_coverage_outside_listed_ladder():
+    strikes = [Decimal("900") + Decimal("5") * index for index in range(21)]
+
+    selected, daily_pair_available, monthly_pair_available = select_monthly_strikes_for_coverage(
+        strikes, 1100.0
+    )
+
+    assert len(selected) == 5
+    assert not daily_pair_available
+    assert not monthly_pair_available

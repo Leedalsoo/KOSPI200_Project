@@ -52,7 +52,7 @@ if($datasetValidationExit -ne 0){
   $summary | ConvertTo-Json -Depth 6 | Set-Content -Encoding UTF8 $reportPath
   exit 1
 }
-if($total -le 0 -or $days -le 0 -or $manifest.rules_version -ne "project200-synthetic-3m-v2" -or @($manifest.monthly_rollovers).Count -lt 3 -or $null -eq $manifest.strategy_lifecycle.strategy6_daily_tail_insurance -or $null -eq $manifest.strategy_lifecycle.strategy7_weekly_volatility_skew_insurance -or $null -eq $manifest.strategy_lifecycle.strategy8_monthly_macro_strangle -or $null -eq $manifest.initial_underlying_spot -or [double]$manifest.initial_underlying_spot -le 0 -or [string]::IsNullOrWhiteSpace([string]$manifest.underlying_spot_source_path)){
+if($total -le 0 -or $days -le 0 -or $manifest.rules_version -ne "project200-synthetic-3m-v3" -or @($manifest.monthly_rollovers).Count -lt 3 -or $null -eq $manifest.strategy_lifecycle.strategy6_daily_tail_insurance -or $null -eq $manifest.strategy_lifecycle.strategy7_weekly_volatility_skew_insurance -or $null -eq $manifest.strategy_lifecycle.strategy8_monthly_macro_strangle -or $null -eq $manifest.initial_underlying_spot -or [double]$manifest.initial_underlying_spot -le 0 -or [string]::IsNullOrWhiteSpace([string]$manifest.underlying_spot_source_path)){
   throw "AUTHORITATIVE_MONTHLY_EXPIRY_DATASET_INVALID events=$total days=$days rules=$($manifest.rules_version) rollovers=$(@($manifest.monthly_rollovers).Count) initial_spot=$($manifest.initial_underlying_spot) spot_source=$($manifest.underlying_spot_source_path)"
 }
 

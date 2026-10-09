@@ -15,7 +15,7 @@ from contracts.option_expiry import normalize_option_expiry
 from core.option.option_master import calculate_krx_monthly_option_expiry, calculate_krx_weekly_option_expiry
 
 SCHEMA = "reference-canonical-market-tick-v1"
-RULES_VERSION = "project200-synthetic-3m-v2"
+RULES_VERSION = "project200-synthetic-3m-v3"
 PATTERNS = ("trend_up", "trend_down", "mean_revert", "high_volatility", "low_volatility", "shock")
 BAR_INTERVAL_MINUTES = 5
 SESSION_OPEN = time(8, 45)
@@ -125,6 +125,75 @@ def contract_multiplier_from_master_row(row: dict) -> tuple[Decimal, str]:
     if value != REGULAR_KOSPI200_OPTION_MULTIPLIER:
         raise RuntimeError(f"OPTION_MASTER_MULTIPLIER_SPEC_MISMATCH:{value}:{REGULAR_KOSPI200_OPTION_MULTIPLIER}")
     return value, f"KRX_OPTION_MASTER_FIELD:{supplied[0][0]}"
+
+
+def select_monthly_strikes_for_coverage(
+    strikes: list[Decimal], spot: float
+) -> tuple[list[Decimal], bool, bool]:
+    """Select only listed strikes while independently preserving Strategy 6/8 pairs.
+
+    Prefer one center that supports both required offsets. If no shared center exists,
+    select the nearest available Strategy 6 (12.5-point) or Strategy 8 (15-point)
+    pair, then fill the remaining event slots with the nearest listed strikes.
+    """
+    ordered = sorted(set(strikes))
+    if len(ordered) < 5:
+        raise RuntimeError("KRX_OPTION_MASTER_STRIKES_INSUFFICIENT")
+    available = set(ordered)
+    daily_offset = Decimal("12.5")
+    monthly_offset = Decimal("15")
+    daily_centers = [
+        center for center in ordered
+        if center - daily_offset in available
+        and center + daily_offset in available
+        and abs(float(center) - spot) <= 25.0
+    ]
+    monthly_centers = [
+        center for center in ordered
+        if center - monthly_offset in available
+        and center + monthly_offset in available
+        and abs(float(center) - spot) <= 25.0
+    ]
+    shared_centers = [center for center in daily_centers if center in monthly_centers]
+
+    if shared_centers:
+        center = min(shared_centers, key=lambda value: (abs(float(value) - spot), value))
+        selected = {
+            center - monthly_offset, center - daily_offset, center,
+            center + daily_offset, center + monthly_offset,
+        }
+    else:
+        pair_candidates = [
+            (abs(float(center) - spot), 0, center, {
+                center - daily_offset, center, center + daily_offset,
+            })
+            for center in daily_centers
+        ] + [
+            (abs(float(center) - spot), 1, center, {
+                center - monthly_offset, center, center + monthly_offset,
+            })
+            for center in monthly_centers
+        ]
+        selected = set(min(pair_candidates, key=lambda item: (item[0], item[1], item[2]))[3]) if pair_candidates else set()
+
+    for candidate in sorted(ordered, key=lambda value: (abs(float(value) - spot), value)):
+        if len(selected) >= 5:
+            break
+        selected.add(candidate)
+    monthly_five = sorted(selected)
+    if len(monthly_five) != 5:
+        raise RuntimeError(f"KRX_OPTION_MASTER_STRIKE_SELECTION_INVALID:{len(monthly_five)}")
+
+    selected_set = set(monthly_five)
+    daily_pair_available = any(
+        center - daily_offset in selected_set and center + daily_offset in selected_set
+        for center in daily_centers
+    )
+    monthly_pair_available = any(
+        center - monthly_offset in selected_set and center + monthly_offset in selected_set
+        for center in monthly_centers
+    )
+    return monthly_five, daily_pair_available, monthly_pair_available
 
 
 def latest_master_snapshot(root: Path) -> tuple[Path, date]:
@@ -387,10 +456,7 @@ def generate(root: Path, output: Path, pattern: str, seed: int) -> dict:
                 progress=(bar_offset+bar)/max(1,total_bars-1)
                 drift,iv=pattern_step(pattern,progress,rng); spot=round(max(400.0,spot*(1.0+drift)),4)
                 atm=min(strikes,key=lambda x:abs(float(x)-spot)); atm_index=strikes.index(atm)
-                offset=Decimal("12.5")
-                monthly_offset=Decimal("15")
-                valid_shared_centers=[x for x in strikes if x-offset in strikes and x+offset in strikes and x-monthly_offset in strikes and x+monthly_offset in strikes]
-                shared_center=min(valid_shared_centers,key=lambda x:(abs(float(x)-spot),x)) if valid_shared_centers else None
+                monthly_five, daily_pair_available, monthly_pair_available = select_monthly_strikes_for_coverage(strikes, spot)
                 ts=datetime.combine(day,SESSION_OPEN)+timedelta(minutes=BAR_INTERVAL_MINUTES*bar)
                 next_weekly_expiries=[value for value in weekly_expiry_dates if value >= day]
                 weekly_expiry_date=min(next_weekly_expiries).isoformat() if next_weekly_expiries else None
@@ -404,12 +470,15 @@ def generate(root: Path, output: Path, pattern: str, seed: int) -> dict:
                 # A listed weekly code is not usable when its authoritative strike ladder
                 # does not cover that same underlying price neighborhood.
                 weekly_cutoff_passed = bool(weekly_expiry_date and day == date.fromisoformat(weekly_expiry_date) and ts.time() >= LAST_TRADING_CLOSE)
-                if weekly_cutoff_passed:
+                if not weekly_expiry_date:
+                    weekly_block_reason="AUTHORITATIVE_WEEKLY_CONTRACTS_NOT_FOUND"
+                    day_weekly_block_reasons.add(weekly_block_reason)
+                elif weekly_cutoff_passed:
                     weekly_block_reason="WEEKLY_CONTRACT_AFTER_LAST_TRADING_CUTOFF"
                     day_weekly_block_reasons.add(weekly_block_reason)
-                elif weekly_expiry_date and len(weekly_strikes)>=2 and nearest_weekly_distance is not None and nearest_weekly_distance <= 25.0:
+                elif len(weekly_strikes)>=2 and nearest_weekly_distance is not None and nearest_weekly_distance <= 25.0:
                     weekly_contract_available=True
-                elif weekly_expiry_date:
+                else:
                     weekly_block_reason="AUTHORITATIVE_WEEKLY_STRIKE_RANGE_DOES_NOT_MATCH_UNDERLYING" if nearest_weekly_distance is not None else "AUTHORITATIVE_WEEKLY_CONTRACTS_NOT_FOUND"
                     day_weekly_block_reasons.add(weekly_block_reason)
                 if weekly_contract_available:
@@ -421,11 +490,6 @@ def generate(root: Path, output: Path, pattern: str, seed: int) -> dict:
                         if len(selected_weekly_strikes) >= 2: break
                         if candidate not in selected_weekly_strikes: selected_weekly_strikes.append(candidate)
                     selected_weekly_strikes=sorted(selected_weekly_strikes)
-                    if shared_center is not None:
-                        monthly_five=[shared_center-monthly_offset,shared_center-offset,shared_center,shared_center+offset,shared_center+monthly_offset]
-                    else:
-                        monthly_five=sorted(strikes,key=lambda x:(abs(float(x)-spot),x))[:5]
-                        monthly_five=sorted(monthly_five)
                     for kind in ("CALL","PUT"):
                         for strike in monthly_five:
                             event_contracts.append((month_identities.get((kind,strike)),kind,strike,"monthly"))
@@ -433,22 +497,9 @@ def generate(root: Path, output: Path, pattern: str, seed: int) -> dict:
                         for strike in selected_weekly_strikes:
                             event_contracts.append((weekly_identities.get((kind,strike)),kind,strike,"weekly"))
                 else:
-                    if shared_center is not None:
-                        monthly_five=[shared_center-monthly_offset,shared_center-offset,shared_center,shared_center+offset,shared_center+monthly_offset]
-                    else:
-                        monthly_five=sorted(strikes,key=lambda x:(abs(float(x)-spot),x))[:5]
-                        monthly_five=sorted(monthly_five)
                     for kind in ("CALL","PUT"):
                         for strike in monthly_five:
                             event_contracts.append((month_identities.get((kind,strike)),kind,strike,"monthly"))
-                daily_pair_available = any(
-                    center-offset in monthly_five and center+offset in monthly_five and abs(float(center)-spot) <= 25.0
-                    for center in strikes
-                )
-                monthly_pair_available = any(
-                    center-monthly_offset in monthly_five and center+monthly_offset in monthly_five and abs(float(center)-spot) <= 25.0
-                    for center in strikes
-                )
                 day_daily_pair_covered = day_daily_pair_covered and daily_pair_available
                 day_monthly_pair_covered = day_monthly_pair_covered and monthly_pair_available
                 expected_bar_events = CONTRACTS_PER_BAR + (4 if weekly_contract_available else 0)

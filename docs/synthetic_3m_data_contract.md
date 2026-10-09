@@ -114,9 +114,19 @@ py -m scripts.validate_authoritative_option_synthetic_3m --dataset data/syntheti
 
 Use the actual approved output directory and seed for the scheduled run; do not overwrite prior run evidence. If any required file cannot be obtained, record `BLOCKED_DATASET_VALIDATION` with the exact missing path/reason and stop. There is no synthetic-calendar or guessed-spot fallback.
 
+### Refreshing authoritative KRX daily snapshots
+
+Set KRX_AUTH_KEY in the local .env file or process environment; the acquisition command never prints the key. Acquire both option and futures daily responses for the same KRX trading date:
+
+    py -m scripts.acquire_krx_daily_snapshot --date 20261008
+
+The command validates HTTP status, non-empty OutBlock_1, date consistency, and required schema for both responses before writing either data file. It writes raw API responses and a SHA-256 acquisition manifest under data/historical/krx_raw/. Existing files are preserved unless --overwrite is explicitly supplied; repeating an identical acquisition is idempotent. The generator selects the latest dated option snapshot in this directory and requires the matching futures daily file for its initial underlying price.
+
+A recent snapshot does not imply full three-month contract coverage. Weekly contracts not present in the snapshot and strikes absent from a listed strike ladder remain unavailable and must be recorded as such; do not infer future weekly codes or missing strikes.
+
 ### Contract multiplier provenance
 
 The current KRX daily option snapshot schema does not contain a contract multiplier column. For that schema, the generator uses the documented regular KOSPI200 option contract specification (`250000`) and records `contract_multiplier_source=KRX_REGULAR_KOSPI200_OPTION_CONTRACT_SPEC` in the manifest. If an input row does provide a multiplier field, the generator validates that it is positive, unambiguous, and consistent with the regular-option specification; mismatch or conflicting fields block generation. Each emitted tick uses the multiplier attached to its parsed contract identity, and the validator checks both row values and manifest provenance. Mini options remain excluded.
 
 
-Contract update note: v1.1 / `project200-synthetic-3m-v2` adds explicit multiplier-source provenance to the manifest and validates every emitted row against its parsed identity. Existing v1 manifests must be regenerated before they can pass the updated validator.
+Contract update note: v1.1 / project200-synthetic-3m-v2 adds explicit multiplier-source provenance to the manifest and validates every emitted row against its parsed identity. v1.2 / project200-synthetic-3m-v3 selects Strategy 6 (12.5-point) and Strategy 8 (15-point) listed strike pairs independently when a shared center does not exist, while preserving exactly five monthly strikes per bar. It also reports missing authoritative weekly listings explicitly. Existing v1/v2 manifests must be regenerated before they can pass the updated validator.
