@@ -1,0 +1,56 @@
+{
+  "report_type": "synthetic_3m_data_contract_smoke",
+  "created_at_kst": "2026-10-09",
+  "rules_version": "project200-synthetic-3m-v1",
+  "pattern": "low_volatility",
+  "seed": 1234,
+  "temporary_dataset": "_tmp_synthetic_rules_final_20261009",
+  "generator_exit_code": 0,
+  "validator_exit_code": 0,
+  "validator_status": "PASS_WITH_LIMITATION",
+  "date_start": "2026-09-18",
+  "date_end_inclusive": "2026-12-17",
+  "date_end_exclusive": "2026-12-18",
+  "horizon_months": 3,
+  "timezone": "Asia/Seoul",
+  "trading_days": 61,
+  "events": 52394,
+  "initial_underlying_spot": 1090.23,
+  "underlying_spot_source_path": "data/historical/krx_raw/20260918_futures_daily.json",
+  "underlying_spot_source_code": "A016C000",
+  "option_master_path": "data/historical/krx_raw/20260918_options_daily.json",
+  "option_master_sha256": "6865992c451b6ada3f8a6ab21980e789765908262542d119655a1463b96d77b1",
+  "weekly_contract_coverage_days": 4,
+  "daily_pair_coverage_days": 56,
+  "monthly_pair_coverage_days": 56,
+  "market_rule_limitations": [
+    "KRX_DAILY_PRICE_LIMIT_NOT_ENFORCED_NO_AUTHORITATIVE_PER_CONTRACT_BASE_PRICE"
+  ],
+  "checks": {
+    "compileall": "PASS",
+    "focused_pytest": "PASS",
+    "focused_pytest_count": 17,
+    "git_diff_check": "PASS",
+    "powershell_ast_parse": "PASS",
+    "three_calendar_month_horizon": "PASS",
+    "krx_calendar_session_and_expiry": "PASS",
+    "canonical_expiry_and_option_master_identity": "PASS",
+    "five_minute_timestamp_sequence": "PASS",
+    "tick_aligned_option_quotes": "PASS",
+    "intraday_time_to_expiry_and_time_value_fields": "PASS",
+    "dynamic_event_count_and_sequence_ids": "PASS"
+  },
+  "not_run": [
+    "scheduled strategy replay",
+    "Control Tower UI smoke"
+  ],
+  "scheduler": {
+    "task_name": "Project200_3M_E2E_Every3Hours",
+    "enabled": true,
+    "state_at_check": "Ready",
+    "multiple_instances": "Queue",
+    "stopped_or_disabled": false,
+    "cadence_changed": false
+  },
+  "official_krx_reference": "https://global.krx.co.kr/contents/GLB/02/0201/0201040202/GLB0201040202.jsp"
+}

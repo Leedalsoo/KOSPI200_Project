@@ -329,3 +329,34 @@ Push 후 반드시 원격 `Project200` HEAD가 해당 commit SHA를 가리키는
 - KIS Live credential 및 실제 Live E2E
 
 이 항목들은 실제 증거가 확보될 때까지 PASS로 승격하지 않는다.
+
+## 18. 3개월 가상데이터 생성 기준 (필수)
+
+3개월 가상데이터 생성은 가격 패턴을 흉내 내는 것보다 거래소 시장 구조와 계약 생명주기를 보존하는 것이 우선이다. 가상 가격·IV 경로는 시나리오에 따라 달라질 수 있지만 날짜, 거래일, 세션, 상품군, 계약 identity, 행사가, 만기, tick, 시간가치의 방향 및 데이터 provenance를 임의로 바꾸지 않는다.
+
+### 18.1 기간·달력·세션
+- 시작일은 선택된 authoritative Option Master 스냅샷 날짜이며 포함한다. 종료 경계는 시작일에 달력상 3개월을 더한 날짜이며 미포함이다. `date_end`는 마지막 생성 거래일, `date_end_exclusive`는 경계 날짜로 각각 명시한다.
+- 거래일은 연도별 authoritative KRX 거래일 달력으로 결정한다. 주말과 공식 휴장일은 제외한다. 종료 경계 뒤의 월물 만기·롤오버를 판정하는 데 필요한 다음 연도 달력도 로드한다. 필수 달력이 없거나 출처·형식이 검증되지 않으면 fail-closed로 중단한다.
+- KOSPI200 옵션 시간은 Asia/Seoul 기준으로 처리한다. 정규장은 08:45~15:45, 옵션 최종거래일은 15:20 종료를 적용한다. 5분 봉은 실제 세션 시작에 정렬하며, 만기 이후 바를 생성하지 않는다. 주간옵션은 각 계약의 정확한 만기일에 종료한다.
+- 거래일 수, 바 수 및 이벤트 수는 달력·세션·실제 계약 커버리지에서 계산한다. 63거래일, 49,140건 등의 과거 샘플 수치를 생성 규칙의 상수로 사용하지 않는다.
+
+### 18.2 상품·계약·만기 identity
+- 일반 KOSPI200 옵션과 Mini KOSPI200 옵션을 구분하고, 이 프로젝트의 표준 옵션 데이터에는 지정된 일반 KOSPI200 상품군만 포함한다. Mini 계약 가격·행사가를 일반 계약의 spot 또는 계약으로 대체하지 않는다.
+- instrument/code, 상품군, 콜/풋, 행사가, 계약월, 정확한 `YYYYMMDD` 만기 및 계약승수는 authoritative Option Master/source에서 가져온다. 계약 identity와 만기 변환은 공통 canonical expiry 경계를 사용한다.
+- 월물·주간물·일물의 시작/종료 및 롤오버는 실제 거래일 달력과 authoritative 계약 마스터에 근거한다. 수집되지 않은 주간 만기, 행사 가격, instrument ID 또는 계약을 추정·복제해 coverage를 채우지 않는다. 누락된 계약은 `UNAVAILABLE`/`BLOCKED` 및 partial coverage로 명시한다.
+- 초기 기초자산 가격은 동일 스냅샷 날짜의 authoritative 정규 KOSPI200 선물 일별 source `SPOT_PRC`에서 읽고 Mini 계약을 제외한다. 값이 없거나 상충하면 고정 상수·후일 시세로 대체하지 않고 fail-closed 한다. source path, code, field, hash를 manifest에 남긴다.
+
+### 18.3 가격·시간가치·시장 규칙
+- 패턴 변경은 시나리오 기초자산 경로와 문서화된 IV 가정에만 영향을 준다. 금리·배당·가격 모형 등의 가정은 manifest에 명시하고, 실제 거래소 관측 가격인 것처럼 표시하지 않는다.
+- 만기까지 남은 시간은 각 관측 timestamp와 계약별 정확한 만기시각을 사용해 계산한다. 고정된 spot, strike, IV 및 기타 입력 조건에서 시간 경과만으로 옵션 시간가치/이론가가 증가하지 않는다는 불변식을 테스트한다.
+- 옵션 호가는 KRX tick에 맞춘다. 현재 기준: 프리미엄 10포인트 미만 0.01포인트, 10포인트 이상 0.05포인트. bid/ask는 양수이며 ask가 bid보다 커야 한다.
+- KRX 옵션 가격제한(기준가격 대비 ±8%, ±15%, ±20% 단계)은 계약별 authoritative 기준가격과 해당 규칙 구현이 모두 확인될 때만 PASS 판정한다. 그 입력이 없으면 `market_rule_limitations`에 누락 사유를 명시하고 결과를 `PASS_WITH_LIMITATION`으로 기록한다. 이를 거래소 주문·체결 규칙 완전 준수 또는 실거래 가능 호가라고 표현하지 않는다.
+- 모든 생성 행은 `DERIVED_SCENARIO` provenance와 Option Master/source hash를 보존한다. Synthetic/derived price는 REAL_VTS 또는 Live market data와 동일시하지 않는다.
+
+### 18.4 생성 직후 사전검증과 스케줄러
+- 각 스케줄 실행은 해당 패턴의 새 3개월 데이터 생성 후 replay 전에 validator를 실행한다. validator는 기간·달력·세션·timestamp·계약 identity·만기·source hash·초기 spot provenance·tick·시간가치·연속 ID·실제 이벤트 수 및 coverage를 확인한다.
+- 생성/검증이 실패하거나 authoritative contract가 누락된 경우 전략 replay를 시작하지 않고 `BLOCKED_DATASET_VALIDATION` 또는 구체적 `UNAVAILABLE` 상태와 증거를 기록한다. 검증 결과 JSON에는 rules version, 기간, 패턴, seed, 거래일/이벤트 수, provenance, 제한사항을 남긴다.
+- Scheduler는 사용자가 명시적으로 변경을 승인하지 않는 한 중단·비활성화·재등록하거나 주기를 변경하지 않는다. Task 이름과 실제 repetition interval이 다르면 이를 보고하고 별도 승인 없이 수정하지 않는다.
+- 테스트는 생성 규칙의 불변식을 검증한다. 테스트 fixture나 기대값을 조정해 실제 생성·replay 실패를 PASS로 바꾸지 않는다. 데이터 validator PASS와 Strategy 1~9의 전체 E2E PASS는 서로 다른 판정이며 혼동하지 않는다.
+
+이 규칙의 상세 계약 문서는 `docs/synthetic_3m_data_contract.md`, 생성기는 `scripts/generate_authoritative_option_synthetic_3m.py`, validator는 `scripts/validate_authoritative_option_synthetic_3m.py`, 스케줄 runner는 `verification/scheduled_3m/run_3m_pattern_e2e.ps1`이다. 이 규칙과 충돌하는 변경은 실행 전에 사용자 지시 및 최신 확정 Decision Log와 대조한다.

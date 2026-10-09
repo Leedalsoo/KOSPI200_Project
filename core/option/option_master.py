@@ -84,15 +84,31 @@ def calculate_krx_monthly_option_expiry(
 
 
 def calculate_krx_weekly_option_expiry(
-    year: int, month: int, week_num: int, calendar: TradingCalendar
+    year: int, month: int, week_num: int, calendar: TradingCalendar, *, weekday: int = 3
 ) -> str:
+    """Resolve a listed KRX weekly series using its actual weekday family.
+
+    weekday=0 is the Monday weekly family (holiday rolls forward to the next
+    trading day); weekday=3 is the Thursday family (holiday rolls backward).
+    KRX does not list a Thursday weekly contract for the second Thursday.
+    """
+    if not 1 <= month <= 12 or not 1 <= week_num <= 5 or weekday not in {0, 3}:
+        raise ValueError("KRX_WEEKLY_SERIES_DATE_INVALID")
+    if weekday == 3 and week_num == 2:
+        raise ValueError("KRX_SECOND_THURSDAY_WEEKLY_NOT_LISTED")
     first_day = date(year, month, 1)
-    first_thursday = 1 + (3 - first_day.weekday()) % 7
-    target_day = first_thursday + (week_num - 1) * 7
-    max_days = (date(year, month + 1, 1) - timedelta(days=1)).day if month < 12 else 31
-    target_date = date(year, month, min(target_day, max_days))
-    while not calendar.is_trading_day(target_date):
-        target_date = calendar.prev_trading_day(target_date)
+    first_target = 1 + (weekday - first_day.weekday()) % 7
+    target_day = first_target + (week_num - 1) * 7
+    max_days = (date(year + (month == 12), month % 12 + 1, 1) - timedelta(days=1)).day
+    if target_day > max_days:
+        raise ValueError("KRX_WEEKLY_SERIES_DATE_OUT_OF_MONTH")
+    target_date = date(year, month, target_day)
+    if weekday == 0:
+        while not calendar.is_trading_day(target_date):
+            target_date += timedelta(days=1)
+    else:
+        while not calendar.is_trading_day(target_date):
+            target_date = calendar.prev_trading_day(target_date)
     return target_date.strftime("%Y-%m-%d")
 
 
@@ -111,11 +127,13 @@ def _calculate_expiry(
     weekly_m = _WEEKLY_PATTERN.search(name) or _WEEKLY_PATTERN.search(symbol)
     if weekly_m:
         try:
+            monday_family = bool(re.search(r"위클리\s*M|weekly\s*M", name, re.IGNORECASE))
             return calculate_krx_weekly_option_expiry(
                 2000 + int(weekly_m.group(1)),
                 int(weekly_m.group(2)),
                 int(weekly_m.group(3)),
                 calendar,
+                weekday=0 if monday_family else 3,
             )
         except Exception as exc:
             logger.debug("Weekly option parse note (%s): %s", name, exc)
