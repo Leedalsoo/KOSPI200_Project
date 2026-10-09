@@ -47,6 +47,8 @@ jobs:
           name: project200-gate-report
           path: verification/project200_gate_report.json
 
+  # Diagnostic-only duplicate probe. The deterministic-gate job also evaluates
+  # runtime evidence through project200_gate.py and remains the blocking policy gate.
   runtime-evidence:
     needs: full-tests
     runs-on: ubuntu-latest
@@ -63,4 +65,4 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           if [ -f pyproject.toml ]; then pip install -e .; fi
       - name: Authoritative runtime evidence probe
-        run: python verification/project200_runtime_evidence_probe.py
+        run: python verification/runtime_evidence.py

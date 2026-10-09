@@ -66,3 +66,13 @@ def test_execution_resolver_registry_exists_and_has_no_strategy_if_chain():
     assert "class ExecutionMultiLegResolverRegistry" in text
     assert "if strategy_id ==" not in text
     assert "def register" in text and "def resolve" in text
+
+
+def test_project_gate_runtime_evidence_workflow_uses_existing_probe():
+    workflow = (ROOT / ".github/workflows/project200-gate.yml").read_text(encoding="utf-8")
+    probe = ROOT / "verification/runtime_evidence.py"
+    assert probe.is_file()
+    assert "run: python verification/runtime_evidence.py" in workflow
+    assert "project200_runtime_evidence_probe.py" not in workflow
+    assert "continue-on-error: true" in workflow
+    assert "deterministic-gate" in workflow
