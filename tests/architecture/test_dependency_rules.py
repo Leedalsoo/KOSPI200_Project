@@ -76,3 +76,21 @@ def test_project_gate_runtime_evidence_workflow_uses_existing_probe():
     assert "project200_runtime_evidence_probe.py" not in workflow
     assert "continue-on-error: true" in workflow
     assert "deterministic-gate" in workflow
+
+
+def test_interfaces_do_not_depend_on_environment_or_infrastructure_adapters():
+    forbidden = ("environments", "infrastructure")
+    violations = []
+    for path in _python_files("interfaces"):
+        for module in _imports(path):
+            if module.startswith(forbidden):
+                violations.append(f"{path.relative_to(ROOT)} -> {module}")
+    assert not violations, "Forbidden interfaces dependency:\n" + "\n".join(sorted(violations))
+
+
+def test_runtime_yaml_parser_is_declared_as_a_project_dependency():
+    import tomllib
+
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    dependencies = project["project"]["dependencies"]
+    assert any(item.lower().startswith("pyyaml>=") for item in dependencies)
