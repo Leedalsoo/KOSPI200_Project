@@ -1,6 +1,6 @@
 # Project200 3-Month Synthetic Market Data Contract
 
-Version: 1.0
+Version: 1.1
 Status: implementation contract for scheduled DERIVED_SCENARIO generation
 Scope: KOSPI200 regular monthly/weekly options; this is not REAL_VTS or Live data.
 
@@ -88,3 +88,35 @@ If any structural pre-replay check fails, write a BLOCKED_DATASET_VALIDATION res
 - Do not alter its repetition interval or queue policy without a separate explicit instruction.
 - The running invocation may continue with the script version it already loaded; the next invocation must use the updated code.
 - Preserve run-specific logs/results and never overwrite prior evidence.
+
+
+## 9. Required authoritative input files and recovery procedure
+
+The generator does not create substitute calendars, option identities, or underlying spot prices. Before generation, confirm these inputs exist and validate their source metadata:
+
+| Required input | Required path/schema | Gate behavior when missing or invalid |
+|---|---|---|
+| KRX trading calendars | `data/calendar/krx/YYYY.json` for every year needed by the three-month horizon and expiry resolution; `source` must be `KRX`, and `year` must match the filename | Stop with `KRX_AUTHORITATIVE_CALENDAR_REQUIRED` or `KRX_AUTHORITATIVE_CALENDAR_INVALID` |
+| KRX daily option snapshot | `data/historical/krx_raw/YYYYMMDD_options_daily.json`; non-empty `OutBlock_1` containing `ISU_CD`, `ISU_NM`, `RGHT_TP_NM`, and `PROD_NM`; at least four usable monthly expiries and required CALL/PUT coverage | Stop with the corresponding `KRX_AUTHORITATIVE_OPTION_MASTER_*` error |
+| Same-date regular KOSPI200 futures daily snapshot | `data/historical/krx_raw/YYYYMMDD_futures_daily.json` using the exact option snapshot date; `OutBlock_1` must contain regular futures `ISU_CD=A016C000` with a positive `SPOT_PRC` | Stop with `KRX_AUTHORITATIVE_UNDERLYING_REQUIRED`, `KRX_AUTHORITATIVE_UNDERLYING_EMPTY`, or `INITIAL_UNDERLYING_SPOT_INVALID` |
+
+### Obtaining a reproducible minimum input set
+
+1. Obtain calendar snapshots from the approved KRX calendar collection process and retain the original source metadata. Do not create a weekday-only calendar or infer holidays.
+2. Obtain the KRX daily option and futures snapshots from the approved KRX data collection process. The two daily files must share the same `YYYYMMDD` date; do not pair an option snapshot with a different day's futures spot.
+3. Place the original files under the paths above without rewriting source rows. Record source URL/collection timestamp and SHA-256 in the collection evidence. Keep these local authoritative data files out of Git when repository policy ignores `data/`.
+4. Run the generator, then the validator before starting any replay:
+
+```powershell
+py -m scripts.generate_authoritative_option_synthetic_3m --output data/synthetic/authoritative_option_3m --pattern mean_revert --seed 20061009
+py -m scripts.validate_authoritative_option_synthetic_3m --dataset data/synthetic/authoritative_option_3m
+```
+
+Use the actual approved output directory and seed for the scheduled run; do not overwrite prior run evidence. If any required file cannot be obtained, record `BLOCKED_DATASET_VALIDATION` with the exact missing path/reason and stop. There is no synthetic-calendar or guessed-spot fallback.
+
+### Contract multiplier provenance
+
+The current KRX daily option snapshot schema does not contain a contract multiplier column. For that schema, the generator uses the documented regular KOSPI200 option contract specification (`250000`) and records `contract_multiplier_source=KRX_REGULAR_KOSPI200_OPTION_CONTRACT_SPEC` in the manifest. If an input row does provide a multiplier field, the generator validates that it is positive, unambiguous, and consistent with the regular-option specification; mismatch or conflicting fields block generation. Each emitted tick uses the multiplier attached to its parsed contract identity, and the validator checks both row values and manifest provenance. Mini options remain excluded.
+
+
+Contract update note: v1.1 / `project200-synthetic-3m-v2` adds explicit multiplier-source provenance to the manifest and validates every emitted row against its parsed identity. Existing v1 manifests must be regenerated before they can pass the updated validator.

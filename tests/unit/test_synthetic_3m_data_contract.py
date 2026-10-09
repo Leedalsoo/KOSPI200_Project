@@ -6,6 +6,8 @@ import pytest
 from scripts.generate_authoritative_option_synthetic_3m import (
     Calendar,
     add_calendar_months,
+    contract_multiplier_from_master_row,
+    MULTIPLIER_SPEC_SOURCE,
     option_valuation,
     round_option_price,
     session_bar_count,
@@ -55,3 +57,27 @@ def test_option_quote_prices_align_to_krx_tick_size(price):
     assert rounded > 0
     step = Decimal("0.05") if Decimal(str(rounded)) >= Decimal("10") else Decimal("0.01")
     assert (Decimal(str(rounded)) / step) == (Decimal(str(rounded)) / step).to_integral_value()
+
+
+def test_contract_multiplier_uses_explicit_master_field_and_records_provenance():
+    multiplier, source = contract_multiplier_from_master_row({"ISU_CD": "REGULAR", "CONTRACT_MULTIPLIER": "250000"})
+    assert multiplier == Decimal("250000")
+    assert source == "KRX_OPTION_MASTER_FIELD:CONTRACT_MULTIPLIER"
+
+
+def test_contract_multiplier_blocks_master_spec_mismatch():
+    with pytest.raises(RuntimeError, match="OPTION_MASTER_MULTIPLIER_SPEC_MISMATCH"):
+        contract_multiplier_from_master_row({"CONTRACT_MULTIPLIER": "50000"})
+
+
+def test_contract_multiplier_blocks_invalid_and_conflicting_master_fields():
+    with pytest.raises(RuntimeError, match="OPTION_MASTER_MULTIPLIER_INVALID"):
+        contract_multiplier_from_master_row({"CONTRACT_MULTIPLIER": "0"})
+    with pytest.raises(RuntimeError, match="OPTION_MASTER_MULTIPLIER_FIELDS_CONFLICT"):
+        contract_multiplier_from_master_row({"CONTRACT_MULTIPLIER": "250000", "MULTIPLIER": "50000"})
+
+
+def test_missing_daily_snapshot_multiplier_uses_named_exchange_spec_source():
+    multiplier, source = contract_multiplier_from_master_row({"ISU_CD": "REGULAR", "PROD_NM": "KOSPI200"})
+    assert multiplier == Decimal("250000")
+    assert source == MULTIPLIER_SPEC_SOURCE

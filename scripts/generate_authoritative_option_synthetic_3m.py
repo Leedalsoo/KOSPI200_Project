@@ -15,7 +15,7 @@ from contracts.option_expiry import normalize_option_expiry
 from core.option.option_master import calculate_krx_monthly_option_expiry, calculate_krx_weekly_option_expiry
 
 SCHEMA = "reference-canonical-market-tick-v1"
-RULES_VERSION = "project200-synthetic-3m-v1"
+RULES_VERSION = "project200-synthetic-3m-v2"
 PATTERNS = ("trend_up", "trend_down", "mean_revert", "high_volatility", "low_volatility", "shock")
 BAR_INTERVAL_MINUTES = 5
 SESSION_OPEN = time(8, 45)
@@ -23,7 +23,10 @@ SESSION_CLOSE = time(15, 45)
 LAST_TRADING_CLOSE = time(15, 20)
 HORIZON_MONTHS = 3
 CONTRACTS_PER_BAR = 10
-MULTIPLIER = 250000.0
+REGULAR_KOSPI200_OPTION_MULTIPLIER = Decimal("250000")
+MULTIPLIER = float(REGULAR_KOSPI200_OPTION_MULTIPLIER)
+_MULTIPLIER_FIELD_NAMES = {"CONTRACT_MULTIPLIER", "CNTR_MLT_VAL", "CONTRACT_MLT", "MULTIPLIER"}
+MULTIPLIER_SPEC_SOURCE = "KRX_REGULAR_KOSPI200_OPTION_CONTRACT_SPEC"
 
 
 class Calendar:
@@ -92,6 +95,38 @@ def load_calendar(root: Path, years: set[int]) -> Calendar:
     return Calendar(holidays)
 
 
+def contract_multiplier_from_master_row(row: dict) -> tuple[Decimal, str]:
+    """Read a supplied regular-option multiplier or record the explicit KRX spec source.
+
+    The currently used KRX daily-option snapshot schema omits multiplier fields. In that
+    case only, use the documented regular KOSPI200 option contract specification. If a
+    master does supply the multiplier, invalid, conflicting, or non-standard values block.
+    Mini products are filtered out before this helper is called.
+    """
+    supplied = [
+        (str(key), str(value).strip().replace(",", ""))
+        for key, value in row.items()
+        if str(key).strip().upper() in _MULTIPLIER_FIELD_NAMES and str(value).strip()
+    ]
+    if not supplied:
+        return REGULAR_KOSPI200_OPTION_MULTIPLIER, MULTIPLIER_SPEC_SOURCE
+    parsed = set()
+    for key, raw in supplied:
+        try:
+            value = Decimal(raw)
+        except Exception as exc:
+            raise RuntimeError(f"OPTION_MASTER_MULTIPLIER_INVALID:{key}:{raw}") from exc
+        if not value.is_finite() or value <= 0:
+            raise RuntimeError(f"OPTION_MASTER_MULTIPLIER_INVALID:{key}:{raw}")
+        parsed.add(value)
+    if len(parsed) != 1:
+        raise RuntimeError(f"OPTION_MASTER_MULTIPLIER_FIELDS_CONFLICT:{supplied}")
+    value = next(iter(parsed))
+    if value != REGULAR_KOSPI200_OPTION_MULTIPLIER:
+        raise RuntimeError(f"OPTION_MASTER_MULTIPLIER_SPEC_MISMATCH:{value}:{REGULAR_KOSPI200_OPTION_MULTIPLIER}")
+    return value, f"KRX_OPTION_MASTER_FIELD:{supplied[0][0]}"
+
+
 def latest_master_snapshot(root: Path) -> tuple[Path, date]:
     pattern = re.compile(r"^(\d{8})_options_daily\.json$")
     today = date.today()
@@ -146,9 +181,11 @@ def parse_master(root: Path, calendar: Calendar, path: Path) -> tuple[dict[str, 
                 continue
             expiry = calculate_krx_weekly_option_expiry(year, month, week_num, calendar, weekday=weekday)
             strike = Decimal(weekly_match.group(2).replace(",", ""))
+            multiplier, multiplier_source = contract_multiplier_from_master_row(row)
             weekly_rows.append({"series": series, "month": f"{year:04d}{month:02d}", "expiry": expiry,
                                 "strike": strike, "option_type": kind, "code": code, "product": product,
-                                "contract_class": "weekly", "weekday": weekday})
+                                "contract_class": "weekly", "weekday": weekday,
+                                "contract_multiplier": multiplier, "contract_multiplier_source": multiplier_source})
             weekly_series_expiries[f"{product}:{series}"] = expiry
             continue
         monthly_match = monthly_pattern.search(name)
@@ -156,9 +193,11 @@ def parse_master(root: Path, calendar: Calendar, path: Path) -> tuple[dict[str, 
             month = monthly_match.group(1)
             if not 1 <= int(month[4:]) <= 12:
                 continue
+            multiplier, multiplier_source = contract_multiplier_from_master_row(row)
             monthly_rows.append({"month": month, "strike": Decimal(monthly_match.group(2).replace(",", "")),
                                  "option_type": kind, "code": code, "product": product,
-                                 "contract_class": "monthly"})
+                                 "contract_class": "monthly", "contract_multiplier": multiplier,
+                                 "contract_multiplier_source": multiplier_source})
     if not monthly_rows:
         raise RuntimeError("KRX_AUTHORITATIVE_OPTION_MASTER_NO_MONTHLY_OPTIONS")
     product_coverage: dict[str, set[tuple[str, str, Decimal]]] = {}
@@ -177,8 +216,10 @@ def parse_master(root: Path, calendar: Calendar, path: Path) -> tuple[dict[str, 
         monthly_expiries[month] = expiry
         identity = {"instrument_id": row["code"], "month": month, "expiry": expiry,
                     "option_type": row["option_type"], "strike": row["strike"],
-                    "contract_multiplier": MULTIPLIER, "identity_source": path.name,
-                    "contract_class": "monthly", "product_family": row["product"]}
+                    "contract_multiplier": row["contract_multiplier"],
+                    "contract_multiplier_source": row["contract_multiplier_source"],
+                    "identity_source": path.name, "contract_class": "monthly",
+                    "product_family": row["product"]}
         previous = identities.get(row["code"])
         if previous is not None and previous != identity:
             raise RuntimeError(f"KRX_OPTION_MASTER_CONFLICTING_IDENTITY:{row['code']}")
@@ -186,12 +227,20 @@ def parse_master(root: Path, calendar: Calendar, path: Path) -> tuple[dict[str, 
     for row in weekly_rows:
         identity = {"instrument_id": row["code"], "month": row["month"], "expiry": row["expiry"],
                     "option_type": row["option_type"], "strike": row["strike"],
-                    "contract_multiplier": MULTIPLIER, "identity_source": path.name,
-                    "contract_class": "weekly", "product_family": row["product"], "series": row["series"]}
+                    "contract_multiplier": row["contract_multiplier"],
+                    "contract_multiplier_source": row["contract_multiplier_source"],
+                    "identity_source": path.name, "contract_class": "weekly",
+                    "product_family": row["product"], "series": row["series"]}
         previous = identities.get(row["code"])
         if previous is not None and previous != identity:
             raise RuntimeError(f"KRX_OPTION_MASTER_CONFLICTING_IDENTITY:{row['code']}")
         identities[row["code"]] = identity
+    multiplier_values = {identity["contract_multiplier"] for identity in identities.values()}
+    multiplier_sources = {identity["contract_multiplier_source"] for identity in identities.values()}
+    if multiplier_values != {REGULAR_KOSPI200_OPTION_MULTIPLIER}:
+        raise RuntimeError(f"OPTION_MASTER_MULTIPLIER_SET_INVALID:{sorted(map(str, multiplier_values))}")
+    if len(multiplier_sources) != 1:
+        raise RuntimeError(f"OPTION_MASTER_MULTIPLIER_PROVENANCE_MIXED:{sorted(multiplier_sources)}")
     by_month: dict[str, dict[tuple[str, Decimal], dict]] = {}
     for identity in identities.values():
         if identity["contract_class"] == "monthly":
@@ -284,6 +333,10 @@ def generate(root: Path, output: Path, pattern: str, seed: int) -> dict:
     calendar_years = set(range(snapshot_day.year, horizon_end_exclusive.year + 2))
     calendar=load_calendar(root,calendar_years)
     identities, master_sha, selected_product, monthly_expiries, weekly_series_expiries=parse_master(root,calendar,master_path)
+    multiplier_values = {identity["contract_multiplier"] for identity in identities.values()}
+    multiplier_sources = {identity["contract_multiplier_source"] for identity in identities.values()}
+    if len(multiplier_values) != 1 or len(multiplier_sources) != 1:
+        raise RuntimeError("OPTION_MASTER_MULTIPLIER_PROVENANCE_INCONSISTENT")
     days=trading_days_between(calendar,snapshot_day,horizon_end_exclusive)
     if not days: raise RuntimeError("KRX_THREE_MONTH_HORIZON_HAS_NO_TRADING_DAYS")
     months=sorted({x["month"] for x in identities.values() if x["contract_class"] == "monthly"})
@@ -411,7 +464,7 @@ def generate(root: Path, output: Path, pattern: str, seed: int) -> dict:
                     last=round_option_price(max(0.01,mid+noise))
                     exact_expiry=normalize_option_expiry(ident["expiry"]).require_exact()
                     seq+=1
-                    tick={"timestamp":ts.isoformat(),"underlying_price":round(spot,4),"underlying_symbol":"KOSPI200","strike_price":float(strike),"option_type":kind,"contract_multiplier":MULTIPLIER,"bid_price":bid,"ask_price":ask,"last_price":last,"theoretical_mid_price":round(mid,8),"intrinsic_value":round(intrinsic,8),"time_value":round(time_value,8),"time_to_expiry_seconds":time_to_expiry_seconds,"implied_volatility":iv,"volume":rng.randint(1,500),"seq_id":seq,"expiry":exact_expiry,"contract_month":ident["month"],"contract_class":contract_class,"symbol":"KOSPI200","option_observed_hour":ts.strftime("%H:%M"),"option_source":f"KRX_OPTION_MASTER:{master_sha[:12]}:{pattern}","instrument_id":ident["instrument_id"]}
+                    tick={"timestamp":ts.isoformat(),"underlying_price":round(spot,4),"underlying_symbol":"KOSPI200","strike_price":float(strike),"option_type":kind,"contract_multiplier":float(ident["contract_multiplier"]),"bid_price":bid,"ask_price":ask,"last_price":last,"theoretical_mid_price":round(mid,8),"intrinsic_value":round(intrinsic,8),"time_value":round(time_value,8),"time_to_expiry_seconds":time_to_expiry_seconds,"implied_volatility":iv,"volume":rng.randint(1,500),"seq_id":seq,"expiry":exact_expiry,"contract_month":ident["month"],"contract_class":contract_class,"symbol":"KOSPI200","option_observed_hour":ts.strftime("%H:%M"),"option_source":f"KRX_OPTION_MASTER:{master_sha[:12]}:{pattern}","instrument_id":ident["instrument_id"]}
                     record={"schema":SCHEMA,"source":f"DERIVED_FROM_KRX_OPTION_MASTER:{master_sha[:12]}","dataset":output.name,"provenance":"DERIVED_SCENARIO","provider":"KOSPI200_KRX_MASTER_SCENARIO","tick":tick}
                     handle.write(json.dumps(record,separators=(",",":"))+"\n"); total+=1; day_count+=1
         day_manifest.append({"date":day.isoformat(),"file":daily_path.name,"events":day_count,"bars":bar_count,"weekly_contract_bars":day_weekly_bars,"session_open":SESSION_OPEN.strftime("%H:%M"),"session_close_exclusive":session_close.strftime("%H:%M"),"session_type":"MONTHLY_LAST_TRADING_DAY" if monthly_last_trading_day else "REGULAR","expiry_month":month,"expiry":normalize_option_expiry(monthly_expiries[month]).require_exact(),"weekly_expiry":normalize_option_expiry(weekly_expiry_date).require_exact() if weekly_expiry_date else None,"weekly_contract_available":day_weekly_contract_used,"weekly_contract_block_reason":";".join(sorted(day_weekly_block_reasons)) or None,"daily_pair_available":day_daily_pair_covered,"monthly_pair_available":day_monthly_pair_covered,"daily_close_limit":"15:00","daily_close_fallback":"15:15","pattern":pattern})
@@ -433,7 +486,7 @@ def generate(root: Path, output: Path, pattern: str, seed: int) -> dict:
         "strategy7_weekly_volatility_skew_insurance":{"required_contract_class":"weekly","entry_trigger":"first trading day of ISO week","exit_time_on_exact_contract_expiry":"15:00","weekly_expiries":weekly_rollovers,"authoritative_coverage_end":weekly_coverage_end,"coverage_status":"FULL" if len(weekly_coverage_days)==len(days) else ("UNAVAILABLE_STRIKE_RANGE_MISMATCH" if not weekly_coverage_days and "AUTHORITATIVE_WEEKLY_STRIKE_RANGE_DOES_NOT_MATCH_UNDERLYING" in weekly_block_reasons else "PARTIAL_AUTHORITATIVE_MASTER_COVERAGE"),"weekly_contract_coverage_days":len(weekly_coverage_days),"uncovered_trading_days":[item["date"] for item in day_manifest if not item["weekly_contract_available"]],"block_reasons":weekly_block_reasons},
         "strategy8_monthly_macro_strangle":{"required_contract_class":"monthly","monthly_expiries":{month:normalize_option_expiry(value).require_exact() for month,value in monthly_expiries.items()},"entry_min_dte":15,"dte_lte_4_action":"NON_EXECUTION_HOLD_LONG_ATTACK","monthly_pair_coverage_status":"FULL" if all(item["monthly_pair_available"] for item in day_manifest) else "PARTIAL_OR_UNAVAILABLE","monthly_pair_coverage_days":sum(1 for item in day_manifest if item["monthly_pair_available"]),"monthly_pair_uncovered_days":[item["date"] for item in day_manifest if not item["monthly_pair_available"]]}
     }
-    manifest={"schema":"reference-canonical-market-tick-v1","rules_version":RULES_VERSION,"dataset":output.name,"provenance":"DERIVED_SCENARIO","source":"KRX_OPTION_MASTER_SNAPSHOT","option_master_path":str(master_path.relative_to(root)).replace("\\","/"),"option_master_snapshot_date":snapshot_day.isoformat(),"option_master_sha256":master_sha,"selected_product_family":selected_product,"underlying_symbol":"KOSPI200","initial_underlying_spot":initial_underlying_spot,"underlying_spot_source_path":underlying_source_path,"underlying_spot_source_code":underlying_source_code,"underlying_spot_source_field":"KRX futures_daily.SPOT_PRC (regular KOSPI200 futures; Mini excluded)","calendar_source":";".join(f"data/calendar/krx/{year}.json" for year in sorted(calendar_years)),"horizon_months":HORIZON_MONTHS,"timezone":"Asia/Seoul","date_start":days[0].isoformat(),"date_end":days[-1].isoformat(),"date_end_exclusive":horizon_end_exclusive.isoformat(),"trading_days":len(days),"bar_interval_minutes":BAR_INTERVAL_MINUTES,"session_open":SESSION_OPEN.strftime("%H:%M"),"session_close":"15:45","last_trading_cutoff":LAST_TRADING_CLOSE.strftime("%H:%M"),"contracts_per_bar_without_weekly":CONTRACTS_PER_BAR,"weekly_extra_contracts_per_bar":4,"events":total,"seed":seed,"pattern":pattern,"contract_multiplier":MULTIPLIER,"pricing_assumptions":{"model":"BLACK_SCHOLES_SCENARIO_APPROXIMATION","risk_free_rate":0.0,"dividend_yield":0.0,"time_basis":"actual seconds to 15:20 KST on exact expiry date","implied_volatility_source":"declared scenario pattern assumptions"},"option_tick_sizes":{"premium_below_10":0.01,"premium_at_or_above_10":0.05},"market_rule_limitations":["KRX_DAILY_PRICE_LIMIT_NOT_ENFORCED_NO_AUTHORITATIVE_PER_CONTRACT_BASE_PRICE"],"monthly_rollovers":rollovers,"monthly_expiries":{month:normalize_option_expiry(value).require_exact() for month,value in monthly_expiries.items()},"weekly_series_expiries":{series:normalize_option_expiry(value).require_exact() for series,value in weekly_series_expiries.items()},"weekly_rollovers":weekly_rollovers,"strategy_lifecycle":strategy_lifecycle,"days":day_manifest}
+    manifest={"schema":"reference-canonical-market-tick-v1","rules_version":RULES_VERSION,"dataset":output.name,"provenance":"DERIVED_SCENARIO","source":"KRX_OPTION_MASTER_SNAPSHOT","option_master_path":str(master_path.relative_to(root)).replace("\\","/"),"option_master_snapshot_date":snapshot_day.isoformat(),"option_master_sha256":master_sha,"selected_product_family":selected_product,"underlying_symbol":"KOSPI200","initial_underlying_spot":initial_underlying_spot,"underlying_spot_source_path":underlying_source_path,"underlying_spot_source_code":underlying_source_code,"underlying_spot_source_field":"KRX futures_daily.SPOT_PRC (regular KOSPI200 futures; Mini excluded)","calendar_source":";".join(f"data/calendar/krx/{year}.json" for year in sorted(calendar_years)),"horizon_months":HORIZON_MONTHS,"timezone":"Asia/Seoul","date_start":days[0].isoformat(),"date_end":days[-1].isoformat(),"date_end_exclusive":horizon_end_exclusive.isoformat(),"trading_days":len(days),"bar_interval_minutes":BAR_INTERVAL_MINUTES,"session_open":SESSION_OPEN.strftime("%H:%M"),"session_close":"15:45","last_trading_cutoff":LAST_TRADING_CLOSE.strftime("%H:%M"),"contracts_per_bar_without_weekly":CONTRACTS_PER_BAR,"weekly_extra_contracts_per_bar":4,"events":total,"seed":seed,"pattern":pattern,"contract_multiplier":float(next(iter(multiplier_values))),"contract_multiplier_source":next(iter(multiplier_sources)),"pricing_assumptions":{"model":"BLACK_SCHOLES_SCENARIO_APPROXIMATION","risk_free_rate":0.0,"dividend_yield":0.0,"time_basis":"actual seconds to 15:20 KST on exact expiry date","implied_volatility_source":"declared scenario pattern assumptions"},"option_tick_sizes":{"premium_below_10":0.01,"premium_at_or_above_10":0.05},"market_rule_limitations":["KRX_DAILY_PRICE_LIMIT_NOT_ENFORCED_NO_AUTHORITATIVE_PER_CONTRACT_BASE_PRICE"],"monthly_rollovers":rollovers,"monthly_expiries":{month:normalize_option_expiry(value).require_exact() for month,value in monthly_expiries.items()},"weekly_series_expiries":{series:normalize_option_expiry(value).require_exact() for series,value in weekly_series_expiries.items()},"weekly_rollovers":weekly_rollovers,"strategy_lifecycle":strategy_lifecycle,"days":day_manifest}
     (output/"manifest.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding="utf-8")
     store=output/"control_tower_replay.jsonl"
     with store.open('w',encoding='utf-8',newline='\n') as target:
@@ -447,6 +500,6 @@ def main() -> None:
     parser=argparse.ArgumentParser(); parser.add_argument('--output',required=True); parser.add_argument('--pattern',choices=PATTERNS,required=True); parser.add_argument('--seed',type=int,required=True)
     args=parser.parse_args(); root=Path.cwd(); output=Path(args.output)
     manifest=generate(root,output,args.pattern,args.seed)
-    print(json.dumps({k:manifest[k] for k in ('dataset','rules_version','date_start','date_end','date_end_exclusive','trading_days','events','initial_underlying_spot','underlying_spot_source_path','underlying_spot_source_code','monthly_rollovers','weekly_rollovers','strategy_lifecycle','option_master_sha256')},ensure_ascii=False))
+    print(json.dumps({k:manifest[k] for k in ('dataset','rules_version','date_start','date_end','date_end_exclusive','trading_days','events','initial_underlying_spot','underlying_spot_source_path','underlying_spot_source_code','monthly_rollovers','weekly_rollovers','strategy_lifecycle','option_master_sha256','contract_multiplier','contract_multiplier_source')},ensure_ascii=False))
 
 if __name__=='__main__': main()

@@ -16,7 +16,6 @@ from scripts.generate_authoritative_option_synthetic_3m import (
     CONTRACTS_PER_BAR,
     HORIZON_MONTHS,
     LAST_TRADING_CLOSE,
-    MULTIPLIER,
     RULES_VERSION,
     SCHEMA,
     SESSION_CLOSE,
@@ -92,8 +91,14 @@ def validate_dataset(root: Path, dataset: Path) -> dict:
         raise RuntimeError("INITIAL_UNDERLYING_SOURCE_FIELD_INVALID")
     if manifest.get("session_open") != SESSION_OPEN.strftime("%H:%M") or manifest.get("session_close") != SESSION_CLOSE.strftime("%H:%M") or manifest.get("last_trading_cutoff") != LAST_TRADING_CLOSE.strftime("%H:%M"):
         raise RuntimeError("KRX_SESSION_RULES_INVALID")
-    if float(manifest.get("contract_multiplier", 0)) != MULTIPLIER:
+    expected_multipliers = {float(identity["contract_multiplier"]) for identity in identities.values()}
+    expected_multiplier_sources = {identity["contract_multiplier_source"] for identity in identities.values()}
+    if len(expected_multipliers) != 1 or len(expected_multiplier_sources) != 1:
+        raise RuntimeError("OPTION_MASTER_MULTIPLIER_PROVENANCE_INCONSISTENT")
+    if float(manifest.get("contract_multiplier", 0)) != next(iter(expected_multipliers)):
         raise RuntimeError("CONTRACT_MULTIPLIER_INVALID")
+    if manifest.get("contract_multiplier_source") != next(iter(expected_multiplier_sources)):
+        raise RuntimeError("CONTRACT_MULTIPLIER_SOURCE_INVALID")
     limitations = manifest.get("market_rule_limitations")
     expected_limitations = ["KRX_DAILY_PRICE_LIMIT_NOT_ENFORCED_NO_AUTHORITATIVE_PER_CONTRACT_BASE_PRICE"]
     if limitations != expected_limitations:
@@ -171,7 +176,7 @@ def validate_dataset(root: Path, dataset: Path) -> dict:
                     raise RuntimeError(f"ROW_CONTRACT_CLASS_OR_MONTH_MISMATCH:{daily_path.name}:{line_number}:{instrument_id}")
                 if tick.get("option_type") != identity["option_type"] or Decimal(str(tick.get("strike_price"))) != identity["strike"]:
                     raise RuntimeError(f"ROW_OPTION_IDENTITY_MISMATCH:{daily_path.name}:{line_number}:{instrument_id}")
-                if float(tick.get("contract_multiplier", 0)) != MULTIPLIER or tick.get("underlying_symbol") != "KOSPI200":
+                if float(tick.get("contract_multiplier", 0)) != float(identity["contract_multiplier"]) or tick.get("underlying_symbol") != "KOSPI200":
                     raise RuntimeError(f"ROW_MULTIPLIER_OR_UNDERLYING_INVALID:{daily_path.name}:{line_number}")
                 expiry_day = date(int(exact_expiry[:4]), int(exact_expiry[4:6]), int(exact_expiry[6:8]))
                 expiry_cutoff = datetime.combine(expiry_day, LAST_TRADING_CLOSE)
