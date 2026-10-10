@@ -65,6 +65,9 @@ class Track3StatisticalArbitrage:
     position_group_legs: list[Mapping[str, object]] = field(default_factory=list)
     _arb_high_pnl: float = 0.0
     _current_date: str = ""
+    _exit_pending: bool = False
+    _pending_exit_cooldown: int = 0
+    _pending_exit_z_score: float | None = None
 
     def initialize(self, context: StrategyContext) -> None:
         self.reset()
@@ -83,6 +86,25 @@ class Track3StatisticalArbitrage:
         self.position_group_legs = []
         self._arb_high_pnl = 0.0
         self._current_date = ""
+        self._exit_pending = False
+        self._pending_exit_cooldown = 0
+        self._pending_exit_z_score = None
+
+    def on_execution_result(self, purpose: str, result: object) -> None:
+        if purpose != "CLOSE_STAT_ARB" or not self._exit_pending:
+            return
+        if not (bool(getattr(result, "group_complete", False)) and bool(getattr(result, "position_flat", False))):
+            return
+        self.last_exit_z_score = self._pending_exit_z_score
+        self.active_position = None
+        self.active_group_id = None
+        self.position_group_legs = []
+        self.cooldown_ticks = self._pending_exit_cooldown
+        self.holding_ticks = 0
+        self.group_integrity = True
+        self._exit_pending = False
+        self._pending_exit_cooldown = 0
+        self._pending_exit_z_score = None
 
     @staticmethod
     def detect_market_regime(
@@ -169,14 +191,16 @@ class Track3StatisticalArbitrage:
         if data.date_str and data.date_str != self._current_date:
             self._current_date = data.date_str
             self.cooldown_ticks = 0
-            self.holding_ticks = 0
-            self.active_position = None
-            self.active_group_id = None
-            self.last_exit_z_score = None
-            self.position_group_legs = []
-            self.group_integrity = True
+            if self.active_position is None and not self._exit_pending:
+                self.holding_ticks = 0
+                self.active_group_id = None
+                self.last_exit_z_score = None
+                self.position_group_legs = []
+                self.group_integrity = True
 
         z_score = float(analytics.get("spread.z_score").value)
+        if self._exit_pending:
+            return Track3Result("EXIT_PENDING", regime, z_score)
         spread_std = float(analytics.get("spread.std").value)
         vol_ratio = float(analytics.get("volatility.ratio").value)
         bid_ask_spread = float(analytics.get("microstructure.spread").value)
@@ -289,10 +313,7 @@ class Track3StatisticalArbitrage:
         return Track3Result("HOLD", regime, z_score)
 
     def _close(self, status: str, z_score: float, signals: tuple[Signal, ...], cooldown: int) -> Track3Result:
-        self.last_exit_z_score = z_score
-        self.active_position = None
-        self.active_group_id = None
-        self.position_group_legs = []
-        self.cooldown_ticks = cooldown
-        self.holding_ticks = 0
+        self._exit_pending = True
+        self._pending_exit_z_score = z_score
+        self._pending_exit_cooldown = cooldown
         return Track3Result(status, "", z_score, signals)

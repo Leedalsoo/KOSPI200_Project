@@ -9,6 +9,7 @@ from typing import Mapping, Protocol, Sequence, runtime_checkable
 from contracts.analytics import AnalyticsMetric, AnalyticsSnapshot, AnalyticsStatus
 from contracts.types import OptionInstrumentIdentity
 from core.domain.market_models import MarketState
+from core.strategy.definition import StrategyDefinition
 
 
 @dataclass(frozen=True)
@@ -129,6 +130,15 @@ class StrategyPlugin(Protocol):
     def on_market_state(self, context: StrategyContext) -> None: ...
     def evaluate(self, context: StrategyContext) -> Sequence[Signal]: ...
     def reset(self) -> None: ...
+
+
+@runtime_checkable
+class ConfiguredStrategyPlugin(StrategyPlugin, Protocol):
+    """Strategy Plugin loaded through the versioned manifest boundary."""
+
+    config_version: str
+    config_hash: str
+    definition: StrategyDefinition
 
 
 def _unavailable_metric(requirement: StrategyFeatureRequirement, snapshot: AnalyticsSnapshot) -> AnalyticsMetric:

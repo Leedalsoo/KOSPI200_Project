@@ -33,10 +33,12 @@ class Track7VolatilitySkewWeeklyInsurance:
     INSURANCE_QTY = 1
     STRIKE_OFFSET = Decimal("12.5")
     TRAILING_DRAWDOWN = Decimal("0.20")
+    CONFIGURABLE_PARAMETERS = ("STRIKE_OFFSET", "TRAILING_DRAWDOWN")
 
     def __init__(self, insurance_qty: int = INSURANCE_QTY) -> None:
         self.insurance_qty = insurance_qty
         self.state = Track7State()
+        self._exit_pending = False
 
     def feature_requirements(self) -> Sequence[StrategyFeatureRequirement]:
         return tuple(StrategyFeatureRequirement(k, "tick", 1.0, frozenset({AnalyticsStatus.AVAILABLE}))
@@ -51,6 +53,18 @@ class Track7VolatilitySkewWeeklyInsurance:
 
     def reset(self) -> None:
         self.state = Track7State()
+        self._exit_pending = False
+
+    def mark_exit_pending(self) -> None:
+        self._exit_pending = True
+
+    def on_execution_result(self, purpose: str, result: object) -> None:
+        """Finalize a weekly close only after fills and the position read model agree."""
+        if purpose != "WEEKLY_INSURANCE_CLOSE" or not self._exit_pending:
+            return
+        if bool(getattr(result, "group_complete", False)) and bool(getattr(result, "position_flat", False)):
+            self.reset()
+        # Partial/unknown outcomes stay pending; do not silently reopen entry evaluation.
 
     @staticmethod
     def _metric(snapshot: AnalyticsSnapshot, key: str):
@@ -72,7 +86,7 @@ class Track7VolatilitySkewWeeklyInsurance:
                 option_type="PUT", strike=self.state.put_strike))
 
     def evaluate(self, context: StrategyContext) -> Sequence[Signal]:
-        if context.strategy_id != self.strategy_id or context.analytics is None:
+        if context.strategy_id != self.strategy_id or context.analytics is None or self._exit_pending:
             return ()
         if self.state.insurance_active:
             put_mark = self._metric(context.analytics, "options.track7_put_mark_price")
@@ -126,6 +140,6 @@ class Track7VolatilitySkewWeeklyInsurance:
                 purpose="WEEKLY_INSURANCE_CLOSE",
                 legs=(ExecutionLeg("put","SELL",self.insurance_qty,"PUT",self.state.put_strike),
                       ExecutionLeg("call","SELL",self.insurance_qty,"CALL",self.state.call_strike)))
-            self.reset()
+            self._exit_pending = True
             return plan
         raise ValueError("TRACK7_EXECUTION_SIDE_REQUIRED")

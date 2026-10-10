@@ -16,7 +16,7 @@ class RiskRouterContext:
     order_router: Any
     broker_command: Any = None
 
-def _account_input(source: Any) -> RiskAccountInput:
+def account_snapshot_to_risk_input(source: Any) -> RiskAccountInput:
     balances = getattr(source, "balances", None)
     if balances is not None:
         return RiskAccountInput(Decimal(balances["cash"]), Decimal(balances["realized_pnl"]), Decimal(balances.get("margin_used", 0)), Decimal(balances.get("available_cash", balances["cash"])))
@@ -24,7 +24,7 @@ def _account_input(source: Any) -> RiskAccountInput:
 
 def route_from_runtime_authoritative_sources(command: CanonicalOrderCommand, *, risk_gate: Any, context: RiskRouterContext, sensor_snapshot: Any = None, allow_reduction: bool = False) -> ReferenceExecutionResult:
     adapted = CanonicalRiskCommandAdapter.from_command(command)
-    approved, token, rejection_reason = risk_gate.admit_order(adapted, _account_input(context.account_snapshot), position_manager_to_risk_input(context.position_source), sensor_snapshot, allow_reduction)
+    approved, token, rejection_reason = risk_gate.admit_order(adapted, account_snapshot_to_risk_input(context.account_snapshot), position_manager_to_risk_input(context.position_source), sensor_snapshot, allow_reduction)
     result = risk_gate.last_evaluation_result
     if not approved or result is None:
         return ReferenceExecutionResult(False, getattr(result, "decision", "DENY"), False, None, rejection_reason or getattr(result, "rejection_reason", None))

@@ -24,6 +24,8 @@ class StrategyRunFailure:
 class StrategyRunResult:
     signals: Tuple[Signal, ...]
     failures: Tuple[StrategyRunFailure, ...]
+    # (strategy_id, code_version, config_version, manifest_sha256)
+    config_provenance: Tuple[Tuple[str, str, str, str], ...] = ()
 
 
 class StrategyOrchestrator:
@@ -36,8 +38,15 @@ class StrategyOrchestrator:
     ) -> None:
         self._registry = registry
         self._strategy_keys = tuple(strategy_keys)
+        definition_lookup = getattr(registry, "definition_for", None)
         self._enabled: Dict[StrategyKey, bool] = {
-            key: True for key in self._strategy_keys
+            key: (
+                definition.enabled
+                if callable(definition_lookup)
+                and (definition := definition_lookup(*key)) is not None
+                else True
+            )
+            for key in self._strategy_keys
         }
         self._entry_enabled: Dict[StrategyKey, bool] = {
             key: True for key in self._strategy_keys
@@ -204,7 +213,10 @@ class StrategyOrchestrator:
                     )
                 )
 
+        provenance_lookup = getattr(self._registry, "configuration_provenance", None)
+        provenance = provenance_lookup(keys) if callable(provenance_lookup) else ()
         return StrategyRunResult(
             signals=self._apply_lifecycle_controls(tuple(signals)),
             failures=tuple(failures),
+            config_provenance=provenance,
         )

@@ -43,6 +43,7 @@ class Track6DailyTailInsurance:
         self.vol_trigger_multiplier = vol_trigger_multiplier
         self.insurance_qty = insurance_qty
         self.state = Track6State()
+        self._exit_pending = False
 
     def feature_requirements(self) -> Sequence[StrategyFeatureRequirement]:
         return tuple(
@@ -61,6 +62,17 @@ class Track6DailyTailInsurance:
 
     def reset(self) -> None:
         self.state = Track6State()
+        self._exit_pending = False
+
+    def on_execution_result(self, purpose: str, result: object) -> None:
+        if purpose not in {
+            "DAILY_TAIL_INSURANCE_TRAILING_CLOSE",
+            "DAILY_TAIL_INSURANCE_LIMIT_CLOSE",
+            "DAILY_TAIL_INSURANCE_FALLBACK_CLOSE",
+        } or not self._exit_pending:
+            return
+        if bool(getattr(result, "group_complete", False)) and bool(getattr(result, "position_flat", False)):
+            self.reset()
 
     @staticmethod
     def _metric(snapshot: AnalyticsSnapshot, key: str):
@@ -138,7 +150,7 @@ class Track6DailyTailInsurance:
 
     def evaluate_take_profit(self, context: StrategyContext) -> Sequence[Signal]:
         analytics = context.analytics
-        if analytics is None or not self.state.is_active:
+        if analytics is None or not self.state.is_active or self._exit_pending:
             return ()
         current_price = self._metric(analytics, "price.last")
         active_vol = self._metric(analytics, "volatility.active")
@@ -165,7 +177,7 @@ class Track6DailyTailInsurance:
         stop_trigger = current_high * trailing_ratio
         if current_high > 0 and total_intrinsic <= stop_trigger:
             proposal = self._close_execution_proposal(tag_id="DAILY_TAIL_INSURANCE_TRAILING_CLOSE")
-            self.reset()
+            self._exit_pending = True
             return (Signal(
                 self.strategy_id, "CLOSE", 1.0,
                 f"TRAILING_STOP;REALIZED:{total_intrinsic};HIGH:{current_high};RATIO:{trailing_ratio}",
@@ -187,17 +199,18 @@ class Track6DailyTailInsurance:
         return ()
 
     def evaluate_expiry_cutoff(self, context: StrategyContext) -> Sequence[Signal]:
-        if not self.state.is_active or context.analytics is None:
+        if not self.state.is_active or context.analytics is None or self._exit_pending:
             return ()
         time_str = self._as_time(context.analytics)
         if MarketSessionPolicy.text(MarketSessionPolicy.LIMIT_CUTOFF) <= time_str < MarketSessionPolicy.text(MarketSessionPolicy.MARKET_CUTOFF):
+            self._exit_pending = True
             return (Signal(
                 self.strategy_id, "CLOSE_LIMIT", 1.0, "DAILY_INSURANCE_15:00_CUTOFF",
                 execution_proposal=self._close_execution_proposal(tag_id="DAILY_TAIL_INSURANCE_LIMIT_CLOSE"),
             ),)
         if time_str >= MarketSessionPolicy.text(MarketSessionPolicy.MARKET_CUTOFF):
             proposal = self._close_execution_proposal(tag_id="DAILY_TAIL_INSURANCE_FALLBACK_CLOSE")
-            self.reset()
+            self._exit_pending = True
             return (Signal(
                 self.strategy_id, "CLOSE_FALLBACK", 1.0, "DAILY_INSURANCE_15:15_FALLBACK",
                 execution_proposal=proposal,

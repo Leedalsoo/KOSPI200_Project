@@ -45,12 +45,22 @@ class Track4GammaScalping:
     def __init__(self, equity_threshold: Decimal = Decimal("0")):
         self.equity_threshold = equity_threshold
         self.state = Track4State()
+        self._exit_pending = False
 
     def initialize(self, context: StrategyContext) -> None:
         self.reset()
 
     def on_market_state(self, context: StrategyContext) -> None:
         return None
+
+    def on_execution_result(self, purpose: str, result: object) -> None:
+        if purpose not in {"UNWIND_FUT_HEDGE", "PROFIT_TAKEN_TRAILING_STOP"} or not self._exit_pending:
+            return
+        if bool(getattr(result, "group_complete", False)) and bool(getattr(result, "position_flat", False)):
+            self.state.active_hedge_qty = 0
+            self.state.scalp_high_pnl = Decimal("0")
+            self.state.is_active = False
+            self._exit_pending = False
 
     def feature_requirements(self):
         return tuple(
@@ -83,12 +93,14 @@ class Track4GammaScalping:
         return ()
 
     def evaluate_delta_hedge(self, data: Track4MarketInput, *, delta: Decimal, deadband: Decimal, equity: Decimal) -> Sequence[Signal]:
+        if self._exit_pending:
+            return ()
         self.state.is_active = equity >= self.equity_threshold
         if not self.state.is_active:
             if self.state.active_hedge_qty:
                 side = "SELL" if self.state.active_hedge_qty > 0 else "BUY"
                 qty = abs(self.state.active_hedge_qty)
-                self.state.active_hedge_qty = 0
+                self._exit_pending = True
                 return (Signal(self.strategy_id, side, 1.0, f"UNWIND_FUT_HEDGE qty={qty}", execution_proposal=StrategyExecutionProposal(proposed_quantity=qty, asset_type="FUTURES", requested_price=None, side=side, track_id=self.strategy_id, tag_id="UNWIND_FUT_HEDGE", option_type=None, strike=None)),)
             return ()
         if abs(delta) <= deadband:
@@ -122,10 +134,8 @@ class Track4GammaScalping:
         if current_pnl <= high * trailing:
             qty = abs(self.state.active_hedge_qty)
             side = "SELL" if self.state.active_hedge_qty > 0 else "BUY"
-            self.state.scalp_high_pnl = Decimal("0")
-            self.state.active_hedge_qty = 0
-            self.state.is_active = False
             if qty > 0:
+                self._exit_pending = True
                 return (Signal(self.strategy_id, "CLOSE", 1.0, f"PROFIT_TAKEN_TRAILING_STOP high={high} ratio={trailing}", execution_proposal=StrategyExecutionProposal(proposed_quantity=qty, asset_type="FUTURES", requested_price=None, side=side, track_id=self.strategy_id, tag_id="PROFIT_TAKEN_TRAILING_STOP", option_type=None, strike=None)),)
             return (Signal(self.strategy_id, "CLOSE", 1.0, f"PROFIT_TAKEN_TRAILING_STOP high={high} ratio={trailing}", kind="NON_EXECUTION", non_execution_event=NonExecutionEvent("TRACK4_PROFIT_TAKEN", "NO_ACTIVE_HEDGE_TO_CLOSE")),)
         return ()
@@ -133,7 +143,7 @@ class Track4GammaScalping:
     def evaluate(self, context: StrategyContext) -> Sequence[Signal]:
         data = context.input.payload if context.input is not None else None
         analytics = context.analytics
-        if not isinstance(data, Track4MarketInput) or analytics is None or context.strategy_id != self.strategy_id:
+        if not isinstance(data, Track4MarketInput) or analytics is None or context.strategy_id != self.strategy_id or self._exit_pending:
             return ()
         metrics = validate_strategy_features(self.feature_requirements(), analytics)
         if any(metric.status is not AnalyticsStatus.AVAILABLE or metric.value is None for metric in metrics):
@@ -153,3 +163,4 @@ class Track4GammaScalping:
 
     def reset(self) -> None:
         self.state = Track4State()
+        self._exit_pending = False

@@ -5,6 +5,7 @@ from typing import Mapping
 
 class LegStatus(str, Enum):
     PENDING = "PENDING"
+    PARTIALLY_FILLED = "PARTIALLY_FILLED"
     FILLED = "FILLED"
     REJECTED = "REJECTED"
     CANCELLED = "CANCELLED"

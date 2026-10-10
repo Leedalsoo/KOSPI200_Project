@@ -176,6 +176,51 @@ def test_control_tower_server_strategy_control_api(monkeypatch):
     )
 
 
+def test_control_tower_handler_skips_bootstrap_when_tower_and_adapter_injected(monkeypatch):
+    import interfaces.control_tower.server as server_mod
+
+    calls = {"n": 0}
+
+    def boom():
+        calls["n"] += 1
+        raise RuntimeError("BOOTSTRAP_SHOULD_NOT_RUN")
+
+    monkeypatch.setattr(server_mod, "create_virtual_runtime_bootstrap", boom)
+    server_mod.reset_virtual_bootstrap_for_tests()
+    tower = MagicMock()
+    tower.status.return_value = {"tabs": [{"tab_id": "high_speed"}]}
+    adapter = MagicMock()
+    monkeypatch.setattr(ControlTowerRequestHandler, "tower", tower)
+    monkeypatch.setattr(ControlTowerRequestHandler, "adapter", adapter)
+
+    request_data = b"GET /api/status HTTP/1.1\r\nHost: localhost\r\n\r\n"
+    sock = _MockSocket(request_data)
+    ControlTowerRequestHandler(sock, ("127.0.0.1", 12345), MagicMock())
+
+    assert calls["n"] == 0
+    assert b"200 OK" in sock._wfile.getvalue()
+    tower.status.assert_called_once_with()
+
+
+def test_control_tower_handler_returns_503_for_virtual_order_without_bootstrap(monkeypatch):
+    import interfaces.control_tower.server as server_mod
+
+    server_mod.reset_virtual_bootstrap_for_tests()
+    monkeypatch.setattr(ControlTowerRequestHandler, "tower", MagicMock())
+    monkeypatch.setattr(ControlTowerRequestHandler, "adapter", MagicMock())
+    body = json.dumps({"side": "BUY", "order_type": "LIMIT", "quantity": 1}).encode("utf-8")
+    request_data = (
+        b"POST /api/environment/virtual_broker/order HTTP/1.1\r\n"
+        b"Host: localhost\r\nContent-Type: application/json\r\nContent-Length: "
+        + str(len(body)).encode("ascii") + b"\r\n\r\n" + body
+    )
+    sock = _MockSocket(request_data)
+    ControlTowerRequestHandler(sock, ("127.0.0.1", 12345), MagicMock())
+    response = sock._wfile.getvalue()
+    assert b"503 Service Unavailable" in response
+    assert b"VIRTUAL_RUNTIME_UNAVAILABLE" in response
+
+
 def test_control_tower_server_import_does_not_bootstrap_runtime():
     import subprocess
     import sys

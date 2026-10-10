@@ -90,6 +90,9 @@ class ExecutionLeg:
     strike: Decimal | None = None
     requested_price: Decimal | None = None
     position_role: str = "NONE"
+    # Optional authoritative identity for close legs built from open-position lots.
+    # Entry plans continue to resolve identity through the existing master/source.
+    instrument_identity: OptionInstrumentIdentity | FuturesInstrumentIdentity | None = None
 
 
 @dataclass(frozen=True)
@@ -104,8 +107,19 @@ class MultiLegExecutionPlan:
     strategy_id: str
     legs: Sequence[ExecutionLeg]
     purpose: str | None = None
+    strategy_code_version: str | None = None
+    strategy_config_version: str | None = None
+    strategy_config_hash: str | None = None
 
     def __post_init__(self) -> None:
+        if self.strategy_config_version is not None and (
+            self.strategy_code_version is None
+            or self.strategy_config_hash is None
+            or len(self.strategy_config_hash) != 64
+        ):
+            raise ValueError("MULTI_LEG_STRATEGY_CONFIG_PROVENANCE_INVALID")
+        if self.strategy_config_hash is not None and self.strategy_config_version is None:
+            raise ValueError("MULTI_LEG_STRATEGY_CONFIG_VERSION_REQUIRED")
         if not self.group_id:
             raise ValueError("group_id must be non-empty")
         if not self.legs:

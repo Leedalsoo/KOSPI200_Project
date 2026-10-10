@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
@@ -194,6 +195,27 @@ def test_strategy5_stop_requests_futures_exit_before_option_exit():
     assert option_exit[0].direction == "CLOSE_OPTION"
     assert option_exit[0].execution_proposal.tag_id == "GAP_DIVERGENCE_OPTION_STOP_EXIT"
     assert not s.state.is_active
+
+
+def test_strategy5_invalid_futures_side_does_not_fake_close_or_reset_option():
+    s = Track5GapDivergence()
+    at = datetime(2026, 10, 6, 9, 0)
+    assert s.evaluate(_context(s, at, 102, 100, 102))
+    s.state = replace(s.state, futures_side=None, futures_closed=False)
+
+    signals = s.evaluate_mean_reversion(Decimal("103"))
+    assert signals == ()
+    assert s.state.is_active
+    assert not s.state.futures_closed
+    assert not s.state.futures_close_requested
+    assert s.state.futures_close_error == "INVALID_FUTURES_SIDE;POSITION_RECONCILIATION_REQUIRED"
+
+    # Once the hedge direction is repaired, the terminal path requests its close first.
+    s.state = replace(s.state, futures_side="SELL", futures_close_error=None)
+    signals = s.evaluate_mean_reversion(Decimal("103"))
+    assert len(signals) == 1
+    assert signals[0].direction == "CLOSE_FUTURES"
+    assert s.state.is_active and s.state.futures_close_requested
 
 
 def test_strategy5_timeout_is_counted_in_evaluations_and_closes_hedge_first():

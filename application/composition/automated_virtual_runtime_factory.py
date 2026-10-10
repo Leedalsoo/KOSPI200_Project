@@ -1,8 +1,8 @@
 """Authoritative composition for automated Virtual strategy execution."""
 from __future__ import annotations
 
+import logging
 from datetime import datetime
-from pathlib import Path
 
 from application.composition.automated_virtual_trading_loop import AutomatedVirtualTradingLoop
 from application.composition.standard_runtime_input_provider import StandardRuntimeInputProvider
@@ -35,9 +35,11 @@ from application.composition.track2_execution_plan_adapter import Track2Executio
 from application.composition.market_calendar_hub import MarketCalendarHub
 from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
 from application.composition.execution_multi_leg_resolver_registry import ExecutionMultiLegResolverRegistry
-from contracts.types import MultiLegExecutionPlan
-from contracts.futures_contract_master import KisCurrentFuturesContractSource, parse_kis_futures_contracts
+from contracts.types import MultiLegExecutionPlan, ExecutionLeg
+from infrastructure.kis.instrument_master_provider import KisFuturesInstrumentMasterProvider
+from infrastructure.kis.kis_index_option_master_source import KIS_INDEX_MASTER_URL
 from contracts.futures_contract_spec import FuturesProductType
+from contracts.futures_identity_source_port import FuturesInstrumentIdentity, require_futures_identity
 from application.composition.futures_identity_source import KisFuturesIdentitySource
 from application.composition.futures_target_configuration import FuturesTargetConfiguration
 from application.composition.track3_hedge_identity_source import Track3HedgeIdentitySource
@@ -45,6 +47,8 @@ from application.composition.track3_multi_leg_execution_plan_adapter import Trac
 from decimal import Decimal
 from contracts.risk_guard import RiskGuardStatusSource
 from core.strategy.standard_registry import STANDARD_STRATEGY_KEYS, build_standard_strategy_registry
+
+logger = logging.getLogger(__name__)
 
 
 def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=None, strategy_keys=None, track9_iv_history_path=None, run_id=None, historical_observation_option_source=None, risk_guard_status_source: RiskGuardStatusSource | None = None, synthetic_runtime_sources=None, track4_greeks_provider=None, market_calendar_hub=None):
@@ -193,11 +197,11 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         )
     track2_option_contract_source = Track2OptionContractSource(bootstrap.bundle.option_master)
     track3_plan_adapter = Track3MultiLegExecutionPlanAdapter()
-    futures_master_path = Path(__file__).resolve().parents[2] / "fo_idx_code_mts.mst"
     futures_identity_source = None
-    if futures_master_path.is_file():
-        raw = futures_master_path.read_bytes().decode("cp949", errors="replace")
-        futures_master = KisCurrentFuturesContractSource(parse_kis_futures_contracts(raw))
+    try:
+        futures_master = KisFuturesInstrumentMasterProvider(
+            source_url=KIS_INDEX_MASTER_URL,
+        ).current_mini_futures_source(underlying_short_code="2001")
         futures_identity_source = KisFuturesIdentitySource(
             futures_master,
             FuturesTargetConfiguration(
@@ -205,6 +209,9 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
                 product_type=FuturesProductType.MINI,
             ),
         )
+    except Exception as exc:
+        # Keep the Virtual runtime available, but never fall back to a stale local master.
+        logger.warning("VIRTUAL_FUTURES_IDENTITY_SOURCE_UNAVAILABLE: %s", exc)
     multi_leg_bridge = VirtualMultiLegExecutionBridge(
         bundle=bootstrap.bundle,
         run_id=run_id,
@@ -268,9 +275,17 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
     provider.track9_position_execution_source = VirtualTrack9PositionExecutionReadModel(multi_leg_bridge)
     provider.track2_market_observation_sink = track2_market_observation_sink
 
-    execution_resolvers = ExecutionMultiLegResolverRegistry()
+    execution_resolvers = ExecutionMultiLegResolverRegistry(
+        registry.definitions_by_strategy_id(selected_keys)
+    )
 
     def resolve_track2(evaluation, canonical):
+        proposal = getattr(evaluation.result, "execution_proposal", None)
+        if proposal is not None and str(getattr(proposal, "tag_id", "")).upper() == "TRAP_CLOSE":
+            return multi_leg_bridge.build_close_plan_from_open_lots(
+                strategy_id="track2_asymmetric_trap",
+                purpose="TRAP_CLOSE",
+            )
         analytics = evaluation.context.analytics
         if analytics is None:
             raise ValueError("TRACK2_MULTI_LEG_ANALYTICS_REQUIRED")
@@ -293,6 +308,12 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         )
 
     def resolve_track3(evaluation, canonical):
+        proposal = getattr(evaluation.result, "execution_proposal", None)
+        if proposal is not None and str(getattr(proposal, "tag_id", "")).upper() == "CLOSE_STAT_ARB":
+            return multi_leg_bridge.build_close_plan_from_open_lots(
+                strategy_id="Strategy_3_StatArb",
+                purpose="CLOSE_STAT_ARB",
+            )
         group_id = f"{run_id}-{canonical.signal_id}"
         observed_symbol = str(
             getattr(canonical, "instrument_id", None)
@@ -322,7 +343,71 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
             hedge_identity_source=hedge_source,
         )
 
+    def futures_identity_for_evaluation(evaluation):
+        if synthetic_runtime_sources is not None:
+            market_state = evaluation.context.market_state
+            if market_state is None or not market_state.ticks:
+                raise ValueError("FUTURES_MARKET_TICK_REQUIRED")
+            observed_identity = identity(evaluation, next(iter(market_state.ticks.values())))
+            if not isinstance(observed_identity, FuturesInstrumentIdentity):
+                raise ValueError("FUTURES_AUTHORITATIVE_IDENTITY_REQUIRED")
+            return observed_identity
+        return require_futures_identity(futures_identity_source)
+
+    def build_futures_single_leg_plan(strategy_id, evaluation, canonical, *, group_id, purpose):
+        instrument_identity = futures_identity_for_evaluation(evaluation)
+        return MultiLegExecutionPlan(
+            group_id=group_id,
+            strategy_id=strategy_id,
+            purpose=purpose,
+            legs=(ExecutionLeg(
+                leg_id=f"futures-{str(getattr(canonical, 'tag_id', '') or purpose).lower()}",
+                side=canonical.side.value,
+                quantity=int(canonical.qty),
+                position_role="NONE",
+                instrument_identity=instrument_identity,
+            ),),
+        )
+
+    def resolve_track1(evaluation, canonical):
+        proposal = getattr(evaluation.result, "execution_proposal", None)
+        if proposal is None or str(getattr(proposal, "asset_type", "")).upper() != "FUTURES":
+            return None
+        tag = str(getattr(proposal, "tag_id", "") or "").upper()
+        if tag == "FUTURES_UNWIND":
+            return multi_leg_bridge.build_close_plan_from_open_lots(
+                strategy_id="TRACK1_TAIL_DEFENSE",
+                purpose="FUTURES_UNWIND",
+            )
+        return build_futures_single_leg_plan(
+            "TRACK1_TAIL_DEFENSE", evaluation, canonical,
+            group_id=f"{run_id}-TRACK1_TAIL_DEFENSE-FUTURES-HEDGE",
+            purpose=tag or "FUTURES_HEDGE",
+        )
+
+    def resolve_track4(evaluation, canonical):
+        proposal = getattr(evaluation.result, "execution_proposal", None)
+        if proposal is None or str(getattr(proposal, "asset_type", "")).upper() != "FUTURES":
+            return None
+        tag = str(getattr(proposal, "tag_id", "") or "").upper()
+        if tag in {"UNWIND_FUT_HEDGE", "PROFIT_TAKEN_TRAILING_STOP"}:
+            return multi_leg_bridge.build_close_plan_from_open_lots(
+                strategy_id="track4_gamma_scalping",
+                purpose=tag,
+            )
+        return build_futures_single_leg_plan(
+            "track4_gamma_scalping", evaluation, canonical,
+            group_id=f"{run_id}-track4_gamma_scalping-FUTURES-HEDGE",
+            purpose=tag or "GAMMA_REBALANCE",
+        )
+
     def resolve_track6(evaluation, canonical):
+        proposal = getattr(evaluation.result, "execution_proposal", None)
+        if proposal is not None and str(getattr(proposal, "side", "")).upper() == "SELL":
+            return multi_leg_bridge.build_close_plan_from_open_lots(
+                strategy_id="track6_daily_tail_insurance",
+                purpose=str(getattr(proposal, "tag_id", "") or "DAILY_TAIL_INSURANCE_CLOSE"),
+            )
         if str(getattr(evaluation.result, "direction", "")) != "BUY_INSURANCE":
             return None
         return registry.get("track6_daily_tail_insurance", "1.0").build_execution_plan(
@@ -333,12 +418,25 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         proposal = evaluation.result.execution_proposal
         if proposal is None:
             raise ValueError("TRACK7_EXECUTION_PROPOSAL_REQUIRED")
+        if str(getattr(proposal, "side", "")).upper() == "SELL":
+            strategy = registry.get("track7_volatility_skew_weekly_insurance", "1.0")
+            strategy.mark_exit_pending()
+            return multi_leg_bridge.build_close_plan_from_open_lots(
+                strategy_id="track7_volatility_skew_weekly_insurance",
+                purpose="WEEKLY_INSURANCE_CLOSE",
+            )
         strategy = registry.get("track7_volatility_skew_weekly_insurance", "1.0")
         if not isinstance(strategy, Track7VolatilitySkewWeeklyInsurance):
             raise ValueError("TRACK7_STRATEGY_REGISTRY_TYPE_REQUIRED")
         return strategy.build_execution_plan(f"{run_id}-{canonical.signal_id}", proposal=proposal)
 
     def resolve_track8(evaluation, canonical):
+        proposal = getattr(evaluation.result, "execution_proposal", None)
+        if proposal is not None and str(getattr(proposal, "side", "")).upper() == "SELL":
+            return multi_leg_bridge.build_close_plan_from_open_lots(
+                strategy_id="track8_macro_regime_monthly_strangle",
+                purpose="MONTHLY_STRANGLE_CLOSE",
+            )
         return registry.get("track8_macro_regime_monthly_strangle", "2.0").build_execution_plan(
             f"{run_id}-{canonical.signal_id}"
         )
@@ -363,12 +461,21 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         proposal = evaluation.result.execution_proposal
         if proposal is None:
             raise ValueError("TRACK9_EXECUTION_PROPOSAL_REQUIRED")
+        if str(getattr(proposal, "side", "")).upper() == "SELL":
+            strategy = registry.get("track9_event_overnight_insurance", "3.0")
+            strategy.mark_exit_pending()
+            return multi_leg_bridge.build_close_plan_from_open_lots(
+                strategy_id="track9_event_overnight_insurance",
+                purpose="OVERNIGHT_INSURANCE_CLOSE",
+            )
         strategy = registry.get("track9_event_overnight_insurance", "3.0")
         return strategy.build_execution_plan(
             f"{run_id}-{canonical.signal_id}", proposal=proposal
         )
 
+    execution_resolvers.register("TRACK1_TAIL_DEFENSE", resolve_track1)
     execution_resolvers.register("track2_asymmetric_trap", resolve_track2)
+    execution_resolvers.register("track4_gamma_scalping", resolve_track4)
     execution_resolvers.register("track5_gap_divergence", resolve_track5)
     execution_resolvers.register("Strategy_3_StatArb", resolve_track3)
     execution_resolvers.register("track6_daily_tail_insurance", resolve_track6)

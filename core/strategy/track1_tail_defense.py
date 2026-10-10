@@ -43,14 +43,33 @@ class Track1TailDefense(Strategy):
     """Track 1 Tail Defense를 Standard Strategy Contract로 이식한 상태기계."""
 
     strategy_id = "TRACK1_TAIL_DEFENSE"
-    FENCE_QUANTITY = 1
     version = "1.1.0"
+    FENCE_QUANTITY = 1
+    INITIAL_FENCE_DISTANCE = 7.5
+    OUTER_FENCE_DISTANCE = 12.5
+    VOLATILITY_EXPANSION_MULTIPLIER = 1.15
+    FENCE_APPROACH_RATIO = 0.9
+    HEDGE_REVERSION_POINTS = 1.5
+    DTE_CUTOFF = 4.0
+    CONFIGURABLE_PARAMETERS = (
+        "FENCE_QUANTITY", "INITIAL_FENCE_DISTANCE", "OUTER_FENCE_DISTANCE",
+        "VOLATILITY_EXPANSION_MULTIPLIER", "FENCE_APPROACH_RATIO",
+        "HEDGE_REVERSION_POINTS", "DTE_CUTOFF",
+    )
 
     def __init__(self, profit_target: float = 500_000.0, max_hedge_allowed: int = 20) -> None:
         self.profit_target = profit_target
         self.max_hedge_allowed = max_hedge_allowed
-        self.state = Track1State()
+        self.state = Track1State(fence_distance=self.INITIAL_FENCE_DISTANCE)
         self._initialized = False
+        self._hedge_exit_pending = False
+        self._hedge_exit_pending = False
+        self._hedge_exit_pending = False
+        self._hedge_exit_pending = False
+
+    def feature_requirements(self) -> tuple[()]:
+        """Track1 consumes typed Track1Input; no Common Analytics metrics are mandatory."""
+        return ()
 
     def initialize(self, context: StrategyContext) -> None:
         self.reset()
@@ -91,13 +110,31 @@ class Track1TailDefense(Strategy):
                       f"FENCE_BUILD:{fence_type}:{strike}:#{tag}:{reason}",
                       execution_proposal=proposal)
 
+    def on_execution_result(self, purpose: str, result: object) -> None:
+        if purpose != "FUTURES_UNWIND" or not self._hedge_exit_pending:
+            return
+        if bool(getattr(result, "group_complete", False)) and bool(getattr(result, "position_flat", False)):
+            self.state.active_hedge = None
+            self.state.hedge_entry_price = None
+            self.state.active_hedge_quantity = 0
+            self._hedge_exit_pending = False
+
+    def on_execution_result(self, purpose: str, result: object) -> None:
+        if purpose != "FUTURES_UNWIND" or not self._hedge_exit_pending:
+            return
+        if bool(getattr(result, "group_complete", False)) and bool(getattr(result, "position_flat", False)):
+            self.state.active_hedge = None
+            self.state.hedge_entry_price = None
+            self.state.active_hedge_quantity = 0
+            self._hedge_exit_pending = False
+
     def _build_hedge_unwind_signal(self) -> Signal:
         quantity = self.state.active_hedge_quantity
         if quantity <= 0 or self.state.active_hedge not in {"BUY", "SELL"}:
             raise ValueError("TRACK1_ACTIVE_HEDGE_PROVENANCE_REQUIRED")
         side = "BUY" if self.state.active_hedge == "SELL" else "SELL"
         return Signal(
-            self.strategy_id, side, 1.0, "FUTURES_UNWIND:1.5PT_REVERSION",
+            self.strategy_id, side, 1.0, f"FUTURES_UNWIND:{self.HEDGE_REVERSION_POINTS}PT_REVERSION",
             execution_proposal=StrategyExecutionProposal(
                 proposed_quantity=quantity, asset_type="FUTURES", requested_price=None,
                 side=side, track_id=self.strategy_id, tag_id="FUTURES_UNWIND",
@@ -108,7 +145,7 @@ class Track1TailDefense(Strategy):
         if context.strategy_id != self.strategy_id:
             raise ValueError("strategy context mismatch")
         # Missing authoritative market state must not produce an order proposal.
-        if context.market_state is None or not context.market_state.ticks:
+        if context.market_state is None or not context.market_state.ticks or self._hedge_exit_pending:
             return ()
         if not self._initialized:
             self.initialize(context)
@@ -123,7 +160,7 @@ class Track1TailDefense(Strategy):
                 if self.state.hedge_count_date != current_date:
                     self.state.futures_hedge_count = 0
                     self.state.hedge_count_date = current_date
-            if track_input.days_to_expiry is not None and track_input.days_to_expiry <= 4.0:
+            if track_input.days_to_expiry is not None and track_input.days_to_expiry <= self.DTE_CUTOFF:
                 if self.state.active_fence_type is not None:
                     signals.append(Signal(
                         self.strategy_id,
@@ -145,14 +182,14 @@ class Track1TailDefense(Strategy):
                     self.state.active_fence_strike = None
                 return signals
             if track_input.active_vol is not None and track_input.base_vol is not None:
-                self.state.fence_distance = 12.5 if track_input.active_vol > track_input.base_vol * 1.15 else 7.5
+                self.state.fence_distance = self.OUTER_FENCE_DISTANCE if track_input.active_vol > track_input.base_vol * self.VOLATILITY_EXPANSION_MULTIPLIER else self.INITIAL_FENCE_DISTANCE
 
         if not self.state.market_opened:
             self.state.base_price = price
             self.state.market_opened = True
-            call_outer = self._round_strike(price + 12.5)
-            put_outer = self._round_strike(price - 12.5)
-            put_inner = self._round_strike(price - 7.5)
+            call_outer = self._round_strike(price + self.OUTER_FENCE_DISTANCE)
+            put_outer = self._round_strike(price - self.OUTER_FENCE_DISTANCE)
+            put_inner = self._round_strike(price - self.INITIAL_FENCE_DISTANCE)
             self.state.active_fence_type = "PUT"
             self.state.active_fence_strike = put_inner
             self.state.active_fence_tag = 1
@@ -166,7 +203,7 @@ class Track1TailDefense(Strategy):
             return signals
 
         base = self.state.base_price or price
-        warning = self.state.fence_distance * 0.9
+        warning = self.state.fence_distance * self.FENCE_APPROACH_RATIO
         approaching = (price <= base - warning if self.state.active_fence_type == "PUT" else price >= base + warning)
 
         if approaching and self.state.active_hedge is None:
@@ -201,16 +238,14 @@ class Track1TailDefense(Strategy):
                 ))
 
         if self.state.active_hedge and self.state.hedge_entry_price is not None:
-            reverted = ((self.state.active_hedge == "SELL" and price - self.state.hedge_entry_price >= 1.5) or
-                        (self.state.active_hedge == "BUY" and self.state.hedge_entry_price - price >= 1.5))
-            if reverted:
+            reverted = ((self.state.active_hedge == "SELL" and price - self.state.hedge_entry_price >= self.HEDGE_REVERSION_POINTS) or
+                        (self.state.active_hedge == "BUY" and self.state.hedge_entry_price - price >= self.HEDGE_REVERSION_POINTS))
+            if reverted and not self._hedge_exit_pending:
                 signals.append(self._build_hedge_unwind_signal())
-                self.state.active_hedge = None
-                self.state.hedge_entry_price = None
-                self.state.active_hedge_quantity = 0
+                self._hedge_exit_pending = True
 
         return signals
 
     def reset(self) -> None:
-        self.state = Track1State()
+        self.state = Track1State(fence_distance=self.INITIAL_FENCE_DISTANCE)
         self._initialized = False

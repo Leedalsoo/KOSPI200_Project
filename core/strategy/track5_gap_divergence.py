@@ -52,6 +52,7 @@ class Track5GapDivergence:
     MINI_FUTURES_QUANTITY = 5
     # Counts evaluate_mean_reversion calls while a position is open, not elapsed minutes or bars.
     MAX_OPEN_EVALUATIONS = 30
+    CONFIGURABLE_PARAMETERS = ("ENTRY_QUANTITY", "MINI_FUTURES_QUANTITY", "MAX_OPEN_EVALUATIONS")
 
     def __init__(self, z_threshold: Decimal = Decimal("1.5")) -> None:
         self.z_threshold = z_threshold

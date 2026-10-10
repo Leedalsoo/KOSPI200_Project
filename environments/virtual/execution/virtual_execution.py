@@ -1,3 +1,4 @@
+from dataclasses import replace
 from typing import Callable, Iterable
 
 from contracts.execution import ExecutionProvider
@@ -42,6 +43,32 @@ class VirtualExecutionEngine(ExecutionProvider):
         if self._authoritative_query is not None:
             report = self._authoritative_query(client_order_id)
             if report is not None:
+                prior = self._reports.get(client_order_id)
+                if (
+                    isinstance(report, ExecutionReport)
+                    and isinstance(prior, ExecutionReport)
+                    and report.client_order_id == prior.client_order_id
+                    and report.execution_id is not None
+                    and report.execution_id == prior.execution_id
+                ):
+                    # Authoritative status wins, but a query projection may omit
+                    # fee/fill provenance available in the original execution report.
+                    report = replace(
+                        report,
+                        broker_order_id=report.broker_order_id or prior.broker_order_id,
+                        execution_price=(
+                            report.execution_price
+                            if report.execution_price is not None
+                            else prior.execution_price
+                        ),
+                        execution_timestamp=(
+                            report.execution_timestamp
+                            if report.execution_timestamp is not None
+                            else prior.execution_timestamp
+                        ),
+                        fee=report.fee if report.fee is not None else prior.fee,
+                        source_freshness=report.source_freshness or prior.source_freshness,
+                    )
                 self._reports[client_order_id] = report
                 return report
         return self._reports.get(client_order_id)

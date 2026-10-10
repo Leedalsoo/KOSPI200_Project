@@ -52,6 +52,7 @@ class Track9EventOvernightInsurance:
     # dependency boundary.
     OPENING_SHOCK_THRESHOLD = Decimal("0.01")
     TRAILING_PROFIT_GIVEBACK = Decimal("0.30")
+    CONFIGURABLE_PARAMETERS = ("ENTRY_TIME", "TRAILING_PROFIT_GIVEBACK")
 
     def __init__(
         self,
@@ -65,6 +66,7 @@ class Track9EventOvernightInsurance:
         self.pair_quantity = pair_quantity
         self.opening_shock_threshold = opening_shock_threshold
         self.state = Track9State()
+        self._exit_pending = False
 
     def initialize(self, context: StrategyContext) -> None:
         self.reset()
@@ -74,6 +76,23 @@ class Track9EventOvernightInsurance:
 
     def reset(self) -> None:
         self.state = Track9State()
+        self._exit_pending = False
+
+    def mark_exit_pending(self) -> None:
+        self._exit_pending = True
+
+    def on_execution_result(self, purpose: str, result: object) -> None:
+        """Mark overnight close complete only after fills and authoritative flat confirmation."""
+        if purpose != "OVERNIGHT_INSURANCE_CLOSE" or not self._exit_pending:
+            return
+        if bool(getattr(result, "group_complete", False)) and bool(getattr(result, "position_flat", False)):
+            self.state = replace(
+                self.state, entry_price=None, put_entry_price=None, call_entry_price=None,
+                entry_premium=None, peak_profit=None, entry_qty=0, closed_next_open=True,
+                trailing_active=False, state="OVERNIGHT_INSURANCE_CLOSED",
+            )
+            self._exit_pending = False
+        # Otherwise retain the close-pending state for reconciliation; never infer flatness.
 
     @staticmethod
     def _requirement(key: str) -> StrategyFeatureRequirement:
@@ -248,7 +267,7 @@ class Track9EventOvernightInsurance:
                 close_signals = self._close_pair_signals(
                     reason=f"OPENING_SHOCK:{opening_move};CURRENT_PROFIT:{current_profit};PEAK_PROFIT:{peak_profit};TRAILING_FLOOR:{trailing_floor};GIVEBACK:{self.TRAILING_PROFIT_GIVEBACK};REASON:OPTION_PAIR_TRAILING_PROFIT"
                 )
-                self.state = replace(self.state, closed_next_open=True, trailing_active=False, state="OPENING_INSURANCE_TRAILING_CLOSED")
+                self._exit_pending = True
                 return close_signals
 
         if not shock and not self.state.trailing_active:
@@ -256,7 +275,7 @@ class Track9EventOvernightInsurance:
                 reason=f"OPENING_MOVE:{opening_move};THRESHOLD:{self.opening_shock_threshold};REASON:NO_OPENING_SHOCK",
                 action="STOP_LOSS_OVERNIGHT_INSURANCE",
             )
-            self.state = replace(self.state, closed_next_open=True, trailing_active=False, state="OPENING_NO_SHOCK_STOPPED")
+            self._exit_pending = True
             return close_signals
 
         if common.time_str == MarketSessionPolicy.text(self.OPENING_WINDOW_END) and not self.state.trailing_active:
@@ -264,7 +283,7 @@ class Track9EventOvernightInsurance:
                 reason=f"OPENING_SHOCK:{opening_move};CURRENT_PROFIT:{current_profit};REASON:TRAILING_PROFIT_NOT_ACTIVATED",
                 action="STOP_LOSS_OVERNIGHT_INSURANCE",
             )
-            self.state = replace(self.state, closed_next_open=True, trailing_active=False, state="OPENING_INSURANCE_TRAILING_UNACTIVATED_STOPPED")
+            self._exit_pending = True
             return close_signals
 
         return ()
@@ -293,11 +312,11 @@ class Track9EventOvernightInsurance:
             side=side,
         )
         if side == "SELL":
-            self.reset()
+            self._exit_pending = True
         return plan
 
     def evaluate(self, context: StrategyContext) -> Sequence[Signal]:
-        if context.strategy_id != self.strategy_id or context.analytics is None:
+        if context.strategy_id != self.strategy_id or context.analytics is None or self._exit_pending:
             return ()
         self._sync_filled_entry(context)
         return self._close_next_open(context) + self._enter_signal(context)

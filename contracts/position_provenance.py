@@ -4,6 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 from contracts.types import OptionInstrumentIdentity
+from contracts.futures_identity_source_port import FuturesInstrumentIdentity
 class PositionRole(StrEnum):
     NONE = "NONE"
     OVERNIGHT_INSURANCE = "OVERNIGHT_INSURANCE"
@@ -14,7 +15,7 @@ class PositionLotProvenance:
     run_id: str; instrument_id: str; strategy_id: str; group_id: str; leg_id: str
     client_order_id: str; execution_id: str; side: str; opened_quantity: int
     remaining_quantity: int; execution_timestamp: datetime
-    instrument_identity: OptionInstrumentIdentity; contract_multiplier: Decimal
+    instrument_identity: OptionInstrumentIdentity | FuturesInstrumentIdentity; contract_multiplier: Decimal
     identity_source: str; position_role: PositionRole
     def validate(self) -> None:
         required=(self.run_id,self.instrument_id,self.strategy_id,self.group_id,self.leg_id,self.client_order_id,self.execution_id,self.identity_source)

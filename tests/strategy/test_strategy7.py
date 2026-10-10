@@ -14,11 +14,16 @@ def test_strategy7_put_entry_builds_two_leg_insurance_plan():
     plan=s.build_execution_plan("T7-G",proposal=proposal(s,"BUY"))
     assert [(x.option_type,x.side,x.quantity) for x in plan.legs]==[("PUT","BUY",1),("CALL","BUY",1)]
 
-def test_strategy7_put_close_resets_lifecycle():
+def test_strategy7_put_close_waits_for_fill_and_position_flat_confirmation():
     s=Track7VolatilitySkewWeeklyInsurance()
     s.state=Track7State(insurance_active=True,put_strike=Decimal("350"),call_strike=Decimal("360"))
     plan=s.build_execution_plan("T7-G",proposal=proposal(s,"SELL"))
     assert plan.purpose=="WEEKLY_INSURANCE_CLOSE"
+    assert s.state.insurance_active is True
+    assert s._exit_pending is True
+    s.on_execution_result("WEEKLY_INSURANCE_CLOSE", SimpleNamespace(group_complete=False, position_flat=True))
+    assert s.state.insurance_active is True
+    s.on_execution_result("WEEKLY_INSURANCE_CLOSE", SimpleNamespace(group_complete=True, position_flat=True))
     assert s.state.insurance_active is False
 
 

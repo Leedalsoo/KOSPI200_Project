@@ -21,6 +21,7 @@ from core.oms.order_router import StandardOrderRouter
 from core.risk.risk_engine import RiskEngine, RiskGate
 from core.risk.risk_config import RiskConfig
 from core.strategy.contracts import SignalKind, StrategyContext
+from core.strategy.execution_plan import ExecutionPlanKind
 from contracts.strategy_runtime_status import StrategyRuntimeStatus
 from application.strategy_hub.contracts import StrategyHubPort
 from application.strategy_hub.hub import StrategyHub
@@ -180,14 +181,18 @@ class AutomatedVirtualTradingLoop:
             multi_leg_plan_resolver=self.multi_leg_plan_resolver,
             pending_order_ids_provider=self.fsm.pending_client_order_ids,
         )
-        approved = tuple(decision.arbitration.approved_signals[:1])
+        approved = tuple(decision.arbitration.approved_signals)
         for canonical in approved:
             status = status_by_strategy.get(canonical.track_id, StrategyRuntimeStatus(canonical.track_id))
             status_by_strategy[canonical.track_id] = status.add(approved=1)
         for canonical, _reason in decision.arbitration.rejected_signals:
             status = status_by_strategy.get(canonical.track_id, StrategyRuntimeStatus(canonical.track_id))
             status_by_strategy[canonical.track_id] = status.add(decision_rejected=1)
-        multi_leg_signal_ids = {item.signal_id for item in decision.multi_leg_decisions}
+        multi_leg_signal_ids = {
+            item.signal_id
+            for item in decision.execution_plans
+            if item.kind is ExecutionPlanKind.MULTI_LEG
+        }
         approved_single_leg = tuple(signal for signal in approved if signal.signal_id not in multi_leg_signal_ids)
         commands = self.decision_to_command.build_commands(evaluations, approved_single_leg)
         routed = pending_routed
@@ -208,16 +213,23 @@ class AutomatedVirtualTradingLoop:
                 status = status.add(routed=1)
             status_by_strategy[cancel_request.strategy_id] = status
 
-        if decision.multi_leg_decisions:
+        multi_leg_plans = tuple(
+            item for item in decision.execution_plans
+            if item.kind is ExecutionPlanKind.MULTI_LEG
+        )
+        if multi_leg_plans:
             if self.multi_leg_executor is None:
                 raise RuntimeError("MULTI_LEG_EXECUTOR_REQUIRED")
-            for multi_leg in decision.multi_leg_decisions:
-                executed = self.multi_leg_executor(multi_leg.plan)
+            for execution_plan in multi_leg_plans:
+                multi_leg_plan = execution_plan.multi_leg_plan
+                if multi_leg_plan is None:
+                    raise RuntimeError("MULTI_LEG_EXECUTION_PLAN_REQUIRED")
+                executed = self.multi_leg_executor(multi_leg_plan)
                 routed_legs = getattr(executed, "routed_legs", 0)
                 filled_legs = getattr(executed, "filled_legs", 0)
                 routed += routed_legs
                 filled += filled_legs
-                strategy_id = multi_leg.plan.strategy_id
+                strategy_id = execution_plan.strategy_id
                 status = status_by_strategy.get(strategy_id, StrategyRuntimeStatus(strategy_id))
                 status_by_strategy[strategy_id] = status.add(routed=routed_legs, filled_quantity=filled_legs)
                 execution_ids.extend(report.execution_id for report in getattr(executed, "reports", ()) if report.execution_id)

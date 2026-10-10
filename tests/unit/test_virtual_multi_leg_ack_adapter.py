@@ -35,3 +35,48 @@ def test_rejected_report_is_not_acknowledged_as_accepted():
     assert response.broker_order_id is None
     assert response.broker_code == "REJECTED"
     assert response.message == "NO_MARGIN"
+
+
+class _TimeoutBroker:
+    def __init__(self, query_report=None):
+        self.query_report = query_report
+        self.query_calls = []
+
+    def submit(self, command):
+        raise TimeoutError("transport timed out after submit")
+
+    def query(self, client_order_id):
+        self.query_calls.append(client_order_id)
+        return self.query_report
+
+
+def test_submit_timeout_reconciles_authoritative_order_report_before_returning():
+    report = SimpleNamespace(
+        status="FILLED", execution_id="EXEC-RECONCILED", broker_order_id="BROKER-1",
+        rejected_reason=None,
+    )
+    broker = _TimeoutBroker(report)
+    adapter = _AckAdapter(broker)
+    command = SimpleNamespace(client_order_id="run-leg-timeout", quantity=2, group_id="g", leg_id="call")
+
+    response = adapter.submit(command)
+
+    assert response.accepted is True
+    assert response.broker_order_id == "BROKER-1"
+    assert adapter.last_report is report
+    assert broker.query_calls == ["run-leg-timeout"]
+
+
+def test_submit_timeout_without_query_result_is_unknown_not_rejected():
+    broker = _TimeoutBroker()
+    adapter = _AckAdapter(broker)
+    command = SimpleNamespace(client_order_id="run-leg-unknown", quantity=3, group_id="g", leg_id="put")
+
+    response = adapter.submit(command)
+
+    assert response.accepted is False
+    assert response.broker_code == "UNKNOWN"
+    assert adapter.last_report.status == "UNKNOWN"
+    assert adapter.last_report.remaining_quantity == 3
+    assert adapter.last_report.rejected_reason == "VIRTUAL_ORDER_STATUS_RECONCILIATION_REQUIRED"
+    assert broker.query_calls == ["run-leg-unknown"]
