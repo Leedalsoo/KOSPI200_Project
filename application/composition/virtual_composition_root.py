@@ -2,10 +2,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from pathlib import Path
 from typing import Any
 
-from application.composition.option_master_factory import create_virtual_option_master
+from application.composition.option_master_factory import create_production_option_master
 
 from application.composition.virtual_builder_contract import VirtualEnvironmentBuilder
 from application.composition.virtual_composition_dependencies import (
@@ -32,8 +31,8 @@ def create_virtual_composition_dependencies(
     loader = mapping_loader or VirtualContractMappingLoader()
     mappings = loader.load(scenario_configuration)
     if option_master is None:
-        historical_master = Path(__file__).resolve().parents[2] / "fo_idx_code_mts.mst"
-        option_master = create_virtual_option_master(historical_source_path=str(historical_master))
+        # Use the current authoritative KIS Option Master; the local MST is a historical snapshot.
+        option_master = create_production_option_master()
     return VirtualCompositionDependencies(
         contract_registry=contract_registry,
         contract_mappings=mappings,

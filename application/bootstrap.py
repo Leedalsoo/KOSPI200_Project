@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from application.composition.live_execution_runtime_composition_factory import (
@@ -119,7 +118,7 @@ def create_virtual_runtime_bootstrap(
     risk_guard_status_source: RiskGuardStatusSource | None = None,
 ) -> VirtualRuntimeBootstrap:
     """Create a Virtual runtime and configure the isolated Run/Scenario lifecycle."""
-    from application.composition.option_master_factory import create_production_option_master, create_virtual_option_master
+    from application.composition.option_master_factory import create_production_option_master
     from application.run_hub.virtual_session_factory import create_virtual_run_session
     from application.run_hub.contracts import RunContextFactory
     from application.run_hub.hub import RunScenarioHub
@@ -127,11 +126,8 @@ def create_virtual_runtime_bootstrap(
     if start_time is not None or Decimal(str(initial_market_price)) != Decimal("350.0"):
         raise ValueError("VIRTUAL_RUNTIME_MARKET_CONFIGURATION_IS_RUNTIME_OWNED")
     if option_master is None:
-        historical_master = Path(__file__).resolve().parents[1] / "fo_idx_code_mts.mst"
-        if historical_master.is_file():
-            option_master = create_virtual_option_master(historical_source_path=str(historical_master))
-        else:
-            option_master = create_production_option_master()
+        # Use the current authoritative KIS Option Master; the local MST is a historical snapshot.
+        option_master = create_production_option_master()
     run_hub = RunScenarioHub()
     run_hub.configure(lambda run_context: create_virtual_run_session(run_context, option_master, risk_guard_status_source))
     context = RunContextFactory().create(run_id=str(uuid4()), environment="virtual", initial_capital=float(initial_capital))
