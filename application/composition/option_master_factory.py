@@ -26,7 +26,9 @@ def create_production_trading_calendar(
     auth = auth_manager or KISAuthManager.from_env()
     kis_provider = KISHolidayProvider(
         auth_manager=auth,
-        auto_load=auto_load_kis,
+        # FallbackHolidayProvider owns source resolution. Eager loading here duplicates
+        # the first KIS request before the fallback asks for the same year.
+        auto_load=False,
         strict_mode=strict_mode,
         target_year=target_year,
     )

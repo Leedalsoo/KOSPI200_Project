@@ -158,17 +158,40 @@ class VirtualMultiLegExecutionBridge:
             for lot in self.position_lot_store.open_lots()
         )
 
-    def build_close_plan_from_open_lots(self, *, strategy_id: str, purpose: str) -> MultiLegExecutionPlan:
-        """Build one terminal close plan from the authoritative lots of exactly one logical group."""
+    def build_close_plan_from_open_lots(
+        self, *, strategy_id: str, purpose: str,
+        asset_type: str | None = None, leg_id_prefix: str | None = None,
+    ) -> MultiLegExecutionPlan:
+        """Build a close plan from authoritative lots, optionally scoped to an asset class."""
         from collections import defaultdict
         from contracts.types import ExecutionLeg
 
-        lots = tuple(
+        candidate_lots = tuple(
             lot for lot in self.position_lot_store.open_lots()
             if lot.run_id == self.run_id and lot.strategy_id == strategy_id and lot.remaining_quantity > 0
         )
+        if asset_type is not None:
+            requested_type = asset_type.strip().upper()
+            if requested_type not in {"OPTION", "FUTURES"}:
+                raise ValueError(f"UNSUPPORTED_CLOSE_ASSET_TYPE:{asset_type}")
+            selected = []
+            for lot in candidate_lots:
+                identity = lot.instrument_identity
+                if identity is None:
+                    raise ValueError(f"AUTHORITATIVE_INSTRUMENT_IDENTITY_REQUIRED:{strategy_id}:{lot.instrument_id}")
+                if isinstance(identity, OptionInstrumentIdentity):
+                    kind = "OPTION"
+                elif isinstance(identity, FuturesInstrumentIdentity):
+                    kind = "FUTURES"
+                else:
+                    raise ValueError(f"AUTHORITATIVE_INSTRUMENT_IDENTITY_TYPE_REQUIRED:{strategy_id}:{lot.instrument_id}")
+                if kind == requested_type:
+                    selected.append(lot)
+            lots = tuple(selected)
+        else:
+            lots = candidate_lots
         if not lots:
-            raise ValueError(f"AUTHORITATIVE_OPEN_LOTS_REQUIRED:{strategy_id}")
+            raise ValueError(f"AUTHORITATIVE_OPEN_LOTS_REQUIRED:{strategy_id}:{asset_type or 'ALL'}")
         group_ids = {lot.group_id for lot in lots}
         if len(group_ids) != 1:
             raise ValueError(f"AMBIGUOUS_OPEN_POSITION_GROUPS:{strategy_id}:{len(group_ids)}")
@@ -208,8 +231,9 @@ class VirtualMultiLegExecutionBridge:
             identity = identities[key]
             digest = sha256("|".join(str(part) for part in key).encode("utf-8")).hexdigest()[:12]
             close_side = "SELL" if sides[key] == "BUY" else "BUY"
+            leg_id = f"{leg_id_prefix}-{digest}" if leg_id_prefix else f"close-{digest}"
             legs.append(ExecutionLeg(
-                leg_id=f"close-{digest}", side=close_side, quantity=aggregated[key],
+                leg_id=leg_id, side=close_side, quantity=aggregated[key],
                 option_type=getattr(identity, "option_type", None),
                 strike=getattr(identity, "strike", None),
                 position_role=roles[key], instrument_identity=identity,

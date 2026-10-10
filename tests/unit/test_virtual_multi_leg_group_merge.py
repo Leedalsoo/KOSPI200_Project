@@ -187,3 +187,49 @@ def test_group_preflight_preserves_originating_leg_rejection_reason():
     assert VirtualMultiLegExecutionBridge._preflight_rejection_reason(
         failed_leg, False, "GROUP_INSUFFICIENT_FREE_MARGIN"
     ) == "GROUP_INSUFFICIENT_FREE_MARGIN"
+
+
+def test_authoritative_close_plan_can_close_only_futures_leg_from_mixed_group():
+    from datetime import datetime
+    from decimal import Decimal
+    from contracts.position_provenance import PositionLotProvenance, PositionRole
+    from contracts.futures_contract_spec import FuturesProductType
+    from contracts.futures_identity_source_port import FuturesInstrumentIdentity
+    from contracts.types import OptionInstrumentIdentity
+    from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
+
+    option = OptionInstrumentIdentity(
+        instrument_id="OPT-20261015-C-350", symbol="OPT-20261015-C-350",
+        expiry="20261015", option_type="CALL", strike=Decimal("350"),
+        contract_multiplier=Decimal("250000"), identity_source="OPTION_MASTER",
+    )
+    futures = FuturesInstrumentIdentity(
+        instrument_id="FUT-ORIGINAL", symbol="FUT-ORIGINAL",
+        product_type=FuturesProductType.MINI, contract_multiplier=Decimal("50000"),
+        identity_source="KIS_FUTURES_MASTER+KRX_INDEX_FUTURES_CONTRACT_SPEC",
+    )
+    def lot(identity, leg_id, side, opened, remaining):
+        return PositionLotProvenance(
+            run_id="run-1", instrument_id=identity.instrument_id, strategy_id="track5_gap_divergence",
+            group_id="original-group", leg_id=leg_id, client_order_id=f"entry-{leg_id}",
+            execution_id=f"fill-{leg_id}", side=side, opened_quantity=opened, remaining_quantity=remaining,
+            execution_timestamp=datetime(2026, 10, 10, 9, 0), instrument_identity=identity,
+            contract_multiplier=identity.contract_multiplier, identity_source=identity.identity_source,
+            position_role=PositionRole.NONE,
+        )
+    bridge = object.__new__(VirtualMultiLegExecutionBridge)
+    bridge.run_id = "run-1"
+    bridge.position_lot_store = SimpleNamespace(open_lots=lambda: (
+        lot(option, "OPTION", "BUY", 1, 1), lot(futures, "MINI_FUTURES", "SELL", 5, 3),
+    ))
+
+    plan = bridge.build_close_plan_from_open_lots(
+        strategy_id="track5_gap_divergence", purpose="TRACK5_GAP_HEDGE_FUTURES_EXIT",
+        asset_type="FUTURES", leg_id_prefix="MINI_FUTURES_EXIT",
+    )
+    assert plan.group_id == "original-group"
+    assert len(plan.legs) == 1
+    assert plan.legs[0].leg_id.startswith("MINI_FUTURES_EXIT-")
+    assert plan.legs[0].side == "BUY"
+    assert plan.legs[0].quantity == 3
+    assert plan.legs[0].instrument_identity == futures

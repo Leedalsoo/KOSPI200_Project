@@ -448,9 +448,26 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         strategy = registry.get("track5_gap_divergence", "2.0")
         if not isinstance(strategy, Track5GapDivergence):
             raise ValueError("TRACK5_STRATEGY_REGISTRY_TYPE_REQUIRED")
-        futures_identity = None
-        if futures_identity_source is not None:
-            futures_identity = futures_identity_source.current_identity()
+        tag = str(getattr(proposal, "tag_id", "") or "").upper()
+        if str(getattr(proposal, "asset_type", "")).upper() == "FUTURES":
+            if tag == "GAP_DIVERGENCE_FUTURES_FIRST_EXIT":
+                return multi_leg_bridge.build_close_plan_from_open_lots(
+                    strategy_id="track5_gap_divergence",
+                    purpose="TRACK5_GAP_HEDGE_FUTURES_EXIT",
+                    asset_type="FUTURES", leg_id_prefix="MINI_FUTURES_EXIT",
+                )
+            if tag == "GAP_DIVERGENCE_TERMINAL_EXIT":
+                return multi_leg_bridge.build_close_plan_from_open_lots(
+                    strategy_id="track5_gap_divergence",
+                    purpose="TRACK5_GAP_HEDGE_TERMINAL_EXIT",
+                )
+        if str(getattr(proposal, "asset_type", "")).upper() == "OPTION" and str(getattr(proposal, "side", "")).upper() == "SELL":
+            return multi_leg_bridge.build_close_plan_from_open_lots(
+                strategy_id="track5_gap_divergence",
+                purpose="TRACK5_GAP_HEDGE_OPTION_EXIT",
+                asset_type="OPTION", leg_id_prefix="OPTION_EXIT",
+            )
+        futures_identity = futures_identity_for_evaluation(evaluation)
         return strategy.build_execution_plan(
             f"{run_id}-{canonical.signal_id}",
             proposal=proposal,

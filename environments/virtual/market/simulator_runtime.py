@@ -8,7 +8,7 @@ from math import erf, exp, log, sqrt
 from decimal import Decimal
 from typing import Optional
 
-from core.option.option_master import IOptionContractMaster
+from core.option.option_master import IOptionContractMaster, KIS_KOSPI200_OPTION_CONTRACT_MULTIPLIER
 from contracts.option_expiry import normalize_option_expiry
 
 from environments.virtual.market.canonical import ReferenceCanonicalMarketTick
@@ -272,6 +272,38 @@ class VirtualMarketSimulatorRuntime:
         if multiplier is None or float(multiplier) <= 0:
             raise ValueError("OPTION_CONTRACT_MULTIPLIER_REQUIRED")
         self._option_quotes[key] = dict(quote)
+
+    def _authoritative_tick_identity(
+        self, timestamp: datetime, option_type: str, target_strike: Decimal
+    ):
+        if self.option_master is None:
+            raise ValueError("VIRTUAL_AUTHORITATIVE_OPTION_MULTIPLIER_SOURCE_REQUIRED")
+        timestamp_date = timestamp.strftime("%Y%m%d")
+        candidates = []
+        for identity in self.option_master.list_contract_identities():
+            if (
+                identity.option_type != option_type
+                or identity.strike is None
+                or identity.contract_multiplier != KIS_KOSPI200_OPTION_CONTRACT_MULTIPLIER
+                or not identity.expiry
+            ):
+                continue
+            try:
+                exact_expiry = normalize_option_expiry(identity.expiry).require_exact()
+            except (TypeError, ValueError):
+                continue
+            if exact_expiry <= timestamp_date:
+                continue
+            strike = Decimal(str(identity.strike))
+            candidates.append((exact_expiry, abs(strike - target_strike), strike, identity))
+        if not candidates:
+            raise ValueError("VIRTUAL_AUTHORITATIVE_OPTION_IDENTITY_REQUIRED")
+        earliest_expiry = min(candidate[0] for candidate in candidates)
+        same_expiry = (
+            candidate for candidate in candidates if candidate[0] == earliest_expiry
+        )
+        return min(same_expiry, key=lambda item: (item[1], item[2]))[3]
+
     def generate_tick_stream(self, *, total_days: int, ticks_per_day: int):
         if total_days <= 0 or ticks_per_day <= 0:
             return
@@ -288,16 +320,13 @@ class VirtualMarketSimulatorRuntime:
             last = round(self._price, 4)
             spread = 0.05
             strike_price = round(last / 2.5) * 2.5
-            if self.option_master is None:
-                raise ValueError("VIRTUAL_AUTHORITATIVE_OPTION_MULTIPLIER_SOURCE_REQUIRED")
-            identity = self.option_master.find_contract_identity(
-                "202609", "CALL", Decimal(str(strike_price))
+            tick_timestamp = start + interval * (seq - 1)
+            identity = self._authoritative_tick_identity(
+                tick_timestamp, "CALL", Decimal(str(strike_price))
             )
-            if identity is None or identity.contract_multiplier is None or not identity.expiry:
-                raise ValueError("VIRTUAL_AUTHORITATIVE_OPTION_IDENTITY_REQUIRED")
             exact_expiry = normalize_option_expiry(identity.expiry).require_exact()
             tick = ReferenceCanonicalMarketTick(
-                timestamp=(start + interval * (seq - 1)).isoformat(),
+                timestamp=tick_timestamp.isoformat(),
                 underlying_price=last, strike_price=strike_price,
                 option_type="CALL", contract_multiplier=identity.contract_multiplier,
                 bid_price=max(0.01, last - spread),

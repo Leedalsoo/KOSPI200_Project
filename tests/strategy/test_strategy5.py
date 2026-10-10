@@ -100,7 +100,8 @@ def test_strategy5_does_not_create_intraday_gap_after_30_minutes():
 
 def _futures_exit_result(status="FILLED", filled_quantity=5, remaining_quantity=0,
                          execution_id="T5-FUTURES-FILL", execution_price="101.5",
-                         leg_id="MINI_FUTURES_EXIT", pending_legs=0, routed_legs=1):
+                         leg_id="MINI_FUTURES_EXIT", pending_legs=0, routed_legs=1,
+                         position_flat=True):
     report = SimpleNamespace(
         status=status,
         filled_quantity=filled_quantity,
@@ -111,8 +112,27 @@ def _futures_exit_result(status="FILLED", filled_quantity=5, remaining_quantity=
         leg_id=leg_id,
     )
     return SimpleNamespace(
-        reports=(report,), pending_legs=pending_legs, routed_legs=routed_legs
+        reports=(report,), pending_legs=pending_legs, routed_legs=routed_legs,
+        position_flat=position_flat,
     )
+
+
+def _terminal_exit_result():
+    reports = tuple(SimpleNamespace(
+        status="FILLED", filled_quantity=qty, remaining_quantity=0,
+        execution_id=f"T5-CLOSE-{leg}", execution_timestamp=datetime(2026, 10, 6, 9, 2),
+        execution_price=Decimal("101.5"), leg_id=leg,
+    ) for leg, qty in (("close-FUTURES", 5), ("close-OPTION", 1)))
+    return SimpleNamespace(reports=reports, pending_legs=0, routed_legs=2, position_flat=True)
+
+
+def _option_exit_result(status="FILLED", position_flat=True):
+    report = SimpleNamespace(
+        status=status, filled_quantity=1, remaining_quantity=0,
+        execution_id="T5-OPTION-CLOSE", execution_timestamp=datetime(2026, 10, 6, 9, 2),
+        execution_price=Decimal("2.5"), leg_id="OPTION_EXIT-abcdef123456",
+    )
+    return SimpleNamespace(reports=(report,), pending_legs=0, routed_legs=1, position_flat=position_flat)
 
 
 def test_strategy5_closes_mini_futures_first_then_option_on_reversion():
@@ -175,25 +195,20 @@ def _mini_futures_identity():
     )
 
 
-def test_strategy5_stop_requests_futures_exit_before_option_exit():
+def test_strategy5_stop_uses_grouped_terminal_exit_until_both_legs_are_flat():
     s = Track5GapDivergence()
     at = datetime(2026, 10, 6, 9, 0)
     assert s.evaluate(_context(s, at, 102, 100, 102))
 
-    futures_exit = s.evaluate_mean_reversion(Decimal("103"))
-    assert len(futures_exit) == 1
-    assert futures_exit[0].direction == "CLOSE_FUTURES"
-    assert "OPTION_STOP_REQUIRES_HEDGE_CLOSE" in futures_exit[0].reason
+    terminal_exit = s.evaluate_mean_reversion(Decimal("103"))
+    assert len(terminal_exit) == 1
+    assert terminal_exit[0].direction == "CLOSE_FUTURES"
+    assert terminal_exit[0].execution_proposal.tag_id == "GAP_DIVERGENCE_TERMINAL_EXIT"
+    assert "OPTION_STOP_REQUIRES_HEDGE_CLOSE" in terminal_exit[0].reason
     assert s.state.is_active and s.state.futures_close_requested
-    assert not s.state.futures_closed
     assert s.evaluate_mean_reversion(Decimal("103")) == ()
-    s.on_execution_result("TRACK5_GAP_HEDGE_FUTURES_EXIT", _futures_exit_result())
-    assert s.state.futures_closed
 
-    option_exit = s.evaluate_mean_reversion(Decimal("103"))
-    assert len(option_exit) == 1
-    assert option_exit[0].direction == "CLOSE_OPTION"
-    assert option_exit[0].execution_proposal.tag_id == "GAP_DIVERGENCE_OPTION_STOP_EXIT"
+    s.on_execution_result("TRACK5_GAP_HEDGE_TERMINAL_EXIT", _terminal_exit_result())
     assert not s.state.is_active
 
 
@@ -238,6 +253,9 @@ def test_strategy5_timeout_is_counted_in_evaluations_and_closes_hedge_first():
     assert len(option_exit) == 1
     assert option_exit[0].direction == "CLOSE_OPTION"
     assert f"TIMEOUT_{s.MAX_OPEN_EVALUATIONS}_EVALUATIONS" in option_exit[0].reason
+    assert s.state.is_active and s.state.option_close_requested
+    assert s.evaluate_mean_reversion(Decimal("102.2")) == ()
+    s.on_execution_result("TRACK5_GAP_HEDGE_OPTION_EXIT", _option_exit_result())
     assert not s.state.is_active
 
 
@@ -253,6 +271,8 @@ def test_strategy5_same_price_path_keeps_futures_first_then_closes_option():
     s.on_execution_result("TRACK5_GAP_HEDGE_FUTURES_EXIT", _futures_exit_result())
     option_exit = s.evaluate_mean_reversion(Decimal("99"))
     assert len(option_exit) == 1 and option_exit[0].direction == "CLOSE_OPTION"
+    assert s.state.is_active and s.state.option_close_requested
+    s.on_execution_result("TRACK5_GAP_HEDGE_OPTION_EXIT", _option_exit_result())
     assert not s.state.is_active
 
 
@@ -376,7 +396,7 @@ def test_strategy5_execution_fill_is_dispatched_through_strategy_hub():
         execution_timestamp=datetime(2026, 10, 6, 9, 1),
         execution_price=Decimal("101.5"),
     )
-    result = SimpleNamespace(reports=(report,), pending_legs=0, routed_legs=1)
+    result = SimpleNamespace(reports=(report,), pending_legs=0, routed_legs=1, position_flat=True)
 
     hub.on_execution_result(
         strategy.strategy_id, "TRACK5_GAP_HEDGE_FUTURES_EXIT", result

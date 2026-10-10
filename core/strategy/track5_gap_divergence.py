@@ -43,6 +43,7 @@ class Track5State:
     futures_close_requested: bool = False
     futures_closed: bool = False
     futures_close_error: str | None = None
+    option_close_requested: bool = False
 
 
 class Track5GapDivergence:
@@ -227,52 +228,78 @@ class Track5GapDivergence:
             execution_proposal=self._proposal(
                 asset_type="FUTURES", side=futures_close_side,
                 quantity=self.MINI_FUTURES_QUANTITY,
-                tag_id="GAP_DIVERGENCE_FUTURES_FIRST_EXIT",
+                tag_id=(
+                    "GAP_DIVERGENCE_FUTURES_FIRST_EXIT"
+                    if reason == "GAP_FILL_STARTED"
+                    else "GAP_DIVERGENCE_TERMINAL_EXIT"
+                ),
             ),
         ),)
 
     def on_execution_result(self, purpose: str, result: object) -> None:
-        """Advance the hedge lifecycle only from its correlated execution report."""
-        if purpose != "TRACK5_GAP_HEDGE_FUTURES_EXIT":
+        """Advance lifecycle only from correlated fills and authoritative flatness."""
+        if not self.state.is_active:
             return
-        if not self.state.is_active or not self.state.futures_close_requested:
-            return
-
         reports = tuple(getattr(result, "reports", ()) or ())
-        if not reports:
-            if (
-                int(getattr(result, "pending_legs", 0) or 0) == 0
-                and int(getattr(result, "routed_legs", 0) or 0) == 0
-            ):
-                self.state = replace(self.state, futures_close_requested=False)
+        terminal = purpose == "TRACK5_GAP_HEDGE_TERMINAL_EXIT"
+        futures_exit = purpose == "TRACK5_GAP_HEDGE_FUTURES_EXIT"
+        option_exit = purpose == "TRACK5_GAP_HEDGE_OPTION_EXIT"
+        if not (terminal or futures_exit or option_exit):
             return
 
-        for report in reports:
-            if getattr(report, "leg_id", None) != "MINI_FUTURES_EXIT":
-                continue
-            status = str(getattr(report, "status", "")).strip().upper()
-            if status in {"REJECTED", "FAILED", "CANCELLED", "EXPIRED"}:
-                self.state = replace(
-                    self.state, futures_close_requested=False, futures_closed=False
-                )
-                return
-            if (
-                status == "FILLED"
-                and int(getattr(report, "filled_quantity", 0) or 0) == self.MINI_FUTURES_QUANTITY
+        def confirmed_fill(report) -> bool:
+            return (
+                str(getattr(report, "status", "")).strip().upper() == "FILLED"
+                and int(getattr(report, "filled_quantity", 0) or 0) > 0
                 and int(getattr(report, "remaining_quantity", -1)) == 0
                 and bool(getattr(report, "execution_id", None))
                 and getattr(report, "execution_timestamp", None) is not None
                 and getattr(report, "execution_price", None) is not None
-            ):
-                self.state = replace(
-                    self.state, futures_close_requested=False, futures_closed=True
-                )
+            )
+
+        if terminal:
+            if reports and all(confirmed_fill(report) for report in reports) and bool(getattr(result, "position_flat", False)):
+                self.reset()
+            elif any(str(getattr(report, "status", "")).strip().upper() in {"REJECTED", "FAILED", "CANCELLED", "EXPIRED"} for report in reports):
+                self.state = replace(self.state, futures_close_requested=False, futures_closed=False,
+                                     futures_close_error="TERMINAL_CLOSE_REJECTED;POSITION_RECONCILIATION_REQUIRED")
+            return
+
+        if futures_exit:
+            if not self.state.futures_close_requested:
                 return
+            futures_reports = [r for r in reports if str(getattr(r, "leg_id", "")).startswith("MINI_FUTURES_EXIT")]
+            if not futures_reports:
+                if not reports and int(getattr(result, "pending_legs", 0) or 0) == 0 and int(getattr(result, "routed_legs", 0) or 0) == 0:
+                    self.state = replace(self.state, futures_close_requested=False)
+                return
+            if any(str(getattr(r, "status", "")).strip().upper() in {"REJECTED", "FAILED", "CANCELLED", "EXPIRED"} for r in futures_reports):
+                self.state = replace(self.state, futures_close_requested=False, futures_closed=False)
+                return
+            if (
+                any(confirmed_fill(r) for r in futures_reports)
+                and bool(getattr(result, "position_flat", False))
+            ):
+                self.state = replace(self.state, futures_close_requested=False, futures_closed=True, futures_close_error=None)
+            return
+
+        if option_exit:
+            if not self.state.option_close_requested:
+                return
+            option_reports = [r for r in reports if str(getattr(r, "leg_id", "")).startswith("OPTION_EXIT")]
+            if any(confirmed_fill(r) for r in option_reports) and bool(getattr(result, "position_flat", False)):
+                self.reset()
+            elif any(str(getattr(r, "status", "")).strip().upper() in {"REJECTED", "FAILED", "CANCELLED", "EXPIRED"} for r in option_reports):
+                self.state = replace(self.state, option_close_requested=False,
+                                     futures_close_error="OPTION_CLOSE_REJECTED;POSITION_RECONCILIATION_REQUIRED")
 
     def evaluate_mean_reversion(self, current_price: Decimal) -> Sequence[Signal]:
         if not self.state.is_active or self.state.direction is None:
             return ()
         state = replace(self.state, open_ticks=self.state.open_ticks + 1)
+        if state.option_close_requested:
+            self.state = state
+            return ()
         direction = state.direction
         pnl = state.entry_price - current_price if direction == "SHORT" else current_price - state.entry_price
         state = replace(state, peak_pnl=max(state.peak_pnl, pnl))
@@ -311,7 +338,7 @@ class Track5GapDivergence:
             (direction == "LONG" and state.gap_extreme_price < state.entry_price)
         )
         if state.futures_closed and reached_target and (had_expansion or state.open_ticks > 1):
-            self.reset()
+            self.state = replace(state, option_close_requested=True)
             return (Signal(
                 self.strategy_id,
                 "CLOSE_OPTION",
@@ -333,7 +360,7 @@ class Track5GapDivergence:
         if stop_triggered:
             if not state.futures_closed:
                 return self._request_futures_exit(state, current_price, "OPTION_STOP_REQUIRES_HEDGE_CLOSE")
-            self.reset()
+            self.state = replace(state, option_close_requested=True)
             return (Signal(
                 self.strategy_id, "CLOSE_OPTION", 1.0,
                 f"DYNAMIC_STOP:{state.stop_loss_price};PNL:{pnl}",
@@ -348,7 +375,7 @@ class Track5GapDivergence:
         if state.open_ticks >= self.MAX_OPEN_EVALUATIONS:
             if not state.futures_closed:
                 return self._request_futures_exit(state, current_price, "TIMEOUT_REQUIRES_HEDGE_CLOSE")
-            self.reset()
+            self.state = replace(state, option_close_requested=True)
             return (Signal(
                 self.strategy_id, "CLOSE_OPTION", 1.0,
                 f"TIMEOUT_{self.MAX_OPEN_EVALUATIONS}_EVALUATIONS;PNL:{pnl}",
@@ -365,7 +392,7 @@ class Track5GapDivergence:
         if trailing_active and state.peak_pnl - pnl >= effective_reversal:
             if not state.futures_closed:
                 return self._request_futures_exit(state, current_price, "TRAILING_EXIT_REQUIRES_HEDGE_CLOSE")
-            self.reset()
+            self.state = replace(state, option_close_requested=True)
             return (Signal(
                 self.strategy_id, "CLOSE_OPTION", 1.0,
                 f"TRAILING_LOCK;PEAK:{state.peak_pnl};REVERSAL:{effective_reversal};PNL:{pnl}",
