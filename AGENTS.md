@@ -126,7 +126,7 @@ REST와 WebSocket은 서로 다른 수집 경계로 유지한다.
 
 KIS VTS Collector의 manifest 상태는 실제 raw/canonical evidence와 일치해야 한다. manifest와 실제 evidence가 불일치하면 collector lifecycle/상태 기록 문제로 분류하여 별도로 검증한다.
 
-Calendar authoritative source를 확인할 수 없으면 휴장으로 추정하지 않고 `UNKNOWN`으로 기록한다. `UNKNOWN` 상태에서 주문 endpoint를 호출하지 않는다.
+휴장일 source 우선순위는 **KRX 공식 데이터 → KIS API → KRX 연도별 캐시 → `UNKNOWN`**이다. KRX 공식 source가 성공하면 KIS API를 호출하지 않는다. KRX source 실패 시에만 KIS를 1회 시도하고, 두 source가 실패하면 유효한 KRX 캐시를 사용한다. 모든 authoritative source와 캐시가 실패하면 휴장으로 추정하지 않고 `UNKNOWN`으로 기록하며, `UNKNOWN` 상태에서 주문 endpoint를 호출하지 않는다.
 
 ---
 

@@ -1,4 +1,4 @@
-"""Year-aware KIS -> KRX -> cache holiday fallback infrastructure.
+"""Year-aware KRX -> KIS -> cache holiday fallback infrastructure.
 
 The fallback is fail-closed: UNKNOWN never becomes a weekday/trading day.
 """
@@ -162,7 +162,7 @@ class KRXHolidayProvider:
 
 
 class FallbackHolidayProvider:
-    """KIS primary -> KRX authoritative -> KRX cache -> UNKNOWN."""
+    """KRX authoritative -> KIS fallback -> KRX cache -> UNKNOWN."""
 
     def __init__(
         self,
@@ -185,6 +185,15 @@ class FallbackHolidayProvider:
         if cached is not None:
             return cached
 
+        # KRX official source is primary; only fall back to KIS when it fails.
+        try:
+            holidays = self._krx_provider.load_from_krx(year)
+            return self._remember(
+                year, holidays, HolidayResolutionStatus.KRX, KRX_HOLIDAY_SOURCE_URL
+            )
+        except Exception:
+            pass
+
         if self._enable_kis:
             try:
                 self._kis_provider.load_from_kis_api(year)
@@ -198,14 +207,6 @@ class FallbackHolidayProvider:
                 )
             except Exception:
                 pass
-
-        try:
-            holidays = self._krx_provider.load_from_krx(year)
-            return self._remember(
-                year, holidays, HolidayResolutionStatus.KRX, KRX_HOLIDAY_SOURCE_URL
-            )
-        except Exception:
-            pass
 
         try:
             holidays = self._krx_provider.load_from_cache(year)
