@@ -16,6 +16,7 @@ from core.oms.order_router import StandardOrderRouter
 from core.risk.risk_config import RiskConfig
 from core.risk.risk_engine import RiskEngine, RiskGate
 from core.risk.risk_approval_read_model import RiskApprovalReadModel, RiskApprovalRecord
+from application.composition.strategy5_risk_diagnostic_jsonl import Strategy5RiskDiagnosticJsonl
 from application.composition.runtime_authoritative_risk_router_adapter import (
     RiskRouterContext, route_from_runtime_authoritative_sources, account_snapshot_to_risk_input,
 )
@@ -116,6 +117,10 @@ class VirtualMultiLegExecutionBridge:
         vssf = bundle.execution._authoritative_execute.__self__.vssf_runtime
         self.risk_gate = RiskGate(RiskEngine(risk_config or RiskConfig(), margin_engine=vssf.margin_engine), risk_guard_status_source=risk_guard_status_source)
         self.risk_approval_read_model = RiskApprovalReadModel()
+        self._strategy5_risk_diagnostic = Strategy5RiskDiagnosticJsonl()
+        self.risk_diagnostic_status: dict[str, str | None] = {
+            "status": "NOT_ATTEMPTED", "error": None, "artifact_path": None,
+        }
         self.command_context = CanonicalVSSFCommandContextProvider()
         self.groups: dict[str, list[ExecutionReport]] = {}
         self.position_groups = PositionGroupRegistry()
@@ -132,6 +137,18 @@ class VirtualMultiLegExecutionBridge:
         self.leg_positions: dict[str, Any] = {}
         self.pending_legs: dict[str, tuple[MultiLegExecutionPlan, Any]] = {}
         self._applied_execution_fingerprints: dict[str, tuple] = {}
+
+    def _record_strategy5_risk_preflight_diagnostic(self, **payload: Any) -> None:
+        """Record diagnostic evidence without allowing storage failures to affect trading."""
+        try:
+            artifact = self._strategy5_risk_diagnostic.append_preflight(**payload)
+            self.risk_diagnostic_status = {
+                "status": "RECORDED", "error": None, "artifact_path": str(artifact),
+            }
+        except Exception as exc:
+            self.risk_diagnostic_status = {
+                "status": "FAILED", "error": type(exc).__name__, "artifact_path": None,
+            }
 
     @staticmethod
     def _preflight_rejection_reason(evaluation, admitted: bool, aggregate_rejection: str | None) -> str:
@@ -411,6 +428,35 @@ class VirtualMultiLegExecutionBridge:
             aggregate_rejection = "GROUP_INSUFFICIENT_FREE_MARGIN"
         elif group_margin_ratio > Decimal(str(config.max_margin_utilization_ratio)):
             aggregate_rejection = "GROUP_MAX_MARGIN_UTILIZATION_EXCEEDED"
+
+        # Strategy 5 diagnostics are best-effort and must never change Risk/order flow.
+        if plan.strategy_id == "track5_gap_divergence":
+            self._record_strategy5_risk_preflight_diagnostic(
+                run_id=self.run_id,
+                strategy_id=plan.strategy_id,
+                group_id=plan.group_id,
+                evaluations=[{
+                    "leg_id": leg.leg_id,
+                    "client_order_id": client_order_id,
+                    "instrument_id": identity.instrument_id,
+                    "side": str(leg.side),
+                    "quantity": int(leg.quantity),
+                    "admitted": bool(admitted),
+                    "risk_decision": str(evaluation.decision),
+                    "risk_approved": bool(evaluation.is_approved),
+                    "rejection_reason": evaluation.rejection_reason,
+                    "required_margin": str(evaluation.required_margin),
+                    "estimated_margin_ratio": str(evaluation.estimated_margin_ratio),
+                } for leg, identity, client_order_id, _command, _canonical, evaluation, admitted in evaluations],
+                total_required_margin=total_required_margin,
+                total_balance=total_balance,
+                used_margin=used_margin,
+                free_margin=free_margin,
+                max_margin_utilization_ratio=config.max_margin_utilization_ratio,
+                group_margin_ratio=group_margin_ratio,
+                aggregate_rejection=aggregate_rejection,
+                leg_rejected=failed,
+            )
         if failed or aggregate_rejection:
             for leg, _identity, client_order_id, _command, _canonical, evaluation, admitted in evaluations:
                 reason = self._preflight_rejection_reason(evaluation, admitted, aggregate_rejection)
