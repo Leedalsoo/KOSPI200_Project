@@ -1,0 +1,1 @@
+"""Reusable strategy evaluation parity harness (test/verification only)."""
