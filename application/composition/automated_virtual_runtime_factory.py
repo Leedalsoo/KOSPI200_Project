@@ -95,11 +95,12 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         getattr(bootstrap.bundle.option_master, "calendar", None)
         or getattr(synthetic_runtime_sources, "calendar", None)
     )
-    def identity(evaluation, tick):
+    def identity(evaluation, tick, *, asset_type=None):
         proposal = evaluation.result.execution_proposal
         if proposal is None:
             return None
-        if str(proposal.asset_type) == "FUTURES":
+        resolved_asset_type = str(asset_type or proposal.asset_type).upper()
+        if resolved_asset_type == "FUTURES":
             if synthetic_runtime_sources is not None:
                 from contracts.futures_identity_source_port import FuturesInstrumentIdentity
                 # Synthetic replay ticks expose the underlying as a MarketTick,
@@ -128,7 +129,7 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
                 )
             if futures_identity_source is None:
                 raise ValueError("VIRTUAL_AUTHORITATIVE_FUTURES_IDENTITY_SOURCE_REQUIRED")
-            timestamp = getattr(tick, "timestamp", None) if tick is not None else None
+            timestamp = (getattr(tick, "timestamp", None) or getattr(tick, "observed_at", None)) if tick is not None else None
             if not timestamp:
                 raise ValueError("VIRTUAL_AUTHORITATIVE_FUTURES_AS_OF_REQUIRED")
             return futures_identity_source.identity_for_as_of(datetime.fromisoformat(str(timestamp)))
@@ -348,7 +349,7 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
             market_state = evaluation.context.market_state
             if market_state is None or not market_state.ticks:
                 raise ValueError("FUTURES_MARKET_TICK_REQUIRED")
-            observed_identity = identity(evaluation, next(iter(market_state.ticks.values())))
+            observed_identity = identity(evaluation, next(iter(market_state.ticks.values())), asset_type="FUTURES")
             if not isinstance(observed_identity, FuturesInstrumentIdentity):
                 raise ValueError("FUTURES_AUTHORITATIVE_IDENTITY_REQUIRED")
             return observed_identity

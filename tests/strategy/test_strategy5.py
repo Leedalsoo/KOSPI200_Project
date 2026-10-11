@@ -404,3 +404,49 @@ def test_strategy5_execution_fill_is_dispatched_through_strategy_hub():
 
     assert strategy.state.futures_closed
     assert not strategy.state.futures_close_requested
+
+
+def test_strategy5_rejected_entry_without_fills_resets_active_state():
+    strategy = Track5GapDivergence()
+    assert strategy.evaluate(_context(strategy, datetime(2026, 10, 6, 9, 0), 102, 100, 102))
+    assert strategy.state.is_active
+
+    reports = (
+        SimpleNamespace(leg_id="OPTION_ENTRY", status="REJECTED", filled_quantity=0),
+        SimpleNamespace(leg_id="MINI_FUTURES_ENTRY", status="REJECTED", filled_quantity=0),
+    )
+    strategy.on_execution_result(
+        "TRACK5_GAP_HEDGE_ENTRY",
+        SimpleNamespace(reports=reports, pending_legs=0, routed_legs=2, position_flat=True),
+    )
+
+    assert not strategy.state.is_active
+    assert strategy.evaluate_mean_reversion(Decimal("101.5")) == ()
+
+
+def test_strategy5_entry_with_no_routed_legs_resets_active_state():
+    strategy = Track5GapDivergence()
+    assert strategy.evaluate(_context(strategy, datetime(2026, 10, 6, 9, 0), 102, 100, 102))
+
+    strategy.on_execution_result(
+        "TRACK5_GAP_HEDGE_ENTRY",
+        SimpleNamespace(reports=(), pending_legs=0, routed_legs=0, position_flat=True),
+    )
+
+    assert not strategy.state.is_active
+
+
+def test_strategy5_entry_with_partial_fill_preserves_state_for_reconciliation():
+    strategy = Track5GapDivergence()
+    assert strategy.evaluate(_context(strategy, datetime(2026, 10, 6, 9, 0), 102, 100, 102))
+    reports = (
+        SimpleNamespace(leg_id="OPTION_ENTRY", status="FILLED", filled_quantity=1),
+        SimpleNamespace(leg_id="MINI_FUTURES_ENTRY", status="REJECTED", filled_quantity=0),
+    )
+    strategy.on_execution_result(
+        "TRACK5_GAP_HEDGE_ENTRY",
+        SimpleNamespace(reports=reports, pending_legs=0, routed_legs=2, position_flat=False),
+    )
+
+    assert strategy.state.is_active
+    assert strategy.state.futures_side == "SELL"

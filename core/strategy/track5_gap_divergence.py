@@ -241,9 +241,29 @@ class Track5GapDivergence:
         if not self.state.is_active:
             return
         reports = tuple(getattr(result, "reports", ()) or ())
+        entry = purpose == "TRACK5_GAP_HEDGE_ENTRY"
         terminal = purpose == "TRACK5_GAP_HEDGE_TERMINAL_EXIT"
         futures_exit = purpose == "TRACK5_GAP_HEDGE_FUTURES_EXIT"
         option_exit = purpose == "TRACK5_GAP_HEDGE_OPTION_EXIT"
+        if entry:
+            # A rejected/no-route entry must not leave a phantom active position.
+            # Preserve state whenever any leg has a fill; partial execution needs
+            # position reconciliation rather than an unconditional reset.
+            terminal_failures = {"REJECTED", "FAILED", "CANCELLED", "EXPIRED"}
+            has_fill = any(int(getattr(report, "filled_quantity", 0) or 0) > 0 for report in reports)
+            no_route = (
+                not reports
+                and int(getattr(result, "pending_legs", 0) or 0) == 0
+                and int(getattr(result, "routed_legs", 0) or 0) == 0
+            )
+            all_legs_rejected = (
+                bool(reports)
+                and all(str(getattr(report, "status", "")).strip().upper() in terminal_failures for report in reports)
+                and int(getattr(result, "pending_legs", 0) or 0) == 0
+            )
+            if not has_fill and (no_route or all_legs_rejected):
+                self.reset()
+            return
         if not (terminal or futures_exit or option_exit):
             return
 
