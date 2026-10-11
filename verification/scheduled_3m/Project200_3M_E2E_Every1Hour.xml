@@ -1,11 +1,8 @@
-﻿<?xml version="1.0" encoding="UTF-16"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <RegistrationInfo><Description>Project200: generate a varied 3-month synthetic dataset and run 49,140-event Strategy 1-9 E2E verification every 1 hour with queued serial execution.</Description></RegistrationInfo>
-  <Triggers><TimeTrigger><Repetition><Interval>PT1H</Interval><StopAtDurationEnd>false</StopAtDurationEnd></Repetition><StartBoundary>2026-10-07T12:00:00</StartBoundary><Enabled>true</Enabled></TimeTrigger></Triggers>
+  <RegistrationInfo><Description>Project200: generate and validate a 3-calendar-month dataset, then run Strategy 1-9 E2E and Control Tower UI smoke every 1 hour with queued serial execution.</Description><URI>\Project200_3M_E2E_Every1Hour</URI></RegistrationInfo>
+  <Triggers><TimeTrigger><Repetition><Interval>PT1H</Interval><StopAtDurationEnd>false</StopAtDurationEnd></Repetition><StartBoundary>2026-10-08T03:00:00</StartBoundary><Enabled>true</Enabled></TimeTrigger></Triggers>
   <Principals><Principal id="Author"><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals>
   <Settings><MultipleInstancesPolicy>Queue</MultipleInstancesPolicy><StartWhenAvailable>true</StartWhenAvailable><ExecutionTimeLimit>PT0S</ExecutionTimeLimit><AllowHardTerminate>false</AllowHardTerminate><Enabled>true</Enabled></Settings>
   <Actions Context="Author"><Exec><Command>powershell.exe</Command><Arguments>-NoProfile -ExecutionPolicy Bypass -File "C:\Users\white\Desktop\MovingProject\KOSPI200_Project\verification\scheduled_3m\run_3m_pattern_e2e.ps1"</Arguments><WorkingDirectory>C:\Users\white\Desktop\MovingProject\KOSPI200_Project</WorkingDirectory></Exec></Actions>
 </Task>
-
-
-
