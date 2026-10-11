@@ -132,7 +132,7 @@ Windows Python 실행은 `py`를 사용한다.
 
 상세 작업 절차와 현재 세부 기준은 **[AGENTS.md](AGENTS.md)**를 기준으로 한다.
 
-## 10. 현재 주요 미완료 범주
+## 10. 현재 미완료 범주
 
 실제 evidence가 확보될 때까지 다음 항목은 전체 PASS로 취급하지 않는다.
 
@@ -141,5 +141,23 @@ Windows Python 실행은 `py`를 사용한다.
 - Strategy Trade P/L / Account P/L / Position open·closed semantics의 완전한 회계 정합성
 - KIS VTS Collector manifest/lifecycle과 실제 evidence의 완전한 정합성
 - KIS Live credential 및 실제 Live E2E
+- 옵션 매수호가·승수·수량·수수료·슬리피지를 반영하는 Runtime 프리미엄 검사
+- 옵션 레그별 만기 payoff/max-loss 및 기존 미청산 포지션·체결 원장 기반 계좌 전체 위험 집계
+- 부분체결·거절·청산·만기 회귀 검증
+- Strategy 1 헤지 구조와 Strategy 3·4·5 선물 레그의 경제적 목적·위험 한도 확정
 
-README는 프로젝트의 **현재 구조와 사용 기준을 요약**하고, 상세 작업 규칙·검증 절차·세부 결정은 AGENTS.md와 Notion의 현재 기록에서 관리한다.
+## 11. 옵션 헤지 위험 검사 — 현재 계획
+
+옵션 헤지 설정 초안은 config/risk/option-hedge-risk.v1.json, 검증 모델은 core/risk/option_hedge_risk_config.py에 있다. 현재 DISABLED_UNTIL_RUNTIME_INTEGRATION 상태이므로 실제 주문 경로의 위험 차단 기능으로 간주하지 않는다. 단위 테스트가 통과해도 Runtime enforcement PASS를 의미하지 않는다.
+
+구현 순서는 다음과 같다.
+
+1. Strategy 1 보호 구조와 Strategy 3·4·5 선물 레그의 경제적 목적·위험 한도를 별도 검토한다.
+2. authoritative 매수호가, 계약 승수, 수량, 수수료 및 보수적 슬리피지를 포함해 프리미엄을 검사한다.
+3. 각 레그의 정확한 만기·행사가·방향·수량으로 만기 payoff와 최대손실을 계산한다.
+4. 기존 미청산 포지션과 실제 체결 원장을 연결해 중복 없는 계좌 전체 위험을 집계한다.
+5. 부분체결·거절·청산·만기 및 입력 누락/오류 회귀를 검증한다.
+
+기존 공통 RiskConfig의 일일 손실 한도와 증거금 한도는 그대로 유지하며 옵션 프리미엄/최대손실 한도로 재해석하지 않는다. 임시 설정 금액은 최종 운용 한도로 확정되지 않았다. authoritative 데이터가 누락되거나 계산이 불가능하면 fail-closed한다. 전략 코드·manifest·매매 정책은 전략별 설계 및 회귀 범위 승인을 거친 뒤 변경한다.
+
+README는 프로젝트의 현재 구조와 작업 순서를 요약하고, 상세 절차는 AGENTS.md, 실제 결정 상태는 Notion의 최신 Q&A와 확정 Decision Log를 기준으로 한다.

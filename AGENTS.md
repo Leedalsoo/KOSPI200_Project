@@ -316,19 +316,36 @@ Push 후 반드시 원격 `Project200` HEAD가 해당 commit SHA를 가리키는
 
 ---
 
-## 17. 현재 미완료 사항의 표현 기준
+## 17. 현재 미완료 사항과 옵션 헤지 작업 상태
 
-현재 완료된 한정적 검증을 전체 시스템 완료로 확대하지 않는다.
+현재 작업 단계는 옵션 헤지 위험 검사 설계·공통 위험 집계 연결 전 단계다. 문서/설정 초안의 존재를 Runtime enforcement 또는 전체 E2E PASS로 해석하지 않는다.
 
-현재 중요한 미완료 범주는 다음과 같다.
+전체 프로젝트에서 실제 증거가 확보될 때까지 다음 항목은 완료로 승격하지 않는다.
 
 - Strategy 1~9 전체의 REAL_VTS signal → execution → Position/PnL Full E2E
 - 동일 3개월 replay 실행과 동일 runtime state를 대상으로 한 실제 browser DOM Playwright 자동 검증
 - Strategy Trade P/L과 Account P/L 및 Position open/closed semantics의 완전한 회계 의미 정합성
 - KIS VTS Collector manifest/lifecycle 상태와 실제 evidence의 완전한 정합성
 - KIS Live credential 및 실제 Live E2E
+- 옵션 실제 매수호가·승수·수량·수수료·슬리피지를 반영한 Runtime 프리미엄 검사
+- 레그별 만기 손익·최대손실 계산과 미청산 포지션/체결 원장 기반 계좌 전체 위험 집계
+- 부분체결·거절·청산·만기 시나리오를 포함한 실제 경로 회귀 검증
+- Strategy 1 헤지 구조와 Strategy 3·4·5 선물 레그의 경제적 목적·위험 한도 최종 확정
 
-이 항목들은 실제 증거가 확보될 때까지 PASS로 승격하지 않는다.
+기존 core/risk/risk_config.py의 max_daily_loss_krw = 10,000,000 및 max_margin_utilization_ratio = 0.85는 기존 공통 게이트로 유지한다. 이 값을 옵션 프리미엄 예산 또는 spread 최대손실 한도로 재해석하지 않는다.
+
+옵션 헤지 설정 초안은 config/risk/option-hedge-risk.v1.json, 설정 모델은 core/risk/option_hedge_risk_config.py에 있다. 이 설정의 임시 금액과 모델 단위 테스트는 런타임 주문 차단을 입증하지 않는다. 설정은 DISABLED_UNTIL_RUNTIME_INTEGRATION 상태이며 실제 주문 경로에서 소비되는 것이 확인되기 전까지 enforcement 상태는 BLOCKED로 기록한다.
+
+전략별 설계는 다음 원칙을 따른다.
+- Strategy 1: Short PUT 보호를 위한 동일 만기·동일 option type의 Long PUT 등 defined-risk 구조를 후보로 검토한다. 실제 계약·수량·행사가 폭·비용·최대손실은 authoritative quote 계산과 별도 검증 전까지 미확정이다.
+- Strategy 2 및 6~9: 기존 옵션 구조를 우선 보존하고 계약 identity, premium, payoff/max loss, 거래비용 및 계좌 전체 위험을 검증한다.
+- Strategy 3: 동일 Futures identity를 사용하는 PRIMARY_ALPHA/SPREAD와 HEDGE 레그의 경제적 역할을 먼저 구분한다. 옵션으로 임의 대체하지 않는다.
+- Strategy 4: 실제 옵션 position/contract와 Greeks를 제공하는 authoritative source 및 FUTURES rebalance/unwind 목적을 확인한다. Basecamp NON_EXECUTION 이벤트를 실제 옵션 체결로 취급하지 않는다.
+- Strategy 5: OPTION BUY + MINI_FUTURES 5계약의 결합 목적을 별도로 확인한다. 선물 5계약을 옵션 수량으로 치환하지 않으며 기존 manifest를 승인 없이 수정하지 않는다.
+
+공통 위험 검사 구현은 유효한 authoritative quote, contract multiplier, quantity, fees 및 conservative slippage를 사용한다. quote/expiry/identity/승수/비용/position provenance가 누락되거나 계산이 불가능하면 임의 대체하지 않고 fail-closed한다. 레그별 손익과 계좌 위험 집계는 체결 원장과 기존 미청산 포지션을 중복 계산하지 않도록 provenance 및 open quantity를 연결한다.
+
+전략의 경제적 목적이나 위험 정책을 바꾸는 작업은 해당 설계·영향 파일·회귀 계획에 대한 명시 승인을 받은 뒤 수행한다. 현재 승인된 범위는 문서 기준 갱신 및 위 설계 방향이며, 전략 코드·manifest·실제 매매 정책을 임의로 변경하는 승인이 아니다.
 
 ## 18. 3개월 가상데이터 생성 기준 (필수)
 
@@ -360,3 +377,28 @@ Push 후 반드시 원격 `Project200` HEAD가 해당 commit SHA를 가리키는
 - 테스트는 생성 규칙의 불변식을 검증한다. 테스트 fixture나 기대값을 조정해 실제 생성·replay 실패를 PASS로 바꾸지 않는다. 데이터 validator PASS와 Strategy 1~9의 전체 E2E PASS는 서로 다른 판정이며 혼동하지 않는다.
 
 이 규칙의 상세 계약 문서는 `docs/synthetic_3m_data_contract.md`, 생성기는 `scripts/generate_authoritative_option_synthetic_3m.py`, validator는 `scripts/validate_authoritative_option_synthetic_3m.py`, 스케줄 runner는 `verification/scheduled_3m/run_3m_pattern_e2e.ps1`이다. 이 규칙과 충돌하는 변경은 실행 전에 사용자 지시 및 최신 확정 Decision Log와 대조한다.
+
+## 19. 옵션 헤지 위험 검사 구현 계획 (현재 작업 기준)
+
+이 절은 옵션 헤지 관련 이전의 임시/초안 상태를 현재 기준으로 정리한다. 아래 작업이 실제 production 경로와 회귀 증거로 확인되기 전에는 완료로 표시하지 않는다.
+
+### 19.1 필수 위험 계산
+- 옵션 매수 프리미엄은 authoritative ask × 계약 multiplier × 수량으로 계산하고, 수수료와 보수적 슬리피지를 포함한다. 매도 레그는 매도 체결 가정과 비용을 별도로 반영하며 단순 net credit만으로 최대손실을 판정하지 않는다.
+- 각 옵션 레그의 option type, strike, exact expiry, side, quantity, multiplier 및 authoritative quote를 검증한다. Mini KOSPI200 옵션은 일반 KOSPI200 옵션의 계약·spot 대체재로 사용하지 않는다.
+- 만기 payoff는 모든 레그의 만기 손익과 수량을 결합하여 계산하고, spread/strategy의 최대손실을 별도로 산출한다. 정의된 위험 구조가 아닌 포지션은 최대손실이 제한되어 있다고 가정하지 않는다.
+- 계좌 위험은 기존 미청산 position lot과 실제 체결 원장을 기준으로 산출한다. 동일 체결·잔여 수량을 포지션과 원장에서 중복 합산하지 않으며 부분 청산 이후 잔여 수량을 보존한다.
+- premium, max loss, margin, bid/ask width, quote freshness, slippage, commission 및 concurrent exposure의 한도는 외부 설정에서 읽는다. 임시 숫자는 사용자 승인 전까지 최종 운용 기준이 아니며 실제 계좌 잔고/시세에서 나온 값으로 표현하지 않는다.
+- 계산 입력이 누락되거나 상충하거나 오래된 경우, 계산이 실패한 경우에는 주문을 허용하지 않고 구체적 BLOCKED/UNAVAILABLE 원인을 기록한다.
+
+### 19.2 구현 순서 및 회귀 범위
+1. Strategy 1 헤지 구조와 Strategy 3·4·5 선물 레그의 목적·위험 한도를 분리해 설계하고, 미확정 항목은 사용자 결정 대상으로 보고한다.
+2. 실제 매수호가·승수·수량·수수료·슬리피지 기반 프리미엄 검사 및 옵션 레그별 만기 payoff/max-loss 계산을 구현한다.
+3. 기존 open positions, execution reports/fills, remaining position lots 및 trade ledger를 연결해 계좌 전체 위험을 집계한다.
+4. 부분체결, 주문 거절, 부분/전체 청산, 만기 정산, 중복 체결, 누락/오래된 호가, 계산 실패를 회귀 검증한다.
+5. focused tests 이후 Virtual execution path와 필요한 end-to-end evidence를 확인한다. 단위 테스트 PASS만으로 runtime enforcement PASS를 선언하지 않는다.
+
+### 19.3 기존 기준과의 경계
+- 기존 공통 RiskConfig의 일일 손실 및 증거금 한도는 의미를 바꾸지 않는다.
+- Strategy 5의 append-only Risk 진단 JSONL은 관측 전용이다. 진단 저장 성공/실패로 Risk 승인·거절, 주문 라우팅 또는 포지션 수명주기를 바꾸지 않는다.
+- Strategy 5의 기존 manifest와 다른 보호 경로는 별도 승인 없이 수정하지 않는다.
+- KIS Live 주문은 실행하지 않는다. REAL_VTS, DERIVED_SCENARIO, SYNTHETIC 및 VIRTUAL_EXECUTION provenance를 구분한다.
