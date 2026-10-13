@@ -134,8 +134,17 @@ REST와 WebSocket은 서로 다른 수집 경계로 유지한다.
 
 KIS VTS Collector의 manifest 상태는 실제 raw/canonical evidence와 일치해야 한다. manifest와 실제 evidence가 불일치하면 collector lifecycle/상태 기록 문제로 분류하여 별도로 검증한다.
 
-휴장일 source 우선순위는 **KRX 공식 데이터 → KIS API → KRX 연도별 캐시 → `UNKNOWN`**이다. KRX 공식 source가 성공하면 KIS API를 호출하지 않는다. KRX source 실패 시에만 KIS를 1회 시도하고, 두 source가 실패하면 유효한 KRX 캐시를 사용한다. 모든 authoritative source와 캐시가 실패하면 휴장으로 추정하지 않고 `UNKNOWN`으로 기록하며, `UNKNOWN` 상태에서 주문 endpoint를 호출하지 않는다.
 
+### KIS 단일 기준 및 공통 데이터 계약 (확정 정책)
+- REST와 WebSocket의 실제 KIS 응답은 KIS adapter에서 검증·정규화하고, Strategy 1~9 및 공통 Analytics/Runtime이 동일한 canonical data model을 사용한다. 전략별로 원본 응답을 직접 파싱하거나 별도 계약 identity/만기/달력을 만들지 않는다.
+- 데이터 누락, API 오류, identity 불일치, 오래된 데이터, 파싱 실패, 시간 역전 또는 검증 실패를 0/False/고정값/요일 추정/다른 출처 값으로 보정하지 않는다. 영향받는 계약·입력만 차단하고 상태와 원인을 명시한다.
+- 관측값마다 원본 응답 또는 원본 frame, API/TR·transport 식별자, KIS 환경(VTS/Live), 수신 시각, 원본 source timestamp(제공 시), canonical schema/data version, master snapshot version/hash, 검증 결과와 실패 사유를 보존한다. 비밀키·토큰은 저장하지 않는다.
+- 달력·만기·종목 identity·가격·호가·거래량을 제공하는 KIS API 경로는 항목별 capability matrix와 실제 응답으로 검증한다. KIS가 해당 항목을 제공하지 않는 경우 KRX로 우회하지 않고 `BLOCKED`/`UNAVAILABLE`로 보고한다.
+- 이 정책은 시장 관측 데이터와 런타임 계약 기준정보의 출처 정책이다. 거래소 규칙(예: tick size/가격제한)은 관측 데이터와 분리된 규칙 명세로 취급하며, 해당 규칙의 출처·버전·적용 여부를 별도 검증한다. 이 항목은 KIS API에서 제공되는 시장 데이터라고 간주하지 않는다.
+
+
+
+런타임 시장 데이터와 계약 기준정보의 유일한 외부 브로커 기준은 **KIS API/공식 KIS 종목 마스터**다. KRX 데이터·KRX 웹/API·KRX 캐시·KRX↔KIS 교차 매핑은 런타임 기준값, 필수 fallback 또는 계약 identity 보정에 사용하지 않는다. KIS가 필수 필드를 제공하지 않거나 응답이 누락·오류·오래됨·상충하면 임의 추정·보정·다른 출처 대체 없이 해당 계약/입력을 `UNAVAILABLE` 또는 `BLOCKED`로 처리하고 주문 경로를 차단한다.
 ---
 
 ## 8. REAL_VTS 연속 Replay / E2E
@@ -361,7 +370,7 @@ Push 후 반드시 원격 `Project200` HEAD가 해당 commit SHA를 가리키는
 
 ### 18.1 기간·달력·세션
 - 시작일은 선택된 authoritative Option Master 스냅샷 날짜이며 포함한다. 종료 경계는 시작일에 달력상 3개월을 더한 날짜이며 미포함이다. `date_end`는 마지막 생성 거래일, `date_end_exclusive`는 경계 날짜로 각각 명시한다.
-- 거래일은 연도별 authoritative KRX 거래일 달력으로 결정한다. 주말과 공식 휴장일은 제외한다. 종료 경계 뒤의 월물 만기·롤오버를 판정하는 데 필요한 다음 연도 달력도 로드한다. 필수 달력이 없거나 출처·형식이 검증되지 않으면 fail-closed로 중단한다.
+- 거래일은 KIS 공식 API/응답으로 검증된 거래일 정보에서 결정한다. 주말 여부만으로 거래일·휴장일을 확정하지 않는다. 종료 경계 뒤의 월물 만기·롤오버를 판정하는 데 필요한 다음 연도 범위도 확인한다. KIS의 필요한 달력 정보가 없거나 출처·형식·신선도가 검증되지 않으면 KRX fallback 없이 fail-closed로 중단한다.
 - KOSPI200 옵션 시간은 Asia/Seoul 기준으로 처리한다. 정규장은 08:45~15:45, 옵션 최종거래일은 15:20 종료를 적용한다. 5분 봉은 실제 세션 시작에 정렬하며, 만기 이후 바를 생성하지 않는다. 주간옵션은 각 계약의 정확한 만기일에 종료한다.
 - 거래일 수, 바 수 및 이벤트 수는 달력·세션·실제 계약 커버리지에서 계산한다. 63거래일, 49,140건 등의 과거 샘플 수치를 생성 규칙의 상수로 사용하지 않는다.
 
@@ -369,7 +378,7 @@ Push 후 반드시 원격 `Project200` HEAD가 해당 commit SHA를 가리키는
 - 일반 KOSPI200 옵션과 Mini KOSPI200 옵션을 구분하고, 이 프로젝트의 표준 옵션 데이터에는 지정된 일반 KOSPI200 상품군만 포함한다. Mini 계약 가격·행사가를 일반 계약의 spot 또는 계약으로 대체하지 않는다.
 - instrument/code, 상품군, 콜/풋, 행사가, 계약월, 정확한 `YYYYMMDD` 만기 및 계약승수는 authoritative Option Master/source에서 가져온다. 계약 identity와 만기 변환은 공통 canonical expiry 경계를 사용한다.
 - 월물·주간물·일물의 시작/종료 및 롤오버는 실제 거래일 달력과 authoritative 계약 마스터에 근거한다. 수집되지 않은 주간 만기, 행사 가격, instrument ID 또는 계약을 추정·복제해 coverage를 채우지 않는다. 누락된 계약은 `UNAVAILABLE`/`BLOCKED` 및 partial coverage로 명시한다.
-- 초기 기초자산 가격은 동일 스냅샷 날짜의 authoritative 정규 KOSPI200 선물 일별 source `SPOT_PRC`에서 읽고 Mini 계약을 제외한다. 값이 없거나 상충하면 고정 상수·후일 시세로 대체하지 않고 fail-closed 한다. source path, code, field, hash를 manifest에 남긴다.
+- 초기 기초자산 가격은 동일 스냅샷 날짜에 대해 KIS 공식 API/마스터에서 검증된 정규 KOSPI200 선물 관측값을 사용하고 Mini 계약을 제외한다. KIS 응답에서 필요한 값과 날짜를 확인할 수 없거나 상충하면 KRX 데이터·고정 상수·후일 시세로 대체하지 않고 fail-closed 한다. API/TR, code, field, raw response reference/hash, snapshot version을 manifest에 남긴다.
 
 ### 18.3 가격·시간가치·시장 규칙
 - 패턴 변경은 시나리오 기초자산 경로와 문서화된 IV 가정에만 영향을 준다. 금리·배당·가격 모형 등의 가정은 manifest에 명시하고, 실제 거래소 관측 가격인 것처럼 표시하지 않는다.
