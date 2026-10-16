@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contracts.trading_date import parse_trading_date
 import argparse
 import json
 import time
@@ -30,12 +31,11 @@ class HighSpeedReplayRunner:
         selected = []
         for path in files:
             try:
-                day = path.stem
-                if start and day < start:
+                day = parse_trading_date(path.stem)
+                if start and day < parse_trading_date(start):
                     continue
-                if end and day > end:
+                if end and day > parse_trading_date(end):
                     continue
-                datetime.strptime(day, "%Y-%m-%d")
             except ValueError:
                 continue
             selected.append(path)

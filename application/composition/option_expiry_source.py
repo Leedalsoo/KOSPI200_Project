@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contracts.trading_date import parse_trading_date
 
 from datetime import date
 from typing import Any
@@ -21,7 +22,7 @@ class KisOptionMasterExpirySource:
             return None
         try:
             normalized = normalize_option_expiry(str(expiry_text))
-            return date.fromisoformat(normalized.require_exact())
+            return parse_trading_date(normalized.require_exact())
         except (ValueError, TypeError) as exc:
             raise OptionExpirySourceError(
                 "AUTHORITATIVE_OPTION_EXPIRY_INVALID"

@@ -5,6 +5,7 @@ payload is available. Missing authoritative data is represented explicitly by
 UnavailableStrategyPayload and never by a numeric/boolean placeholder.
 """
 from __future__ import annotations
+from contracts.trading_date import format_trading_date
 
 from decimal import Decimal
 from typing import Any
@@ -404,7 +405,7 @@ class StandardRuntimeInputProvider:
             else:
                 execution_input = Track6ExecutionInput(
                     strategy_id="track6_daily_tail_insurance",
-                    date_str=d.as_of.date().isoformat(),
+                    date_str=format_trading_date(d.as_of.date()),
                     time_str=d.as_of.strftime("%H:%M:%S"),
                     listed_put_strike=Decimal(str(selection.put.strike)),
                     listed_call_strike=Decimal(str(selection.call.strike)),

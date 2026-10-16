@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contracts.trading_date import parse_trading_date
 
 from datetime import date, timedelta
 from typing import Any
@@ -24,7 +25,7 @@ class Track7CalendarSource:
         if identity is None or not identity.expiry:
             return None
         try:
-            return date.fromisoformat(str(identity.expiry))
+            return parse_trading_date(str(identity.expiry))
         except ValueError as exc:
             raise ValueError("TRACK7_AUTHORITATIVE_OPTION_EXPIRY_INVALID") from exc
 

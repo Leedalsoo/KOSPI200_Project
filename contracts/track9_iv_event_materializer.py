@@ -5,6 +5,8 @@ from datetime import datetime, time
 from decimal import Decimal
 from typing import Protocol
 
+from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
+
 
 SESSION_START = time(9, 0)
 SPIKE_THRESHOLD = Decimal("4")
@@ -21,6 +23,12 @@ class Track9ATMIVSnapshot:
     put_iv: Decimal
     observed_at: datetime
     source: str
+
+    def __post_init__(self) -> None:
+        try:
+            object.__setattr__(self, "expiry", require_exact_option_expiry(self.expiry))
+        except CanonicalOptionExpiryError as exc:
+            raise ValueError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
 
 
 class Track9ATMIVSource(Protocol):
@@ -85,6 +93,10 @@ class Track9IVEventMaterializer:
         source: Track9ATMIVSource,
     ) -> Track9IVEventValues:
         self.reset_for_new_session(session_date)
+        try:
+            expiry = require_exact_option_expiry(expiry)
+        except CanonicalOptionExpiryError as exc:
+            raise ValueError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
         snapshot = source.snapshot(
             symbol=symbol,
             expiry=expiry,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
 from typing import Any
 
 
@@ -12,6 +13,12 @@ class Track8OptionContractSelection:
     put: Any
     call: Any
     source: str = "OptionMaster.list_contract_identities"
+
+    def __post_init__(self) -> None:
+        try:
+            object.__setattr__(self, "expiry", require_exact_option_expiry(self.expiry))
+        except CanonicalOptionExpiryError as exc:
+            raise ValueError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
 
 
 class Track8OptionContractSource:

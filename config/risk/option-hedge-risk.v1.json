@@ -1,0 +1,91 @@
+{
+  "schema_version": "1.0.0",
+  "currency": "KRW",
+  "activation_mode": "DISABLED_UNTIL_RUNTIME_INTEGRATION",
+  "description": "Conservative editable starting limits for standard KOSPI200 options. Not active until runtime preflight consumes this configuration.",
+  "account": {
+    "configured_capital_krw": 50000000,
+    "max_gross_premium_outlay_krw": 2500000,
+    "max_total_loss_krw": 2500000,
+    "max_margin_utilization_ratio": "0.50",
+    "max_concurrent_risk_budget_krw": 2500000
+  },
+  "strategy_defaults": {
+    "max_gross_premium_outlay_krw": 500000,
+    "max_loss_krw": 500000,
+    "max_concurrent_positions": 2
+  },
+  "strategies": {
+    "track1_tail_defense": {
+      "enabled": true,
+      "max_gross_premium_outlay_krw": 500000,
+      "max_loss_krw": 500000,
+      "max_concurrent_positions": 2,
+      "notes": "Candidate for defined-risk protection; runtime activation requires approved option-spread plan."
+    },
+    "track2_asymmetric_trap": {
+      "enabled": true,
+      "max_gross_premium_outlay_krw": 500000,
+      "max_loss_krw": 500000,
+      "max_concurrent_positions": 1,
+      "notes": "Validate existing four-leg payoff and premium before enabling."
+    },
+    "Strategy_3_StatArb": {
+      "enabled": false,
+      "max_gross_premium_outlay_krw": 0,
+      "max_loss_krw": 0,
+      "max_concurrent_positions": 0,
+      "notes": "Futures economic role is unresolved; no option conversion authorized by this config."
+    },
+    "track4_gamma_scalping": {
+      "enabled": false,
+      "max_gross_premium_outlay_krw": 0,
+      "max_loss_krw": 0,
+      "max_concurrent_positions": 0,
+      "notes": "Authoritative option position and Greeks path must be identified before activation."
+    },
+    "track5_gap_divergence": {
+      "enabled": false,
+      "max_gross_premium_outlay_krw": 0,
+      "max_loss_krw": 0,
+      "max_concurrent_positions": 0,
+      "notes": "Existing Mini Futures five-contract leg is not assumed to be an option hedge."
+    },
+    "track6_daily_tail_insurance": {
+      "enabled": true,
+      "max_gross_premium_outlay_krw": 250000,
+      "max_loss_krw": 250000,
+      "max_concurrent_positions": 1
+    },
+    "track7_weekly_insurance": {
+      "enabled": true,
+      "max_gross_premium_outlay_krw": 250000,
+      "max_loss_krw": 250000,
+      "max_concurrent_positions": 1
+    },
+    "track8_macro_hedge": {
+      "enabled": true,
+      "max_gross_premium_outlay_krw": 250000,
+      "max_loss_krw": 250000,
+      "max_concurrent_positions": 1
+    },
+    "track9_overnight_insurance": {
+      "enabled": true,
+      "max_gross_premium_outlay_krw": 250000,
+      "max_loss_krw": 250000,
+      "max_concurrent_positions": 1
+    }
+  },
+  "execution_constraints": {
+    "require_authoritative_option_master": true,
+    "require_exact_expiry_yyyymmdd": true,
+    "require_fresh_authoritative_quote": true,
+    "require_contract_multiplier_match": true,
+    "max_bid_ask_spread_ratio": "0.20",
+    "max_quote_age_seconds": 5,
+    "estimated_slippage_ticks_per_leg": 1,
+    "fail_closed_on_missing_identity_quote_or_risk_calculation": true,
+    "allow_synthetic_quotes": false,
+    "allow_live_orders": false
+  }
+}

@@ -5,7 +5,9 @@ from hashlib import sha256
 from decimal import Decimal
 from typing import Any, Callable
 
+from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
 from contracts.types import BrokerOrderCommand, ExecutionReport, MultiLegExecutionPlan, OptionInstrumentIdentity
+from contracts.market_data_freshness import FreshnessVerdict, admits_freshness_verdict_for_identity, permits_risk_increasing_order
 from contracts.futures_identity_source_port import FuturesIdentitySourcePort, FuturesInstrumentIdentity, require_futures_identity
 from contracts.risk_guard import RiskGuardStatusSource
 from core.option.option_master import IOptionContractMaster
@@ -106,7 +108,7 @@ class _AckAdapter:
 class VirtualMultiLegExecutionBridge:
     """Preserve group/leg identity while routing every leg through Risk -> OMS -> VSSF."""
 
-    def __init__(self, *, bundle: Any, run_id: str, option_master: IOptionContractMaster | None = None, futures_identity_source: FuturesIdentitySourcePort | None = None, option_expiry_source: Any | None = None, risk_config: RiskConfig | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None, execution_result_callback: Callable[[MultiLegExecutionPlan, MultiLegExecutionResult], None] | None = None) -> None:
+    def __init__(self, *, bundle: Any, run_id: str, option_master: IOptionContractMaster | None = None, futures_identity_source: FuturesIdentitySourcePort | None = None, option_expiry_source: Any | None = None, risk_config: RiskConfig | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None, execution_result_callback: Callable[[MultiLegExecutionPlan, MultiLegExecutionResult], None] | None = None, freshness_verdict_provider: Callable[..., FreshnessVerdict | None] | None = None) -> None:
         self.bundle = bundle
         self.option_master = option_master or getattr(bundle, "option_master", None)
         self.futures_identity_source = futures_identity_source
@@ -128,6 +130,7 @@ class VirtualMultiLegExecutionBridge:
             raise ValueError("MULTI_LEG_RUN_ID_REQUIRED")
         self.run_id = run_id
         self.execution_result_callback = execution_result_callback
+        self.freshness_verdict_provider = freshness_verdict_provider
         self.position_lot_store = VirtualPositionLotStore()
         self.fee_ledger = VirtualTrack9FeeLedger()
         self.option_position_attribution = Track9OptionPositionAttributionReadModel(self.position_lot_store)
@@ -278,28 +281,25 @@ class VirtualMultiLegExecutionBridge:
         if self.option_master is None:
             raise ValueError("MULTI_LEG_OPTION_MASTER_REQUIRED")
         current_tick = getattr(self.bundle.market, "last_tick", None)
-        authoritative_expiry = str(getattr(current_tick, "expiry", "") or "").replace("-", "")[:8]
-        if len(authoritative_expiry) != 8 and self.option_expiry_source is not None and current_tick is not None:
+        authoritative_expiry = ""
+        raw_tick_expiry = str(getattr(current_tick, "expiry", "") or "").strip()
+        if raw_tick_expiry:
+            try:
+                authoritative_expiry = require_exact_option_expiry(raw_tick_expiry)
+            except CanonicalOptionExpiryError:
+                authoritative_expiry = ""
+        if not authoritative_expiry and self.option_expiry_source is not None and current_tick is not None:
             observed_symbol = str(getattr(current_tick, "symbol", "") or "").strip()
             if observed_symbol:
                 resolved_expiry = self.option_expiry_source.resolve_expiry(observed_symbol)
                 if resolved_expiry is not None:
-                    authoritative_expiry = str(resolved_expiry).replace("-", "")[:8]
-        option_quotes = getattr(self.bundle.market, "option_quotes", {})
-        # Multi-leg identity is authoritative independently of quote availability.
-        # A missing quote for one leg must not block submission of another leg.
-        # The broker/VSSF owns NEW/PENDING -> FILLED lifecycle for the missing leg.
-        if len(authoritative_expiry) != 8:
-            matching_expiries = sorted({
-                str(key[2]).replace("-", "")[:8]
-                for key in option_quotes
-                if isinstance(key, tuple) and len(key) == 3
-                and str(key[0]).upper() == str(leg.option_type).upper()
-                and float(key[1]) == float(leg.strike)
-            })
-            if len(matching_expiries) != 1:
-                raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_EXPIRY_REQUIRED")
-            authoritative_expiry = matching_expiries[0]
+                    try:
+                        authoritative_expiry = require_exact_option_expiry(resolved_expiry)
+                    except CanonicalOptionExpiryError:
+                        authoritative_expiry = ""
+        # Quotes are not an authoritative contract-master source; never infer expiry from them.
+        if not authoritative_expiry:
+            raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_EXPIRY_REQUIRED")
         identity = self.option_master.find_contract_identity(
             authoritative_expiry, leg.option_type, Decimal(str(leg.strike))
         )
@@ -423,10 +423,38 @@ class VirtualMultiLegExecutionBridge:
         used_margin = Decimal(str(account_input.used_margin))
         free_margin = Decimal(str(account_input.free_margin))
         group_margin_ratio = (used_margin + total_required_margin) / total_balance if total_balance > 0 else Decimal("1")
-        aggregate_rejection = None
-        if total_required_margin > free_margin:
+        # Resolve freshness for every leg before any leg can reach the router.
+        # Missing provider/evidence is a group-level rejection, never a partial submit.
+        freshness_verdict_by_leg: dict[str, FreshnessVerdict] = {}
+        freshness_rejection: str | None = None
+        for leg, identity, _client_order_id, broker_command, _canonical, _evaluation, _admitted in evaluations:
+            try:
+                verdict = (
+                    self.freshness_verdict_provider(plan, leg, identity, broker_command)
+                    if self.freshness_verdict_provider is not None else None
+                )
+            except Exception as exc:
+                verdict = None
+                freshness_rejection = freshness_rejection or f"MARKET_DATA_FRESHNESS_PROVIDER_ERROR:{type(exc).__name__}"
+            expected_symbol = str(broker_command.broker_symbol or broker_command.instrument_id or "").strip()
+            if not admits_freshness_verdict_for_identity(
+                verdict, expected_instrument_id=broker_command.instrument_id,
+                expected_symbol=expected_symbol,
+            ):
+                if freshness_rejection is None:
+                    if verdict is None or not permits_risk_increasing_order(verdict):
+                        freshness_rejection = "MARKET_DATA_FRESHNESS_VERDICT_REQUIRED" if verdict is None else f"MARKET_DATA_FRESHNESS_{verdict.status.value}:{verdict.reason}"
+                    elif verdict.instrument_id != broker_command.instrument_id or verdict.symbol != expected_symbol:
+                        freshness_rejection = "MARKET_DATA_FRESHNESS_COMMAND_IDENTITY_MISMATCH"
+                    else:
+                        freshness_rejection = "MARKET_DATA_FRESHNESS_EVIDENCE_REQUIRED"
+            else:
+                freshness_verdict_by_leg[leg.leg_id] = verdict
+
+        aggregate_rejection = freshness_rejection
+        if aggregate_rejection is None and total_required_margin > free_margin:
             aggregate_rejection = "GROUP_INSUFFICIENT_FREE_MARGIN"
-        elif group_margin_ratio > Decimal(str(config.max_margin_utilization_ratio)):
+        elif aggregate_rejection is None and group_margin_ratio > Decimal(str(config.max_margin_utilization_ratio)):
             aggregate_rejection = "GROUP_MAX_MARGIN_UTILIZATION_EXCEEDED"
 
         # Strategy 5 diagnostics are best-effort and must never change Risk/order flow.
@@ -485,17 +513,33 @@ class VirtualMultiLegExecutionBridge:
             if self.execution_result_callback is not None: self.execution_result_callback(plan, result)
             return result
 
-        for leg, identity, client_order_id, broker_command, canonical, _evaluation, _admitted in evaluations:
+        for leg, identity, client_order_id, broker_command, canonical, preflight_evaluation, _admitted in evaluations:
+            freshness_verdict = freshness_verdict_by_leg[leg.leg_id]
             result = route_from_runtime_authoritative_sources(
                 canonical, risk_gate=self.risk_gate,
                 context=RiskRouterContext(account_snapshot=account, position_source=position,
                     order_router=self.router, broker_command=broker_command),
+                freshness_verdict=freshness_verdict,
             )
-            risk_evaluation = self.risk_gate.last_evaluation_result
-            if risk_evaluation is None:
-                raise RuntimeError("MULTI_LEG_RISK_RESULT_UNAVAILABLE")
+            if result.rejection_reason and result.rejection_reason.startswith("MARKET_DATA_FRESHNESS_"):
+                risk_evaluation = replace(
+                    preflight_evaluation, is_approved=False, decision="DENY",
+                    rejection_reason=result.rejection_reason,
+                )
+            else:
+                risk_evaluation = self.risk_gate.last_evaluation_result
+                if risk_evaluation is None:
+                    raise RuntimeError("MULTI_LEG_RISK_RESULT_UNAVAILABLE")
             self.risk_approval_read_model.record(RiskApprovalRecord(plan.strategy_id, plan.group_id, leg.leg_id, client_order_id, risk_evaluation))
             if not result.routed:
+                if result.rejection_reason and result.rejection_reason.startswith("MARKET_DATA_FRESHNESS_"):
+                    reports.append(ExecutionReport(
+                        client_order_id=client_order_id, broker_order_id=None, execution_id=None,
+                        status="REJECTED", filled_quantity=0, remaining_quantity=leg.quantity,
+                        execution_price=None, execution_timestamp=None,
+                        rejected_reason=result.rejection_reason, group_id=plan.group_id, leg_id=leg.leg_id,
+                    ))
+                    continue
                 raw = self.ack.last_report
                 raw_status = str(getattr(raw, "status", "")).strip().upper() if raw is not None else ""
                 if raw_status in {"UNKNOWN", "RECONCILIATION_REQUIRED"}:

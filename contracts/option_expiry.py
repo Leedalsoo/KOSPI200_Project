@@ -1,4 +1,4 @@
-﻿"""Canonical option-expiry normalization at external/generated data boundaries."""
+"""Canonical option-expiry normalization at external/generated data boundaries."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -41,7 +41,7 @@ def normalize_option_expiry(value: str | date) -> CanonicalOptionExpiry:
     if isinstance(value, date):
         exact = value.strftime("%Y%m%d")
         return CanonicalOptionExpiry(
-            raw=value.isoformat(),
+            raw=value.strftime("%Y%m%d"),
             exact=exact,
             contract_month=exact[:6],
             source_format="date",
@@ -65,3 +65,7 @@ def normalize_option_expiry(value: str | date) -> CanonicalOptionExpiry:
         return CanonicalOptionExpiry(raw, None, f"{year:04d}{month:02d}", "YYYYMM")
 
     raise CanonicalOptionExpiryError("OPTION_EXPIRY_UNSUPPORTED_FORMAT")
+
+
+def require_exact_option_expiry(value: str | date) -> str:
+    return normalize_option_expiry(value).require_exact()

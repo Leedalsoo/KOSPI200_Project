@@ -1,3 +1,4 @@
+from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
 from contracts.broker import BrokerAdapter
 from contracts.types import BrokerOrderCommand, ExecutionReport
 from environments.virtual.execution.virtual_execution import VirtualExecutionEngine
@@ -30,6 +31,10 @@ class VirtualBroker(BrokerAdapter):
         }
 
     def get_option_quote(self, *, option_type: str, strike: float, expiry: str) -> dict | None:
+        try:
+            expiry = require_exact_option_expiry(expiry)
+        except CanonicalOptionExpiryError as exc:
+            raise ValueError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
         return self._option_quotes.get((option_type.upper(), float(strike), expiry))
 
     def submit(self, command: BrokerOrderCommand) -> ExecutionReport:

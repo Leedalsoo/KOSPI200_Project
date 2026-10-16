@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
@@ -53,6 +54,10 @@ class KISTrack6ATMVolatilitySource:
         return value, str(source or getattr(self.option_iv_source, "authoritative_source", "") or "KIS:H0IOCNT0")
 
     def snapshot(self, *, expiry: str, current_price: Decimal, observed_at: datetime):
+        try:
+            expiry = require_exact_option_expiry(expiry)
+        except CanonicalOptionExpiryError:
+            return None
         self.reset_for_new_session(observed_at.date())
         strike = self._atm_strike(expiry=expiry, current_price=current_price)
         if strike is None:

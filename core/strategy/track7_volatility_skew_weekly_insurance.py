@@ -1,6 +1,8 @@
+from contracts.trading_date import format_trading_date
 from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Sequence
+from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
 from contracts.analytics import AnalyticsSnapshot, AnalyticsStatus
 from contracts.types import MultiLegExecutionPlan
 from core.strategy.contracts import Signal, StrategyContext, StrategyFeatureRequirement
@@ -16,6 +18,12 @@ class Track7ExecutionInput:
     call_strike: Decimal
     contract_multiplier: Decimal
 
+    def __post_init__(self) -> None:
+        try:
+            object.__setattr__(self, "expiry", require_exact_option_expiry(self.expiry))
+        except CanonicalOptionExpiryError as exc:
+            raise ValueError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
+
 @dataclass(frozen=True)
 class Track7State:
     insurance_active: bool = False
@@ -26,6 +34,13 @@ class Track7State:
     call_strike: Decimal = Decimal("0")
     contract_multiplier: Decimal = Decimal("0")
     peak_profit: Decimal = Decimal("0")
+
+    def __post_init__(self) -> None:
+        if self.expiry:
+            try:
+                object.__setattr__(self, "expiry", require_exact_option_expiry(self.expiry))
+            except CanonicalOptionExpiryError as exc:
+                raise ValueError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
 
 class Track7VolatilitySkewWeeklyInsurance:
     strategy_id = "track7_volatility_skew_weekly_insurance"
@@ -102,7 +117,7 @@ class Track7VolatilitySkewWeeklyInsurance:
                 return (self._close_signal(f"TRAILING_20PCT;CURRENT:{current};PEAK:{peak}"),)
             # The stream may contain multiple contract families and expiries.
             # Close only when this position's own authoritative weekly expiry arrives.
-            if self.state.expiry == context.analytics.as_of.date().isoformat():
+            if self.state.expiry == context.analytics.as_of.strftime("%Y%m%d"):
                 hhmm = context.analytics.as_of.hour * 100 + context.analytics.as_of.minute
                 if hhmm >= 1500:
                     return (self._close_signal("WEEKLY_EXACT_EXPIRY_15:00"),)
@@ -113,7 +128,7 @@ class Track7VolatilitySkewWeeklyInsurance:
         if contract is None or contract.contract_multiplier <= 0:
             return ()
         self.state = replace(self.state, insurance_active=True,
-            bought_date=context.analytics.as_of.date().isoformat(), expiry=contract.expiry,
+            bought_date=format_trading_date(context.analytics.as_of.date()), expiry=contract.expiry,
             reference_price=contract.reference_price, put_strike=contract.put_strike,
             call_strike=contract.call_strike, contract_multiplier=contract.contract_multiplier,
             peak_profit=Decimal("0"))

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -38,6 +39,10 @@ class KISTrack9ATMIVSource(Track9ATMIVSource):
 
     def snapshot(self, *, symbol: str, expiry: str, current_price: Decimal,
                  observed_at: datetime) -> Track9ATMIVSnapshot | None:
+        try:
+            expiry = require_exact_option_expiry(expiry)
+        except CanonicalOptionExpiryError:
+            return None
         strike = self._atm_strike(expiry=expiry, current_price=current_price)
         if strike is None:
             return None

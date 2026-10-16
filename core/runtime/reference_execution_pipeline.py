@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Optional, Protocol
 
 from shared.contracts.canonical import CanonicalAssetType, CanonicalOrderCommand
+from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
 from core.risk.risk_runtime_adapter import build_risk_runtime_inputs
 
 
@@ -55,8 +56,12 @@ class CanonicalRiskCommandAdapter:
         if str(asset) == CanonicalAssetType.OPTION.value:
             if not self.symbol or not self.expiry or self.option_type is None or not self.strike:
                 raise ValueError("OPTION_RISK_INSTRUMENT_KEY_INCOMPLETE")
+            try:
+                exact_expiry = require_exact_option_expiry(self.expiry)
+            except CanonicalOptionExpiryError as exc:
+                raise ValueError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
             option_type = getattr(self.option_type, "value", self.option_type)
-            return f"{asset}:{self.symbol}:{self.expiry}:{option_type}:{self.strike}"
+            return f"{asset}:{self.symbol}:{exact_expiry}:{option_type}:{self.strike}"
         if not self.symbol:
             raise ValueError("FUTURES_RISK_INSTRUMENT_KEY_REQUIRED")
         return f"{asset}:{self.symbol}"
@@ -170,6 +175,10 @@ def approved_signal_to_command(
             raise ValueError("OPTION_SYMBOL_REQUIRED")
         if not str(getattr(signal, "expiry", "") or "").strip():
             raise ValueError("OPTION_EXPIRY_REQUIRED")
+        try:
+            exact_expiry = require_exact_option_expiry(signal.expiry)
+        except CanonicalOptionExpiryError as exc:
+            raise ValueError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
         if getattr(signal, "option_type", None) is None:
             raise ValueError("OPTION_TYPE_REQUIRED")
 
@@ -183,7 +192,7 @@ def approved_signal_to_command(
         option_type=signal.option_type,
         strike=signal.strike,
         symbol=getattr(signal, "symbol", ""),
-        expiry=getattr(signal, "expiry", ""),
+        expiry=exact_expiry if str(asset_type) == CanonicalAssetType.OPTION.value else "",
         tag_id=signal.tag_id,
         instrument_id=getattr(signal, "instrument_id", ""),
         contract_multiplier=getattr(signal, "contract_multiplier", None),

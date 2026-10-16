@@ -81,71 +81,36 @@ class HistoricalObservationOptionSource(Track2OptionIVSource):
         return values[index][1] if index >= 0 else None
 
     def get_iv_source(self, *, expiry: str, option_type: str, strike: Decimal):
-        normalized_expiry = str(expiry).replace("-", "")
+        from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
+        try:
+            normalized_expiry = require_exact_option_expiry(expiry)
+        except CanonicalOptionExpiryError:
+            return None
         option_type = str(option_type).upper()
         strike = Decimal(str(strike))
-        key = (normalized_expiry[:8], option_type, strike)
+        key = (normalized_expiry, option_type, strike)
         values = self._iv.get(key, ())
-        if not values and len(normalized_expiry) >= 6:
-            month = normalized_expiry[:6]
-            candidates = [v for k, v in self._iv.items()
-                          if k[0].startswith(month) and k[1] == option_type and k[2] == strike]
-            if len(candidates) == 1:
-                values = candidates[0]
         if self._as_of is None or not values:
             return None
         source_values = self._iv_source.get(key, ())
-        if not source_values and len(normalized_expiry) >= 6:
-            month = normalized_expiry[:6]
-            candidates = [v for k, v in self._iv_source.items()
-                          if k[0].startswith(month) and k[1] == option_type and k[2] == strike]
-            if len(candidates) == 1:
-                source_values = candidates[0]
-        if not source_values:
-            return None
         source_times = self._iv_source_times.get(key, ())
-        if not source_times and len(normalized_expiry) >= 6:
-            month = normalized_expiry[:6]
-            candidates = [
-                times for k, times in self._iv_source_times.items()
-                if k[0].startswith(month) and k[1] == option_type and k[2] == strike
-            ]
-            if len(candidates) == 1:
-                source_times = candidates[0]
-        if not source_times:
+        if not source_values or not source_times:
             return None
         index = bisect_right(source_times, self._as_of) - 1
         return source_values[index][1] if index >= 0 else None
 
     def get_iv(self, *, expiry: str, option_type: str, strike: Decimal) -> Decimal | None:
-        normalized_expiry = str(expiry).replace("-", "")
+        from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
+        try:
+            normalized_expiry = require_exact_option_expiry(expiry)
+        except CanonicalOptionExpiryError:
+            return None
         option_type = str(option_type).upper()
         strike = Decimal(str(strike))
-        exact_key = (normalized_expiry[:8], option_type, strike)
-        value = self._latest(
+        exact_key = (normalized_expiry, option_type, strike)
+        return self._latest(
             self._iv.get(exact_key, ()),
             self._iv_times.get(exact_key, ()),
-            self._as_of,
-        )
-        if value is not None:
-            return value
-        if len(normalized_expiry) < 6:
-            return None
-        month = normalized_expiry[:6]
-        candidates = [
-            values
-            for key, values in self._iv.items()
-            if key[0].startswith(month) and key[1] == option_type and key[2] == strike
-        ]
-        if len(candidates) != 1:
-            return None
-        candidate_key = next(
-            key for key, candidate_values in self._iv.items()
-            if candidate_values is candidates[0]
-        )
-        return self._latest(
-            candidates[0],
-            self._iv_times[candidate_key],
             self._as_of,
         )
 
@@ -153,21 +118,15 @@ class HistoricalObservationOptionSource(Track2OptionIVSource):
         self, *, expiry: str, option_type: str, strike: Decimal, as_of: datetime | None = None,
         instrument_id: str | None = None,
     ) -> Decimal | None:
+        from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
+        try:
+            normalized_expiry = require_exact_option_expiry(expiry)
+        except CanonicalOptionExpiryError:
+            return None
         values = self._delta_by_instrument.get(str(instrument_id), ()) if instrument_id else ()
+        key = (normalized_expiry, str(option_type).upper(), Decimal(str(strike)))
         if not values:
-            normalized_expiry = str(expiry).replace("-", "")
-            key = (normalized_expiry[:8], str(option_type).upper(), Decimal(str(strike)))
             values = self._delta.get(key, ())
-            if not values and len(normalized_expiry) == 6:
-                candidates = [
-                    candidate_values
-                    for candidate_key, candidate_values in self._delta.items()
-                    if candidate_key[0].startswith(normalized_expiry)
-                    and candidate_key[1] == str(option_type).upper()
-                    and candidate_key[2] == Decimal(str(strike))
-                ]
-                if len(candidates) == 1:
-                    values = candidates[0]
         if as_of is None:
             as_of = self._as_of
         if as_of is None or not values:

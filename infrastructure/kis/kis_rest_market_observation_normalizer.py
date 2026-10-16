@@ -126,9 +126,9 @@ class KISRestMarketObservationNormalizer:
             analytics=MarketAnalytics(
                 implied_volatility=self._first(price_row, "hts_ints_vltl"),
                 delta=self._first(price_row, "delta_val"),
-                gamma=self._first(price_row, "gamma_val"),
-                theta=self._first(price_row, "theta_val"),
-                vega=self._first(price_row, "vega_val"),
+                gamma=self._first(price_row, "gama", "gamma_val"),
+                theta=self._first(price_row, "theta", "theta_val"),
+                vega=self._first(price_row, "vega", "vega_val"),
             ),
             provenance=MarketDataProvenance(
                 endpoints=(

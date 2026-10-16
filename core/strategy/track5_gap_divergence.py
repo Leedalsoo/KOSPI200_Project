@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
 from decimal import Decimal
 from typing import Sequence
 
@@ -20,6 +21,13 @@ class Track5ExecutionInput:
     liquidity_score: Decimal
     option_quantity: int = 1
     mini_futures_quantity: int = 5
+
+    def __post_init__(self) -> None:
+        try:
+            exact_expiry = require_exact_option_expiry(self.expiry)
+        except CanonicalOptionExpiryError as exc:
+            raise ValueError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
+        object.__setattr__(self, "expiry", exact_expiry)
 
 
 @dataclass(frozen=True)

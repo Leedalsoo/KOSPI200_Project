@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contracts.trading_date import parse_trading_date
 
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -51,7 +52,7 @@ class KISHistoricalMarketCapture:
         return self._underlying_sequence
 
     def start_session(self, session_date: str | date, *, option_symbol: str, underlying_symbol: str) -> None:
-        parsed_date = session_date if isinstance(session_date, date) else date.fromisoformat(str(session_date).replace("/", "-"))
+        parsed_date = session_date if isinstance(session_date, date) else parse_trading_date(str(session_date).replace("/", "-"))
         if not option_symbol.strip():
             raise ValueError("HISTORICAL_CAPTURE_OPTION_SYMBOL_REQUIRED")
         if not underlying_symbol.strip():

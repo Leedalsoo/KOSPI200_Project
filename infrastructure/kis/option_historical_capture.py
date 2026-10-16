@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contracts.trading_date import parse_trading_date
 
 from datetime import date
 from collections.abc import Callable
@@ -55,7 +56,7 @@ class KISOptionHistoricalCapture:
         self._session_date = (
             session_date
             if isinstance(session_date, date)
-            else date.fromisoformat(str(session_date).replace("/", "-"))
+            else parse_trading_date(str(session_date).replace("/", "-"))
         )
         self._sequence = 0
 

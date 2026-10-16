@@ -26,7 +26,7 @@ def _get_virtual_bootstrap():
     global _virtual_bootstrap
     if _virtual_bootstrap is None:
         bootstrap = create_virtual_runtime_bootstrap()
-        next(bootstrap.bundle.market.generate_tick_stream(total_days=1, ticks_per_day=1))
+        # Startup does not force a tick when exact option expiry data is unavailable.
         _virtual_bootstrap = bootstrap
     return _virtual_bootstrap
 
@@ -272,7 +272,7 @@ class ControlTowerRequestHandler(BaseHTTPRequestHandler):
         identity = OptionInstrumentIdentity(
             instrument_id=master_identity.shrn_iscd,
             symbol=master_identity.shrn_iscd,
-            expiry=master_identity.expiry.replace("-", "")[:6],
+            expiry=master_identity.expiry,
             option_type=master_identity.option_type,
             strike=master_identity.strike,
             contract_multiplier=master_identity.contract_multiplier,

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contracts.trading_date import parse_trading_date
 
 from datetime import date, datetime
 from decimal import Decimal
@@ -23,7 +24,7 @@ class KISOptionHistoricalRecorder:
 
     @staticmethod
     def _timestamp(session_date: str | date, observed_hour: str) -> str:
-        day = session_date if isinstance(session_date, date) else date.fromisoformat(
+        day = session_date if isinstance(session_date, date) else parse_trading_date(
             str(session_date).replace("/", "-")
         )
         raw = str(observed_hour).strip()

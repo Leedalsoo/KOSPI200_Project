@@ -152,7 +152,11 @@ class VirtualMarketSimulatorRuntime:
         """Register an external replay quote without triggering strategy evaluation."""
         if not symbol or option_type not in {"CALL", "PUT"} or not expiry:
             raise ValueError("VMS_REPLAY_OPTION_QUOTE_REQUIRED")
-        normalized_expiry = str(expiry).replace("-", "")[:8]
+        from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
+        try:
+            normalized_expiry = require_exact_option_expiry(expiry)
+        except CanonicalOptionExpiryError as exc:
+            raise ValueError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
         self._option_quotes[(option_type.upper(), float(strike), normalized_expiry)] = {
             "bid": float(bid),
             "ask": float(ask),
@@ -235,7 +239,11 @@ class VirtualMarketSimulatorRuntime:
             self._price = tick.underlying_price
             self._futures_price = self._price + self.config.futures_basis_points
         if tick.symbol and tick.option_type and tick.expiry and tick.bid_price > 0 and tick.ask_price > 0:
-            normalized_expiry = str(tick.expiry).replace("-", "")[:8]
+            from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
+            try:
+                normalized_expiry = require_exact_option_expiry(tick.expiry)
+            except CanonicalOptionExpiryError as exc:
+                raise ValueError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
             self._option_quotes[(tick.option_type.upper(), float(tick.strike_price), normalized_expiry)] = {
                 "bid": tick.bid_price,
                 "ask": tick.ask_price,

@@ -18,6 +18,19 @@ from infrastructure.kis.kis_websocket_market_observation_normalizer import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def format_trading_date(day: date) -> str:
+    """Canonical date-only identifier: YYYYMMDD."""
+    return day.strftime("%Y%m%d")
+
+
+def parse_trading_date(value: str) -> date:
+    """Accept canonical YYYYMMDD and legacy ISO input; normalize all output to YYYYMMDD."""
+    raw = str(value).strip()
+    if len(raw) == 8 and raw.isdigit():
+        return datetime.strptime(raw, "%Y%m%d").date()
+    return date.fromisoformat(raw)
+
+
 def _latest_underlying_context(
     observations: list,
     *,
@@ -42,8 +55,17 @@ def _latest_underlying_context(
 
 
 def ingest_day(day: date, *, raw_filename: str = "kis_vts_websocket_raw.jsonl") -> tuple[int, int, int]:
-    day_dir = ROOT / "data" / "kis_market_data_restart" / day.isoformat()
-    raw_path = day_dir / raw_filename
+    data_root = ROOT / "data" / "kis_market_data_restart"
+    canonical_day_dir = data_root / format_trading_date(day)
+    legacy_day_dir = data_root / format_trading_date(day)
+    day_dir = canonical_day_dir
+    raw_path = canonical_day_dir / raw_filename
+    # Read-only compatibility for historical YYYY-MM-DD folders; new outputs use YYYYMMDD.
+    if not raw_path.is_file():
+        legacy_raw_path = legacy_day_dir / raw_filename
+        if legacy_raw_path.is_file():
+            day_dir = legacy_day_dir
+            raw_path = legacy_raw_path
     canonical_path = day_dir / "historical_market_observations.jsonl"
 
     if not raw_path.is_file():
@@ -72,8 +94,8 @@ def ingest_day(day: date, *, raw_filename: str = "kis_vts_websocket_raw.jsonl") 
         observations = normalizer.normalize_frame(
             str(record["payload"]),
             received_at=received_at,
-            run_id=f"vts-ws-daily-{day.isoformat()}",
-            raw_id=f"{day.isoformat()}:{record['sequence']}",
+            run_id=f"vts-ws-daily-{format_trading_date(day)}",
+            raw_id=f"{format_trading_date(day)}:{record['sequence']}",
             raw_content_hash=record.get("payload_sha256"),
             underlying=underlying,
         )
@@ -94,10 +116,10 @@ def main() -> int:
     parser.add_argument("--date", required=True)
     parser.add_argument("--raw-file", default="kis_vts_websocket_raw.jsonl")
     args = parser.parse_args()
-    day = date.fromisoformat(args.date)
+    day = parse_trading_date(args.date)
     raw_count, canonical_count, skipped = ingest_day(day, raw_filename=args.raw_file)
     print(
-        f"WS_CANONICAL_INGEST_OK date={day.isoformat()} "
+        f"WS_CANONICAL_INGEST_OK date={format_trading_date(day)} "
         f"raw_frames={raw_count} canonical_appended={canonical_count} skipped_existing={skipped}"
     )
     return 0

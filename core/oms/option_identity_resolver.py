@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from contracts.types import OptionInstrumentIdentity
+from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
 
 
 class IdentityResolutionError(ValueError):
@@ -46,6 +47,10 @@ class OptionIdentityResolver:
             raise IdentityResolutionError("SYMBOL_REQUIRED")
         if not identity.expiry:
             raise IdentityResolutionError("EXPIRY_REQUIRED")
+        try:
+            exact_expiry = require_exact_option_expiry(identity.expiry)
+        except CanonicalOptionExpiryError as exc:
+            raise IdentityResolutionError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
         if option_type is None:
             raise IdentityResolutionError("OPTION_TYPE_REQUIRED")
         if strike is None or strike <= 0:
@@ -54,7 +59,7 @@ class OptionIdentityResolver:
         return OptionInstrumentIdentity(
             instrument_id=identity.instrument_id,
             symbol=identity.symbol,
-            expiry=identity.expiry,
+            expiry=exact_expiry,
             option_type=option_type,
             strike=strike,
         )

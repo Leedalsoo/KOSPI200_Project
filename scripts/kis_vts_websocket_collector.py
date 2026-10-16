@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contracts.trading_date import format_trading_date
 
 import argparse
 import asyncio
@@ -16,13 +17,21 @@ from urllib.request import Request, urlopen
 import websockets
 
 from infrastructure.kis.auth import KISAuthManager
+from infrastructure.kis.collector_instance_lock import acquire_process_lock
 from infrastructure.kis.futures_market_transport import KISWebSocketApprovalKeyProvider
-from infrastructure.kis.kis_weekday_collection_plan import FUTURES_TRADE_TR_ID, STRATEGY_MONTHLY_OFFSETS
+from infrastructure.kis.kis_weekday_collection_plan import OPTION_TRADE_TR_ID, STRATEGY_MONTHLY_OFFSETS
 from infrastructure.kis.kis_vts_weekday_collector import market_data_root_from_env
-from infrastructure.kis.kis_index_option_master_source import current_kospi200_futures_symbols, current_monthly_option_symbols
+from infrastructure.kis.kis_index_option_master_source import current_monthly_option_symbols
 from infrastructure.kis.index_price_source import KISKOSPI200IndexPriceSource
 from infrastructure.kis.websocket_index_price_source import KISWebSocketIndexPriceSource
 from infrastructure.kis.realtime_raw_store import KISRealtimeRawStore
+from scripts.kis_vts_subscription_ack import (
+    ACK_SCHEMA,
+    ACK_SCHEMA_TODO,
+    State as SubscriptionState,
+    SubscriptionAckController,
+    build_request_payload,
+)
 
 KST = timezone(timedelta(hours=9))
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,8 +41,23 @@ HEARTBEAT_SECONDS = 1.0
 SUBSCRIBE_INTERVAL_SECONDS = 0.12
 RECONNECT_BACKOFF_SECONDS = 5.0
 MAX_SUBSCRIPTIONS = 41
+ACK_CONTROLLER_ENABLED = os.environ.get("PROJECT200_WS_ACK_CONTROLLER_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}
+OPTION_QUOTE_TR_ID = "H0IOASP0"
+# Verified against KIS master/VTS REST for 2026-10-15 only. Rollover is unverified.
+WEEKLY_PINNED_VALID_DATE = date(2026, 10, 15)
+WEEKLY_PINNED_SUBSCRIPTIONS = tuple(
+    (OPTION_QUOTE_TR_ID, symbol)
+    for symbol in (
+        "B09FGW860", "C09FGW860",
+        "B09FGW862", "C09FGW862",
+        "B09FGW865", "C09FGW865",
+        "B09FGW867", "C09FGW867",
+        "B09FGW870", "C09FGW870",
+    )
+)
 LOG_PATH = market_data_root_from_env() / "logs" / "websocket_collector.log"
 LOGGER = logging.getLogger("kis_vts_websocket_collector")
+COLLECTOR_BLOCK_LOGGED: set[str] = set()
 
 
 def now_kst() -> datetime:
@@ -55,36 +79,102 @@ def configure_logging() -> None:
     LOGGER.addHandler(console)
 
 
-def build_subscriptions(day: date) -> tuple[tuple[str, str], ...]:
-    """Build raw KIS realtime subscriptions from the KIS instrument master.
+def build_orderbook_subscriptions(
+    day: date, reference_price: Decimal
+) -> tuple[tuple[str, str], ...]:
+    """Build KIS KOSPI200 option order-book subscriptions from official KIS symbols."""
+    return tuple(
+        (OPTION_QUOTE_TR_ID, symbol)
+        for tr_id, symbol in current_monthly_option_symbols(
+            day, reference_price, STRATEGY_MONTHLY_OFFSETS
+        )
+        if tr_id == OPTION_TRADE_TR_ID
+    )
 
-    KIS is the broker-symbol source at the raw WebSocket boundary. KRX contract
-    identity reconciliation remains downstream and does not block frame capture.
-    """
+
+def build_base_subscriptions(day: date) -> tuple[tuple[str, str], ...]:
+    """Build the original 26 monthly option quotes plus the index reference."""
     reference_price = KISKOSPI200IndexPriceSource(KISAuthManager.from_env(is_vts=True)).refresh().price
-    subscriptions = list(current_monthly_option_symbols(day, reference_price, STRATEGY_MONTHLY_OFFSETS))
-    for _, futures_symbol in current_kospi200_futures_symbols(day):
-        subscriptions.append((FUTURES_TRADE_TR_ID, futures_symbol))
-    subscriptions.append(("H0UPCNT0", "2001"))
+    options = list(build_orderbook_subscriptions(day, reference_price))
+    if len(options) != 26:
+        raise RuntimeError(f"KIS_WEBSOCKET_BASELINE_OPTION_COUNT_UNEXPECTED:{len(options)}")
+    base = tuple(options + [("H0UPCNT0", "2001")])
+    if len(base) != 27:
+        raise RuntimeError(f"KIS_WEBSOCKET_BASELINE_COUNT_UNEXPECTED:{len(base)}")
+    return base
+
+
+def build_subscriptions(
+    day: date,
+    *,
+    base_subscriptions: tuple[tuple[str, str], ...] | None = None,
+) -> tuple[tuple[str, str], ...]:
+    """Build base subscriptions plus the date-validated pinned weekly set."""
+    if day != WEEKLY_PINNED_VALID_DATE:
+        raise RuntimeError(
+            f"KIS_WEEKLY_PINNED_SET_DATE_UNVERIFIED:{format_trading_date(day)}:"
+            f"valid_only={WEEKLY_PINNED_VALID_DATE.isoformat()}"
+        )
+    base = tuple(base_subscriptions) if base_subscriptions is not None else build_base_subscriptions(day)
+    subscriptions = tuple(dict.fromkeys((*base, *WEEKLY_PINNED_SUBSCRIPTIONS)))
     if len(subscriptions) > MAX_SUBSCRIPTIONS:
         raise RuntimeError(f"KIS_WEBSOCKET_SUBSCRIPTION_LIMIT_EXCEEDED:{len(subscriptions)}")
-    return tuple(subscriptions)
-
-def _approval_key(auth: KISAuthManager) -> str:
-    provider = KISWebSocketApprovalKeyProvider(auth, timeout=10.0)
-    return provider.issue()
+    return subscriptions
 
 
-def _message(approval_key: str, tr_id: str, symbol: str) -> str:
+def startup_gate_reason(day: date, *, ack_enabled: bool = ACK_CONTROLLER_ENABLED) -> str | None:
+    """Offline-testable startup gate; ACK protocol gating is opt-in."""
+    if ack_enabled and not ACK_SCHEMA.configured:
+        return "KIS_WS_ACK_SCHEMA_UNVERIFIED"
+    if ack_enabled and day != WEEKLY_PINNED_VALID_DATE:
+        return f"KIS_WEEKLY_PINNED_SET_DATE_UNVERIFIED:{format_trading_date(day)}"
+    return None
+
+
+def _legacy_subscription_message(approval_key: str, tr_id: str, symbol: str, *, unsubscribe: bool = False) -> str:
     return json.dumps({
         "header": {
             "approval_key": approval_key,
             "custtype": "P",
-            "tr_type": "1",
+            "tr_type": "2" if unsubscribe else "1",
             "content-type": "utf-8",
         },
         "body": {"input": {"tr_id": tr_id, "tr_key": symbol}},
     })
+
+
+async def _legacy_subscribe_all(ws, approval_key: str, subscriptions: tuple[tuple[str, str], ...]) -> None:
+    if len(subscriptions) > MAX_SUBSCRIPTIONS:
+        raise RuntimeError(f"KIS_WEBSOCKET_SUBSCRIPTION_LIMIT_EXCEEDED:{len(subscriptions)}")
+    for index, (tr_id, symbol) in enumerate(subscriptions, 1):
+        await ws.send(_legacy_subscription_message(approval_key, tr_id, symbol))
+        if index < len(subscriptions):
+            await asyncio.sleep(SUBSCRIBE_INTERVAL_SECONDS)
+
+
+async def _legacy_rotate(ws, approval_key: str, active: set[tuple[str, str]], desired: tuple[tuple[str, str], ...]) -> set[tuple[str, str]]:
+    desired_set = set(desired)
+    if len(desired_set) > MAX_SUBSCRIPTIONS:
+        raise RuntimeError(f"KIS_WEBSOCKET_SUBSCRIPTION_LIMIT_EXCEEDED:{len(desired_set)}")
+    # Unsubscribe first: prevents transient subscription count from exceeding the cap.
+    removals = sorted(active - desired_set)
+    additions = sorted(desired_set - active)
+    for tr_id, symbol in removals:
+        await ws.send(_legacy_subscription_message(approval_key, tr_id, symbol, unsubscribe=True))
+        active.discard((tr_id, symbol))
+        await asyncio.sleep(SUBSCRIBE_INTERVAL_SECONDS)
+    if len(active) + len(additions) > MAX_SUBSCRIPTIONS:
+        raise RuntimeError(f"KIS_WEBSOCKET_SUBSCRIPTION_LIMIT_EXCEEDED:{len(active) + len(additions)}")
+    for tr_id, symbol in additions:
+        await ws.send(_legacy_subscription_message(approval_key, tr_id, symbol))
+        active.add((tr_id, symbol))
+        await asyncio.sleep(SUBSCRIBE_INTERVAL_SECONDS)
+    return active
+
+
+def _approval_key(auth: KISAuthManager) -> str:
+    provider = KISWebSocketApprovalKeyProvider(auth, timeout=10.0)
+    return provider.issue()
 
 
 def _is_control_frame(payload: str) -> bool:
@@ -114,37 +204,24 @@ def _frame_identity(payload: str) -> tuple[str, str] | None:
     return tr_id, symbol
 
 
-async def _subscribe_all(ws, approval_key: str, subscriptions: tuple[tuple[str, str], ...]) -> None:
-    if len(subscriptions) > MAX_SUBSCRIPTIONS:
-        raise RuntimeError(f"KIS_WEBSOCKET_SUBSCRIPTION_LIMIT_EXCEEDED:{len(subscriptions)}")
-    for index, (tr_id, symbol) in enumerate(subscriptions, 1):
-        await ws.send(_message(approval_key, tr_id, symbol))
-        if index < len(subscriptions):
-            await asyncio.sleep(SUBSCRIBE_INTERVAL_SECONDS)
+def _append_jsonl(path: Path, event: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write(json.dumps(event, ensure_ascii=False, separators=(",", ":"), default=str) + "\n")
 
 
-def plan_subscription_rotation(
-    active: tuple[tuple[str, str], ...] | set[tuple[str, str]],
-    desired: tuple[tuple[str, str], ...] | set[tuple[str, str]],
-    *,
-    cap: int = MAX_SUBSCRIPTIONS,
-) -> dict[str, object]:
-    """Plan a bounded rotation; subscribe-first when spare capacity allows it."""
-    active_set, desired_set = set(active), set(desired)
-    if len(active_set) > cap or len(desired_set) > cap:
-        raise ValueError(f"KIS_WEBSOCKET_SUBSCRIPTION_LIMIT_EXCEEDED:{max(len(active_set), len(desired_set))}")
-    additions = sorted(desired_set - active_set)
-    removals = sorted(active_set - desired_set)
-    subscribe_first = len(active_set) + len(additions) <= cap
-    peak = len(active_set) + len(additions) if subscribe_first else len(active_set)
-    return {
-        "additions": additions,
-        "removals": removals,
-        "subscribe_first": subscribe_first,
-        "peak_active": peak,
-        "gap_expected": bool(additions and removals and not subscribe_first),
-        "cap": cap,
-    }
+def _source_time_from_frame(payload: str, tr_id: str) -> str | None:
+    """Return the raw HHMMSS field for TRs whose official schemas name it bsop_hour."""
+    if tr_id not in {"H0IOCNT0", "H0IFCNT0", "H0UPCNT0"}:
+        return None
+    parts = payload.split("|", 3)
+    if len(parts) != 4:
+        return None
+    fields = parts[3].split("^")
+    if len(fields) < 2:
+        return None
+    value = fields[1].strip()
+    return value if len(value) == 6 and value.isdigit() else None
 
 
 def _append_subscription_event(path: Path, *, event: dict[str, object]) -> None:
@@ -188,94 +265,65 @@ def write_subscription_events_manifest(day_dir: Path, *, initial_subscriptions: 
     return path
 
 
-async def _apply_subscription_rotation(
+async def _dispatch_next_subscription_request(
     ws,
     approval_key: str,
-    active: set[tuple[str, str]],
-    desired: tuple[tuple[str, str], ...],
+    controller: SubscriptionAckController,
     *,
     events_path: Path,
-    reference_price: Decimal,
-    center_price: Decimal,
-    observed_at: datetime,
-) -> set[tuple[str, str]]:
-    plan = plan_subscription_rotation(active, desired)
-    if not plan["additions"] and not plan["removals"]:
-        return active
-    before = sorted([{"tr_id": tr, "symbol": symbol} for tr, symbol in active], key=lambda row: (row["tr_id"], row["symbol"]))
-    _append_subscription_event(events_path, event={
-        "schema_version": "kis-vts-subscription-event-v1",
-        "event": "ROTATION_STARTED",
-        "recorded_at": datetime.now(timezone.utc).isoformat(),
-        "source": "KIS:H0UPCNT0:2001",
-        "observed_at": observed_at.isoformat(),
-        "reference_price": str(reference_price),
-        "previous_center_price": str(center_price),
-        "active_before": before,
-        "active_count_before": len(active),
-        "desired_count": len(set(desired)),
-        "subscription_cap": int(plan["cap"]),
-        "subscribe_first": bool(plan["subscribe_first"]),
-        "gap_expected": bool(plan["gap_expected"]),
-        "additions": [{"tr_id": tr, "symbol": symbol} for tr, symbol in plan["additions"]],
-        "removals": [{"tr_id": tr, "symbol": symbol} for tr, symbol in plan["removals"]],
-        "raw_frames_file": "kis_vts_websocket_raw.jsonl",
-    })
-    async def subscribe_items(items):
-        for tr_id, symbol in items:
-            await ws.send(json.dumps({"header": {"approval_key": approval_key, "custtype": "P", "tr_type": "1", "content-type": "utf-8"}, "body": {"input": {"tr_id": tr_id, "tr_key": symbol}}}))
-            await asyncio.sleep(SUBSCRIBE_INTERVAL_SECONDS)
-    async def unsubscribe_items(items):
-        for tr_id, symbol in items:
-            await ws.send(json.dumps({"header": {"approval_key": approval_key, "custtype": "P", "tr_type": "2", "content-type": "utf-8"}, "body": {"input": {"tr_id": tr_id, "tr_key": symbol}}}))
-            await asyncio.sleep(SUBSCRIBE_INTERVAL_SECONDS)
-    additions = list(plan["additions"])
-    removals = list(plan["removals"])
+    day: date,
+) -> None:
+    request = controller.prepare_next()
+    if request is None:
+        return
     try:
-        if plan["subscribe_first"]:
-            await subscribe_items(additions)
-            active.update(additions)
-            if len(active) > MAX_SUBSCRIPTIONS:
-                raise RuntimeError(f"KIS_WEBSOCKET_SUBSCRIPTION_LIMIT_EXCEEDED:{len(active)}")
-            await unsubscribe_items(removals)
-            active.difference_update(removals)
-        else:
-            await unsubscribe_items(removals)
-            active.difference_update(removals)
-            await subscribe_items(additions)
-            active.update(additions)
-        if len(active) > MAX_SUBSCRIPTIONS or active != set(desired):
-            raise RuntimeError(f"KIS_WEBSOCKET_SUBSCRIPTION_RECONCILIATION_FAILED:{len(active)}:{len(desired)}")
+        # Preserve the existing minimum spacing between subscription requests.
+        await asyncio.sleep(SUBSCRIBE_INTERVAL_SECONDS)
+        payload = build_request_payload(approval_key=approval_key, request=request, schema=controller.schema)
+        await ws.send(payload)
+        controller.mark_sent(request.request_id)
         _append_subscription_event(events_path, event={
             "schema_version": "kis-vts-subscription-event-v1",
-            "event": "ROTATION_REQUESTS_SENT",
+            "event": "SUBSCRIPTION_REQUEST_SENT",
             "recorded_at": datetime.now(timezone.utc).isoformat(),
-            "reference_price": str(reference_price),
-            "requested_subscription_count_after": len(active),
-            "requested_subscriptions_after": sorted([{"tr_id": tr, "symbol": symbol} for tr, symbol in active], key=lambda row: (row["tr_id"], row["symbol"])),
-            "broker_acknowledgement_status": "NOT_VERIFIED_CONTROL_FRAMES_ARE_NOT_CORRELATED_TO_ROTATION",
-            "additions": [{"tr_id": tr, "symbol": symbol} for tr, symbol in additions],
-            "removals": [{"tr_id": tr, "symbol": symbol} for tr, symbol in removals],
-            "gap_expected": bool(plan["gap_expected"]),
-            "raw_frames_file": "kis_vts_websocket_raw.jsonl",
+            "trading_date": format_trading_date(day),
+            "session_generation": request.session_generation,
+            "request_id": request.request_id,
+            "action": request.action.value,
+            "tr_id": request.tr_id,
+            "symbol": request.symbol,
+            "ack_deadline_seconds": controller.timeout_seconds,
+            "confirmed_subscription_count": len(controller.confirmed),
         })
-        return active
     except Exception as exc:
+        controller.mark_send_error(request.request_id)
         _append_subscription_event(events_path, event={
             "schema_version": "kis-vts-subscription-event-v1",
-            "event": "ROTATION_FAILED",
+            "event": "SUBSCRIPTION_SEND_UNKNOWN",
             "recorded_at": datetime.now(timezone.utc).isoformat(),
+            "trading_date": format_trading_date(day),
+            "request_id": request.request_id,
+            "action": request.action.value,
+            "tr_id": request.tr_id,
+            "symbol": request.symbol,
             "error_type": type(exc).__name__,
-            "error": str(exc),
-            "tracked_subscription_count_at_failure": len(active),
-            "tracked_subscriptions_at_failure": sorted([{"tr_id": tr, "symbol": symbol} for tr, symbol in active], key=lambda row: (row["tr_id"], row["symbol"])),
-            "broker_acknowledgement_status": "NOT_VERIFIED",
-            "raw_frames_file": "kis_vts_websocket_raw.jsonl",
+            "state": controller.state.value,
+            "result": controller.last_result,
         })
-        raise
+        LOGGER.error("WS_SUBSCRIPTION_STATE_UNKNOWN request_id=%s error_type=%s",
+                     request.request_id, type(exc).__name__)
 
 
 async def collect_day(day: date, *, market_data_root: Path) -> None:
+    # ACK protocol gate is opt-in; default collector startup preserves data-capture operation.
+    reason = startup_gate_reason(day)
+    if reason is not None:
+        if reason not in COLLECTOR_BLOCK_LOGGED:
+            LOGGER.error("WS_ACK_PROTOCOL_BLOCKED reason=%s detail=%s", reason, ACK_SCHEMA_TODO)
+            COLLECTOR_BLOCK_LOGGED.add(reason)
+        await asyncio.sleep(5)
+        return
+
     auth = KISAuthManager.from_env(
         is_vts=True,
         env_file=str(ROOT / ".env"),
@@ -284,10 +332,17 @@ async def collect_day(day: date, *, market_data_root: Path) -> None:
     if not auth.has_credentials():
         raise RuntimeError("KIS_VTS_CREDENTIALS_REQUIRED")
 
-    subscriptions = build_subscriptions(day)
+    base_subscriptions = build_base_subscriptions(day)
+    subscriptions = (
+        build_subscriptions(day, base_subscriptions=base_subscriptions)
+        if ACK_CONTROLLER_ENABLED
+        else base_subscriptions
+    )
     initial_subscriptions = subscriptions
-    day_dir = market_data_root / day.isoformat()
+    day_dir = market_data_root / format_trading_date(day)
     raw_store = KISRealtimeRawStore(day_dir / "kis_vts_websocket_raw.jsonl")
+    control_events_path = day_dir / "kis_vts_websocket_control_events.jsonl"
+    timing_path = day_dir / "kis_vts_websocket_timing.jsonl"
     sequence = raw_store.count()
     ws_url = "ws://ops.koreainvestment.com:31000"
 
@@ -301,18 +356,52 @@ async def collect_day(day: date, *, market_data_root: Path) -> None:
             await asyncio.sleep(1)
             continue
 
+        ack_controller: SubscriptionAckController | None = None
         try:
             # One persistent WebSocket session for the whole collection window.
             approval_key = _approval_key(auth)
             async with websockets.connect(ws_url, proxy=None, ping_interval=20, ping_timeout=20, open_timeout=10) as ws:
-                await _subscribe_all(ws, approval_key, subscriptions)
-                active_subscriptions = set(subscriptions)
+                events_path = day_dir / "kis_vts_subscription_events.jsonl"
+                if ACK_CONTROLLER_ENABLED:
+                    ack_controller = SubscriptionAckController(
+                        baseline=set(base_subscriptions),
+                        pinned=set(WEEKLY_PINNED_SUBSCRIPTIONS),
+                        cap=MAX_SUBSCRIPTIONS,
+                        schema=ACK_SCHEMA,
+                    )
+                    ack_controller.start_initial(set(subscriptions))
+                    await _dispatch_next_subscription_request(
+                        ws, approval_key, ack_controller, events_path=events_path, day=day,
+                    )
+                    active_subscriptions = set(subscriptions)
+                else:
+                    ack_controller = None
+                    await _legacy_subscribe_all(ws, approval_key, subscriptions)
+                    active_subscriptions = set(subscriptions)
+                    LOGGER.info(
+                        "WS_SUBSCRIPTION_SENDS_COMPLETED status=OBSERVATION_ONLY count=%d ack_controller=OFF",
+                        len(active_subscriptions),
+                    )
                 index_price_source = KISWebSocketIndexPriceSource(session_date=day)
                 initial_price = KISKOSPI200IndexPriceSource(auth).refresh().price
                 center_price = initial_price
-                events_path = day_dir / "kis_vts_subscription_events.jsonl"
+                pending_rotation: dict[str, object] | None = None
                 last_heartbeat = time.monotonic()
-                LOGGER.info("WS_CONNECTED date=%s subscriptions=%d center_price=%s", day, len(subscriptions), center_price)
+                connected_at = datetime.now(timezone.utc)
+                _append_jsonl(control_events_path, {
+                    "schema_version": "kis-vts-websocket-control-event-v1",
+                    "event": "SESSION_CONNECTED",
+                    "recorded_at": connected_at.isoformat(),
+                    "trading_date": format_trading_date(day),
+                    "endpoint": ws_url,
+                    "subscription_count": len(subscriptions),
+                    "subscription_status": "ACK_PENDING" if ACK_CONTROLLER_ENABLED else "OBSERVATION_ONLY_ACK_DISABLED",
+                    "subscriptions": [{"tr_id": tr_id, "symbol": symbol} for tr_id, symbol in subscriptions],
+                })
+                LOGGER.info(
+                    "WS_CONNECTED date=%s planned_subscriptions=%d subscription_status=ACK_PENDING center_price=%s",
+                    day, len(subscriptions), center_price,
+                )
 
                 while True:
                     now = now_kst()
@@ -323,53 +412,256 @@ async def collect_day(day: date, *, market_data_root: Path) -> None:
                         payload = await asyncio.wait_for(ws.recv(), timeout=1.0)
                     except asyncio.TimeoutError:
                         payload = None
+                        if ack_controller is not None and ack_controller.check_timeout():
+                            _append_subscription_event(events_path, event={
+                                "schema_version": "kis-vts-subscription-event-v1",
+                                "event": "SUBSCRIPTION_ACK_TIMEOUT",
+                                "recorded_at": datetime.now(timezone.utc).isoformat(),
+                                "trading_date": format_trading_date(day),
+                                "request_id": ack_controller.pending.request_id if ack_controller.pending else None,
+                                "state": ack_controller.state.value,
+                                "result": ack_controller.last_result,
+                                "confirmed_subscription_count": len(ack_controller.confirmed),
+                            })
+                            LOGGER.error(
+                                "WS_SUBSCRIPTION_UNKNOWN state=%s result=%s confirmed_count=%d",
+                                ack_controller.state.value, ack_controller.last_result, len(ack_controller.confirmed),
+                            )
 
                     if payload is not None:
                         if isinstance(payload, bytes):
                             payload = payload.decode("utf-8")
                         payload = str(payload)
-                        if not _is_control_frame(payload):
+                        received_at = datetime.now(timezone.utc)
+                        if _is_control_frame(payload):
+                            _append_jsonl(control_events_path, {
+                                "schema_version": "kis-vts-websocket-control-event-v1",
+                                "event": "CONTROL_FRAME",
+                                "recorded_at": received_at.isoformat(),
+                                "trading_date": format_trading_date(day),
+                                "payload": payload,
+                            })
+                            if ack_controller is not None:
+                                ack_result = ack_controller.handle_frame(payload)
+                                if ack_result != "NOT_ACK":
+                                    event = dict(ack_controller.last_event or {})
+                                    event.update({
+                                        "schema_version": "kis-vts-subscription-event-v1",
+                                        "recorded_at": datetime.now(timezone.utc).isoformat(),
+                                        "trading_date": format_trading_date(day),
+                                        "ack_handler_result": ack_result,
+                                        "state": ack_controller.state.value,
+                                        "result": ack_controller.last_result,
+                                    })
+                                    _append_subscription_event(events_path, event=event)
+                                    if ack_result == "ACK_SUCCESS":
+                                        if ack_controller.last_completed_kind == "INITIAL":
+                                            LOGGER.info(
+                                                "WS_INITIAL_SUBSCRIPTIONS_ACKNOWLEDGED count=%d",
+                                                len(ack_controller.confirmed),
+                                            )
+                                            ack_controller.last_completed_kind = None
+                                        elif ack_controller.last_completed_kind == "ROTATION":
+                                            if pending_rotation is not None:
+                                                center_price = pending_rotation["center_price"]
+                                                subscriptions = tuple(pending_rotation["desired"])
+                                                LOGGER.info(
+                                                    "WS_RECENTERED_ACK_VERIFIED date=%s price=%s subscriptions=%d",
+                                                    day, center_price, len(ack_controller.confirmed),
+                                                )
+                                                pending_rotation = None
+                                            ack_controller.last_completed_kind = None
+                                    if ack_controller.state in {SubscriptionState.APPLYING, SubscriptionState.ROLLING_BACK}:
+                                        await _dispatch_next_subscription_request(
+                                            ws, approval_key, ack_controller, events_path=events_path, day=day,
+                                        )
+                                    elif ack_controller.state in {SubscriptionState.UNKNOWN, SubscriptionState.BLOCKED}:
+                                        LOGGER.error(
+                                            "WS_SUBSCRIPTION_BLOCKED state=%s result=%s confirmed_count=%d",
+                                            ack_controller.state.value, ack_controller.last_result,
+                                            len(ack_controller.confirmed),
+                                        )
+                        else:
                             identity = _frame_identity(payload)
                             if identity is None:
+                                _append_jsonl(control_events_path, {
+                                    "schema_version": "kis-vts-websocket-control-event-v1",
+                                    "event": "UNPARSEABLE_FRAME",
+                                    "recorded_at": received_at.isoformat(),
+                                    "trading_date": format_trading_date(day),
+                                    "payload": payload,
+                                })
                                 LOGGER.warning("WS_FRAME_UNPARSEABLE prefix=%r", payload[:160])
                             else:
                                 tr_id, symbol = identity
                                 sequence += 1
-                                received_at = datetime.now(timezone.utc)
                                 raw_store.append(
                                     received_at=received_at,
-                                    trading_date=day.isoformat(),
+                                    trading_date=format_trading_date(day),
                                     instrument=symbol,
                                     tr_id=tr_id,
                                     payload=payload,
                                     sequence=sequence,
                                 )
+                                source_time_raw = _source_time_from_frame(payload, tr_id)
+                                _append_jsonl(timing_path, {
+                                    "schema_version": "kis-vts-websocket-timing-v1",
+                                    "trading_date": format_trading_date(day),
+                                    "sequence": sequence,
+                                    "tr_id": tr_id,
+                                    "symbol": symbol,
+                                    "source_timestamp_field": "bsop_hour" if source_time_raw is not None else None,
+                                    "source_timestamp_raw": source_time_raw,
+                                    "source_timestamp_format": "HHMMSS" if source_time_raw is not None else None,
+                                    "source_capability_status": (
+                                        "UNVERIFIED_FOR_VTS_OFFICIAL_SAMPLE_SAYS_LIVE_ONLY"
+                                        if tr_id == "H0IOCNT0" else "NOT_ASSESSED"
+                                    ),
+                                    "received_at_utc": received_at.isoformat(),
+                                    "received_at_kst": received_at.astimezone(KST).isoformat(),
+                                    "raw_payload_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+                                    "raw_payload_file": "kis_vts_websocket_raw.jsonl",
+                                    "source_clock_timezone": "UNVERIFIED",
+                                    "source_date_semantics": "UNVERIFIED",
+                                })
                                 if tr_id == "H0UPCNT0" and symbol == "2001":
                                     observation = index_price_source.update_frame(payload, received_at=received_at)
-                                    # Recenter only after a 5-point move from the last center to avoid boundary churn.
-                                    if abs(observation.price - center_price) >= Decimal("5.0"):
-                                        new_subscriptions = list(current_monthly_option_symbols(day, observation.price, STRATEGY_MONTHLY_OFFSETS))
-                                        new_subscriptions.extend(item for item in subscriptions if item[0] != "H0IOCNT0" and item[0] != "H0UPCNT0")
+                                    # ACK mode requires READY; default capture mode recenters on the observed index.
+                                    if (
+                                        (ack_controller is None or ack_controller.ready)
+                                        and abs(observation.price - center_price) >= Decimal("5.0")
+                                    ):
+                                        new_subscriptions = list(build_orderbook_subscriptions(day, observation.price))
                                         new_subscriptions.append(("H0UPCNT0", "2001"))
+                                        if ACK_CONTROLLER_ENABLED:
+                                            new_subscriptions.extend(WEEKLY_PINNED_SUBSCRIPTIONS)
                                         desired = tuple(dict.fromkeys(new_subscriptions))
                                         if len(desired) > MAX_SUBSCRIPTIONS:
-                                            raise RuntimeError(f"KIS_WEBSOCKET_SUBSCRIPTION_LIMIT_EXCEEDED:{len(desired)}")
-                                        active_subscriptions = await _apply_subscription_rotation(
-                                            ws, approval_key, active_subscriptions, desired,
-                                            events_path=events_path, reference_price=observation.price,
-                                            center_price=center_price, observed_at=observation.observed_at,
-                                        )
-                                        center_price = observation.price
-                                        subscriptions = desired
-                                        LOGGER.info("WS_RECENTERED date=%s price=%s subscriptions=%d", day, center_price, len(active_subscriptions))
+                                            if ack_controller is not None:
+                                                ack_controller._block(
+                                                    f"KIS_WEBSOCKET_SUBSCRIPTION_LIMIT_EXCEEDED:{len(desired)}"
+                                                )
+                                            LOGGER.error(
+                                                "KIS_WEBSOCKET_SUBSCRIPTION_LIMIT_EXCEEDED desired=%d cap=%d",
+                                                len(desired), MAX_SUBSCRIPTIONS,
+                                            )
+                                            _append_subscription_event(events_path, event={
+                                                "schema_version": "kis-vts-subscription-event-v1",
+                                                "event": "ROTATION_BLOCKED",
+                                                "recorded_at": datetime.now(timezone.utc).isoformat(),
+                                                "reason": "DESIRED_SET_EXCEEDS_CAP",
+                                                "desired_count": len(desired),
+                                                "subscription_cap": MAX_SUBSCRIPTIONS,
+                                            })
+                                        elif ack_controller is None:
+                                            try:
+                                                active_subscriptions = await _legacy_rotate(
+                                                    ws, approval_key, active_subscriptions, desired,
+                                                )
+                                                previous_center = center_price
+                                                center_price = observation.price
+                                                subscriptions = desired
+                                                _append_subscription_event(events_path, event={
+                                                    "schema_version": "kis-vts-subscription-event-v1",
+                                                    "event": "ROTATION_SENT_OBSERVATION_ONLY",
+                                                    "recorded_at": datetime.now(timezone.utc).isoformat(),
+                                                    "trading_date": format_trading_date(day),
+                                                    "reference_price": str(observation.price),
+                                                    "previous_center_price": str(previous_center),
+                                                    "active_count": len(active_subscriptions),
+                                                    "subscription_cap": MAX_SUBSCRIPTIONS,
+                                                    "ack_status": "NOT_USED",
+                                                })
+                                                LOGGER.info(
+                                                    "WS_RECENTERED_OBSERVED date=%s price=%s subscriptions=%d ack_controller=OFF",
+                                                    day, center_price, len(active_subscriptions),
+                                                )
+                                            except Exception as exc:
+                                                LOGGER.error("WS_RECENTER_BLOCKED ack_controller=OFF error_type=%s", type(exc).__name__)
+                                        else:
+                                            try:
+                                                ack_controller.start_rotation(set(desired))
+                                                pending_rotation = {
+                                                    "center_price": observation.price,
+                                                    "desired": desired,
+                                                    "observed_at": observation.observed_at.isoformat(),
+                                                }
+                                                _append_subscription_event(events_path, event={
+                                                    "schema_version": "kis-vts-subscription-event-v1",
+                                                    "event": "ROTATION_STARTED_ACK_GATED",
+                                                    "recorded_at": datetime.now(timezone.utc).isoformat(),
+                                                    "reference_price": str(observation.price),
+                                                    "previous_center_price": str(center_price),
+                                                    "desired_count": len(desired),
+                                                    "confirmed_count_before": len(ack_controller.confirmed),
+                                                    "state": ack_controller.state.value,
+                                                })
+                                                await _dispatch_next_subscription_request(
+                                                    ws, approval_key, ack_controller,
+                                                    events_path=events_path, day=day,
+                                                )
+                                                if ack_controller.ready and ack_controller.last_completed_kind == "ROTATION":
+                                                    center_price = observation.price
+                                                    subscriptions = desired
+                                                    pending_rotation = None
+                                                    ack_controller.last_completed_kind = None
+                                                    LOGGER.info(
+                                                        "WS_RECENTERED_ACK_VERIFIED date=%s price=%s subscriptions=%d",
+                                                        day, center_price, len(ack_controller.confirmed),
+                                                    )
+                                            except Exception as exc:
+                                                _append_subscription_event(events_path, event={
+                                                    "schema_version": "kis-vts-subscription-event-v1",
+                                                    "event": "ROTATION_BLOCKED",
+                                                    "recorded_at": datetime.now(timezone.utc).isoformat(),
+                                                    "error_type": type(exc).__name__,
+                                                    "error": str(exc),
+                                                    "state": ack_controller.state.value,
+                                                    "result": ack_controller.last_result,
+                                                })
+                                                LOGGER.error(
+                                                    "WS_ROTATION_BLOCKED state=%s result=%s error_type=%s",
+                                                    ack_controller.state.value, ack_controller.last_result,
+                                                    type(exc).__name__,
+                                                )
 
                     if time.monotonic() - last_heartbeat >= HEARTBEAT_SECONDS:
                         LOGGER.info("WS_HEARTBEAT date=%s raw_count=%d", day, raw_store.count())
                         last_heartbeat = time.monotonic()
 
+                ended_at = datetime.now(timezone.utc)
+                _append_jsonl(control_events_path, {
+                    "schema_version": "kis-vts-websocket-control-event-v1",
+                    "event": "SESSION_ENDED",
+                    "recorded_at": ended_at.isoformat(),
+                    "trading_date": format_trading_date(day),
+                    "raw_count": raw_store.count(),
+                })
                 LOGGER.info("WS_SESSION_END date=%s raw_count=%d", day, raw_store.count())
                 break
         except Exception as exc:
+            if ack_controller is not None:
+                ack_controller.mark_session_lost()
+                _append_subscription_event(
+                    day_dir / "kis_vts_subscription_events.jsonl",
+                    event={
+                        "schema_version": "kis-vts-subscription-event-v1",
+                        "event": "SESSION_LOST_SUBSCRIPTION_STATE_UNKNOWN",
+                        "recorded_at": datetime.now(timezone.utc).isoformat(),
+                        "trading_date": format_trading_date(day),
+                        "state": ack_controller.state.value,
+                        "result": ack_controller.last_result,
+                        "confirmed_subscription_count": len(ack_controller.confirmed),
+                    },
+                )
+            _append_jsonl(control_events_path, {
+                "schema_version": "kis-vts-websocket-control-event-v1",
+                "event": "SESSION_ERROR",
+                "recorded_at": datetime.now(timezone.utc).isoformat(),
+                "trading_date": format_trading_date(day),
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            })
             LOGGER.exception("WS_SESSION_ERROR date=%s error=%s", day, exc)
             await asyncio.sleep(RECONNECT_BACKOFF_SECONDS)
 
@@ -437,10 +729,26 @@ def preflight() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--preflight", action="store_true")
+    parser.add_argument("--offline-startup-check", action="store_true")
     args = parser.parse_args()
+    if args.offline_startup_check:
+        reason = startup_gate_reason(now_kst().date())
+        if reason is not None:
+            print(f"WS_OFFLINE_STARTUP_BLOCKED reason={reason}")
+            return 5
+        print(
+            f"WS_OFFLINE_STARTUP_OK ack_controller={'ON' if ACK_CONTROLLER_ENABLED else 'OFF'} "
+            f"gate=OPEN planned_subscription_count=27 weekly_included=false network=NOT_USED"
+        )
+        return 0
     configure_logging()
     if args.preflight:
         return preflight()
+    lock_path = market_data_root_from_env() / "logs" / "kis_vts_websocket_collector.lock"
+    lock_handle = acquire_process_lock(lock_path)
+    if lock_handle is None:
+        LOGGER.error("COLLECTOR_INSTANCE_BLOCKED reason=ANOTHER_WEBSOCKET_COLLECTOR_HOLDS_LOCK")
+        return 4
     asyncio.run(run_forever())
     return 0
 

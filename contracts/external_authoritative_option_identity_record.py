@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from contracts.types import OptionInstrumentIdentity
+from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
 
 
 class AuthoritativeOptionIdentityRecordError(ValueError):
@@ -26,6 +27,12 @@ class ExternalAuthoritativeOptionIdentityRecord:
     strike: Decimal
     shrn_iscd: str | None = None
     stnd_iscd: str | None = None
+
+    def __post_init__(self) -> None:
+        try:
+            object.__setattr__(self, "expiry", require_exact_option_expiry(self.expiry))
+        except CanonicalOptionExpiryError as exc:
+            raise AuthoritativeOptionIdentityRecordError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
 
     def to_identity(self) -> OptionInstrumentIdentity:
         if not self.instrument_id:

@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from decimal import Decimal
 from contracts.types import BrokerOrderCommand
+from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
 from shared.contracts.canonical import CanonicalAssetType, CanonicalOptionType, CanonicalOrderCommand, CanonicalOrderSide
 
 class VSSFCommandContextError(ValueError):
@@ -23,9 +24,13 @@ class CanonicalVSSFCommandContextProvider:
             if identity is None: raise VSSFCommandContextError("OPTION_IDENTITY_REQUIRED")
             if identity.instrument_id != order.instrument_id: raise VSSFCommandContextError("INSTRUMENT_IDENTITY_MISMATCH")
             if not identity.symbol or not identity.expiry: raise VSSFCommandContextError("OPTION_IDENTITY_INCOMPLETE")
+            try:
+                exact_expiry = require_exact_option_expiry(identity.expiry)
+            except CanonicalOptionExpiryError as exc:
+                raise VSSFCommandContextError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
             if identity.option_type not in {CanonicalOptionType.CALL.value, CanonicalOptionType.PUT.value}: raise VSSFCommandContextError("CANONICAL_OPTION_TYPE_REQUIRED")
             if identity.strike is None or identity.strike <= Decimal("0"): raise VSSFCommandContextError("OPTION_STRIKE_REQUIRED")
-            option_type, strike, symbol, expiry = CanonicalOptionType(identity.option_type), float(identity.strike), identity.symbol, identity.expiry
+            option_type, strike, symbol, expiry = CanonicalOptionType(identity.option_type), float(identity.strike), identity.symbol, exact_expiry
         elif asset_type == CanonicalAssetType.FUTURES.value:
             if identity is None or identity.instrument_id != order.instrument_id: raise VSSFCommandContextError("FUTURES_IDENTITY_REQUIRED")
             if identity.contract_multiplier is None or identity.contract_multiplier <= 0: raise VSSFCommandContextError("FUTURES_CONTRACT_MULTIPLIER_REQUIRED")

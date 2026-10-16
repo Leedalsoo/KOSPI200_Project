@@ -1,5 +1,6 @@
 """Common runtime-input assembly kept outside strategy-specific composition."""
 from __future__ import annotations
+from contracts.trading_date import format_trading_date
 
 from decimal import Decimal
 from typing import Any
@@ -47,7 +48,7 @@ class CommonRuntimeInputAssembler:
                 if self.fee_ledger is not None and self.run_id else None
             ),
             time_str=data.as_of.strftime("%H:%M:%S"),
-            date_str=data.as_of.date().isoformat(),
+            date_str=format_trading_date(data.as_of.date()),
         )
 
     def analytics_snapshot(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
 from typing import Any
 
 
@@ -14,6 +15,12 @@ class Track7OptionContractSelection:
     call: Any
     contract_multiplier: Decimal
     source: str = "OptionMaster.find_contract_identity"
+
+    def __post_init__(self) -> None:
+        try:
+            object.__setattr__(self, "expiry", require_exact_option_expiry(self.expiry))
+        except CanonicalOptionExpiryError as exc:
+            raise ValueError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
 
 
 class Track7OptionContractSource:
@@ -29,6 +36,10 @@ class Track7OptionContractSource:
             raise ValueError("TRACK7_OPTION_MASTER_REQUIRED")
         if not expiry:
             raise ValueError("TRACK7_OPTION_EXPIRY_REQUIRED")
+        try:
+            expiry = require_exact_option_expiry(expiry)
+        except CanonicalOptionExpiryError as exc:
+            raise ValueError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
         reference_price = Decimal(str(reference_price))
         if reference_price <= 0:
             raise ValueError("TRACK7_REFERENCE_PRICE_REQUIRED")

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contracts.trading_date import format_trading_date, parse_trading_date
 
 import asyncio
 import hashlib
@@ -17,28 +18,23 @@ from decimal import Decimal
 from pathlib import Path
 
 from infrastructure.kis.auth import KISAuthManager
+from infrastructure.kis.collector_instance_lock import acquire_process_lock
 from infrastructure.kis.futures_market_transport import KISFuturesMarketTransport
 from infrastructure.kis.kis_realtime_collector import KISRealtimeCollector
-from infrastructure.kis.krx_kis_option_identity_resolver import load_kis_index_option_master, KRXKISOptionIdentityResolver, KISOptionIdentityResolver
-from infrastructure.kis.kis_index_option_master_source import current_monthly_option_symbols
+from infrastructure.kis.krx_kis_option_identity_resolver import load_kis_index_option_master, KISOptionIdentityResolver
+from infrastructure.kis.kis_index_option_master_source import (
+    current_kospi200_futures_symbols,
+    current_monthly_option_symbols,
+    load_kis_index_option_rows,
+)
+from infrastructure.kis.index_price_source import KISKOSPI200IndexPriceSource
 from infrastructure.kis.kis_rest_market_observation_collector import (
     CollectionTarget,
     KISRestMarketObservationCollector,
     KISRestMarketObservationTransport,
 )
 from environments.virtual.market.historical_market_store import HistoricalMarketStore
-from infrastructure.kis.holiday_fallback_provider import (
-    FallbackHolidayProvider,
-    KRXHolidayProvider,
-)
-from infrastructure.kis.holiday_provider import KISHolidayProvider
-from infrastructure.kis.trading_calendar import ProductionTradingCalendar
-from infrastructure.krx.krx_marketplace_master import load_option_master
-from infrastructure.krx.krx_option_master_store import (
-    KRXOptionMasterRefreshRequired,
-    discover_master_snapshot_dates,
-    resolve_option_master_paths_for_day,
-)
+from infrastructure.kis.trading_calendar_factory import create_kis_trading_calendar
 from infrastructure.kis.kis_vts_collection_diagnostic import diagnose_collection, write_human_report, write_report
 from infrastructure.kis.kis_weekday_collection_plan import (
     CollectionPlan,
@@ -107,19 +103,6 @@ def configure_logging() -> logging.Logger:
     return LOGGER
 
 
-def _latest_krx_spot_price() -> str:
-    candidates = sorted((ROOT / "data" / "historical" / "krx_raw").glob("*_futures_daily.json"))
-    if not candidates:
-        raise RuntimeError("AUTHORITATIVE_KRX_FUTURES_DAILY_SOURCE_REQUIRED")
-    path = candidates[-1]
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    rows = payload.get("OutBlock_1", [])
-    matches = [row for row in rows if row.get("ISU_CD") == "A016C000" and row.get("SPOT_PRC")]
-    if not matches:
-        raise RuntimeError("AUTHORITATIVE_KOSPI200_SPOT_PRICE_REQUIRED")
-    return str(matches[-1]["SPOT_PRC"])
-
-
 def build_plan(day: date | None = None) -> CollectionPlan:
     """Build a plan for the requested day, defaulting to the current KST date."""
     return build_plan_for_day(day or _now_kst().date())
@@ -128,29 +111,29 @@ def build_plan(day: date | None = None) -> CollectionPlan:
 def write_daily_collection_diagnostic(day: date, plan: CollectionPlan) -> dict[str, Path]:
     raw_path = _raw_store_for(day).path
     report = diagnose_collection(raw_path, LOG_PATH, plan)
-    json_path = DATA_ROOT / day.isoformat() / "collection_report.json"
-    text_path = DATA_ROOT / day.isoformat() / "collection_report.txt"
+    json_path = DATA_ROOT / format_trading_date(day) / "collection_report.json"
+    text_path = DATA_ROOT / format_trading_date(day) / "collection_report.txt"
     write_report(report, json_path)
     write_human_report(report, text_path)
     LOGGER.info(
         "COLLECTION_DIAGNOSTIC date=%s overall=%s missing=%d reconnects=%d errors=%d hash=%s",
-        day.isoformat(), report.overall, len(report.missing_contracts), report.reconnect_count,
+        format_trading_date(day), report.overall, len(report.missing_contracts), report.reconnect_count,
         report.error_frames, report.hash_validation,
     )
     return {"json": json_path, "text": text_path}
 
 
 def _raw_store_for(day: date) -> KISRealtimeRawStore:
-    return KISRealtimeRawStore(DATA_ROOT / day.isoformat() / "kis_vts_raw.jsonl")
+    return KISRealtimeRawStore(DATA_ROOT / format_trading_date(day) / "kis_vts_raw.jsonl")
 
 
 def _write_option_alert(day: date, data_root: Path, tr_counts: Counter[str] | dict[str, int]) -> Path:
-    day_dir = data_root / day.isoformat()
+    day_dir = data_root / format_trading_date(day)
     day_dir.mkdir(parents=True, exist_ok=True)
     path = day_dir / "ALERT_NO_OPTION_FRAMES.txt"
     path.write_text(
         "KIS VTS 조기 경보\n"
-        f"date={day.isoformat()}\n"
+        f"date={format_trading_date(day)}\n"
         "원인 후보: 옵션 TR(H0IOCNT0) 미수신, KIS VTS 옵션 실시간 데이터 미지원/지연, 구독·인증·네트워크 문제.\n"
         "다음 조치: 수집을 중단하지 않고 계속 수집하며, 일 마감 진단에서 실제 수신 TR/종목 및 원본 해시를 확인한다.\n"
         f"TR_COUNTS={dict(sorted(tr_counts.items()))}\n",
@@ -170,7 +153,7 @@ def _sha256_file(path: Path) -> str:
 def _backup_day(day: date, day_dir: Path, *, source_root: Path) -> bool:
     configured = os.environ.get("PROJECT200_BACKUP_DIR", "").strip()
     if not configured:
-        LOGGER.warning("BACKUP_SKIPPED reason=PROJECT200_BACKUP_DIR_UNSET date=%s", day.isoformat())
+        LOGGER.warning("BACKUP_SKIPPED reason=PROJECT200_BACKUP_DIR_UNSET date=%s", format_trading_date(day))
         return False
     if not day_dir.exists():
         raise FileNotFoundError(day_dir)
@@ -178,7 +161,7 @@ def _backup_day(day: date, day_dir: Path, *, source_root: Path) -> bool:
     source = day_dir.resolve()
     if backup_root == source or source.is_relative_to(backup_root):
         raise ValueError("BACKUP_DESTINATION_MUST_NOT_CONTAIN_SOURCE")
-    destination = backup_root / day.isoformat()
+    destination = backup_root / format_trading_date(day)
     shutil.copytree(source, destination, dirs_exist_ok=True)
     for src in source.rglob("*"):
         if src.is_file():
@@ -186,7 +169,7 @@ def _backup_day(day: date, day_dir: Path, *, source_root: Path) -> bool:
             dst = destination / rel
             if not dst.exists() or _sha256_file(src) != _sha256_file(dst):
                 raise ValueError(f"BACKUP_SHA256_MISMATCH:{rel}")
-    LOGGER.info("BACKUP_VERIFIED date=%s destination=%s", day.isoformat(), destination)
+    LOGGER.info("BACKUP_VERIFIED date=%s destination=%s", format_trading_date(day), destination)
     return True
 
 
@@ -198,18 +181,18 @@ def _safe_write_daily_diagnostics(day: date, plan: CollectionPlan) -> None:
             endpoint="ws://ops.koreainvestment.com:31000",
             tolerate_truncated_tail=True,
         )
-        LOGGER.info("DAY_FINISHED date=%s record_count=%d file_sha256=%s", day.isoformat(), manifest["record_count"], manifest["file_sha256"])
+        LOGGER.info("DAY_FINISHED date=%s record_count=%d file_sha256=%s", format_trading_date(day), manifest["record_count"], manifest["file_sha256"])
     except Exception as exc:
-        LOGGER.error("MANIFEST_WRITE_ERROR date=%s error=%s", day.isoformat(), exc, exc_info=True)
+        LOGGER.error("MANIFEST_WRITE_ERROR date=%s error=%s", format_trading_date(day), exc, exc_info=True)
     try:
         paths = write_daily_collection_diagnostic(day, plan)
-        LOGGER.info("COLLECTION_REPORT_WRITTEN date=%s json=%s text=%s", day.isoformat(), paths["json"], paths["text"])
+        LOGGER.info("COLLECTION_REPORT_WRITTEN date=%s json=%s text=%s", format_trading_date(day), paths["json"], paths["text"])
     except Exception as exc:
-        LOGGER.error("COLLECTION_DIAGNOSTIC_ERROR date=%s error=%s", day.isoformat(), exc, exc_info=True)
+        LOGGER.error("COLLECTION_DIAGNOSTIC_ERROR date=%s error=%s", format_trading_date(day), exc, exc_info=True)
     try:
-        _backup_day(day, DATA_ROOT / day.isoformat(), source_root=DATA_ROOT)
+        _backup_day(day, DATA_ROOT / format_trading_date(day), source_root=DATA_ROOT)
     except Exception as exc:
-        LOGGER.error("BACKUP_ERROR date=%s error=%s", day.isoformat(), exc, exc_info=True)
+        LOGGER.error("BACKUP_ERROR date=%s error=%s", format_trading_date(day), exc, exc_info=True)
 
 
 async def _collect_day(day: date, plan: CollectionPlan) -> None:
@@ -225,10 +208,10 @@ async def _collect_day(day: date, plan: CollectionPlan) -> None:
     transport = KISFuturesMarketTransport(auth)
     collector = KISRealtimeCollector(transport, store, max_reconnects=1)
 
-    await collector.start(day.isoformat(), plan.subscriptions)
+    await collector.start(format_trading_date(day), plan.subscriptions)
     LOGGER.info(
         "DAY_STARTED date=%s subscriptions=%d monthly_expiry=%s weekly_expiry=%s monthly_strikes=%s weekly_strikes=%s",
-        day.isoformat(), len(plan.subscriptions), plan.monthly_expiry, plan.weekly_expiry,
+        format_trading_date(day), len(plan.subscriptions), plan.monthly_contract_label, plan.weekly_contract_label,
         plan.monthly_strikes, plan.weekly_strikes,
     )
 
@@ -250,13 +233,13 @@ async def _collect_day(day: date, plan: CollectionPlan) -> None:
             if not alert_checked and now.time() >= ALERT_CHECK_TIME:
                 alert_checked = True
                 if tr_counts.get("H0IOCNT0", 0) == 0:
-                    LOGGER.warning("ALERT_NO_OPTION_FRAMES date=%s", day.isoformat())
+                    LOGGER.warning("ALERT_NO_OPTION_FRAMES date=%s", format_trading_date(day))
                     _write_option_alert(day, DATA_ROOT, tr_counts)
 
             if (now - last_heartbeat_at).total_seconds() >= HEARTBEAT_INTERVAL_SECONDS:
                 LOGGER.info(
                     "HEARTBEAT date=%s received_count=%d tr_counts=%s last_received_at=%s",
-                    day.isoformat(), received_count, dict(sorted(tr_counts.items())), last_received_at,
+                    format_trading_date(day), received_count, dict(sorted(tr_counts.items())), last_received_at,
                 )
                 last_heartbeat_at = now
 
@@ -268,12 +251,12 @@ async def _collect_day(day: date, plan: CollectionPlan) -> None:
             except asyncio.TimeoutError:
                 continue
             except Exception as exc:
-                LOGGER.exception("RECEIVE_ERROR date=%s error=%s", day.isoformat(), exc)
+                LOGGER.exception("RECEIVE_ERROR date=%s error=%s", format_trading_date(day), exc)
                 await collector.close()
                 await asyncio.sleep(2)
                 if _now_kst().date() != day:
                     break
-                await collector.start(day.isoformat(), plan.subscriptions)
+                await collector.start(format_trading_date(day), plan.subscriptions)
     finally:
         await collector.close()
 
@@ -316,7 +299,7 @@ class DateSessionManifest:
     def new(cls, day: date, run_id: str, status: str) -> "DateSessionManifest":
         return cls(
             schema_version="project200-kis-market-day-v1",
-            trading_date=day.isoformat(), session_status=status, run_id=run_id,
+            trading_date=format_trading_date(day), session_status=status, run_id=run_id,
             started_at=datetime.now(KST).isoformat(),
             collectors={"rest": {"status": "NOT_STARTED"}, "websocket": {"status": "NOT_STARTED"}},
         )
@@ -354,7 +337,7 @@ class DailySessionOrchestrator:
         self.rest_collector = rest_collector
 
     def day_dir(self, day: date) -> Path:
-        return self.market_data_root / day.isoformat()
+        return self.market_data_root / format_trading_date(day)
 
     def store_for(self, day: date) -> HistoricalMarketStore:
         return HistoricalMarketStore(self.day_dir(day) / "historical_market_observations.jsonl")
@@ -398,7 +381,7 @@ class DailySessionOrchestrator:
         manifest.collectors["rest"] = {"status": "RUNNING", "last_result_count": len(results)}
 
     def _reconcile_websocket_evidence(self, manifest: DateSessionManifest) -> None:
-        day_dir = self.day_dir(date.fromisoformat(manifest.trading_date))
+        day_dir = self.day_dir(parse_trading_date(manifest.trading_date))
         evidence = sorted(day_dir.glob("kis_vts_websocket*.jsonl"))
         evidence = [path for path in evidence if path.is_file() and path.stat().st_size > 0]
         websocket = dict(manifest.collectors.get("websocket", {}))
@@ -428,18 +411,18 @@ class DailySessionOrchestrator:
                 files.append({"path": str(path.relative_to(day_dir)), "sha256": _sha256_file(path)})
         manifest.files = files
         manifest.write(day_dir)
-        self._write_status(manifest_day := date.fromisoformat(manifest.trading_date), manifest)
+        self._write_status(manifest_day := parse_trading_date(manifest.trading_date), manifest)
 
 
 REST_CYCLE_INTERVAL_SECONDS = 30
 REST_ROUND_REQUESTS_PER_TARGET = 2
-_KIS_OPTION_RESOLVER_CACHE: dict[date, KRXKISOptionIdentityResolver] = {}
+_KIS_OPTION_RESOLVER_CACHE: dict[date, KISOptionIdentityResolver] = {}
 
 
-def _kis_option_resolver_for_day(day: date) -> KRXKISOptionIdentityResolver:
+def _kis_option_resolver_for_day(day: date) -> KISOptionIdentityResolver:
     resolver = _KIS_OPTION_RESOLVER_CACHE.get(day)
     if resolver is None:
-        resolver = KRXKISOptionIdentityResolver(load_kis_index_option_master())
+        resolver = KISOptionIdentityResolver(load_kis_index_option_master())
         _KIS_OPTION_RESOLVER_CACHE[day] = resolver
     return resolver
 
@@ -447,11 +430,10 @@ def _kis_option_resolver_for_day(day: date) -> KRXKISOptionIdentityResolver:
 def build_daily_targets(day: date) -> tuple[CollectionTarget, ...]:
     """Build REST option targets directly from the KIS broker master.
 
-    KRX Marketplace Option Master is deliberately not a prerequisite for raw
-    KIS collection. KIS supplies the broker symbol and contract identity used
-    by the REST transport; KRX remains available downstream for reconciliation.
+    The official KIS option master supplies broker symbols and option
+    contract identity; no KRX master or cross-source fallback is used.
     """
-    reference_price = Decimal(_latest_krx_spot_price())
+    reference_price = _kis_index_reference_price(day)
     subscriptions = current_monthly_option_symbols(
         day, reference_price,
         (
@@ -471,32 +453,42 @@ def build_daily_targets(day: date) -> tuple[CollectionTarget, ...]:
             raise ValueError(f"KIS_OPTION_IDENTITY_REQUIRED:{symbol}")
         targets.append(CollectionTarget(identity=identity))
     if not targets:
-        raise ValueError(f"KIS_OPTION_TARGETS_REQUIRED:{day.isoformat()}")
+        raise ValueError(f"KIS_OPTION_TARGETS_REQUIRED:{format_trading_date(day)}")
     center = sum((Decimal(str(target.identity.strike)) for target in targets), Decimal("0")) / len(targets)
     targets.sort(key=lambda target: (abs(Decimal(str(target.identity.strike)) - center), str(target.identity.option_type), target.identity.symbol))
     return tuple(targets)
 
+def _kis_index_reference_price(day: date) -> Decimal:
+    auth = KISAuthManager.from_env(
+        is_vts=True,
+        env_file=str(ROOT / ".env"),
+        cache_file_path=str(ROOT / "data" / ".kis_token_cache_vts.json"),
+    )
+    if not auth.has_credentials():
+        raise RuntimeError("KIS_VTS_CREDENTIALS_REQUIRED")
+    observation = KISKOSPI200IndexPriceSource(auth).refresh()
+    if observation.index_code != "2001" or observation.price <= 0:
+        raise RuntimeError(f"KIS_KOSPI200_REFERENCE_PRICE_INVALID:{format_trading_date(day)}")
+    return observation.price
+
+
 def build_plan_for_day(day: date) -> CollectionPlan:
-    reference_price = _latest_krx_spot_price()
-    monthly_paths, weekly_paths = resolve_option_master_paths_for_day(ROOT, day)
-    try:
-        return build_collection_plan(
-            reference_price=Decimal(reference_price),
-            option_master_paths=monthly_paths,
-            weekly_master_paths=weekly_paths,
-            standard_futures_symbol="A01609", mini_futures_symbol="A05609", as_of=day,
-        )
-    except ValueError as exc:
-        if str(exc) != "NO_LISTED_OPTION_EXPIRY_AVAILABLE":
-            raise
-        snapshots = discover_master_snapshot_dates(ROOT, day)
-        raise KRXOptionMasterRefreshRequired(
-            f"KRX_OPTION_MASTER_REFRESH_REQUIRED:expiry:{day.isoformat()}:snapshots={snapshots}"
-        ) from exc
+    reference_price = _kis_index_reference_price(day)
+    option_rows = load_kis_index_option_rows()
+    futures = dict(current_kospi200_futures_symbols(day))
+    if "STANDARD" not in futures or "MINI" not in futures:
+        raise RuntimeError("KIS_CURRENT_KOSPI200_FUTURES_REQUIRED")
+    return build_collection_plan(
+        reference_price=reference_price,
+        option_master_rows=option_rows,
+        standard_futures_symbol=futures["STANDARD"],
+        mini_futures_symbol=futures["MINI"],
+        as_of=day,
+    )
 
 
 def _daily_run_id(day: date) -> str:
-    return f"vts-rest-daily-{day.isoformat()}"
+    return f"vts-rest-daily-{format_trading_date(day)}"
 
 
 def _manifest_target_rows(targets: tuple[CollectionTarget, ...]) -> list[dict[str, object]]:
@@ -516,7 +508,11 @@ def _rest_collector_for_day(day: date, store: HistoricalMarketStore):
     )
     if not auth.has_credentials():
         raise RuntimeError("KIS_VTS_CREDENTIALS_REQUIRED")
-    transport = KISRestMarketObservationTransport(auth)
+    timing_path = MARKET_DATA_ROOT / format_trading_date(day) / "rest_request_timing.jsonl"
+    transport = KISRestMarketObservationTransport(
+        auth,
+        event_sink=lambda event: _write_json_line(timing_path, event),
+    )
     targets = build_daily_targets(day)
     identity_source = {target.identity.symbol: target.identity for target in targets}
     return KISRestMarketObservationCollector(
@@ -545,12 +541,12 @@ def run_rest_cycle_for_day(day: date, manifest: DateSessionManifest, *, cycle_id
     }
     orchestrator = DailySessionOrchestrator(MARKET_DATA_ROOT, object())
     orchestrator.record_rest_results(manifest, results)
-    blocked_path = MARKET_DATA_ROOT / day.isoformat() / 'rest_blocked_diagnostics.jsonl'
+    blocked_path = MARKET_DATA_ROOT / format_trading_date(day) / 'rest_blocked_diagnostics.jsonl'
     for result in results:
         diagnostic = getattr(result, 'diagnostic', None)
         if str(getattr(result, 'status', '')) == 'BLOCKED':
             _write_json_line(blocked_path, {
-                'trading_date': day.isoformat(),
+                'trading_date': format_trading_date(day),
                 'run_id': manifest.run_id,
                 'cycle_id': cycle_id,
                 'symbol': getattr(result, 'symbol', None),
@@ -626,7 +622,7 @@ def collect_underlying_futures_observation(day: date, manifest: DateSessionManif
             ).group(1),
         )
         collected_at = _now_kst().isoformat()
-        day_dir = MARKET_DATA_ROOT / day.isoformat()
+        day_dir = MARKET_DATA_ROOT / format_trading_date(day)
         day_dir.mkdir(parents=True, exist_ok=True)
         _write_json_line(day_dir / "futures_underlying_rest.jsonl", {
             "collected_at": collected_at,
@@ -671,24 +667,29 @@ def collect_underlying_futures_observation(day: date, manifest: DateSessionManif
 
 
 def authoritative_calendar_for_today(day: date):
-    kis_provider = KISHolidayProvider(
-        auth_manager=KISAuthManager.from_env(
-            is_vts=False, env_file=str(ROOT / ".env"),
-            cache_file_path=str(ROOT / "data" / ".kis_token_cache_real.json"),
-        ),
-        auto_load=False,
-        target_year=day.year,
+    # Common calendar factory owns the daily provider + annual resolution chain.
+    # This VTS collector intentionally keeps LIVE annual credentials separate from
+    # VTS daily endpoint credentials; neither environment is used as the other's fallback.
+    live_auth = KISAuthManager.from_env(
+        is_vts=False,
+        env_file=str(ROOT / ".env"),
+        cache_file_path=str(ROOT / "data" / ".kis_token_cache_real.json"),
+    )
+    vts_daily_auth = KISAuthManager.from_env(
+        is_vts=True,
+        env_file=str(ROOT / ".env"),
+        cache_file_path=str(ROOT / "data" / ".kis_token_cache_vts.json"),
+    )
+    return create_kis_trading_calendar(
+        auth_manager=live_auth,
+        daily_auth_manager=vts_daily_auth,
+        is_vts=False,
+        auto_load_kis=True,
         strict_mode=True,
+        target_year=day.year,
+        approved_holiday_dir=ROOT / "data" / "reference" / "kis" / "approved_holidays",
+        daily_evidence_dir=ROOT / "verification" / "evidence" / "kis_daily_trading_day_snapshots",
     )
-    krx_provider = KRXHolidayProvider(
-        cache_dir=ROOT / "data" / "calendar",
-    )
-    provider = FallbackHolidayProvider(
-        kis_provider=kis_provider,
-        krx_provider=krx_provider,
-        enable_kis=True,
-    )
-    return ProductionTradingCalendar(provider)
 
 
 def pre_open_smoke(day: date, *, market_data_root: Path = MARKET_DATA_ROOT) -> DateSessionManifest:
@@ -768,9 +769,9 @@ async def run_daily_forever() -> None:
                 cycle_number += 1
                 run_rest_cycle_for_day(active_day, manifest, cycle_id=f"cycle-{cycle_number:04d}")
                 collect_underlying_futures_observation(active_day, manifest)
-                manifest.write(MARKET_DATA_ROOT / active_day.isoformat())
-                _write_json_line(MARKET_DATA_ROOT / active_day.isoformat() / "heartbeat.jsonl", {
-                    "trading_date": active_day.isoformat(), "run_id": manifest.run_id,
+                manifest.write(MARKET_DATA_ROOT / format_trading_date(active_day))
+                _write_json_line(MARKET_DATA_ROOT / format_trading_date(active_day) / "heartbeat.jsonl", {
+                    "trading_date": format_trading_date(active_day), "run_id": manifest.run_id,
                     "heartbeat_at": now.isoformat(), "cycle_id": f"cycle-{cycle_number:04d}",
                     "rest_status": manifest.collectors.get("rest", {}).get("status"),
                 })
@@ -794,6 +795,10 @@ def daily_main() -> None:
     if args.once:
         result = run_daily_once()
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+        return
+    lock_handle = acquire_process_lock(MARKET_DATA_ROOT / "logs" / "kis_vts_weekday_collector.lock")
+    if lock_handle is None:
+        LOGGER.error("COLLECTOR_INSTANCE_BLOCKED reason=ANOTHER_REST_COLLECTOR_HOLDS_LOCK")
         return
     asyncio.run(run_daily_forever())
 

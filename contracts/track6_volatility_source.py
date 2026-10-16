@@ -5,6 +5,8 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Protocol
 
+from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
+
 
 @dataclass(frozen=True)
 class Track6VolatilitySnapshot:
@@ -16,6 +18,12 @@ class Track6VolatilitySnapshot:
     expiry: str
     observed_at: datetime
     source: str
+
+    def __post_init__(self) -> None:
+        try:
+            object.__setattr__(self, "expiry", require_exact_option_expiry(self.expiry))
+        except CanonicalOptionExpiryError as exc:
+            raise ValueError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
 
 
 class Track6VolatilitySource(Protocol):

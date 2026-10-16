@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
 from decimal import Decimal
 
 
@@ -35,6 +36,10 @@ def validate_lossless_transport(request: CanonicalOrderTransportInput) -> None:
     if request.asset_type == "OPTION":
         if not request.symbol or not request.expiry:
             raise CanonicalOrderTransportError("OPTION_SYMBOL_EXPIRY_REQUIRED")
+        try:
+            require_exact_option_expiry(request.expiry)
+        except CanonicalOptionExpiryError as exc:
+            raise CanonicalOrderTransportError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
         if request.option_type not in {"CALL", "PUT"}:
             raise CanonicalOrderTransportError("OPTION_TYPE_REQUIRED")
         if request.strike is None:

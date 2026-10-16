@@ -1,3 +1,4 @@
+from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
 from dataclasses import dataclass
 
 from contracts.types import BrokerOrderCommand, OrderIntent
@@ -34,6 +35,10 @@ class OrderIntentAdapter:
                 raise OrderIntentMappingError("OPTION_IDENTITY_REQUIRED")
             if not identity.symbol or not identity.expiry:
                 raise OrderIntentMappingError("OPTION_SYMBOL_EXPIRY_REQUIRED")
+            try:
+                require_exact_option_expiry(identity.expiry)
+            except CanonicalOptionExpiryError as exc:
+                raise OrderIntentMappingError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
             if identity.option_type is None or identity.strike is None or identity.strike <= 0:
                 raise OrderIntentMappingError("OPTION_CONTRACT_FIELDS_REQUIRED")
             if identity.instrument_id != intent.instrument_id:

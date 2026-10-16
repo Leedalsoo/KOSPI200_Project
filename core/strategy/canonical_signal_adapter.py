@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional
 from contracts.types import OptionInstrumentIdentity
+from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
 from contracts.futures_identity_source_port import FuturesInstrumentIdentity
 from core.strategy.contracts import Signal
 from shared.contracts.canonical import CanonicalAssetType, CanonicalOrderSide, CanonicalOptionType, CanonicalStrategySignal
@@ -41,8 +42,12 @@ def signal_to_canonical(signal: Signal, runtime: RuntimeSignalContext, instrumen
         if not isinstance(identity, OptionInstrumentIdentity): raise ValueError("OPTION_IDENTITY_REQUIRED")
         if not identity.instrument_id or not identity.symbol or not identity.expiry or identity.option_type is None or identity.strike is None:
             raise ValueError("OPTION_IDENTITY_INCOMPLETE")
+        try:
+            exact_expiry = require_exact_option_expiry(identity.expiry)
+        except CanonicalOptionExpiryError as exc:
+            raise ValueError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
         if proposal.option_type is not None and str(proposal.option_type) != str(identity.option_type): raise ValueError("OPTION_TYPE_IDENTITY_MISMATCH")
         if proposal.strike is not None and proposal.strike != identity.strike: raise ValueError("STRIKE_IDENTITY_MISMATCH")
-        option_type = CanonicalOptionType(str(identity.option_type)); strike = float(identity.strike); symbol = identity.symbol; expiry = identity.expiry; instrument_id = identity.instrument_id
+        option_type = CanonicalOptionType(str(identity.option_type)); strike = float(identity.strike); symbol = identity.symbol; expiry = exact_expiry; instrument_id = identity.instrument_id
         multiplier = float(identity.contract_multiplier) if identity.contract_multiplier is not None else None; identity_source = identity.identity_source or ""
     return CanonicalStrategySignal(signal_id=signal_id, track_id=track_id, asset_type=asset_type, side=side, qty=proposal.proposed_quantity, price=float(runtime.price), option_type=option_type, strike=strike, tag_id=str(proposal.tag_id) if proposal.tag_id is not None else "", reason=signal.reason, timestamp=runtime.timestamp, symbol=symbol, expiry=expiry, instrument_id=instrument_id, contract_multiplier=multiplier, identity_source=identity_source)

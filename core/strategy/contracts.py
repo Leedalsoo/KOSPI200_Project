@@ -8,6 +8,7 @@ from typing import Mapping, Protocol, Sequence, runtime_checkable
 
 from contracts.analytics import AnalyticsMetric, AnalyticsSnapshot, AnalyticsStatus
 from contracts.types import OptionInstrumentIdentity
+from contracts.market_data_freshness import FreshnessVerdict
 from core.domain.market_models import MarketState
 from core.strategy.definition import StrategyDefinition
 
@@ -51,6 +52,9 @@ class StrategyContext:
     strategy_id: str = ""
     input: StrategyInput | None = None
     analytics: AnalyticsSnapshot | None = None
+    # Only populated by a source adapter that can provide verified evidence.
+    # None is intentionally fail-closed at the final order admission boundary.
+    freshness_verdict: FreshnessVerdict | None = None
 
 
 class SignalKind(str, Enum):

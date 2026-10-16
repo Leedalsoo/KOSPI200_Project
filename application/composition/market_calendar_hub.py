@@ -1,8 +1,11 @@
 """Common Market Calendar Hub / read model for all runtime consumers."""
 from __future__ import annotations
+from contracts.trading_date import parse_trading_date
 
 from datetime import date, timedelta
 from typing import Any
+
+from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
 
 from contracts.market_calendar import MarketCalendarSnapshot, MarketCalendarStatus
 
@@ -93,15 +96,11 @@ class MarketCalendarHub:
         )
         if identity is None or not getattr(identity, "expiry", None):
             return None
-        raw = str(identity.expiry).replace("-", "").strip()
         try:
-            if len(raw) == 6 and raw.isdigit():
-                year, month = int(raw[:4]), int(raw[4:6])
-                first = date(year, month, 1)
-                return first + timedelta(days=(3 - first.weekday()) % 7 + 14)
-            return date.fromisoformat(str(identity.expiry))
-        except (ValueError, TypeError) as exc:
-            raise ValueError("MARKET_CALENDAR_AUTHORITATIVE_OPTION_EXPIRY_INVALID") from exc
+            exact = require_exact_option_expiry(str(identity.expiry))
+            return date.fromisoformat(f"{exact[:4]}-{exact[4:6]}-{exact[6:8]}")
+        except (CanonicalOptionExpiryError, ValueError, TypeError) as exc:
+            raise ValueError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
 
     def flags(self, observed_date: date, expiry: date | None = None) -> tuple[bool, bool, bool]:
         snapshot = self.snapshot(observed_date, expiry=expiry)

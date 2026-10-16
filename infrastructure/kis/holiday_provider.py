@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import date
@@ -66,6 +67,7 @@ class KISHolidayProvider:
         self._urlopen = urlopen
         self._last_error: Optional[str] = None
         self._loaded_years: Set[int] = {d.year for d in self._holidays}
+        self._year_response_dates: dict[int, Set[date]] = {}
 
         if auto_load and not self._holidays:
             self.load_from_kis_api(self._target_year)
@@ -76,6 +78,17 @@ class KISHolidayProvider:
 
     def is_year_loaded(self, year: int) -> bool:
         return year in self._loaded_years and self._last_error is None
+
+    def is_year_complete(self, year: int) -> bool:
+        # Do not infer missing dates as open days. Require explicit KIS coverage
+        # for every calendar date before using this endpoint as an annual calendar.
+        values = self._year_response_dates.get(year, set())
+        first = date(year, 1, 1)
+        stop = date(year + 1, 1, 1)
+        expected = (stop - first).days
+        return len(values) == expected and all(
+            first <= item < stop for item in values
+        )
 
     @property
     def total_holidays(self) -> int:
@@ -112,11 +125,23 @@ class KISHolidayProvider:
             self._last_error = "Invalid output field: expected list"
             raise KISHolidayParseError(self._last_error)
 
-        parsed = parse_kis_holiday_output([item for item in output if isinstance(item, Mapping)])
+        typed_output = [item for item in output if isinstance(item, Mapping)]
+        parsed = parse_kis_holiday_output(typed_output)
         self._holidays.update(parsed)
         resolved_year = year or (min((d.year for d in parsed), default=None))
+        response_dates: Set[date] = set()
+        for item in typed_output:
+            raw_date = str(item.get("bass_dt", "")).strip()
+            if len(raw_date) == 8 and raw_date.isdigit():
+                try:
+                    value = date(int(raw_date[:4]), int(raw_date[4:6]), int(raw_date[6:8]))
+                except ValueError:
+                    continue
+                if resolved_year is None or value.year == resolved_year:
+                    response_dates.add(value)
         if resolved_year is not None:
             self._loaded_years.add(resolved_year)
+            self._year_response_dates.setdefault(resolved_year, set()).update(response_dates)
         self._last_error = None
         return len(parsed)
 
@@ -125,7 +150,7 @@ class KISHolidayProvider:
         try:
             auth = self._auth_manager
             if auth is None:
-                auth = KISAuthManager.from_env()
+                auth = KISAuthManager.from_env(is_vts=True)
                 self._auth_manager = auth
 
             if not auth.has_credentials():
@@ -169,6 +194,17 @@ class KISHolidayProvider:
             self._loaded_years.add(year)
             self._last_error = None
             return total_loaded
+        except urllib.error.HTTPError as exc:
+            raw_body = exc.read().decode("utf-8", errors="replace")
+            try:
+                body = json.loads(raw_body) if raw_body else {}
+            except json.JSONDecodeError:
+                body = {}
+            msg_cd = str(body.get("msg_cd") or "UNAVAILABLE")
+            msg1 = str(body.get("msg1") or raw_body or "NO_RESPONSE_BODY")
+            self._last_error = f"KIS_HOLIDAY_HTTP_{exc.code}:msg_cd={msg_cd};msg1={msg1}"
+            logger.warning("KIS holiday API HTTP failure status=%s msg_cd=%s msg1=%s", exc.code, msg_cd, msg1)
+            return 0
         except Exception as exc:
             self._last_error = str(exc)
             logger.warning("KIS holiday API load failed: %s", exc)

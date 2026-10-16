@@ -1,5 +1,6 @@
 """Historical daily OHLC adapter backed by the authoritative daily store."""
 from __future__ import annotations
+from contracts.trading_date import format_trading_date
 
 from datetime import datetime
 from typing import Any
@@ -24,7 +25,7 @@ class HistoricalMarketDailyOHLCProvider:
         if not requested:
             raise ValueError("HISTORICAL_OHLC_SYMBOL_REQUIRED")
         candidates: list[HistoricalDailyOHLC] = []
-        for record, _provenance in self.store.load_records(symbol=requested, trading_date=target.isoformat()):
+        for record, _provenance in self.store.load_records(symbol=requested, trading_date=format_trading_date(target)):
             # `observed_at` is the source observation/retrieval timestamp; the
             # completed daily bar's market date is the authoritative freshness boundary.
             if record.trading_date >= observed_at.date():

@@ -1,12 +1,10 @@
 from __future__ import annotations
+from contracts.trading_date import parse_trading_date
 
 from dataclasses import dataclass
 from datetime import date, datetime, timezone, timedelta
-from decimal import Decimal, ROUND_HALF_UP
-from pathlib import Path
-from typing import Sequence
-
-from infrastructure.krx.krx_marketplace_master import load_option_master
+from decimal import Decimal
+from typing import Mapping, Sequence
 
 
 KST = timezone(timedelta(hours=9))
@@ -42,124 +40,140 @@ class CollectionWindow:
 @dataclass(frozen=True)
 class CollectionPlan:
     subscriptions: tuple[tuple[str, str], ...]
-    monthly_expiry: str
-    weekly_expiry: str
+    monthly_contract_label: str
+    weekly_contract_label: str
     monthly_strikes: tuple[Decimal, ...]
     weekly_strikes: tuple[Decimal, ...]
     standard_futures_symbol: str
     mini_futures_symbol: str
 
 
-def _nearest_strike(price: Decimal) -> Decimal:
-    return (price / Decimal("2.5")).quantize(Decimal("1"), rounding=ROUND_HALF_UP) * Decimal("2.5")
+def _row_month(row: Mapping[str, object]) -> str:
+    month = str(row.get("month") or "")
+    if len(month) != 6 or not month.isdigit():
+        raise ValueError("KIS_OPTION_MASTER_MONTH_LABEL_REQUIRED")
+    return month
 
 
-def _next_expiry(identities: Sequence[object], as_of: date, *, strictly_after: bool = False) -> str:
-    expiries = sorted(
-        {
-            identity.expiry
-            for identity in identities
-            if identity.expiry
-            and (
-                date.fromisoformat(identity.expiry) > as_of
-                if strictly_after
-                else date.fromisoformat(identity.expiry) >= as_of
-            )
-        }
+def _row_week(row: Mapping[str, object]) -> int:
+    label = str(row.get("week_label") or "")
+    if len(label) != 2 or label[0] != "W" or not label[1].isdigit():
+        raise ValueError("KIS_OPTION_MASTER_WEEK_LABEL_REQUIRED")
+    return int(label[1])
+
+
+def _select_monthly_rows(rows: Sequence[Mapping[str, object]], as_of: date) -> tuple[str, tuple[Mapping[str, object], ...]]:
+    current_month = f"{as_of.year:04d}{as_of.month:02d}"
+    months = sorted({
+        _row_month(row) for row in rows
+        if row.get("product_series") == "MONTHLY"
+        and row.get("instrument_family") == "STANDARD"
+        and row.get("type_code") in {"5", "6"}
+        and _row_month(row) >= current_month
+    })
+    if not months:
+        raise ValueError(f"KIS_MONTHLY_OPTION_MONTH_REQUIRED:{current_month}")
+    month = months[0]
+    selected = tuple(
+        row for row in rows
+        if row.get("product_series") == "MONTHLY"
+        and row.get("instrument_family") == "STANDARD"
+        and row.get("type_code") in {"5", "6"}
+        and _row_month(row) == month
     )
-    if not expiries:
-        raise ValueError("NO_LISTED_OPTION_EXPIRY_AVAILABLE")
-    return expiries[0]
+    if not selected:
+        raise ValueError(f"KIS_MONTHLY_OPTION_ROWS_REQUIRED:{month}")
+    return month, selected
 
 
-def _find_option(
-    identities: Sequence[object],
-    *,
-    expiry: str,
-    option_type: str,
-    strike: Decimal,
-) -> str:
+def _select_weekly_rows(rows: Sequence[Mapping[str, object]], as_of: date) -> tuple[str, tuple[Mapping[str, object], ...]]:
+    current_month = f"{as_of.year:04d}{as_of.month:02d}"
+    current_week = (as_of.day - 1) // 7 + 1
+    candidates: list[tuple[str, int, str]] = []
+    for row in rows:
+        series = str(row.get("product_series") or "")
+        if series not in {"THURSDAY_WEEKLY", "MONDAY_WEEKLY"} or row.get("instrument_family") != "STANDARD":
+            continue
+        month = _row_month(row)
+        if month < current_month:
+            continue
+        week = _row_week(row)
+        if month == current_month and week < current_week:
+            continue
+        if month == current_month and (
+            (series == "MONDAY_WEEKLY" and as_of.weekday() > 0)
+            or (series == "THURSDAY_WEEKLY" and as_of.weekday() > 3)
+        ):
+            continue
+        candidates.append((month, week, series))
+    if not candidates:
+        raise ValueError(f"KIS_WEEKLY_OPTION_SERIES_REQUIRED:{as_of.isoformat()}")
+    month, week, series = min(candidates)
+    label = f"{month[2:]}W{week}:{series}"
+    selected = tuple(
+        row for row in rows
+        if row.get("product_series") == series
+        and row.get("instrument_family") == "STANDARD"
+        and _row_month(row) == month
+        and _row_week(row) == week
+    )
+    if not selected:
+        raise ValueError(f"KIS_WEEKLY_OPTION_ROWS_REQUIRED:{label}")
+    return label, selected
+
+
+def _find_option_symbol(rows: Sequence[Mapping[str, object]], *, option_type: str, strike: Decimal) -> str:
     matches = [
-        identity
-        for identity in identities
-        if identity.expiry == expiry
-        and identity.option_type == option_type
-        and identity.strike == strike
-        and identity.contract_multiplier == Decimal("250000")
+        row for row in rows
+        if row.get("option_type") == option_type
+        and row.get("strike") == strike
+        and isinstance(row.get("short_code"), str)
+        and row.get("short_code")
     ]
     if len(matches) != 1:
-        raise ValueError(
-            f"AUTHORITATIVE_OPTION_IDENTITY_REQUIRED:{expiry}:{option_type}:{strike}:{len(matches)}"
-        )
-    return matches[0].shrn_iscd
+        raise ValueError(f"KIS_AUTHORITATIVE_OPTION_SYMBOL_REQUIRED:{option_type}:{strike}:{len(matches)}")
+    return str(matches[0]["short_code"])
 
 
 def build_collection_plan(
     *,
     reference_price: Decimal,
-    option_master_paths: Sequence[str | Path],
-    weekly_master_paths: Sequence[str | Path],
+    option_master_rows: Sequence[Mapping[str, object]],
     standard_futures_symbol: str,
     mini_futures_symbol: str,
     as_of: date,
 ) -> CollectionPlan:
-    monthly_master = load_option_master(option_master_paths)
-    weekly_master = load_option_master(weekly_master_paths)
-
-    monthly_identities = tuple(monthly_master.identities.values())
-    weekly_identities = tuple(weekly_master.identities.values())
-
-    monthly_expiry = _next_expiry(monthly_identities, as_of)
-    weekly_expiry = _next_expiry(weekly_identities, as_of)
-
-    atm = _nearest_strike(Decimal(reference_price))
+    if not option_master_rows:
+        raise ValueError("KIS_OPTION_MASTER_ROWS_REQUIRED")
+    monthly_label, monthly_rows = _select_monthly_rows(option_master_rows, as_of)
+    weekly_label, weekly_rows = _select_weekly_rows(option_master_rows, as_of)
+    available_monthly_strikes = sorted({
+        row["strike"] for row in monthly_rows if isinstance(row.get("strike"), Decimal)
+    })
+    if not available_monthly_strikes:
+        raise ValueError(f"KIS_MONTHLY_OPTION_STRIKES_REQUIRED:{monthly_label}")
+    atm = min(available_monthly_strikes, key=lambda strike: abs(strike - Decimal(reference_price)))
     monthly_strikes = tuple(atm + offset for offset in STRATEGY_MONTHLY_OFFSETS)
-
-    # Track7 is the only strategy whose current contract rule is explicitly
-    # weekly; it needs the listed ATM±15 CALL/PUT pair.
     weekly_strikes = (atm - Decimal("15.0"), atm + Decimal("15.0"))
-
     subscriptions: list[tuple[str, str]] = []
     for strike in monthly_strikes:
-        subscriptions.append(
-            (OPTION_TRADE_TR_ID, _find_option(
-                monthly_identities, expiry=monthly_expiry, option_type="PUT", strike=strike
-            ))
-        )
-        subscriptions.append(
-            (OPTION_TRADE_TR_ID, _find_option(
-                monthly_identities, expiry=monthly_expiry, option_type="CALL", strike=strike
-            ))
-        )
-
+        for option_type in ("PUT", "CALL"):
+            subscriptions.append((OPTION_TRADE_TR_ID, _find_option_symbol(monthly_rows, option_type=option_type, strike=strike)))
     for strike in weekly_strikes:
-        subscriptions.append(
-            (OPTION_TRADE_TR_ID, _find_option(
-                weekly_identities, expiry=weekly_expiry, option_type="PUT", strike=strike
-            ))
-        )
-        subscriptions.append(
-            (OPTION_TRADE_TR_ID, _find_option(
-                weekly_identities, expiry=weekly_expiry, option_type="CALL", strike=strike
-            ))
-        )
-
-    subscriptions.extend(
-        (
-            (FUTURES_TRADE_TR_ID, standard_futures_symbol),
-            (FUTURES_QUOTE_TR_ID, standard_futures_symbol),
-            (FUTURES_TRADE_TR_ID, mini_futures_symbol),
-            (FUTURES_QUOTE_TR_ID, mini_futures_symbol),
-        )
-    )
-
+        for option_type in ("PUT", "CALL"):
+            subscriptions.append((OPTION_TRADE_TR_ID, _find_option_symbol(weekly_rows, option_type=option_type, strike=strike)))
+    subscriptions.extend((
+        (FUTURES_TRADE_TR_ID, standard_futures_symbol),
+        (FUTURES_QUOTE_TR_ID, standard_futures_symbol),
+        (FUTURES_TRADE_TR_ID, mini_futures_symbol),
+        (FUTURES_QUOTE_TR_ID, mini_futures_symbol),
+    ))
     if len(subscriptions) > MAX_SUBSCRIPTIONS:
         raise ValueError(f"KIS_WEBSOCKET_SUBSCRIPTION_LIMIT_EXCEEDED:{len(subscriptions)}")
-
     return CollectionPlan(
         subscriptions=tuple(subscriptions),
-        monthly_expiry=monthly_expiry,
-        weekly_expiry=weekly_expiry,
+        monthly_contract_label=monthly_label,
+        weekly_contract_label=weekly_label,
         monthly_strikes=monthly_strikes,
         weekly_strikes=weekly_strikes,
         standard_futures_symbol=standard_futures_symbol,

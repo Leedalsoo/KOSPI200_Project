@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
@@ -73,6 +74,13 @@ class OptionInstrumentIdentity:
     strike: Decimal | None = None
     contract_multiplier: Decimal | None = None
     identity_source: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.expiry:
+            try:
+                object.__setattr__(self, "expiry", require_exact_option_expiry(self.expiry))
+            except CanonicalOptionExpiryError as exc:
+                raise ValueError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
 
 
 @dataclass(frozen=True)

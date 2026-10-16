@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contracts.trading_date import format_trading_date, parse_trading_date
 
 from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
@@ -38,7 +39,7 @@ class KISRealtimeCollector:
         self._sequence = 0
 
     async def start(self, trading_date: str, subscriptions: Sequence[tuple[str, str]]) -> None:
-        clean_date = str(trading_date).strip()
+        clean_date = format_trading_date(parse_trading_date(str(trading_date)))
         if not clean_date:
             raise ValueError("TRADING_DATE_REQUIRED")
         clean_subscriptions: list[tuple[str, str]] = []

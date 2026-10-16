@@ -6,11 +6,9 @@ from typing import Optional
 
 from core.option.option_master import IOptionContractMaster, create_default_option_master
 from infrastructure.kis.auth import KISAuthManager
-from infrastructure.kis.holiday_provider import KISHolidayProvider
-from infrastructure.kis.holiday_fallback_provider import (
-    FallbackHolidayProvider,
-    KRXHolidayProvider,
-)
+from infrastructure.kis.trading_calendar_factory import create_kis_trading_calendar
+from infrastructure.kis.kis_index_option_master_source import get_kis_index_master_snapshot
+from infrastructure.kis.kis_option_expiry_source import KISOptionExpiryResolver
 from infrastructure.kis.trading_calendar import ProductionTradingCalendar
 
 
@@ -24,24 +22,15 @@ def create_production_trading_calendar(
     calendar_cache_dir: Optional[str] = None,
 ) -> ProductionTradingCalendar:
     auth = auth_manager or KISAuthManager.from_env()
-    kis_provider = KISHolidayProvider(
+    return create_kis_trading_calendar(
         auth_manager=auth,
-        # FallbackHolidayProvider owns source resolution. Eager loading here duplicates
-        # the first KIS request before the fallback asks for the same year.
-        auto_load=False,
+        daily_auth_manager=auth,
+        is_vts=bool(getattr(auth, "is_vts", True)),
+        auto_load_kis=auto_load_kis,
         strict_mode=strict_mode,
         target_year=target_year,
+        approved_holiday_dir=Path("data/reference/kis/approved_holidays"),
     )
-    krx_provider = KRXHolidayProvider(
-        cache_dir=Path(calendar_cache_dir or "data/calendar"),
-        source_loader=krx_source_loader,
-    )
-    provider = FallbackHolidayProvider(
-        kis_provider=kis_provider,
-        krx_provider=krx_provider,
-        enable_kis=auto_load_kis,
-    )
-    return ProductionTradingCalendar(provider)
 
 
 def create_production_option_master(
@@ -52,14 +41,31 @@ def create_production_option_master(
     strict_calendar: bool = False,
     target_year: Optional[int] = None,
 ) -> IOptionContractMaster:
+    auth = auth_manager or KISAuthManager.from_env()
     calendar = create_production_trading_calendar(
-        auth_manager=auth_manager,
+        auth_manager=auth,
         auto_load_kis=auto_load_calendar,
         strict_mode=strict_calendar,
         target_year=target_year,
     )
+    resolver_cache = {}
+
+    def resolve_expiry(symbol: str, master_sha256: str):
+        resolver = resolver_cache.get(master_sha256)
+        if resolver is None:
+            resolver = KISOptionExpiryResolver(
+                master_sha256=master_sha256,
+                auth_manager=auth,
+                environment="VTS" if getattr(auth, "is_vts", True) else "LIVE",
+            )
+            resolver_cache[master_sha256] = resolver
+        return resolver.resolve(symbol)
+
     return create_default_option_master(
-        calendar=calendar, auto_load_kis=auto_load_kis_master
+        calendar=calendar,
+        auto_load_kis=auto_load_kis_master,
+        master_source_loader=get_kis_index_master_snapshot,
+        expiry_resolver=resolve_expiry,
     )
 
 

@@ -1,5 +1,6 @@
 """Pure S6 decision functions for the opt-in candidate implementation."""
 from __future__ import annotations
+from contracts.trading_date import format_trading_date
 
 from dataclasses import dataclass, replace
 from decimal import Decimal
@@ -37,7 +38,7 @@ def _as_time(snapshot: AnalyticsSnapshot) -> str:
     return snapshot.as_of.strftime("%H:%M:%S")
 
 def _as_date(snapshot: AnalyticsSnapshot) -> str:
-    return snapshot.as_of.date().isoformat()
+    return format_trading_date(snapshot.as_of.date())
 
 def _close_proposal(state: Track6State, *, tag_id: str, insurance_qty: int) -> StrategyExecutionProposal:
     if state.long_put_strike <= 0 or state.long_call_strike <= 0:

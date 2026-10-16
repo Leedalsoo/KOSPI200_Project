@@ -1,4 +1,5 @@
 ﻿from __future__ import annotations
+from contracts.trading_date import format_trading_date, parse_trading_date
 
 import json
 from dataclasses import asdict
@@ -20,7 +21,7 @@ class HistoricalDailyStore:
     @staticmethod
     def _serialize(record: HistoricalDailyOHLC) -> dict:
         data = asdict(record)
-        data["trading_date"] = record.trading_date.isoformat()
+        data["trading_date"] = format_trading_date(record.trading_date)
         data["observed_at"] = record.observed_at.isoformat()
         for field in ("open", "high", "low", "close"):
             data[field] = str(getattr(record, field))
@@ -31,7 +32,7 @@ class HistoricalDailyStore:
         from datetime import date, datetime
         return HistoricalDailyOHLC(
             symbol=str(data["symbol"]),
-            trading_date=date.fromisoformat(data["trading_date"]),
+            trading_date=parse_trading_date(data["trading_date"]),
             open=Decimal(str(data["open"])),
             high=Decimal(str(data["high"])),
             low=Decimal(str(data["low"])),
@@ -42,7 +43,7 @@ class HistoricalDailyStore:
 
     @staticmethod
     def _key(record: HistoricalDailyOHLC) -> tuple[str, str, str]:
-        return record.symbol, record.trading_date.isoformat(), record.source
+        return record.symbol, format_trading_date(record.trading_date), record.source
 
     def append(self, record: HistoricalDailyOHLC, *, provenance: dict[str, str]) -> None:
         if not provenance:

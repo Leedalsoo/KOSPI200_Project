@@ -1,4 +1,5 @@
 ﻿from __future__ import annotations
+from contracts.trading_date import format_trading_date, parse_trading_date
 
 import json
 from dataclasses import asdict
@@ -33,9 +34,9 @@ class HistoricalMarketStore:
 
     @classmethod
     def for_trading_date(cls, market_data_root: str | Path, trading_date: str | date) -> "HistoricalMarketStore":
-        value = trading_date.isoformat() if isinstance(trading_date, date) else str(trading_date)
-        parsed = datetime.strptime(value, "%Y-%m-%d").date()
-        return cls(Path(market_data_root) / parsed.isoformat() / "historical_market_observations.jsonl")
+        value = format_trading_date(trading_date) if isinstance(trading_date, date) else str(trading_date)
+        parsed = parse_trading_date(value)
+        return cls(Path(market_data_root) / format_trading_date(parsed) / "historical_market_observations.jsonl")
 
     def append(self, tick: ReferenceCanonicalMarketTick, *, source: str) -> None:
         source = str(source).strip()

@@ -5,6 +5,7 @@ from typing import Any
 
 from contracts.order_ack import to_order_ack_event
 from contracts.types import BrokerOrderCommand, BrokerOrderResponse
+from contracts.market_data_freshness import FreshnessVerdict, admits_freshness_verdict_for_identity
 from core.oms.oms_fsm import OrderStateMachine
 
 
@@ -21,6 +22,21 @@ class StandardOrderRouter:
     def register_and_route(self, command: BrokerOrderCommand, token: Any, *, broker_adapter: Any = None, **kwargs: Any) -> BrokerOrderResponse:
         if command is None: raise OrderRouterError("BROKER_ORDER_COMMAND_REQUIRED")
         if token is None: raise OrderRouterError("RISK_APPROVAL_TOKEN_REQUIRED")
+        freshness_verdict = kwargs.pop("freshness_verdict", None)
+        if not isinstance(freshness_verdict, FreshnessVerdict) or freshness_verdict.status.value != "FRESH":
+            raise OrderRouterError("MARKET_DATA_FRESHNESS_VERDICT_REQUIRED")
+        expected_symbol = str(command.broker_symbol or command.instrument_id or "").strip()
+        if (
+            not command.instrument_id or not expected_symbol
+            or freshness_verdict.instrument_id != command.instrument_id
+            or freshness_verdict.symbol != expected_symbol
+        ):
+            raise OrderRouterError("MARKET_DATA_FRESHNESS_COMMAND_IDENTITY_MISMATCH")
+        if not admits_freshness_verdict_for_identity(
+            freshness_verdict, expected_instrument_id=command.instrument_id,
+            expected_symbol=expected_symbol,
+        ):
+            raise OrderRouterError("MARKET_DATA_FRESHNESS_EVIDENCE_REQUIRED")
         broker = broker_adapter if broker_adapter is not None else self._broker_adapter
         if broker is None: raise OrderRouterError("BROKER_ADAPTER_REQUIRED")
         submit = getattr(broker, "submit", None)

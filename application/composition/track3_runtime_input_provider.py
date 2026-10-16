@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contracts.trading_date import format_trading_date
 
 from typing import Any
 
@@ -81,7 +82,7 @@ class Track3RuntimeInputProvider:
             current_price=current_price,
             options_legs=payload.options_legs,
             contract_multiplier=payload.contract_multiplier,
-            date_str=observed_at.date().isoformat(),
+            date_str=format_trading_date(observed_at.date()),
         )
         analytics = build_track3_analytics_snapshot(
             data,

@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from contracts.kis_index_option_market_ws_adapter import KisIndexOptionMarketObservation
 from contracts.track2_option_iv_source import Track2OptionIVObservation
+from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
 from core.option.option_master import IOptionContractMaster
 
 
@@ -49,10 +50,16 @@ class KISTrack2OptionIVSource:
         return record
 
     def get_iv(self, *, expiry: str, option_type: str, strike: Decimal) -> Decimal | None:
-        key_expiry = str(expiry).replace("-", "")[:8]
+        try:
+            key_expiry = require_exact_option_expiry(expiry)
+        except CanonicalOptionExpiryError:
+            return None
         record = self._observations.get((key_expiry, str(option_type).upper(), Decimal(str(strike))))
         return record.implied_volatility if record is not None else None
 
     def get_observation(self, *, expiry: str, option_type: str, strike: Decimal) -> Track2OptionIVObservation | None:
-        key_expiry = str(expiry).replace("-", "")[:8]
+        try:
+            key_expiry = require_exact_option_expiry(expiry)
+        except CanonicalOptionExpiryError:
+            return None
         return self._observations.get((key_expiry, str(option_type).upper(), Decimal(str(strike))))

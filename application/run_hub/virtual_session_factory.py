@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contracts.trading_date import parse_trading_date
 
 from decimal import Decimal
 from datetime import date
@@ -136,7 +137,7 @@ def create_virtual_run_session(context: RunContext, option_master: Any, risk_gua
             raw_futures_path = candidate
     if raw_futures_path is not None and loop.track2_market_observation_sink is not None:
         session_partition = Path(context.historical_store_path).parent.name
-        loop.track2_market_observation_sink.session_date = date.fromisoformat(session_partition)
+        loop.track2_market_observation_sink.session_date = parse_trading_date(session_partition)
         futures_replay = HistoricalFuturesObservationReplay(raw_futures_path)
         index_replay = HistoricalIndexPriceObservationReplay(raw_futures_path)
         bundle.market.set_futures_observation_replay(futures_replay)

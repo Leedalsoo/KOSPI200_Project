@@ -7,6 +7,7 @@ from typing import Protocol
 from contracts.external_authoritative_option_identity_record import (
 ExternalAuthoritativeOptionIdentityRecord,
 )
+from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
 
 
 class OptionIdentitySourceError(ValueError):
@@ -31,6 +32,11 @@ class OptionIdentitySelection:
             raise OptionIdentitySourceError("SYMBOL_REQUIRED")
         if not self.expiry:
             raise OptionIdentitySourceError("EXPIRY_REQUIRED")
+        try:
+            exact_expiry = require_exact_option_expiry(self.expiry)
+        except CanonicalOptionExpiryError as exc:
+            raise OptionIdentitySourceError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
+        object.__setattr__(self, "expiry", exact_expiry)
         if not self.option_type:
             raise OptionIdentitySourceError("OPTION_TYPE_REQUIRED")
         if self.strike <= 0:

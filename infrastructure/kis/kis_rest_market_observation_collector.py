@@ -8,7 +8,7 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
-from typing import Any, Mapping, Protocol
+from typing import Any, Callable, Mapping, Protocol
 
 from contracts.types import MarketObservation, OptionInstrumentIdentity, RawMarketDataReference
 from environments.virtual.market.historical_market_store import HistoricalMarketStore
@@ -79,10 +79,34 @@ class KISRestMarketObservationTransport:
         *,
         timeout: float = 10.0,
         urlopen: Any = urllib.request.urlopen,
+        event_sink: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self.auth = auth
         self.timeout = timeout
         self._urlopen = urlopen
+        self._event_sink = event_sink
+
+    @staticmethod
+    def _source_timestamp(payload: dict[str, Any]) -> str | None:
+        row = payload.get("output1")
+        if not isinstance(row, dict):
+            row = payload.get("output")
+        if isinstance(row, list):
+            row = row[0] if row and isinstance(row[0], dict) else {}
+        if not isinstance(row, dict):
+            row = {}
+        value = row.get("aspr_acpt_hour")
+        if value in (None, ""):
+            secondary = payload.get("output2")
+            if isinstance(secondary, list):
+                secondary = secondary[0] if secondary and isinstance(secondary[0], dict) else {}
+            if isinstance(secondary, dict):
+                value = secondary.get("aspr_acpt_hour")
+        return str(value).strip() if value not in (None, "") else None
+
+    def _emit_event(self, event: dict[str, Any]) -> None:
+        if self._event_sink is not None:
+            self._event_sink(event)
 
     def _get(self, path: str, tr_id: str, symbol: str) -> tuple[int, dict[str, Any]]:
         query = urllib.parse.urlencode(
@@ -93,9 +117,79 @@ class KISRestMarketObservationTransport:
             headers=self.auth.get_auth_headers(tr_id=tr_id),
             method="GET",
         )
-        with self._urlopen(request, timeout=self.timeout) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-            return int(response.status), payload
+        started_at = datetime.now(timezone.utc)
+        started_monotonic = time.perf_counter()
+        base_event: dict[str, Any] = {
+            "schema_version": "kis-rest-request-timing-v1",
+            "request_started_at": started_at.isoformat(),
+            "source": "KIS_VTS_REST",
+            "endpoint": path,
+            "tr_id": tr_id,
+            "symbol": symbol,
+            "method": "GET",
+            "timeout_seconds": self.timeout,
+        }
+        try:
+            with self._urlopen(request, timeout=self.timeout) as response:
+                raw_body = response.read()
+                received_at = datetime.now(timezone.utc)
+                payload = json.loads(raw_body.decode("utf-8"))
+                event = {
+                    **base_event,
+                    "response_received_at": received_at.isoformat(),
+                    "request_duration_ms": round((time.perf_counter() - started_monotonic) * 1000, 3),
+                    "http_status": int(response.status),
+                    "rt_cd": payload.get("rt_cd") if isinstance(payload, dict) else None,
+                    "msg_cd": payload.get("msg_cd") if isinstance(payload, dict) else None,
+                    "msg1": payload.get("msg1") if isinstance(payload, dict) else None,
+                    "source_timestamp_raw": self._source_timestamp(payload) if isinstance(payload, dict) else None,
+                    "raw_response_sha256": sha256(raw_body).hexdigest(),
+                    "raw_response": payload,
+                    "error_type": None,
+                    "error_message": None,
+                }
+                self._emit_event(event)
+                return int(response.status), payload
+        except urllib.error.HTTPError as exc:
+            raw_body = exc.read()
+            try:
+                parsed_body = json.loads(raw_body.decode("utf-8", errors="replace")) if raw_body else {}
+            except json.JSONDecodeError:
+                parsed_body = {"raw_body": raw_body.decode("utf-8", errors="replace")}
+            exc.kis_error_body = parsed_body
+            received_at = datetime.now(timezone.utc)
+            self._emit_event({
+                **base_event,
+                "response_received_at": received_at.isoformat(),
+                "request_duration_ms": round((time.perf_counter() - started_monotonic) * 1000, 3),
+                "http_status": int(exc.code),
+                "rt_cd": parsed_body.get("rt_cd") if isinstance(parsed_body, dict) else None,
+                "msg_cd": parsed_body.get("msg_cd") if isinstance(parsed_body, dict) else None,
+                "msg1": parsed_body.get("msg1") if isinstance(parsed_body, dict) else None,
+                "source_timestamp_raw": self._source_timestamp(parsed_body) if isinstance(parsed_body, dict) else None,
+                "raw_response_sha256": sha256(raw_body).hexdigest(),
+                "raw_response": parsed_body,
+                "error_type": type(exc).__name__,
+                "error_message": str(exc),
+            })
+            raise
+        except Exception as exc:
+            received_at = datetime.now(timezone.utc)
+            self._emit_event({
+                **base_event,
+                "response_received_at": received_at.isoformat(),
+                "request_duration_ms": round((time.perf_counter() - started_monotonic) * 1000, 3),
+                "http_status": None,
+                "rt_cd": None,
+                "msg_cd": None,
+                "msg1": None,
+                "source_timestamp_raw": None,
+                "raw_response_sha256": None,
+                "raw_response": None,
+                "error_type": type(exc).__name__,
+                "error_message": str(exc),
+            })
+            raise
 
     def request_price(self, symbol: str) -> tuple[int, dict[str, Any]]:
         return self._get(self.PRICE_PATH, self.PRICE_TR_ID, symbol)
@@ -279,11 +373,15 @@ class KISRestMarketObservationCollector:
                 error_body: dict[str, Any] = {}
                 if isinstance(exc, urllib.error.HTTPError):
                     try:
-                        raw_body = exc.read().decode('utf-8', errors='replace')
-                        parsed_body = json.loads(raw_body) if raw_body else {}
-                        error_body = parsed_body if isinstance(parsed_body, dict) else {'raw_body': raw_body}
+                        if hasattr(exc, "kis_error_body"):
+                            parsed_body = exc.kis_error_body
+                            error_body = parsed_body if isinstance(parsed_body, dict) else {"raw_body": str(parsed_body)}
+                        else:
+                            raw_body = exc.read().decode("utf-8", errors="replace")
+                            parsed_body = json.loads(raw_body) if raw_body else {}
+                            error_body = parsed_body if isinstance(parsed_body, dict) else {"raw_body": raw_body}
                     except Exception:
-                        error_body = {'raw_body': '<UNREADABLE_HTTP_ERROR_BODY>'}
+                        error_body = {"raw_body": "<UNREADABLE_HTTP_ERROR_BODY>"}
                 response = order_book if stage == 'normalization' and order_book else price
                 diagnostic = {
                     'stage': stage,

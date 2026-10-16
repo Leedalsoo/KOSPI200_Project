@@ -1,3 +1,4 @@
+from contracts.trading_date import format_trading_date
 from dataclasses import dataclass, replace
 from datetime import datetime
 from decimal import Decimal
@@ -92,7 +93,7 @@ class Track6DailyTailInsurance:
 
     @staticmethod
     def _as_date(snapshot: AnalyticsSnapshot) -> str:
-        return snapshot.as_of.date().isoformat()
+        return format_trading_date(snapshot.as_of.date())
 
     def evaluate_buy(self, context: StrategyContext) -> Sequence[Signal]:
         analytics = context.analytics

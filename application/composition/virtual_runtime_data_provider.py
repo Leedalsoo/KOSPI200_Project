@@ -1,5 +1,6 @@
 """Authoritative derived-data providers for the Virtual Market runtime."""
 from __future__ import annotations
+from contracts.trading_date import format_trading_date
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -97,9 +98,10 @@ class VirtualRuntimeDataProvider:
     @classmethod
     def _implied_vol(cls, spot: Decimal, strike: Decimal, premium: Decimal,
                      expiry: str, observed_at: datetime) -> Decimal | None:
+        from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
         try:
-            exp_dt = datetime.strptime(expiry, "%Y%m")
-            exp_dt = exp_dt.replace(day=1)
+            exact_expiry = require_exact_option_expiry(expiry)
+            exp_dt = datetime.strptime(exact_expiry, "%Y%m%d")
             t = max(1.0 / 365.0, (exp_dt - observed_at).total_seconds() / 31536000.0)
             s, k, p = float(spot), float(strike), float(premium)
             if s <= 0 or k <= 0 or p <= 0:
@@ -214,7 +216,7 @@ class VirtualRuntimeDataProvider:
         if (self.track9_iv_event_materializer is not None and self.track9_atm_iv_source is not None
                 and getattr(tick, "symbol", None) and getattr(tick, "expiry", None)):
             event_values = self.track9_iv_event_materializer.materialize(
-                session_date=observed_at.date().isoformat(),
+                session_date=format_trading_date(observed_at.date()),
                 symbol=tick.symbol,
                 expiry=tick.expiry,
                 current_price=Decimal(str(tick.underlying_price)),

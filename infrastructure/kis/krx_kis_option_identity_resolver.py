@@ -35,7 +35,7 @@ def parse_kis_index_option_master(raw_text: str) -> dict[str, KisOptionContractI
             strike_raw = line[63:72].strip()
         if info_type not in {"5", "6", "D", "E", "L", "M"}:
             continue
-        expiry_match = re.search(r"20\d{4}", name)
+        expiry_match = re.search(r"(?<!\d)(20\d{6})(?!\d)", name)
         if not shrn_iscd or not stnd_iscd or not expiry_match:
             continue
         try:
@@ -43,9 +43,14 @@ def parse_kis_index_option_master(raw_text: str) -> dict[str, KisOptionContractI
         except Exception:
             continue
         option_type = "CALL" if info_type in {"5", "D", "L"} else "PUT"
+        from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
+        try:
+            exact_expiry = require_exact_option_expiry(expiry_match.group(1))
+        except CanonicalOptionExpiryError:
+            continue
         identity = KisOptionContractIdentity(
             shrn_iscd=shrn_iscd, stnd_iscd=stnd_iscd,
-            expiry=expiry_match.group(0), option_type=option_type,
+            expiry=exact_expiry, option_type=option_type,
             strike=strike, info_type="KIS_INDEX_OPTION_MASTER",
             contract_multiplier=Decimal("250000"),
         )

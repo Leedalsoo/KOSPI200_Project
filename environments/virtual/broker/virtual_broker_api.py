@@ -1,6 +1,8 @@
 """KIS-like Standard Broker API facade for the Virtual environment."""
 from __future__ import annotations
 
+from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
+
 from typing import Any, Callable
 
 from contracts.types import BrokerOrderCommand, ExecutionReport
@@ -39,6 +41,10 @@ class VirtualBrokerApi:
         return self._broker.get_market_snapshot()
 
     def get_option_quote(self, *, option_type: str, strike: float, expiry: str) -> dict | None:
+        try:
+            expiry = require_exact_option_expiry(expiry)
+        except CanonicalOptionExpiryError as exc:
+            raise ValueError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
         return self._broker.get_option_quote(option_type=option_type, strike=strike, expiry=expiry)
 
     def get_account_snapshot(self) -> Any:

@@ -5,6 +5,7 @@ They make the generated market dataset exercise existing Runtime contracts witho
 pretending that synthetic values are authoritative market evidence.
 """
 from __future__ import annotations
+from contracts.trading_date import format_trading_date, parse_trading_date
 
 import json
 from collections import deque
@@ -122,7 +123,12 @@ class SyntheticRuntimeSources:
         )
 
     def get_iv(self, *, expiry: str, option_type: str, strike: Decimal) -> Decimal | None:
-        return self._iv.get((str(expiry), str(option_type).upper(), Decimal(str(strike))))
+        from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
+        try:
+            exact_expiry = require_exact_option_expiry(expiry)
+        except CanonicalOptionExpiryError:
+            return None
+        return self._iv.get((exact_expiry, str(option_type).upper(), Decimal(str(strike))))
 
     def get_track6_volatility(self, *, expiry: str, current_price: Decimal, observed_at: datetime, option_master: Any) -> Track6VolatilitySnapshot | None:
         metrics = self._metrics
@@ -221,30 +227,27 @@ class SyntheticOptionContractMaster(InMemoryOptionContractMaster):
         identity = self.get_contract_identity(symbol)
         if identity is None or not identity.expiry:
             return None
-        raw = str(identity.expiry).replace("-", "")[:6]
-        year, month = int(raw[:4]), int(raw[4:6])
-        first = date(year, month, 1)
-        expiry = first + timedelta(days=(3 - first.weekday()) % 7 + 14)
-        return expiry.isoformat()
+        from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
+        try:
+            return require_exact_option_expiry(identity.expiry)
+        except CanonicalOptionExpiryError:
+            return None
 
     def find_contract_identity(self, expiry: str, option_type: str, strike: Decimal):
-        found = super().find_contract_identity(expiry, option_type, strike)
+        from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
+        try:
+            exact_expiry = require_exact_option_expiry(expiry)
+        except CanonicalOptionExpiryError:
+            return None
+        found = super().find_contract_identity(exact_expiry, option_type, strike)
         if found is not None:
             return found
-        target = str(expiry).replace("-", "")
-        month_target = target[:6]
-        for identity in self.list_contract_identities():
-            if str(identity.expiry).replace("-", "")[:6] == month_target and str(identity.option_type).upper() == str(option_type).upper() and identity.strike == Decimal(str(strike)):
-                return identity
-        # Execution plans may intentionally choose strikes between the dataset's
-        # observed grid points. In the synthetic environment only, create an
-        # explicit synthetic contract identity for that requested strike.
         requested_strike = Decimal(str(strike))
-        synthetic_id = f"SYN-{month_target}-{str(option_type).upper()}-{requested_strike:.4f}"
+        synthetic_id = f"SYN-{exact_expiry}-{str(option_type).upper()}-{requested_strike:.4f}"
         identity = KisOptionContractIdentity(
             shrn_iscd=synthetic_id,
-            stnd_iscd=synthetic_id,
-            expiry=target[:8],
+            stnd_iscd=None,
+            expiry=exact_expiry,
             option_type=str(option_type).upper(),
             strike=requested_strike,
             info_type="SYNTHETIC",
@@ -254,7 +257,9 @@ class SyntheticOptionContractMaster(InMemoryOptionContractMaster):
         return identity
 
 
+
 def build_synthetic_option_master(dataset: str | Path) -> InMemoryOptionContractMaster:
+    """Load only source-supplied exact-date synthetic identities."""
     master = SyntheticOptionContractMaster(auto_load_kis_source=False)
     root = Path(dataset)
     for path in sorted(root.glob("*.jsonl")):
@@ -262,10 +267,17 @@ def build_synthetic_option_master(dataset: str | Path) -> InMemoryOptionContract
             for line in handle:
                 record = json.loads(line)
                 tick = record["tick"]
+                from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
+                try:
+                    exact_expiry = require_exact_option_expiry(str(tick.get("expiry", "")))
+                except CanonicalOptionExpiryError:
+                    # Legacy auxiliary records without exact dates are unavailable,
+                    # not a source from which to synthesize an expiry.
+                    continue
                 identity = KisOptionContractIdentity(
                     shrn_iscd=str(tick["instrument_id"]),
                     stnd_iscd=str(tick["instrument_id"]),
-                    expiry=str(tick["expiry"]),
+                    expiry=exact_expiry,
                     option_type=str(tick["option_type"]),
                     strike=Decimal(str(tick["strike_price"])),
                     info_type="SYNTHETIC",
@@ -273,10 +285,9 @@ def build_synthetic_option_master(dataset: str | Path) -> InMemoryOptionContract
                 )
                 existing = master.get_contract_identity(str(tick["instrument_id"]))
                 if existing is not None:
-                    existing_month = str(existing.expiry).replace("-", "")[:6]
-                    incoming_month = str(identity.expiry).replace("-", "")[:6]
-                    if existing_month == incoming_month and existing.option_type == identity.option_type and existing.strike == identity.strike and existing.contract_multiplier == identity.contract_multiplier:
+                    if existing == identity:
                         continue
+                    raise ValueError("SYNTHETIC_OPTION_IDENTITY_CONFLICT")
                 master.register_contract_identity(identity)
     return master
 
@@ -292,19 +303,14 @@ class SyntheticTradingCalendar:
         return candidate
 
     def resolve_option_expiry(self, tick: Any) -> date:
-        raw = str(tick.expiry).strip()
-        if len(raw) == 10 and raw[4] == "-":
-            return date.fromisoformat(raw)
-        compact = raw.replace("-", "").replace("/", "")
-        if len(compact) == 8 and compact.isdigit():
-            return date(int(compact[:4]), int(compact[4:6]), int(compact[6:8]))
-        if len(compact) != 6 or not compact.isdigit():
-            raise ValueError(f"SYNTHETIC_OPTION_EXPIRY_INVALID:{raw}")
-        year, month = int(compact[:4]), int(compact[4:6])
-        if not 1 <= month <= 12:
-            raise ValueError(f"SYNTHETIC_OPTION_EXPIRY_INVALID:{raw}")
-        first = date(year, month, 1)
-        return first + timedelta(days=(3 - first.weekday()) % 7 + 7)
+        from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
+        raw = str(getattr(tick, "expiry", "") or "").strip()
+        try:
+            exact = require_exact_option_expiry(raw)
+            return parse_trading_date(exact)
+        except CanonicalOptionExpiryError as exc:
+            raise ValueError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
+
 
     def flags(self, observed_date: date, option_expiry: date | None):
         if option_expiry is None:

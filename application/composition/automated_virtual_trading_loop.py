@@ -271,9 +271,15 @@ class AutomatedVirtualTradingLoop:
             )
             account = self.bundle.account.snapshot()
             risk_command = replace(canonical, symbol=canonical.symbol or "KOSPI200")
+            matching_evaluation = next(
+                e for e in evaluations
+                if e.runtime_context.client_order_id(canonical.track_id) == canonical.client_order_id
+            )
+            freshness_verdict = getattr(matching_evaluation.context, "freshness_verdict", None)
             result = route_from_runtime_authoritative_sources(
                 risk_command, risk_gate=self.risk_gate,
                 context=RiskRouterContext(account, self.bundle.position, self.router, broker_command),
+                freshness_verdict=freshness_verdict,
             )
             if not result.routed or self.broker_adapter.last_report is None:
                 rejected += 1

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
 from typing import Any
 
 from core.option.option_master import KIS_KOSPI200_OPTION_CONTRACT_MULTIPLIER
@@ -17,6 +18,12 @@ class Track5OptionContractSelection:
     strike_rank: int
     liquidity_score: Decimal
     source: str = "OptionMaster+OptionOrderBook"
+
+    def __post_init__(self) -> None:
+        try:
+            object.__setattr__(self, "expiry", require_exact_option_expiry(self.expiry))
+        except CanonicalOptionExpiryError as exc:
+            raise ValueError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
 
 
 class Track5OptionContractSource:

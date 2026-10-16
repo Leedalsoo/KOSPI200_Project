@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contracts.trading_date import format_trading_date, parse_trading_date
 
 import hashlib
 import json
@@ -26,7 +27,7 @@ class KISRealtimeRawStore:
         payload: str,
         sequence: int | None = None,
     ) -> dict[str, Any]:
-        clean_date = str(trading_date).strip()
+        clean_date = format_trading_date(parse_trading_date(str(trading_date)))
         clean_instrument = str(instrument).strip()
         clean_tr_id = str(tr_id).strip()
         if not clean_date:
