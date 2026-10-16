@@ -1,0 +1,35 @@
+# Strategy 2 code–intent difference register v0.3
+
+- 작성일: 2026-10-13; 상태: draft / unverified / unapproved; read-only comparison.
+- Inspected branch/HEAD: `Project200` / `7eb9945e29774fb61fd2d07801762871b2506b98`.
+- No code edits, tests, commit/push, or Live orders. Intent source: `strategy_2_asymmetric_trap_spec_v0.3.md` §1.
+
+| # | Path / symbol | Observed code fact | Target intent | Classification / impact |
+|---|---|---|---|---|
+| D01 | `core/strategy/track2_asymmetric_trap.py` constants | `ENTRY_QUANTITY=1`, `MAX_DAILY_ENTRIES=2`, 15-minute `COOLDOWN`, offsets and trailing constants are class values | 1 contract per each of 4 legs; monthly one-cycle; daily cap/cooldown retired; offsets in versioned config | Mismatch; config/runtime enforcement after approval |
+| D02 | Strategy entry proposal / `build_asymmetric_trap` | Current proposal can be single PUT SELL while downstream resolver builds 4 legs | Proposal and plan must explicitly represent same 4-leg structure | Mismatch; intent-plan consistency test needed |
+| D03 | `track2_asymmetric_trap.py` entry state | `_trap_active`, `_entry_price`, `_daily_entry_count`, entry strike/state can update before confirmed fills | Exposure/cycle/cost state only from authoritative fills and positions | Mismatch; per-leg callbacks/reconciliation needed |
+| D04 | active/pending entry guard | Existing path does not sufficiently evidence duplicate active/pending group prevention | No duplicate entry while pending/active/exposed or monthly cycle consumed | Mismatch / runtime proof missing |
+| D05 | `STOP_LOSS_RATIO` | Stop uses underlying `current_price` vs underlying `entry_price` change | Stop uses actual four-option-group P&L ratio | Mismatch; authoritative mark/fill/fees/multiplier source needed |
+| D06 | trailing/high-watermark | Activation/tier/retention derive from underlying return ratio | Option-group P&L and actual option prices; numbers provisional | Mismatch; formula/mark side unresolved S2-U18 |
+| D07 | `_short_switch_at`, `_short_switched`, `SHORT_SWITCH_TIMEOUT_EXIT` | Short-switch timer/exit path exists | User retired timer/path on 2026-10-13 | Retired path; remove only after implementation approval |
+| D08 | cutoff/expiry lifecycle | cutoff evaluation does not guarantee expiry-day 15:10 forced close; complete monthly terminal policy not evidenced | Monthly expiry day 15:10 close start; flat only after actual position reconciliation | Missing/mismatch; calendar and terminal close proof needed |
+| D09 | `track2_option_contract_source.py` | Selects nearest expiry and ATM-like CALL/PUT from listed identities; monthly-only rule, standard-only filter, rounding/tie-break not fully evidenced | Standard KOSPI200 monthly contracts, exact YYYYMMDD, offsets and authoritative listed strikes | Partial; S2-U17, no inferred fallback |
+| D10 | `core/oms/multi_leg_plan.py` | `build_asymmetric_trap` helper orders `short_put`, `short_call`, `long_put`, `long_call` (short-first) | `inner_put_buy`, `inner_call_buy`, `outer_put_sell`, `outer_call_sell` | Mismatch; plan order must change only after approval |
+| D11 | `track2_execution_plan_adapter.py`, `resolve_track2` | Adapter can translate entry decision to four-leg plan; proposal/plan shape agreement not proven | Exact four-leg intent end-to-end; no silent single-leg rewrite | Mismatch / runtime evidence missing |
+| D12 | `core/risk/multi_leg_risk.py` | Group identity and per-leg approval primitives exist; full S2 quote/cost/max-loss/account risk enforcement not proven | Full group preflight before first order | Partial; verify actual wiring, not class existence |
+| D13 | `core/analytics/track2.py` | BBW, volume z-score, OBI, basis, POC, put/call IV, active/base volatility names exist; BBW observed as boolean-like | Keep all features and define formula/window/unit/boundary | Partial; source formula/sample validation needed |
+| D14 | `track2_analytics_provider.py` | Metric mappings and `freshness_seconds=1.0` declaration observed | Per-feature source/as-of/received time, identity and freshness enforced | Partial; runtime rejection and timestamp propagation unverified |
+| D15 | `track2_market_metrics_source.py` | BBW/volume/regime metrics derive from futures price/volume observations | Explicit formulas, units, timestamps and basis/POC semantics | Partial; REAL_VTS coverage and provenance needed |
+| D16 | `track2_option_iv_source.py` | IV keyed by normalized expiry/type/strike; identity and IV presence checked | Exact matched expiry/strike IV with freshness/source provenance | Partial; stale-age enforcement not proven |
+| D17 | contract source / strike selection | ATM/nearest strike logic exists; rounding/tie-break/listed strike validation not fully evidenced | Exact listed strikes, explicit rounding and no synthetic contracts | Partial; S2-U17 |
+| D18 | entry/exit callbacks and persistence | Entry fill/reject/partial callback and durable restore not evidenced; close callback exists | State from execution reports and actual positions; reconcile before restart resume | Missing evidence; S2-U19 |
+| D19 | `tests/strategy/test_strategy2.py` | Visible coverage checks 4-leg plan shape and missing-analytics fail-closed; not full lifecycle | Threshold, leg order, partial/cancel race, option P&L, expiry, restart tests | Coverage gap; no tests run in this task |
+| D20 | `ZERO_COST` terminology | No authoritative quote-based zero-cost proof established; long inner options may create net debit | Compute signed net premium/cost from actual bid/ask/fills; name is not a guarantee | Unvalidated label; rename only as proposal, no change here |
+| D21 | account/cross-strategy risk | S2 path alone does not prove aggregation with S1/S6/S7/S8/S9 same expiry/strike and pending risk | Aggregate actual lots + pending worst-case exposure, no silent netting | Missing evidence; shared risk model required |
+| D22 | config versioning | Constants/configurable parameters exist; complete loaded config version/hash per run not evidenced | Version/hash/effective settings tied to every run; null/provisional critical value blocks | Missing evidence; schema/loader/run manifest verification |
+
+## Evidence boundary
+
+This is a read-only comparison, not exhaustive test evidence. Similar rows can share root causes; row count is not a count of independent defects. Working tree had unrelated modified/untracked files before this task; none were intentionally edited here. No implementation is authorized by this table.
+| D23 | `core/oms/multi_leg_plan.py`, execution router and quote sources | Current S2 helper exposes a `MID_PRICE_OFFSET`/1-tick metadata field but no proven per-leg executable limit basis, tick rounding, quote-age or max-spread gate | Each leg uses a versioned limit-price rule sourced from valid option quotes; null limit basis/tick/freshness/spread settings block entry | Missing/config dependency; S2-U21; no code change here |

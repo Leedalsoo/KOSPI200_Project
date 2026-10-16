@@ -1,0 +1,40 @@
+# Runtime Market-Data Timestamp Provenance Evidence Index v0.1
+
+- Date: 2026-10-14 KST
+- Status: **Evidence index / read-only audit; not an implementation specification or approval**
+- Scope: KIS REST/WS timestamp provenance and the currently visible path toward common order admission.
+- Safety boundary: No KIS API calls, WebSocket subscription/retry, account API retry, order/modify/cancel API, runtime source edits, test execution, Git stage/commit/push, or deletion/restoration of existing files in this audit.
+
+## 1. Authoritative evidence inventory
+
+| Evidence | Location / identity | Hash or observation | What it proves | What it does not prove |
+|---|---|---|---|---|
+| KIS VTS capability probe | `verification/evidence/kis_api_capability_probe_20261014.json` | File SHA-256 `6B715779876B26DB4E696BDF4E8729D930960CBD0A7620629036C094676DECEC` | Preserved read-only REST request/response timing, raw response hashes, VTS environment, and the `HHMCM000002C0` calendar response. | Does not establish absolute timestamp semantics or LIVE capability. |
+| REST quote response | Probe entry for `/uapi/domestic-futureoption/v1/quotations/inquire-asking-price`, TR `FHMIF10010000`, symbol `BAFC2W942` | `aspr_acpt_hour="154500"`; raw response SHA-256 `6f10900c8941b5ec11484dca8f6a1f47fd21a19446361460820bbb5a7837ca1d`; response received `2026-10-13T15:44:36.833198+00:00` | Raw field and receive clock are both recorded, and the value is a time-only string in this captured payload. | Does not prove date association, timezone, event/acceptance-time semantics, clock source, or absolute source instant. Do not combine the field with receive date by assumption. |
+| REST normalizer | `infrastructure/kis/kis_rest_market_observation_normalizer.py` | SHA-256 `53292ED9BD5D17164AE017B15541104ACF10FFDFAACCD9568A2E9C8263682C7C`; lines 91–95, 105–110, 133–145 | Compares raw price/book time strings; sets `MarketObservation.observed_at=None`, keeps `source_timestamps`, sets `raw_reference=None`, and retains `underlying_observed_hour` as a string. | Does not produce a timezone-aware source instant or a durable raw payload reference for the canonical observation. |
+| REST collector timestamp capture | `infrastructure/kis/kis_rest_market_observation_collector.py` | SHA-256 `E1BEDE240B27DD84B28D7E2638D938617D3DE0FDF93A97E359D6DB8D1C07089E`; lines 90–105, 145, 169 | Captures `aspr_acpt_hour` as `source_timestamp_raw` alongside request/receive metadata in collector events. | Capture alone does not resolve the timestamp semantics or prove the option REST observation is connected to the common S1–S9 order-admission route. |
+| WebSocket field semantics | Existing project record No.1277 and official KIS sample `examples_user/domestic_futureoption/domestic_futureoption_functions_ws.py` | Official sample lists `bsop_hour` for `H0IOCNT0`/`H0IOASP0`; recorded as HHMMSS with no date. Sample labels these TRs LIVE-only / VTS unsupported. | The field exists in the sample and the documented sample capability is not VTS. No retry was made. | Does not prove date, timezone, precision, rollover, event-time meaning, or any alternate current capability. H0IOCNT0/H0IOASP0 retries remain on hold. |
+| WebSocket typed observation | `contracts/kis_index_futures_market_ws_adapter.py` | `KisIndexFuturesMarketObservation.observed_hour` stores the time-only field; adapter is for index futures (`H0IFCNT0`/`H0IFASP0`). | The typed value remains an hour string at this adapter boundary. | Futures adapter evidence is not proof of S1–S9 option WebSocket coverage. |
+| Live futures provider | `environments/live/market/kis_futures_market_data.py` | SHA-256 `77352883381DBA3EC7F0421F207829344E5181E0CDBB503B44FCB24E7C1E58AB`; lines 38–70, 90–108 | Requires an `observed_at` resolver and datetime; projects the value to `CanonicalMarketTick`. | `DataQuality(is_fresh=True, ...)` is assigned without an age comparison at publish time. `health()` computes an age but clamps negative age to zero, so future-skew is not separately surfaced there. This is a concrete audit finding, not an authorization to modify code. |
+| Live composition | `application/composition/live_runtime_authoritative_composition.py` | SHA-256 `1BC2C5E84F32E76544CB236D5E3710092FC5AFD041F5D11BBDFB0B16DB83FD70`; lines 182–188 | Live composition wires the futures provider into `MarketDataHub` and resolves `observed_at` from the typed observation. | This futures-focused Live graph does not prove option-strategy S1–S9 coverage or source-time freshness enforcement at every order admission. |
+| Common admission seam | `application/composition/runtime_authoritative_risk_router_adapter.py` | SHA-256 `AE54D49B5A3D07A927A303D0E86AFFD0CB7A1E4C46183E00449F879D0A50ABA0`; lines 25–36 | The route calls `RiskGate.admit_order`, requires an approval token, and only then calls `register_and_route`. | The function signature has no required typed KIS freshness verdict/provenance input; this seam alone does not enforce timestamp freshness. |
+| Existing S1–S9 route coverage | `docs/strategy_specifications/runtime_order_admission_path_coverage_v0.2.md` | SHA-256 `77E60D7C9A9D61C027FAC1B34A813C360CF69BA4E0814F3D596FDDC4B7D3297D` | Existing static trace records the Virtual path and states freshness coverage is `BLOCKED / NOT_PROVEN`. | It is static code evidence, not runtime, REAL_VTS, or Live E2E proof. |
+| Freshness implementation scope draft | `docs/strategy_specifications/runtime_market_data_freshness_implementation_scope_v0.1.md` | SHA-256 `A1C26BBA1EBB82D2C35E0256D00C22E81723F37CE114E511EB150518630A5346` | Existing draft lists target boundaries and FRESH-01–14 test scenarios. | It remains a draft; it does not authorize implementation. |
+
+## 2. Current path finding
+
+1. **REST option observation:** the current REST normalizer is constructed by the KIS VTS weekday collector path. Its output preserves the raw time-only field but has `observed_at=None` and `raw_reference=None`. The current source search did not find this normalizer wired into the common S1–S9 final admission path.
+2. **S1–S9 Virtual order route:** the static path reaches `route_from_runtime_authoritative_sources()` → `RiskGate.admit_order()` → approval-token check → `StandardOrderRouter.register_and_route()`. No required typed freshness verdict is present at that seam.
+3. **Separate Live futures route:** `KISFuturesMarketDataProvider` receives a typed futures observation and assigns `is_fresh=True` during publish without comparing its timestamp to a policy threshold. This is a separate futures-focused graph and must not be presented as S1–S9 option Live proof.
+4. **Overall result:** `BLOCKED / NOT_PROVEN` — absolute KIS source timestamp semantics and mandatory freshness enforcement across every S1–S9 final admission path are not established.
+
+## 3. Next permitted work
+
+- Obtain written KIS confirmation for REST `aspr_acpt_hour` and applicable WS `bsop_hour` semantics: date association, timezone, event/acceptance-time meaning, precision, rollover and environment/TR capability. Do not retry H0IOASP0/H0IOCNT0 or repeat prior failed account/TR requests without explicit instruction.
+- Continue read-only caller-chain mapping from each S1–S9 active registry/resolver through input provenance, decision, plan, risk gate, OMS/router, broker call, and reconciliation boundary. Mark every unproven edge as `NOT_PROVEN`.
+- Prepare an exact target-file/diff plan and tests/evidence mapping. Keep the approved numeric candidates unapplied until source semantics are proven. Implementation remains prohibited until the user separately approves the file scope and test plan.
+- Preserve all pre-existing modified, deleted, and untracked worktree items. No stage/commit/push or Live orders without the required separate approval.
+
+## 4. Audit boundary and source hashes
+
+The hashes above were calculated from current files in the `Project200` worktree at HEAD `3179d80c0f0d7ba0a74120740e23132e80b1aa7b`. The worktree already contains many unrelated modified, deleted, and untracked files. This index is a new documentation artifact only; it does not change source code, tests, Manifest, or Git history.

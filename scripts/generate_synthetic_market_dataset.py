@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contracts.trading_date import format_trading_date
 import argparse
 import json
 import math
@@ -113,7 +114,7 @@ def generate_dataset(root: Path, seed: int = 2005) -> dict:
     total = 0
     manifest_days = []
     for day_index, day in enumerate(days):
-        path = root / f"{day.isoformat()}.jsonl"
+        path = root / f"{format_trading_date(day)}.jsonl"
         day_count = 0
         with path.open("w", encoding="utf-8") as handle:
             for bar_index in range(78):
@@ -133,7 +134,7 @@ def generate_dataset(root: Path, seed: int = 2005) -> dict:
                         day_count += 1
         total += day_count
         manifest_days.append({
-            "date": day.isoformat(),
+            "date": format_trading_date(day),
             "file": path.name,
             "events": day_count,
             "source": SOURCE,
@@ -145,8 +146,8 @@ def generate_dataset(root: Path, seed: int = 2005) -> dict:
         "provider": PROVIDER,
         "schema": SCHEMA,
         "calendar": "weekday-only synthetic calendar; not KRX holiday authoritative",
-        "date_start": days[0].isoformat(),
-        "date_end": days[-1].isoformat(),
+        "date_start": format_trading_date(days[0]),
+        "date_end": format_trading_date(days[-1]),
         "trading_days": len(days),
         "bar_interval_minutes": BAR_MINUTES,
         "contracts_per_bar": 10,

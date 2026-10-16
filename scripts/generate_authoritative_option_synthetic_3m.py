@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contracts.trading_date import format_trading_date, parse_trading_date
 
 import argparse
 import calendar as month_calendar
@@ -91,7 +92,7 @@ def load_calendar(root: Path, years: set[int]) -> Calendar:
         payload = json.loads(path.read_text(encoding="utf-8-sig"))
         if payload.get("source") != "KRX" or int(payload.get("year", 0)) != year:
             raise RuntimeError(f"KRX_AUTHORITATIVE_CALENDAR_INVALID:{year}:{path}")
-        holidays.update(date.fromisoformat(x) for x in payload.get("holidays", []))
+        holidays.update(parse_trading_date(x) for x in payload.get("holidays", []))
     return Calendar(holidays)
 
 
@@ -323,7 +324,7 @@ def parse_master(root: Path, calendar: Calendar, path: Path) -> tuple[dict[str, 
         raise RuntimeError(f"KRX_OPTION_MASTER_SNAPSHOT_DATE_INVALID:{path.name}")
     snapshot_raw = snapshot_match.group(1)
     snapshot_day = date(int(snapshot_raw[:4]), int(snapshot_raw[4:6]), int(snapshot_raw[6:8]))
-    required_months = [m for m in sorted(by_month) if m in monthly_expiries and date.fromisoformat(monthly_expiries[m]) >= snapshot_day]
+    required_months = [m for m in sorted(by_month) if m in monthly_expiries and parse_trading_date(monthly_expiries[m]) >= snapshot_day]
     if len(required_months) < 4:
         raise RuntimeError(f"KRX_OPTION_MASTER_MONTH_ROLL_COVERAGE_REQUIRED:{required_months}")
     for month in required_months[:4]:
@@ -369,7 +370,7 @@ def option_valuation(spot: float, strike: float, expiry: date, as_of: datetime, 
     expiry_cutoff = datetime.combine(expiry, LAST_TRADING_CLOSE)
     seconds = int((expiry_cutoff - as_of).total_seconds())
     if seconds < 0:
-        raise RuntimeError(f"OPTION_QUOTE_AFTER_LAST_TRADING_CUTOFF:{expiry}:{as_of.isoformat()}")
+        raise RuntimeError(f"OPTION_QUOTE_AFTER_LAST_TRADING_CUTOFF:{format_trading_date(expiry)}:{as_of.isoformat()}")
     intrinsic = max(0.0, spot - strike if kind == "CALL" else strike - spot)
     years = seconds / (365.0 * 24.0 * 60.0 * 60.0)
     if years <= 0 or spot <= 0 or strike <= 0 or iv <= 0:
@@ -413,19 +414,19 @@ def generate(root: Path, output: Path, pattern: str, seed: int) -> dict:
     days=trading_days_between(calendar,snapshot_day,horizon_end_exclusive)
     if not days: raise RuntimeError("KRX_THREE_MONTH_HORIZON_HAS_NO_TRADING_DAYS")
     months=sorted({x["month"] for x in identities.values() if x["contract_class"] == "monthly"})
-    usable=[m for m in months if m in monthly_expiries and date.fromisoformat(monthly_expiries[m]) >= snapshot_day]
+    usable=[m for m in months if m in monthly_expiries and parse_trading_date(monthly_expiries[m]) >= snapshot_day]
     if len(usable)<4: raise RuntimeError("KRX_OPTION_MASTER_THREE_MONTH_ROLL_REQUIRED")
     spot, underlying_source_path, underlying_source_code = load_initial_underlying_spot(root, snapshot_day)
     initial_underlying_spot = spot
     active_month_by_day = {}
     bar_count_by_day = {}
     for scenario_day in days:
-        active_months = [m for m in usable if date.fromisoformat(monthly_expiries[m]) >= scenario_day]
+        active_months = [m for m in usable if parse_trading_date(monthly_expiries[m]) >= scenario_day]
         if not active_months:
             raise RuntimeError(f"KRX_OPTION_MASTER_NO_ACTIVE_MONTH:{scenario_day}")
         active_month_by_day[scenario_day] = active_months[0]
         bar_count_by_day[scenario_day] = session_bar_count(
-            scenario_day, date.fromisoformat(monthly_expiries[active_months[0]]) == scenario_day
+            scenario_day, parse_trading_date(monthly_expiries[active_months[0]]) == scenario_day
         )
     total_bars = sum(bar_count_by_day.values())
     rng=random.Random(seed); seq=0; total=0; day_manifest=[]; bar_offset=0
@@ -437,20 +438,20 @@ def generate(root: Path, output: Path, pattern: str, seed: int) -> dict:
             identities_by_month.setdefault(ident["month"],{}).setdefault((ident["option_type"],ident["strike"]),ident)
         else:
             identities_by_weekly_expiry.setdefault(ident["expiry"],{}).setdefault((ident["option_type"],ident["strike"]),ident)
-    weekly_expiry_dates=sorted(date.fromisoformat(value) for value in set(weekly_series_expiries.values()))
+    weekly_expiry_dates=sorted(parse_trading_date(value) for value in set(weekly_series_expiries.values()))
     weekly_rollovers=[]
     for weekly_expiry in weekly_expiry_dates:
-        weekly_rollovers.append({"expiry":normalize_option_expiry(weekly_expiry).require_exact(),"series":[key for key,value in weekly_series_expiries.items() if value==weekly_expiry.isoformat()]})
+        weekly_rollovers.append({"expiry":normalize_option_expiry(weekly_expiry).require_exact(),"series":[key for key,value in weekly_series_expiries.items() if value==format_trading_date(weekly_expiry)]})
     for day_index, day in enumerate(days):
         month = active_month_by_day[day]
-        expiry=date.fromisoformat(monthly_expiries[month])
+        expiry=parse_trading_date(monthly_expiries[month])
         monthly_last_trading_day = expiry == day
         bar_count = bar_count_by_day[day]
         session_close = LAST_TRADING_CLOSE if monthly_last_trading_day else SESSION_CLOSE
         month_identities=identities_by_month[month]
         strikes=sorted({strike for (kind,strike) in month_identities})
         if len(strikes)<5: raise RuntimeError(f"KRX_OPTION_MASTER_STRIKES_INSUFFICIENT:{month}")
-        daily_path=output/f"{day.isoformat()}.jsonl"; day_count=0; day_weekly_bars=0
+        daily_path=output/f"{format_trading_date(day)}.jsonl"; day_count=0; day_weekly_bars=0
         with daily_path.open('w',encoding='utf-8',newline='\n') as handle:
             day_daily_pair_covered=True
             day_monthly_pair_covered=True
@@ -463,7 +464,7 @@ def generate(root: Path, output: Path, pattern: str, seed: int) -> dict:
                 monthly_five, daily_pair_available, monthly_pair_available = select_monthly_strikes_for_coverage(strikes, spot)
                 ts=datetime.combine(day,SESSION_OPEN)+timedelta(minutes=BAR_INTERVAL_MINUTES*bar)
                 next_weekly_expiries=[value for value in weekly_expiry_dates if value >= day]
-                weekly_expiry_date=min(next_weekly_expiries).isoformat() if next_weekly_expiries else None
+                weekly_expiry_date=format_trading_date(min(next_weekly_expiries)) if next_weekly_expiries else None
                 event_contracts=[]
                 weekly_contract_available=False
                 weekly_block_reason=None
@@ -473,7 +474,7 @@ def generate(root: Path, output: Path, pattern: str, seed: int) -> dict:
                 # The scenario underlying is anchored to the selected monthly family.
                 # A listed weekly code is not usable when its authoritative strike ladder
                 # does not cover that same underlying price neighborhood.
-                weekly_cutoff_passed = bool(weekly_expiry_date and day == date.fromisoformat(weekly_expiry_date) and ts.time() >= LAST_TRADING_CLOSE)
+                weekly_cutoff_passed = bool(weekly_expiry_date and day == parse_trading_date(weekly_expiry_date) and ts.time() >= LAST_TRADING_CLOSE)
                 if not weekly_expiry_date:
                     weekly_block_reason="AUTHORITATIVE_WEEKLY_CONTRACTS_NOT_FOUND"
                     day_weekly_block_reasons.add(weekly_block_reason)
@@ -511,7 +512,7 @@ def generate(root: Path, output: Path, pattern: str, seed: int) -> dict:
                     raise RuntimeError(f"STRATEGY_HORIZON_EVENT_SHAPE_INVALID:{day}:{len(event_contracts)}:{expected_bar_events}")
                 for ident,kind,strike,contract_class in event_contracts:
                     if ident is None: raise RuntimeError(f"KRX_OPTION_MASTER_IDENTITY_REQUIRED:{contract_class}:{day}:{kind}:{strike}")
-                    contract_expiry=date.fromisoformat(ident["expiry"])
+                    contract_expiry=parse_trading_date(ident["expiry"])
                     mid,intrinsic,time_value,time_to_expiry_seconds=option_valuation(spot,float(strike),contract_expiry,ts,iv,kind)
                     spread=max(0.02,mid*(0.008+iv*0.015)); noise=rng.uniform(-spread*0.25,spread*0.25)
                     bid=round_option_price(max(0.01,mid-spread/2))
@@ -522,7 +523,7 @@ def generate(root: Path, output: Path, pattern: str, seed: int) -> dict:
                     tick={"timestamp":ts.isoformat(),"underlying_price":round(spot,4),"underlying_symbol":"KOSPI200","strike_price":float(strike),"option_type":kind,"contract_multiplier":float(ident["contract_multiplier"]),"bid_price":bid,"ask_price":ask,"last_price":last,"theoretical_mid_price":round(mid,8),"intrinsic_value":round(intrinsic,8),"time_value":round(time_value,8),"time_to_expiry_seconds":time_to_expiry_seconds,"implied_volatility":iv,"volume":rng.randint(1,500),"seq_id":seq,"expiry":exact_expiry,"contract_month":ident["month"],"contract_class":contract_class,"symbol":"KOSPI200","option_observed_hour":ts.strftime("%H:%M"),"option_source":f"KRX_OPTION_MASTER:{master_sha[:12]}:{pattern}","instrument_id":ident["instrument_id"]}
                     record={"schema":SCHEMA,"source":f"DERIVED_FROM_KRX_OPTION_MASTER:{master_sha[:12]}","dataset":output.name,"provenance":"DERIVED_SCENARIO","provider":"KOSPI200_KRX_MASTER_SCENARIO","tick":tick}
                     handle.write(json.dumps(record,separators=(",",":"))+"\n"); total+=1; day_count+=1
-        day_manifest.append({"date":day.isoformat(),"file":daily_path.name,"events":day_count,"bars":bar_count,"weekly_contract_bars":day_weekly_bars,"session_open":SESSION_OPEN.strftime("%H:%M"),"session_close_exclusive":session_close.strftime("%H:%M"),"session_type":"MONTHLY_LAST_TRADING_DAY" if monthly_last_trading_day else "REGULAR","expiry_month":month,"expiry":normalize_option_expiry(monthly_expiries[month]).require_exact(),"weekly_expiry":normalize_option_expiry(weekly_expiry_date).require_exact() if weekly_expiry_date else None,"weekly_contract_available":day_weekly_contract_used,"weekly_contract_block_reason":";".join(sorted(day_weekly_block_reasons)) or None,"daily_pair_available":day_daily_pair_covered,"monthly_pair_available":day_monthly_pair_covered,"daily_close_limit":"15:00","daily_close_fallback":"15:15","pattern":pattern})
+        day_manifest.append({"date":format_trading_date(day),"file":daily_path.name,"events":day_count,"bars":bar_count,"weekly_contract_bars":day_weekly_bars,"session_open":SESSION_OPEN.strftime("%H:%M"),"session_close_exclusive":session_close.strftime("%H:%M"),"session_type":"MONTHLY_LAST_TRADING_DAY" if monthly_last_trading_day else "REGULAR","expiry_month":month,"expiry":normalize_option_expiry(monthly_expiries[month]).require_exact(),"weekly_expiry":normalize_option_expiry(weekly_expiry_date).require_exact() if weekly_expiry_date else None,"weekly_contract_available":day_weekly_contract_used,"weekly_contract_block_reason":";".join(sorted(day_weekly_block_reasons)) or None,"daily_pair_available":day_daily_pair_covered,"monthly_pair_available":day_monthly_pair_covered,"daily_close_limit":"15:00","daily_close_fallback":"15:15","pattern":pattern})
         bar_offset += bar_count
     expected_events = sum(item["bars"] * CONTRACTS_PER_BAR + item["weekly_contract_bars"] * 4 for item in day_manifest)
     if total != expected_events or not day_manifest or len(day_manifest) != len(days):
@@ -541,7 +542,7 @@ def generate(root: Path, output: Path, pattern: str, seed: int) -> dict:
         "strategy7_weekly_volatility_skew_insurance":{"required_contract_class":"weekly","entry_trigger":"first trading day of ISO week","exit_time_on_exact_contract_expiry":"15:00","weekly_expiries":weekly_rollovers,"authoritative_coverage_end":weekly_coverage_end,"coverage_status":"FULL" if len(weekly_coverage_days)==len(days) else ("UNAVAILABLE_STRIKE_RANGE_MISMATCH" if not weekly_coverage_days and "AUTHORITATIVE_WEEKLY_STRIKE_RANGE_DOES_NOT_MATCH_UNDERLYING" in weekly_block_reasons else "PARTIAL_AUTHORITATIVE_MASTER_COVERAGE"),"weekly_contract_coverage_days":len(weekly_coverage_days),"uncovered_trading_days":[item["date"] for item in day_manifest if not item["weekly_contract_available"]],"block_reasons":weekly_block_reasons},
         "strategy8_monthly_macro_strangle":{"required_contract_class":"monthly","monthly_expiries":{month:normalize_option_expiry(value).require_exact() for month,value in monthly_expiries.items()},"entry_min_dte":15,"dte_lte_4_action":"NON_EXECUTION_HOLD_LONG_ATTACK","monthly_pair_coverage_status":"FULL" if all(item["monthly_pair_available"] for item in day_manifest) else "PARTIAL_OR_UNAVAILABLE","monthly_pair_coverage_days":sum(1 for item in day_manifest if item["monthly_pair_available"]),"monthly_pair_uncovered_days":[item["date"] for item in day_manifest if not item["monthly_pair_available"]]}
     }
-    manifest={"schema":"reference-canonical-market-tick-v1","rules_version":RULES_VERSION,"dataset":output.name,"provenance":"DERIVED_SCENARIO","source":"KRX_OPTION_MASTER_SNAPSHOT","option_master_path":str(master_path.relative_to(root)).replace("\\","/"),"option_master_snapshot_date":snapshot_day.isoformat(),"option_master_sha256":master_sha,"selected_product_family":selected_product,"underlying_symbol":"KOSPI200","initial_underlying_spot":initial_underlying_spot,"underlying_spot_source_path":underlying_source_path,"underlying_spot_source_code":underlying_source_code,"underlying_spot_source_field":"KRX futures_daily.SPOT_PRC (regular KOSPI200 futures; Mini excluded)","calendar_source":";".join(f"data/calendar/krx/{year}.json" for year in sorted(calendar_years)),"horizon_months":HORIZON_MONTHS,"timezone":"Asia/Seoul","date_start":days[0].isoformat(),"date_end":days[-1].isoformat(),"date_end_exclusive":horizon_end_exclusive.isoformat(),"trading_days":len(days),"bar_interval_minutes":BAR_INTERVAL_MINUTES,"session_open":SESSION_OPEN.strftime("%H:%M"),"session_close":"15:45","last_trading_cutoff":LAST_TRADING_CLOSE.strftime("%H:%M"),"contracts_per_bar_without_weekly":CONTRACTS_PER_BAR,"weekly_extra_contracts_per_bar":4,"events":total,"seed":seed,"pattern":pattern,"contract_multiplier":float(next(iter(multiplier_values))),"contract_multiplier_source":next(iter(multiplier_sources)),"pricing_assumptions":{"model":"BLACK_SCHOLES_SCENARIO_APPROXIMATION","risk_free_rate":0.0,"dividend_yield":0.0,"time_basis":"actual seconds to 15:20 KST on exact expiry date","implied_volatility_source":"declared scenario pattern assumptions"},"option_tick_sizes":{"premium_below_10":0.01,"premium_at_or_above_10":0.05},"market_rule_limitations":["KRX_DAILY_PRICE_LIMIT_NOT_ENFORCED_NO_AUTHORITATIVE_PER_CONTRACT_BASE_PRICE"],"monthly_rollovers":rollovers,"monthly_expiries":{month:normalize_option_expiry(value).require_exact() for month,value in monthly_expiries.items()},"weekly_series_expiries":{series:normalize_option_expiry(value).require_exact() for series,value in weekly_series_expiries.items()},"weekly_rollovers":weekly_rollovers,"strategy_lifecycle":strategy_lifecycle,"days":day_manifest}
+    manifest={"schema":"reference-canonical-market-tick-v1","rules_version":RULES_VERSION,"dataset":output.name,"provenance":"DERIVED_SCENARIO","source":"KRX_OPTION_MASTER_SNAPSHOT","option_master_path":str(master_path.relative_to(root)).replace("\\","/"),"option_master_snapshot_date":format_trading_date(snapshot_day),"option_master_sha256":master_sha,"selected_product_family":selected_product,"underlying_symbol":"KOSPI200","initial_underlying_spot":initial_underlying_spot,"underlying_spot_source_path":underlying_source_path,"underlying_spot_source_code":underlying_source_code,"underlying_spot_source_field":"KRX futures_daily.SPOT_PRC (regular KOSPI200 futures; Mini excluded)","calendar_source":";".join(f"data/calendar/krx/{year}.json" for year in sorted(calendar_years)),"horizon_months":HORIZON_MONTHS,"timezone":"Asia/Seoul","date_start":format_trading_date(days[0]),"date_end":format_trading_date(days[-1]),"date_end_exclusive":format_trading_date(horizon_end_exclusive),"trading_days":len(days),"bar_interval_minutes":BAR_INTERVAL_MINUTES,"session_open":SESSION_OPEN.strftime("%H:%M"),"session_close":"15:45","last_trading_cutoff":LAST_TRADING_CLOSE.strftime("%H:%M"),"contracts_per_bar_without_weekly":CONTRACTS_PER_BAR,"weekly_extra_contracts_per_bar":4,"events":total,"seed":seed,"pattern":pattern,"contract_multiplier":float(next(iter(multiplier_values))),"contract_multiplier_source":next(iter(multiplier_sources)),"pricing_assumptions":{"model":"BLACK_SCHOLES_SCENARIO_APPROXIMATION","risk_free_rate":0.0,"dividend_yield":0.0,"time_basis":"actual seconds to 15:20 KST on exact expiry date","implied_volatility_source":"declared scenario pattern assumptions"},"option_tick_sizes":{"premium_below_10":0.01,"premium_at_or_above_10":0.05},"market_rule_limitations":["KRX_DAILY_PRICE_LIMIT_NOT_ENFORCED_NO_AUTHORITATIVE_PER_CONTRACT_BASE_PRICE"],"monthly_rollovers":rollovers,"monthly_expiries":{month:normalize_option_expiry(value).require_exact() for month,value in monthly_expiries.items()},"weekly_series_expiries":{series:normalize_option_expiry(value).require_exact() for series,value in weekly_series_expiries.items()},"weekly_rollovers":weekly_rollovers,"strategy_lifecycle":strategy_lifecycle,"days":day_manifest}
     (output/"manifest.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding="utf-8")
     store=output/"control_tower_replay.jsonl"
     with store.open('w',encoding='utf-8',newline='\n') as target:

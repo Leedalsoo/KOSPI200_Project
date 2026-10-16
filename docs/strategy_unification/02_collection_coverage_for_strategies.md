@@ -1,7 +1,7 @@
 # Project200 — KIS VTS collection coverage check for strategy strike rules
 
 Date: 2026-10-11
-Scope: read-only review of collector code and existing `data/kis_market_data_restart/YYYY-MM-DD/` partitions. No collector, scheduler, or data file was changed. Prices below are stored observations only; there is no synthetic price series.
+Scope: read-only review of collector code and existing `data/kis_market_data_restart/YYYYMMDD/` partitions. No collector, scheduler, or data file was changed. Prices below are stored observations only; there is no synthetic price series.
 
 ## 1. Code findings
 

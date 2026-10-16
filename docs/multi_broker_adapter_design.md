@@ -154,13 +154,13 @@
 
 ### 4.2 저장 구조
 
-`data/<market-data-root>/<broker_id>/YYYY-MM-DD/`
+`data/<market-data-root>/<broker_id>/YYYYMMDD/`
 
 예:
 
-- `data/<market-data-root>/KIS/2026-09-22/`
-- `data/<market-data-root>/LS/2026-09-22/`
-- `data/<market-data-root>/NH_FUTURES/2026-09-22/`
+- `data/<market-data-root>/KIS/20260922/`
+- `data/<market-data-root>/LS/20260922/`
+- `data/<market-data-root>/NH_FUTURES/20260922/`
 
 각 broker 날짜 partition에는 raw payload, canonical observation, manifest/status/audit를 둔다.
 

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contracts.trading_date import format_trading_date, parse_trading_date
 
 import argparse
 import hashlib
@@ -47,9 +48,9 @@ def validate_dataset(root: Path, dataset: Path) -> dict:
     if manifest.get("timezone") != "Asia/Seoul":
         raise RuntimeError(f"TIMEZONE_INVALID:{manifest.get('timezone')}")
 
-    snapshot_day = date.fromisoformat(manifest["option_master_snapshot_date"])
+    snapshot_day = parse_trading_date(manifest["option_master_snapshot_date"])
     end_exclusive = add_calendar_months(snapshot_day, HORIZON_MONTHS)
-    if manifest.get("date_end_exclusive") != end_exclusive.isoformat():
+    if manifest.get("date_end_exclusive") != format_trading_date(end_exclusive):
         raise RuntimeError(f"THREE_MONTH_END_BOUNDARY_INVALID:{manifest.get('date_end_exclusive')}:{end_exclusive}")
     calendar_years = set(range(snapshot_day.year, end_exclusive.year + 2))
     calendar = load_calendar(root, calendar_years)
@@ -59,7 +60,7 @@ def validate_dataset(root: Path, dataset: Path) -> dict:
     expected_days = trading_days_between(calendar, snapshot_day, end_exclusive)
     if not expected_days:
         raise RuntimeError("THREE_MONTH_HORIZON_HAS_NO_TRADING_DAYS")
-    if manifest.get("date_start") != expected_days[0].isoformat() or manifest.get("date_end") != expected_days[-1].isoformat():
+    if manifest.get("date_start") != format_trading_date(expected_days[0]) or manifest.get("date_end") != format_trading_date(expected_days[-1]):
         raise RuntimeError(f"DATE_WINDOW_INVALID:{manifest.get('date_start')}:{manifest.get('date_end')}")
     if int(manifest.get("trading_days", 0)) != len(expected_days):
         raise RuntimeError(f"TRADING_DAY_COUNT_INVALID:{manifest.get('trading_days')}:{len(expected_days)}")
@@ -71,7 +72,7 @@ def validate_dataset(root: Path, dataset: Path) -> dict:
     if master_hash != manifest.get("option_master_sha256"):
         raise RuntimeError(f"OPTION_MASTER_HASH_MISMATCH:{master_hash}:{manifest.get('option_master_sha256')}")
     master_date_match = re.fullmatch(r"(\d{8})_options_daily\.json", master_path.name)
-    if not master_date_match or date.fromisoformat(f"{master_date_match.group(1)[:4]}-{master_date_match.group(1)[4:6]}-{master_date_match.group(1)[6:8]}") != snapshot_day:
+    if not master_date_match or parse_trading_date(f"{master_date_match.group(1)[:4]}-{master_date_match.group(1)[4:6]}-{master_date_match.group(1)[6:8]}") != snapshot_day:
         raise RuntimeError(f"OPTION_MASTER_SNAPSHOT_DATE_MISMATCH:{master_path.name}:{snapshot_day}")
     identities, parsed_hash, selected_product, monthly_expiries, weekly_expiries = parse_master(root, calendar, master_path)
     if parsed_hash != master_hash or selected_product != manifest.get("selected_product_family"):
@@ -108,7 +109,7 @@ def validate_dataset(root: Path, dataset: Path) -> dict:
         raise RuntimeError("PRICING_ASSUMPTIONS_INVALID")
 
     daily_manifest = manifest.get("days")
-    if not isinstance(daily_manifest, list) or [item.get("date") for item in daily_manifest] != [day.isoformat() for day in expected_days]:
+    if not isinstance(daily_manifest, list) or [item.get("date") for item in daily_manifest] != [format_trading_date(day) for day in expected_days]:
         raise RuntimeError("DAILY_MANIFEST_CALENDAR_MISMATCH")
 
     expected_seq = 1
@@ -126,7 +127,7 @@ def validate_dataset(root: Path, dataset: Path) -> dict:
         expected_month_expiry_exact = normalize_option_expiry(expected_month_expiry).require_exact()
         if item.get("expiry") != expected_month_expiry_exact:
             raise RuntimeError(f"MONTHLY_EXPIRY_IDENTITY_MISMATCH:{scenario_day}:{item.get('expiry')}:{expected_month_expiry_exact}")
-        monthly_last_trading_day = date.fromisoformat(expected_month_expiry) == scenario_day
+        monthly_last_trading_day = parse_trading_date(expected_month_expiry) == scenario_day
         expected_close = LAST_TRADING_CLOSE if monthly_last_trading_day else SESSION_CLOSE
         expected_bars = int((datetime.combine(scenario_day, expected_close) - datetime.combine(scenario_day, SESSION_OPEN)).total_seconds() // (BAR_INTERVAL_MINUTES * 60))
         if int(item.get("bars", -1)) != expected_bars:
@@ -138,7 +139,7 @@ def validate_dataset(root: Path, dataset: Path) -> dict:
             raise RuntimeError(f"SESSION_TYPE_INVALID:{scenario_day}:{item.get('session_type')}")
 
         daily_path = dataset / item.get("file", "")
-        if daily_path.name != f"{scenario_day.isoformat()}.jsonl" or not daily_path.is_file():
+        if daily_path.name != f"{format_trading_date(scenario_day)}.jsonl" or not daily_path.is_file():
             raise RuntimeError(f"DAILY_DATA_FILE_INVALID:{scenario_day}:{daily_path}")
         grouped: dict[datetime, list[dict]] = defaultdict(list)
         file_count = 0
@@ -232,7 +233,7 @@ def validate_dataset(root: Path, dataset: Path) -> dict:
                 weekly_bars += 1
             for record in records:
                 tick = record["tick"]
-                if tick["contract_class"] == "weekly" and timestamp >= datetime.combine(date.fromisoformat(normalize_option_expiry(tick["expiry"]).require_exact()[:4] + "-" + normalize_option_expiry(tick["expiry"]).require_exact()[4:6] + "-" + normalize_option_expiry(tick["expiry"]).require_exact()[6:8]), LAST_TRADING_CLOSE):
+                if tick["contract_class"] == "weekly" and timestamp >= datetime.combine(parse_trading_date(normalize_option_expiry(tick["expiry"]).require_exact()[:4] + "-" + normalize_option_expiry(tick["expiry"]).require_exact()[4:6] + "-" + normalize_option_expiry(tick["expiry"]).require_exact()[6:8]), LAST_TRADING_CLOSE):
                     raise RuntimeError(f"WEEKLY_CONTRACT_AFTER_CUTOFF:{timestamp}:{tick['instrument_id']}")
         if weekly_bars != int(item.get("weekly_contract_bars", -1)):
             raise RuntimeError(f"WEEKLY_BAR_COVERAGE_INVALID:{scenario_day}:{weekly_bars}:{item.get('weekly_contract_bars')}")

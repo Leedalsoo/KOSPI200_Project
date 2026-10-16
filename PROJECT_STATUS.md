@@ -18,7 +18,7 @@
 - pytest PASS는 실제 Strategy E2E PASS와 동일하지 않음
 
 ## 현재 데이터/검증 경계
-현재 REAL_VTS 기준은 `data/kis_market_data_restart/YYYY-MM-DD/`의 실제 관측 데이터다. Synthetic/Scenario/Replay 결과는 실제 시장 데이터와 별도 provenance로 취급한다.
+현재 REAL_VTS 기준은 `data/kis_market_data_restart/YYYYMMDD/`의 실제 관측 데이터다. Synthetic/Scenario/Replay 결과는 실제 시장 데이터와 별도 provenance로 취급한다.
 
 REAL_VTS 구간에서 실제 signal이 관찰되지 않으면 해당 Strategy의 전체 lifecycle을 PASS로 판정하지 않는다. target tick 미달, runtime error 또는 authoritative input 부재는 BLOCKED/INCOMPLETE로 처리한다.
 

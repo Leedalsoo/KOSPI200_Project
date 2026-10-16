@@ -67,7 +67,7 @@
 
 현재 Collector의 시장데이터 root는 `PROJECT200_MARKET_DATA_DIR` 환경변수로 override할 수 있다. 상대경로는 ProjectRoot의 `data/` 아래로 해석된다. 현재 Windows Watchdog는 `kis_market_data_restart`를 설정하므로 실제 활성 root는 ProjectRoot 기준 `data/kis_market_data_restart/`이다.
 
-코드의 기본값은 `kis_market_data`이며 이것도 절대 Windows 경로가 아니라 ProjectRoot의 `data/kis_market_data/`로 해석된다. 따라서 `data/kis_market_data/YYYY-MM-DD/` 자체는 상대경로 기반이다.
+코드의 기본값은 `kis_market_data`이며 이것도 절대 Windows 경로가 아니라 ProjectRoot의 `data/kis_market_data/`로 해석된다. 따라서 `data/kis_market_data/YYYYMMDD/` 자체는 상대경로 기반이다.
 
 **판정: 확정 — EC2에서는 `/var/lib/project200/data` 같은 명시적 데이터 디렉터리를 서비스 설계로 정하고, 코드에는 상대경로/환경변수만 전달한다. 기존 Windows 경로는 수정하지 않는다.**
 
@@ -216,7 +216,7 @@ Control Tower 웹 UI를 인터넷에 직접 노출한다면 TLS(HTTPS)뿐 아니
 
 ### 5.1 EC2 로컬 데이터 위험
 
-`data/.../YYYY-MM-DD/`가 EBS에만 존재하면 인스턴스 자체 장애, 파일시스템 손상, 운영 실수 등으로 수집 원본이 손실될 수 있다. 시장 원본은 단순 캐시가 아니라 Replay/검증 자산이므로 별도 백업이 필요하다.
+`data/.../YYYYMMDD/`가 EBS에만 존재하면 인스턴스 자체 장애, 파일시스템 손상, 운영 실수 등으로 수집 원본이 손실될 수 있다. 시장 원본은 단순 캐시가 아니라 Replay/검증 자산이므로 별도 백업이 필요하다.
 
 **판정: 확정 — EC2 로컬 디스크만을 유일한 보존수단으로 사용하지 않는다.**
 

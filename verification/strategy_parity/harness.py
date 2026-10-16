@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contracts.trading_date import format_trading_date
 
 from dataclasses import dataclass, fields, is_dataclass
 from decimal import Decimal
@@ -45,7 +46,11 @@ def semantic_value(value: Any) -> Any:
         return value.value
     if isinstance(value, Decimal):
         return str(value)
-    if isinstance(value, (datetime, date, time)):
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, date):
+        return format_trading_date(value)
+    if isinstance(value, time):
         return value.isoformat()
     if is_dataclass(value) and not isinstance(value, type):
         return {field.name: semantic_value(getattr(value, field.name)) for field in fields(value)}
