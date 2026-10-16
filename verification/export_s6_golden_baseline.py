@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contracts.trading_date import format_trading_date
 
 import argparse
 import dataclasses

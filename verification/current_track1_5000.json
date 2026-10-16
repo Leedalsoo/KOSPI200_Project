@@ -2,7 +2,7 @@
   "strategy_id": "TRACK1_TAIL_DEFENSE",
   "version": "1.1.0",
   "source": "kis_vts_rest",
-  "store_path": "C:\\Users\\white\\Desktop\\MovingProject\\KOSPI200_Project\\data\\kis_market_data_restart\\2026-10-02\\historical_market_observations.jsonl.observations.jsonl",
+  "store_path": "C:\\Users\\white\\Desktop\\MovingProject\\KOSPI200_Project\\data\\kis_market_data_restart\\20261002\\historical_market_observations.jsonl.observations.jsonl",
   "requested_ticks": 5000,
   "processed_ticks": 4771,
   "last_tick": {
