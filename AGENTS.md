@@ -119,7 +119,7 @@ KIS VTS 모의계좌에서 수집한 실제 시장데이터는 **REAL_VTS 원본
 
 현재 운영 저장 루트는 다음으로 고정한다.
 
-`data/kis_market_data_restart/YYYY-MM-DD/`
+`data/kis_market_data_restart/YYYYMMDD/`
 
 거래일별 partition의 raw/canonical observation, manifest, status, heartbeat 및 관련 evidence는 source/provenance와 함께 보존한다.
 
@@ -428,3 +428,36 @@ Push 후 반드시 원격 `Project200` HEAD가 해당 commit SHA를 가리키는
 - KIS API와 공식 KIS 마스터만 런타임 권위 소스로 사용한다. 필요한 데이터, identity, timestamp, capability 또는 provenance가 누락·불일치·미검증이면 fail-closed로 BLOCKED/UNAVAILABLE 처리한다.
 - VTS 또는 오프라인 검증 PASS는 KIS Live 준비 완료나 실시간 수집·복구·연속성 PASS를 의미하지 않는다. Strategy 1~9의 KIS 원천 → 입력 → 신호/계획 → 최종 admission lineage가 전략별 증거로 입증되기 전까지 전체 연결은 **NOT PROVEN/BLOCKED**로 유지한다.
 - 문서 기준 갱신은 기존 미완료 코드·테스트 변경을 승인하거나 정당화하지 않는다. 작업 전후 git status와 diff를 확인하고, 해당 작업과 무관한 사용자 변경은 stage/commit/push에 포함하지 않는다.
+
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
+
+Rules:
+- When graphify-out/graph.json exists, run `graphify query "<question>"` before your first grep, search or source-file read for a codebase question, and put this rule in every subagent prompt that explores code. Read raw files only for lines the graph or an earlier read already located. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+- A committed graphify-out/graph.json is rewritten whole on every build, so a large diff to it in a pull request is expected. Do not flag it as churn or suggest skipping the graph rebuild or its hooks.
+
+## 운영 프로토콜 (점검·과제 큐)
+
+점검·과제 큐 관련 키워드를 처리할 때는 대화 기억이나 이전 보고만으로 현재 상태·큐를 판단하지 않는다. 매번 아래 두 Notion 페이지를 먼저 다시 읽고, 그 페이지의 절차와 현재 증거를 기준으로 진행한다.
+
+- 통합 점검 지시문 v1: https://app.notion.com/p/3fb5f4f6eaa18107acbae513567306af?pvs=204
+- 과제 큐 (현재): https://app.notion.com/p/3fb5f4f6eaa181efbccae9003d35aeee?pvs=204
+
+적용 키워드: `상태점검`, `상태점검 간단`, `과제정리 No.xxxx`, `큐`, `승인 Qn`, `다음`, `보류 Qn`, `건너뜀 Qn`, `먼저 Qn`, `점검목록 ...`, `문턱 현황`.
+
+- 키워드 실행 전에 두 페이지를 모두 읽는다. 어느 한 페이지라도 읽지 못하면 작업을 실행하지 말고, 읽지 못한 페이지와 오류를 보고한다.
+- `상태점검`/`상태점검 간단`은 통합 점검 지시문 모드 A에 따라 직접 읽기 전용 점검을 수행하고, Q&A에 전체 결과를 기록한 뒤 재조회로 검증한다.
+- `과제정리 No.xxxx`는 지정된 상태점검 페이지를 읽고 관련 현재 상태를 다시 직접 확인한 다음, 모드 B에 따라 과제를 우선순위화하고 `과제 큐 (현재)`를 갱신한다.
+- `큐`는 `과제 큐 (현재)`를 다시 읽고, 읽은 시각과 각 상태별 개수를 포함해 표시한다. **과제 없음**이라고 보고할 때는 큐 URL, 읽은 시각, 상태별 개수를 반드시 함께 제시한다.
+- `승인 Qn`은 큐의 해당 항목과 관련된 현재 상태를 재확인하고 승인 범위만 실행한다. 코드 수정·프로세스/스케줄 변경·삭제/이동·커밋/푸시는 해당 항목의 명시적인 `승인 Qn` 없이는 실행하지 않는다. 일반적인 작업 지시는 큐 항목 승인으로 대체하지 않는다.
+- `다음`은 직전에 제안한 후보가 읽기 전용 또는 문서 작업인 경우에만 실행한다. 코드 수정·프로세스/스케줄 변경·삭제/이동·커밋/푸시 후보는 `승인 Qn`을 별도로 요구한다.
+- 모드 A/B는 읽기 전용이다. 새 문제는 실행하지 않고 큐에 등록한다. 승인된 작업도 범위 밖 변경, 다른 파일, 미추적 파일을 포함하지 않는다.
+- 실행 결과는 통합 점검 지시문에 지정된 Q&A 형식으로 기록하고, 재조회로 기록을 검증한다. Notion 기록이나 현재 증거를 실제로 확인하지 않았다면 완료로 보고하지 않는다.
