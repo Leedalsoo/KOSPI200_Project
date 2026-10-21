@@ -21,7 +21,7 @@ Notion `질문과답변`은 작업 연속성 및 실행 기록의 기준이다. 
 - 상태·시세·체결·포지션이 불명확하거나 authoritative input이 누락/오래된 경우 임의 추정으로 주문하지 않고 fail-closed 및 BLOCKED/UNAVAILABLE 처리한다.
 - 전략/아키텍처/데이터 기준 변경은 commit/push 전에 사용자 사전 승인을 받는다. Decision Log는 삭제하지 않고 폐기 시 상태를 `폐기됨`으로 변경해 근거를 남긴다. 다른 Notion 페이지 삭제는 사전 승인을 받는다.
 
-현재 개발 단계는 **Control Tower / Option Program / 실제 KIS VTS 연결 / 장기 E2E 검증**이다. Virtual/VTS 검증을 중심으로 진행하며 Live KIS 주문은 실행하지 않는다.
+현재 개발 단계는 **수집기 v2 재구성·검증**이다. 런타임 데이터 기준은 KIS API만 사용하며 KRX는 런타임 소스가 아니다. VTS 전용이고 KIS Live 및 주문·정정·취소·계좌·잔고·증거금 API는 명시 승인 전까지 금지한다. 장중 운영 가드 08:29~16:01에는 수집기와 수집 코드를 수정·중지·재시작하지 않는다. 모의 REST 요청 간격은 최소 1.25초다.
 
 ---
 
@@ -335,7 +335,7 @@ Push 후 반드시 원격 `Project200` HEAD가 해당 commit SHA를 가리키는
 
 ## 17. 현재 미완료 사항과 옵션 헤지 작업 상태
 
-현재 작업 단계는 옵션 헤지 위험 검사 설계·공통 위험 집계 연결 전 단계다. 문서/설정 초안의 존재를 Runtime enforcement 또는 전체 E2E PASS로 해석하지 않는다.
+현재 작업 단계는 수집기 v2 재구성·검증이다. 2026-10-21 기준 S9 KIS master/expiry/quote 입력 경로의 로컬 검증 후보가 있으나, 이를 실제 Runtime/E2E PASS 또는 전략 구현 완료로 승격하지 않는다.
 
 전체 프로젝트에서 실제 증거가 확보될 때까지 다음 항목은 완료로 승격하지 않는다.
 
@@ -421,13 +421,23 @@ Push 후 반드시 원격 `Project200` HEAD가 해당 commit SHA를 가리키는
 - KIS Live 주문은 실행하지 않는다. REAL_VTS, DERIVED_SCENARIO, SYNTHETIC 및 VIRTUAL_EXECUTION provenance를 구분한다.
 
 
-## 최신 통합 기준 정합성 (2026-10-16)
+## 최신 통합 기준 정합성 및 현재 작업 상태 (2026-10-21)
 
-- 현재 프로젝트의 최신 통합 기준은 Notion 질문과답변의 **No.1278 (Strategy 1~9 KIS 단일 출처 최신 통합판)** 이다. 작업 우선순위에서 과거 기준과 충돌하면 No.1278 및 그 이후의 확정된 결정·검증 증거를 적용한다.
+- Notion Q&A No.1278은 과거 통합 기준 참조다. 이번 작업에서 최신 활성 Decision Log 20개 전체를 재조회하지 못했으므로, 이 페이지를 현재 최우선 기준으로 재확인한 것으로 간주하지 않는다.
 - **No.1274는 원본 Strategy 1~9 전략 기준표**로 유지한다. No.1274를 최신 통합 정책 또는 현재 검증 완료의 증거로 해석하지 않는다.
 - KIS API와 공식 KIS 마스터만 런타임 권위 소스로 사용한다. 필요한 데이터, identity, timestamp, capability 또는 provenance가 누락·불일치·미검증이면 fail-closed로 BLOCKED/UNAVAILABLE 처리한다.
 - VTS 또는 오프라인 검증 PASS는 KIS Live 준비 완료나 실시간 수집·복구·연속성 PASS를 의미하지 않는다. Strategy 1~9의 KIS 원천 → 입력 → 신호/계획 → 최종 admission lineage가 전략별 증거로 입증되기 전까지 전체 연결은 **NOT PROVEN/BLOCKED**로 유지한다.
 - 문서 기준 갱신은 기존 미완료 코드·테스트 변경을 승인하거나 정당화하지 않는다. 작업 전후 git status와 diff를 확인하고, 해당 작업과 무관한 사용자 변경은 stage/commit/push에 포함하지 않는다.
+
+### 2026-10-21 S9 KIS 입력 probe — BLOCKED / local only
+
+- KIS Option Master snapshot SHA-256: `efb5b80be190971eea41a73f20573e7f4a4b33caeabf1fc47ca8298a315e43eb`. KIS REST `futs_last_tr_date` exact expiry evidence maps S1-expiry candidate `C01611880` (PUT 880.00) and fallback `C01611882` (PUT 882.50) to `20261112` for a fixture-based local selection test.
+- KIS REST order-book probe: rank 4 has bid 15.00 / ask 0.00 and is invalid. Rank 3 has bid 1.75 / ask 41.85, relative spread 183.94%, and source timestamp 15:45 KST while probed after 17:17 KST; both candidates are blocked for runtime use.
+- `min_volume` is unresolved: one-day KIS REST `acml_vol` samples are 57 and 23, and the 20261020 canonical observations contain no rows for these symbols. Do not infer a threshold from this sample.
+- `s1_put_link_ratio` is unresolved because no authoritative actual S1 short-PUT lot/stress-outcome sample was verified. `third_strike_insufficient_action` remains undecided; valid candidate values are `BLOCK_FOR_SESSION` or `WAIT_AND_RECHECK`, and the latter also needs approved retry count/interval. Quote freshness, spread, top-depth, quantity rounding and limit/reprice/cancel policies remain unset.
+- Local prototype files connect KIS exact master/expiry evidence, quote freshness timestamps, and S1 position-lot provenance to the S9 input context. Focused offline regression tests: 36 passed. No actual Runtime/S1 position snapshot or full REAL_VTS strategy lifecycle was executed. These local code changes are not pushed by the documentation-only commit.
+- **Approval conflict requiring user decision:** the v0.3 approval index lists `strategy_9_s1_put_insurance_spec_v0.4.md` SHA-256 `3D1060BBCDBCCF29E4FC0025559A15FFDB767C4C7C5BAAD81DB61085F37C2E24` as approved, while that file's own top status says `draft / unverified / unapproved — implementation basis prohibited`, and its v0.4 D-4/liquidity addendum says DRAFT / VERIFYING / UNAPPROVED. Do not extend strategy logic or promote it to implementation-complete until the approved scope is clarified.
+- The `Project200-KIS-VTS-WebSocket-Collector` scheduled task was read-only confirmed `Running` at 17:22 KST. No collector stop/restart, subscription change, order/account API, or KIS Live access occurred. The upcoming push is limited to `AGENTS.md`; local strategy/runtime changes remain unstaged.
 
 
 ## graphify
