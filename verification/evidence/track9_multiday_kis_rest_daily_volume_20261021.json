@@ -1,0 +1,108 @@
+{
+  "schema_version": "track9-kis-vts-daily-option-volume-v1",
+  "retrieved_at_kst": "2026-10-21 18:06",
+  "environment": "VTS",
+  "endpoint": "/uapi/domestic-futureoption/v1/quotations/inquire-daily-fuopchartprice",
+  "tr_id": "FHKIF03020100",
+  "market_code": "O",
+  "period_code": "D",
+  "date_range": [
+    "20261015",
+    "20261021"
+  ],
+  "method": "two sequential read-only market-data REST calls; requests spaced >=1.25 seconds; no account/order APIs",
+  "responses": {
+    "C01611880": {
+      "http_status": 200,
+      "rt_cd": "0",
+      "msg_cd": "MCA00000",
+      "request_at_utc": "2026-10-21T09:06:15.721919+00:00",
+      "received_at_utc": "2026-10-21T09:06:15.835911+00:00",
+      "response_sha256": "54a9debd573562d6ca996fedeb6e77ae09c302aa8168ce7de85ecd8ddde5597f",
+      "daily_rows": [
+        {
+          "date": "20261015",
+          "acml_vol": 237,
+          "close": 68.0
+        },
+        {
+          "date": "20261016",
+          "acml_vol": 77,
+          "close": 45.7
+        },
+        {
+          "date": "20261019",
+          "acml_vol": 81,
+          "close": 37.2
+        },
+        {
+          "date": "20261020",
+          "acml_vol": 34,
+          "close": 52.85
+        },
+        {
+          "date": "20261021",
+          "acml_vol": 57,
+          "close": 35.35
+        }
+      ]
+    },
+    "C01611882": {
+      "http_status": 200,
+      "rt_cd": "0",
+      "msg_cd": "MCA00000",
+      "request_at_utc": "2026-10-21T09:06:26.855017+00:00",
+      "received_at_utc": "2026-10-21T09:06:26.944319+00:00",
+      "response_sha256": "b1ca3b9d202026b7a4ce5e538d029f97737b1b742b10e0adce7598fc8821b2e1",
+      "daily_rows": [
+        {
+          "date": "20261015",
+          "acml_vol": 82,
+          "close": 65.75
+        },
+        {
+          "date": "20261016",
+          "acml_vol": 11,
+          "close": 41.35
+        },
+        {
+          "date": "20261019",
+          "acml_vol": 11,
+          "close": 38.25
+        },
+        {
+          "date": "20261020",
+          "acml_vol": 7,
+          "close": 56.95
+        },
+        {
+          "date": "20261021",
+          "acml_vol": 23,
+          "close": 37.0
+        }
+      ]
+    }
+  },
+  "summary": {
+    "C01611880": {
+      "n_trading_days": 5,
+      "min_acml_vol": 34,
+      "median_acml_vol": 77,
+      "max_acml_vol": 237,
+      "passes_min_volume_10": 5,
+      "passes_min_volume_20": 5,
+      "passes_min_volume_30": 5
+    },
+    "C01611882": {
+      "n_trading_days": 5,
+      "min_acml_vol": 7,
+      "median_acml_vol": 11,
+      "max_acml_vol": 82,
+      "passes_min_volume_10": 4,
+      "passes_min_volume_20": 2,
+      "passes_min_volume_30": 1
+    }
+  },
+  "calibration_conclusion": "Five trading days provide a multi-day KIS-reported volume sample. min_volume=10 contracts/day is a research candidate (rank-4 5/5 days, rank-3 4/5 days), not an approved runtime value: sample is short, no fill/slippage/reject outcomes or held-out period, and the acceptance threshold/sample size remain unapproved.",
+  "other_blockers": "Actual S1 residual short-PUT execution/position provenance remains absent; s1_put_link_ratio cannot be calibrated from these market data."
+}

@@ -423,23 +423,22 @@ Push 후 반드시 원격 `Project200` HEAD가 해당 commit SHA를 가리키는
 
 ## 최신 통합 기준 정합성 및 현재 작업 상태 (2026-10-21)
 
-- Notion Q&A No.1278은 과거 통합 기준 참조다. 이번 작업에서 최신 활성 Decision Log 20개 전체를 재조회하지 못했으므로, 이 페이지를 현재 최우선 기준으로 재확인한 것으로 간주하지 않는다.
-- **No.1274는 원본 Strategy 1~9 전략 기준표**로 유지한다. No.1274를 최신 통합 정책 또는 현재 검증 완료의 증거로 해석하지 않는다.
-- KIS API와 공식 KIS 마스터만 런타임 권위 소스로 사용한다. 필요한 데이터, identity, timestamp, capability 또는 provenance가 누락·불일치·미검증이면 fail-closed로 BLOCKED/UNAVAILABLE 처리한다.
-- VTS 또는 오프라인 검증 PASS는 KIS Live 준비 완료나 실시간 수집·복구·연속성 PASS를 의미하지 않는다. Strategy 1~9의 KIS 원천 → 입력 → 신호/계획 → 최종 admission lineage가 전략별 증거로 입증되기 전까지 전체 연결은 **NOT PROVEN/BLOCKED**로 유지한다.
-- 문서 기준 갱신은 기존 미완료 코드·테스트 변경을 승인하거나 정당화하지 않는다. 작업 전후 git status와 diff를 확인하고, 해당 작업과 무관한 사용자 변경은 stage/commit/push에 포함하지 않는다.
+- 현재 단계는 사용자 지정에 따라 **수집기 v2 재구성·검증**이다. Current Baseline은 상태 대시보드이며 지시 권한이 없다. 최신 기준은 현재 대화의 직접 지시, 최신 확정 Decision Log, 이 문서 순서로 확인한다.
+- 2026-10-21 19:09 KST에 Decision Log 데이터 소스를 조회했다. 최신 관련 항목은 S9 scope 충돌 기록과 Strategy 1~9 quote-only 입력 경계/독립 입력 검증 기록이다. S9 scope 충돌 Decision Log 항목은 v0.5 설계 범위 승인과 v0.6 보정 초안 상태를 반영해 `정정됨`으로 갱신했다. 재조회에서 `정정됨` 상태와 최신 본문, Q&A No.1319 링크를 확인했다. 이 문서가 Notion의 결정을 대체하지 않는다.
+- Strategy 1~9의 과거 명세·검증 결과는 현재 승인이나 구현 완료의 증거가 아니다. 신규 명세의 승인된 범위와 현재 코드/실제 데이터/새 검증 결과를 대조한다. 오프라인·synthetic·quote-only 입력 경계 PASS는 실제 VTS lifecycle 또는 Live 검증 PASS가 아니다.
+- KIS API 및 공식 KIS 마스터만 런타임 권위 소스로 사용한다. KRX는 런타임 데이터 소스가 아니다. 필수 데이터, identity, timestamp, capability 또는 provenance가 누락·불일치·미검증이면 fail-closed로 BLOCKED/UNAVAILABLE 처리한다.
+- 이 갱신은 원격 `Project200`의 `AGENTS.md`에 남아 있던 S9 v0.4 충돌 및 단일 거래일 volume 설명을 정정한다. 명시적 사용자 승인에 따라 관련 문서만 stage/commit/push하며, 무관한 코드 변경·Graphify 산출물·미추적 파일은 커밋에 포함하지 않는다.
 
-### 2026-10-21 S9 KIS 입력 probe — BLOCKED / local only
+### 2026-10-21 S9 KIS 입력 및 범위 상태 — BLOCKED / local evidence
 
-- KIS Option Master snapshot SHA-256: `efb5b80be190971eea41a73f20573e7f4a4b33caeabf1fc47ca8298a315e43eb`. KIS REST `futs_last_tr_date` exact expiry evidence maps S1-expiry candidate `C01611880` (PUT 880.00) and fallback `C01611882` (PUT 882.50) to `20261112` for a fixture-based local selection test.
-- KIS REST order-book probe: rank 4 has bid 15.00 / ask 0.00 and is invalid. Rank 3 has bid 1.75 / ask 41.85, relative spread 183.94%, and source timestamp 15:45 KST while probed after 17:17 KST; both candidates are blocked for runtime use.
-- `min_volume` is unresolved: one-day KIS REST `acml_vol` samples are 57 and 23, and the 20261020 canonical observations contain no rows for these symbols. Do not infer a threshold from this sample.
-- `s1_put_link_ratio` is unresolved because no authoritative actual S1 short-PUT lot/stress-outcome sample was verified. `third_strike_insufficient_action` remains undecided; valid candidate values are `BLOCK_FOR_SESSION` or `WAIT_AND_RECHECK`, and the latter also needs approved retry count/interval. Quote freshness, spread, top-depth, quantity rounding and limit/reprice/cancel policies remain unset.
-- Local prototype files connect KIS exact master/expiry evidence, quote freshness timestamps, and S1 position-lot provenance to the S9 input context. Focused offline regression tests: 36 passed. No actual Runtime/S1 position snapshot or full REAL_VTS strategy lifecycle was executed. These local code changes are not pushed by the documentation-only commit.
-- **Approval conflict requiring user decision:** the v0.3 approval index lists `strategy_9_s1_put_insurance_spec_v0.4.md` SHA-256 `3D1060BBCDBCCF29E4FC0025559A15FFDB767C4C7C5BAAD81DB61085F37C2E24` as approved, while that file's own top status says `draft / unverified / unapproved — implementation basis prohibited`, and its v0.4 D-4/liquidity addendum says DRAFT / VERIFYING / UNAPPROVED. Do not extend strategy logic or promote it to implementation-complete until the approved scope is clarified.
-- The `Project200-KIS-VTS-WebSocket-Collector` scheduled task was read-only confirmed `Running` at 17:22 KST. No collector stop/restart, subscription change, order/account API, or KIS Live access occurred. The documentation commit/push includes only `AGENTS.md`; local strategy/runtime changes remain unstaged.
-
-
+- **v0.5 설계 범위 승인:** 사용자의 직접 지시에 따라 v0.4 내부 상태 충돌을 새 버전 v0.5에서 명시적으로 정리했다. 파일 SHA-256 `8729F2E615EC4256550DCBC3B937BBCEBD04AAE33033B5E385045B9F94524768`. 원본 v0.4 SHA-256 `3D1060BBCDBCCF29E4FC0025559A15FFDB767C4C7C5BAAD81DB61085F37C2E24`는 변경하지 않고 보존한다. 이 승인은 설계 범위만 승인하며 Runtime 활성화·전략 구현·숫자 파라미터를 승인하지 않는다.
+- **v0.6 보정 초안:** `docs/strategy_specifications/strategy_9_s1_put_insurance_spec_v0.6.md`, SHA-256 `0604AB4F9E85084384D42DDCE360D74C45E47CFEC4087B6898E49BD180205DD0`. 상태 DRAFT / VERIFYING. 사용자 검토·승인 전에는 Runtime 기준이 아니다.
+- **원본 WebSocket 호가:** 20261015/20261016/20261020/20261021 네 거래일에서 `C01611880` 21,229건, `C01611882` 5,171건을 확인했다. 증거 `verification/evidence/track9_multiday_quote_quality_20261021.json`, SHA-256 `C47DEDBCE4E105605F19F34BB294D8014748D610643BF280D6845DCE11003D7B`.
+- **KIS REST 거래량:** 5개 거래일에서 `C01611880`은 237, 77, 81, 34, 57이고 `C01611882`는 82, 11, 11, 7, 23이다. 증거 `verification/evidence/track9_multiday_kis_rest_daily_volume_20261021.json`, SHA-256 `DBE83BEB900A70FA869A0E5C1735BE3EB17D54094A9F6FA0D5E1B548278B72FE`. `min_volume=10`은 연구 후보일 뿐 Runtime 값은 null/unapproved다.
+- spread/depth 연구 후보는 rank-4 spread <=10%, rank-3 spread <=15%, 양방향 cumulative top-five depth >=4계약이다. Source timestamp 의미와 `max_quote_age`는 미확정이며, 체결·부분체결·거절·슬리피지 및 holdout 검증 전에는 Runtime 기준으로 승인하지 않는다.
+- `third_strike_insufficient_action=WAIT_AND_RECHECK`는 승인된 설계 범위 규칙이다. 동일 exact contract의 새 호가를 재확인하고 임의 가격 또는 대체 계약을 사용하지 않는다. 재시도 횟수·간격은 미확정이므로 실행 경로는 계속 BLOCKED다.
+- 실제 S1 잔여 short PUT과 연결된 authoritative position/lot 및 execution provenance는 확인되지 않았다. `s1_put_link_ratio`는 null/BLOCKED다. 계좌·잔고·증거금 API는 호출하지 않는다. quote age, 최종 spread/depth, quantity rounding, initial limit price, repricing/cancel 정책도 미확정이다. 따라서 S9 Runtime 및 전략 구현은 계속 BLOCKED다.
+- 2026-10-21 19:08 KST 상태 확인에서 `Project200-KIS-VTS-WebSocket-Collector` 예약 작업은 `Running`, 관련 PID 17800/13360/1228이 존재했다. `LastTaskResult=2147946720`의 의미는 미확인이다. 프로세스·스케줄러를 변경하지 않았다.
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.

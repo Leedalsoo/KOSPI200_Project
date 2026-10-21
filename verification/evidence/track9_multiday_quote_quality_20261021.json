@@ -1,0 +1,230 @@
+{
+  "schema_version": "track9-multiday-kis-vts-quote-quality-v1",
+  "generated_at_kst": "2026-10-21 17:49",
+  "scope": "read-only local KIS VTS WebSocket raw data; no REST or account calls made during this analysis",
+  "raw_sources": {
+    "20261015": {
+      "path": "data/kis_market_data_restart/20261015/kis_vts_websocket_raw.jsonl",
+      "sha256": "40d1eee8863407c8ce2e68cc85b5a4fd8f410f31db217853958da6a2dfc207ed",
+      "manifest_records": 153059,
+      "manifest_match": true
+    },
+    "20261016": {
+      "path": "data/kis_market_data_restart/20261016/kis_vts_websocket_raw.jsonl",
+      "sha256": "13cae135d01fead9a73a1132a8bc42f83463c1815846acc5a462b12efa548bc2",
+      "manifest_records": 140486,
+      "manifest_match": true
+    },
+    "20261020": {
+      "path": "data/kis_market_data_restart/20261020/kis_vts_websocket_raw.jsonl",
+      "sha256": "9d63ef6512468249833e0571f99d0303cd6057c7906da18ebe55cf4fbb80cff2",
+      "manifest_records": 204398,
+      "manifest_match": true
+    },
+    "20261021": {
+      "path": "data/kis_market_data_restart/20261021/kis_vts_websocket_raw.jsonl",
+      "sha256": "54cf62fa97f07384b55536fb433f239851acc67f372b41d062705234bbd3e252",
+      "manifest_records": 137319,
+      "manifest_match": true
+    }
+  },
+  "contract_identity": {
+    "C01611880": {
+      "option_type": "PUT",
+      "strike": 880.0,
+      "expiry": "20261112",
+      "identity_basis": "KIS Option Master + exact KIS REST expiry row"
+    },
+    "C01611882": {
+      "option_type": "PUT",
+      "strike": 882.5,
+      "expiry": "20261112",
+      "identity_basis": "KIS Option Master + exact KIS REST expiry row"
+    }
+  },
+  "quote_metrics": {
+    "C01611880": {
+      "20261015": {
+        "n": 4236,
+        "two_sided_pct": 100.0,
+        "spread_median_pct": 1.77,
+        "spread_p90_pct": 4.65,
+        "spread_p95_pct": 5.74,
+        "spread_le_5_pct": 92.09,
+        "spread_le_10_pct": 98.98,
+        "top5_min_side_depth_p10_contracts": 5,
+        "top5_min_side_depth_median_contracts": 7,
+        "receive_vs_hhmmss_skew_p95_sec": 1.22,
+        "p99_sec": 1.35,
+        "p999_sec": 2.23,
+        "max_sec": 3.52
+      },
+      "20261016": {
+        "n": 4582,
+        "two_sided_pct": 100.0,
+        "spread_median_pct": 3.19,
+        "spread_p90_pct": 5.71,
+        "spread_p95_pct": 7.04,
+        "spread_le_5_pct": 82.45,
+        "spread_le_10_pct": 99.0,
+        "top5_min_side_depth_p10_contracts": 5,
+        "top5_min_side_depth_median_contracts": 7,
+        "receive_vs_hhmmss_skew_p95_sec": 1.31,
+        "p99_sec": 4.87,
+        "p999_sec": 25.88,
+        "max_sec": 28.85
+      },
+      "20261020": {
+        "n": 6920,
+        "two_sided_pct": 99.9,
+        "spread_median_pct": 1.99,
+        "spread_p90_pct": 4.99,
+        "spread_p95_pct": 6.23,
+        "spread_le_5_pct": 90.02,
+        "spread_le_10_pct": 99.33,
+        "top5_min_side_depth_p10_contracts": 4,
+        "top5_min_side_depth_median_contracts": 6,
+        "receive_vs_hhmmss_skew_p95_sec": 1.26,
+        "p99_sec": 1.4,
+        "p999_sec": 2.18,
+        "max_sec": 2.45
+      },
+      "20261021": {
+        "n": 5491,
+        "two_sided_pct": 99.96,
+        "spread_median_pct": 1.83,
+        "spread_p90_pct": 4.07,
+        "spread_p95_pct": 4.96,
+        "spread_le_5_pct": 95.14,
+        "spread_le_10_pct": 99.87,
+        "top5_min_side_depth_p10_contracts": 4,
+        "top5_min_side_depth_median_contracts": 6,
+        "receive_vs_hhmmss_skew_p95_sec": 1.37,
+        "p99_sec": 1.5,
+        "p999_sec": 3.18,
+        "max_sec": 6.67
+      }
+    },
+    "C01611882": {
+      "20261015": {
+        "n": 687,
+        "two_sided_pct": 100.0,
+        "spread_median_pct": 5.75,
+        "spread_p90_pct": 12.61,
+        "spread_p95_pct": 18.13,
+        "spread_le_5_pct": 41.34,
+        "spread_le_10_pct": 85.3,
+        "spread_le_15_pct": 93.74,
+        "top5_min_side_depth_p10_contracts": 6,
+        "top5_min_side_depth_median_contracts": 6,
+        "receive_vs_hhmmss_skew_p95_sec": 1.24,
+        "p99_sec": 1.38,
+        "p999_sec": 1.42,
+        "max_sec": 1.46
+      },
+      "20261016": {
+        "n": 641,
+        "two_sided_pct": 99.53,
+        "spread_median_pct": 5.41,
+        "spread_p90_pct": 11.47,
+        "spread_p95_pct": 13.38,
+        "spread_le_5_pct": 39.34,
+        "spread_le_10_pct": 87.93,
+        "spread_le_15_pct": 96.87,
+        "top5_min_side_depth_p10_contracts": 6,
+        "top5_min_side_depth_median_contracts": 7,
+        "receive_vs_hhmmss_skew_p95_sec": 1.32,
+        "p99_sec": 1.4,
+        "p999_sec": 1.65,
+        "max_sec": 9.63
+      },
+      "20261020": {
+        "n": 207,
+        "two_sided_pct": 98.07,
+        "spread_median_pct": 6.17,
+        "spread_p90_pct": 15.74,
+        "spread_p95_pct": 32.61,
+        "spread_le_5_pct": 34.48,
+        "spread_le_10_pct": 83.25,
+        "spread_le_15_pct": 89.16,
+        "spread_le_20_pct": 90.15,
+        "top5_min_side_depth_p10_contracts": 5,
+        "top5_min_side_depth_median_contracts": 6,
+        "receive_vs_hhmmss_skew_p95_sec": 1.64,
+        "p99_sec": 2.27,
+        "p999_sec": 2.42,
+        "max_sec": 2.46
+      },
+      "20261021": {
+        "n": 3636,
+        "two_sided_pct": 100.0,
+        "spread_median_pct": 4.63,
+        "spread_p90_pct": 9.96,
+        "spread_p95_pct": 11.5,
+        "spread_le_5_pct": 55.14,
+        "spread_le_10_pct": 90.35,
+        "spread_le_15_pct": 98.76,
+        "top5_min_side_depth_p10_contracts": 5,
+        "top5_min_side_depth_median_contracts": 8,
+        "receive_vs_hhmmss_skew_p95_sec": 1.41,
+        "p99_sec": 1.54,
+        "p999_sec": 3.26,
+        "max_sec": 4.25
+      }
+    },
+    "C01611892": {
+      "20261015": {
+        "n": 405,
+        "two_sided_pct": 100.0,
+        "spread_median_pct": 10.45,
+        "spread_p95_pct": 23.8,
+        "spread_le_10_pct": 44.69,
+        "spread_le_15_pct": 74.07,
+        "spread_le_20_pct": 89.14
+      },
+      "20261016": {
+        "n": 386,
+        "two_sided_pct": 99.22,
+        "spread_median_pct": 6.14,
+        "spread_p95_pct": 11.56,
+        "spread_le_10_pct": 90.34,
+        "spread_le_15_pct": 96.87,
+        "spread_le_20_pct": 98.17
+      },
+      "20261020": {
+        "n": 35,
+        "two_sided_pct": 77.14,
+        "spread_median_pct": 20.62,
+        "spread_p95_pct": 145.46,
+        "spread_le_10_pct": 29.63,
+        "spread_le_15_pct": 48.15,
+        "spread_le_20_pct": 48.15
+      },
+      "20261021": {
+        "n": 979,
+        "two_sided_pct": 99.8,
+        "spread_median_pct": 8.47,
+        "spread_p95_pct": 15.33,
+        "spread_le_10_pct": 65.2,
+        "spread_le_15_pct": 94.37,
+        "spread_le_20_pct": 98.87
+      }
+    }
+  },
+  "candidate_gates_not_approved": {
+    "rank4_max_relative_spread_pct": 10.0,
+    "rank3_max_relative_spread_pct": 15.0,
+    "minimum_cumulative_top5_depth_each_side_contracts": 4,
+    "reason": "observed multi-day spread and top-five depth distributions only; no held-out fill/slippage/reject outcomes, so these are research candidates only"
+  },
+  "timestamp_caveat": "H0IOASP0 HHMMSS is empirically close to local receive time in most samples but its official semantics are still unverified. 20261016 includes rare large skew outliers. max_quote_age remains unset.",
+  "volume_caveat": "No H0IOCNT0 option-trade rows for target contracts in the four raw files. H0UPCNT0 records use instrument 2001, not these option symbols. Existing REST volume samples 57 and 23 are one-day only; min_volume remains null.",
+  "s1_position_caveat": "No authoritative current S1 residual short-PUT position/lot snapshot linked to actual execution provenance found in inspected existing evidence. No account/balance/margin API used; fixture S1 lots are not actual position evidence.",
+  "status": {
+    "multiday_quote_distribution": "PASS_WITH_LIMITATION",
+    "min_volume": "BLOCKED",
+    "s1_put_link_ratio": "BLOCKED",
+    "third_strike_insufficient_action": "UNSET",
+    "runtime": "BLOCKED"
+  }
+}
