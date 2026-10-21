@@ -316,10 +316,13 @@ class Track9EventOvernightInsurance:
         return plan
 
     def evaluate(self, context: StrategyContext) -> Sequence[Signal]:
-        if context.strategy_id != self.strategy_id or context.analytics is None or self._exit_pending:
+        if context.strategy_id != self.strategy_id:
             return ()
-        self._sync_filled_entry(context)
-        return self._close_next_open(context) + self._enter_signal(context)
+        # The approved S9 specification replaces the legacy overnight PUT/CALL
+        # pair with an S1-linked OTM PUT. Until authoritative S1 short-PUT lots,
+        # eligible contract identity/quote, and non-PROVISIONAL required settings
+        # are wired into RuntimeInput, the legacy path must not emit signals.
+        return ()
 
 
 __all__ = ("Track9EventOvernightInsurance", "Track9State")
