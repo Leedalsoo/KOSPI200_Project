@@ -93,11 +93,16 @@ class StrategyRegistry:
         definition = self._definitions.get((strategy_id, version))
         data_status = getattr(context.input, "data_status", None) if context.input is not None else None
         if definition is not None and data_status is not None:
+            unavailable_sources = []
             for source in definition.required_sources:
                 status = str(data_status.get(source, "")).strip().upper()
                 if status not in {"AVAILABLE", "PASS", "OK"}:
-                    raise ValueError(
-                        f"STRATEGY_REQUIRED_SOURCE_UNAVAILABLE:{strategy_id}:{source}:"
-                        f"{status or 'STATUS_UNDECLARED'}"
-                    )
+                    unavailable_sources.append((source, status or "STATUS_UNDECLARED"))
+            if unavailable_sources:
+                first_source, first_status = unavailable_sources[0]
+                details = ",".join(f"{source}={status}" for source, status in unavailable_sources)
+                raise ValueError(
+                    f"STRATEGY_REQUIRED_SOURCE_UNAVAILABLE:{strategy_id}:{first_source}:"
+                    f"{first_status};all={details}"
+                )
         return self.get(strategy_id, version)

@@ -26,6 +26,7 @@ class Track6ExecutionInput:
 @dataclass(frozen=True)
 class Track6State:
     is_active: bool = False
+    entry_pending: bool = False
     bought_date: str | None = None
     long_put_strike: Decimal = Decimal("0")
     long_call_strike: Decimal = Decimal("0")
@@ -39,10 +40,19 @@ class Track6DailyTailInsurance:
     VOL_TRIGGER_MULTIPLIER = Decimal("1.3")
     INSURANCE_QTY = 1
 
-    def __init__(self, vol_trigger_multiplier: Decimal = VOL_TRIGGER_MULTIPLIER,
-                 insurance_qty: int = INSURANCE_QTY) -> None:
+    def __init__(
+        self,
+        vol_trigger_multiplier: Decimal = VOL_TRIGGER_MULTIPLIER,
+        insurance_qty: int = INSURANCE_QTY,
+        *,
+        runtime_config_verified: bool = False,
+        risk_limits_available: bool = False,
+    ) -> None:
         self.vol_trigger_multiplier = vol_trigger_multiplier
         self.insurance_qty = insurance_qty
+        # S6 spec has PROVISIONAL/null order-price, freshness and risk settings.
+        self.runtime_config_verified = runtime_config_verified
+        self.risk_limits_available = risk_limits_available
         self.state = Track6State()
         self._exit_pending = False
 
@@ -66,10 +76,26 @@ class Track6DailyTailInsurance:
         self._exit_pending = False
 
     def on_execution_result(self, purpose: str, result: object) -> None:
+        if purpose == "DAILY_TAIL_INSURANCE_ENTRY" and self.state.entry_pending:
+            reports = tuple(getattr(result, "reports", ()) or ())
+            confirmed = bool(reports) and all(
+                str(getattr(report, "status", "")).strip().upper() == "FILLED"
+                and int(getattr(report, "filled_quantity", 0) or 0) == self.insurance_qty
+                and int(getattr(report, "remaining_quantity", -1)) == 0
+                and bool(getattr(report, "execution_id", None))
+                and getattr(report, "execution_timestamp", None) is not None
+                and getattr(report, "execution_price", None) is not None
+                for report in reports
+            )
+            leg_ids = {str(getattr(report, "leg_id", "")).lower() for report in reports}
+            if confirmed and {"put", "call"}.issubset(leg_ids) and bool(getattr(result, "group_complete", False)) and not bool(getattr(result, "position_flat", True)):
+                self.state = replace(self.state, is_active=True, entry_pending=False)
+            return
         if purpose not in {
             "DAILY_TAIL_INSURANCE_TRAILING_CLOSE",
             "DAILY_TAIL_INSURANCE_LIMIT_CLOSE",
             "DAILY_TAIL_INSURANCE_FALLBACK_CLOSE",
+            "DAILY_TAIL_INSURANCE_FORCE_CLOSE",
         } or not self._exit_pending:
             return
         if bool(getattr(result, "group_complete", False)) and bool(getattr(result, "position_flat", False)):
@@ -98,15 +124,18 @@ class Track6DailyTailInsurance:
     def evaluate_buy(self, context: StrategyContext) -> Sequence[Signal]:
         analytics = context.analytics
         data = self._as_execution_input(context)
-        if analytics is None or data is None or self.state.is_active:
+        if (analytics is None or data is None or self.state.is_active or self.state.entry_pending
+                or not self.runtime_config_verified or not self.risk_limits_available):
             return ()
         current_price = self._metric(analytics, "price.last")
         active_vol = self._metric(analytics, "volatility.active")
         base_vol = self._metric(analytics, "volatility.base")
         if not all(isinstance(value, Decimal) for value in (current_price, active_vol, base_vol)):
             return ()
-        if (MarketSessionPolicy.text(MarketSessionPolicy.MARKET_CUTOFF) <= self._as_time(analytics) < MarketSessionPolicy.text(MarketSessionPolicy.PENDING_CANCEL_END)):
-            return (Signal(self.strategy_id, "CANCEL", 1.0, "CANCEL_PENDING_TRANCHES_15:15"),)
+        # Approved S6 spec ends new-entry attempts at 11:00; the separate
+        # 15:10 terminal-close rule remains in evaluate_expiry_cutoff().
+        if self._as_time(analytics) >= "11:00:00":
+            return ()
         if data.contract_multiplier is None or data.contract_multiplier <= 0:
             return ()
         if data.listed_put_strike is None or data.listed_call_strike is None:
@@ -115,7 +144,8 @@ class Track6DailyTailInsurance:
             return ()
         put_strike = data.listed_put_strike
         call_strike = data.listed_call_strike
-        self.state = replace(self.state, is_active=True, bought_date=self._as_date(analytics),
+        self.state = replace(self.state, is_active=False, entry_pending=True,
+                             bought_date=self._as_date(analytics),
                              long_put_strike=put_strike, long_call_strike=call_strike,
                              high_watermark_intrinsic=Decimal("0"), trailing_stop_active=False)
         return (Signal(
@@ -142,7 +172,7 @@ class Track6DailyTailInsurance:
         )
 
     def build_execution_plan(self, group_id: str) -> MultiLegExecutionPlan | None:
-        if not self.state.is_active or self.state.long_put_strike <= 0 or self.state.long_call_strike <= 0:
+        if not (self.state.is_active or self.state.entry_pending) or self.state.long_put_strike <= 0 or self.state.long_call_strike <= 0:
             return None
         return build_pair_plan(group_id=group_id, strategy_id=self.strategy_id,
                                purpose="DAILY_TAIL_INSURANCE_ENTRY",
@@ -153,6 +183,12 @@ class Track6DailyTailInsurance:
         analytics = context.analytics
         if analytics is None or not self.state.is_active or self._exit_pending:
             return ()
+        # The approved S6 rules require per-leg actual entry fills and option marks.
+        # Current runtime analytics expose an underlying-price intrinsic proxy only;
+        # do not use that proxy as option P&L or fabricate a trailing trigger.
+        return ()
+        # Legacy intrinsic-proxy implementation below is unreachable pending the
+        # authoritative per-leg mark/fill read-model contract.
         current_price = self._metric(analytics, "price.last")
         active_vol = self._metric(analytics, "volatility.active")
         premium_spent = self._metric(analytics, "portfolio.premium_spent")
@@ -203,17 +239,11 @@ class Track6DailyTailInsurance:
         if not self.state.is_active or context.analytics is None or self._exit_pending:
             return ()
         time_str = self._as_time(context.analytics)
-        if MarketSessionPolicy.text(MarketSessionPolicy.LIMIT_CUTOFF) <= time_str < MarketSessionPolicy.text(MarketSessionPolicy.MARKET_CUTOFF):
+        if time_str >= "15:10:00":
+            proposal = self._close_execution_proposal(tag_id="DAILY_TAIL_INSURANCE_FORCE_CLOSE")
             self._exit_pending = True
             return (Signal(
-                self.strategy_id, "CLOSE_LIMIT", 1.0, "DAILY_INSURANCE_15:00_CUTOFF",
-                execution_proposal=self._close_execution_proposal(tag_id="DAILY_TAIL_INSURANCE_LIMIT_CLOSE"),
-            ),)
-        if time_str >= MarketSessionPolicy.text(MarketSessionPolicy.MARKET_CUTOFF):
-            proposal = self._close_execution_proposal(tag_id="DAILY_TAIL_INSURANCE_FALLBACK_CLOSE")
-            self._exit_pending = True
-            return (Signal(
-                self.strategy_id, "CLOSE_FALLBACK", 1.0, "DAILY_INSURANCE_15:15_FALLBACK",
+                self.strategy_id, "CLOSE_FORCE", 1.0, "DAILY_INSURANCE_15:10_FORCE_CLOSE",
                 execution_proposal=proposal,
             ),)
         return ()

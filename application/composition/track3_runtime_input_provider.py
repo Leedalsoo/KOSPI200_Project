@@ -4,6 +4,7 @@ from contracts.trading_date import format_trading_date
 from typing import Any
 
 from contracts.track3_runtime_input_source import Track3RuntimeInputSource
+from contracts.analytics import AnalyticsStatus
 from core.domain.market_models import MarketState
 from core.strategy.contracts import StrategyContext, StrategyInput, UnavailableStrategyPayload
 from core.strategy.track3_statistical_arbitrage import Track3MarketInput
@@ -91,13 +92,50 @@ class Track3RuntimeInputProvider:
             as_of=observed_at,
             common_snapshot=common_snapshot,
         )
+        common_metric_keys = (
+            "volatility.active",
+            "volatility.base",
+            "market.current_regime",
+        )
+        common_metrics = (
+            tuple(common_snapshot.get(key) for key in common_metric_keys)
+            if common_snapshot is not None and callable(getattr(common_snapshot, "get", None))
+            else ()
+        )
+        common_analytics_status = (
+            "AVAILABLE"
+            if len(common_metrics) == len(common_metric_keys)
+            and all(
+                metric is not None
+                and getattr(metric, "status", None) is AnalyticsStatus.AVAILABLE
+                and getattr(metric, "value", None) is not None
+                for metric in common_metrics
+            )
+            else "UNAVAILABLE"
+        )
+        # The current Track3 payload has no separately verified Futures identity
+        # field. A generic source label or synthetic symbol is not authoritative
+        # instrument-identity evidence, so this required source stays unavailable.
+        data_status = {
+            "track3": "AVAILABLE",
+            "source": payload.source,
+            "common_analytics": common_analytics_status,
+            "authoritative_futures_identity": "UNAVAILABLE",
+            "execution_totals": (
+                "AVAILABLE"
+                if payload.total_fees is not None and payload.premium_spent is not None
+                else "UNAVAILABLE"
+            ),
+            "contract_multiplier": (
+                "AVAILABLE"
+                if payload.contract_multiplier is not None and payload.contract_multiplier > 0
+                else "UNAVAILABLE"
+            ),
+        }
         return StrategyContext(
             market_state=market_state,
             strategy_id=self.strategy_id,
-            input=StrategyInput(payload=data, data_status={
-                "track3": "AVAILABLE",
-                "source": payload.source,
-            }),
+            input=StrategyInput(payload=data, data_status=data_status),
             analytics=analytics,
         )
 

@@ -27,12 +27,12 @@ class Track5OptionContractSelection:
 
 
 class Track5OptionContractSource:
-    """Select Strategy5's liquid second/third strike around ATM.
+    """Select the exact ATM contract required by the pinned S5 specification.
 
-    For a rising open the strategy buys a CALL above ATM; for a falling open
-    it buys a PUT below ATM. Only the 2nd and 3rd OTM strikes are eligible.
-    The higher available top-of-book quantity score wins; a missing liquidity
-    observation is not treated as liquid.
+    Selection is fail-closed when the authoritative contract identity,
+    multiplier, or a valid two-sided order book is unavailable. Liquidity
+    scoring is retained as diagnostic metadata; it does not substitute for
+    the still-unapproved spread, freshness, or risk limits.
     """
 
     def __init__(self, option_master: Any, orderbook_source: Any | None = None) -> None:
@@ -81,36 +81,29 @@ class Track5OptionContractSource:
         if not strikes:
             raise ValueError("TRACK5_LISTED_OPTION_NOT_FOUND")
         atm = min(strikes, key=lambda strike: (abs(strike - current_price), strike))
-
-        if option_type == "CALL":
-            candidates = [strike for strike in strikes if strike > atm]
-        else:
-            candidates = [strike for strike in reversed(strikes) if strike < atm]
-        candidates = candidates[:3]
-        if len(candidates) < 2:
-            raise ValueError("TRACK5_SECOND_OR_THIRD_STRIKE_REQUIRED")
-
-        scored = []
-        for rank, strike in enumerate(candidates, start=1):
-            if rank not in {2, 3}:
-                continue
-            identity = by_strike[strike]
-            book = None
-            if self.orderbook_source is not None:
-                book = self.orderbook_source.get_order_book(str(identity.shrn_iscd))
-            score = self._liquidity_score(book)
-            if score > 0:
-                scored.append((score, rank, strike, identity))
-        if not scored:
-            raise ValueError("TRACK5_LIQUID_SECOND_OR_THIRD_STRIKE_REQUIRED")
-
-        score, rank, strike, identity = max(scored, key=lambda item: (item[0], -item[1]))
+        identity = by_strike[atm]
+        if self.orderbook_source is None:
+            raise ValueError("TRACK5_ATM_ORDERBOOK_SOURCE_REQUIRED")
+        book = self.orderbook_source.get_order_book(str(identity.shrn_iscd))
+        bids = tuple(getattr(book, "bid_levels", ()) or ()) if book is not None else ()
+        asks = tuple(getattr(book, "ask_levels", ()) or ()) if book is not None else ()
+        if not bids or not asks:
+            raise ValueError("TRACK5_ATM_TWO_SIDED_ORDERBOOK_REQUIRED")
+        bid_price = Decimal(str(getattr(bids[0], "price", 0) or 0))
+        ask_price = Decimal(str(getattr(asks[0], "price", 0) or 0))
+        bid_quantity = Decimal(str(getattr(bids[0], "quantity", 0) or 0))
+        ask_quantity = Decimal(str(getattr(asks[0], "quantity", 0) or 0))
+        if bid_price <= 0 or ask_price <= 0 or ask_price < bid_price:
+            raise ValueError("TRACK5_ATM_TWO_SIDED_QUOTE_INVALID")
+        if bid_quantity <= 0 or ask_quantity <= 0:
+            raise ValueError("TRACK5_ATM_TOP_OF_BOOK_DEPTH_UNAVAILABLE")
+        score = self._liquidity_score(book)
         return Track5OptionContractSelection(
             expiry=str(expiry),
             atm_strike=atm,
-            selected_strike=strike,
+            selected_strike=atm,
             option_type=option_type,
             contract=identity,
-            strike_rank=rank,
+            strike_rank=0,
             liquidity_score=score,
         )

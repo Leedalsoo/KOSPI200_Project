@@ -48,7 +48,15 @@ class Track2AsymmetricTrap:
         "OBI_NEUTRAL_THRESHOLD", "BASIS_MIN_THRESHOLD", "POC_DISTANCE_THRESHOLD",
     )
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        runtime_config_verified: bool = False,
+        risk_limits_available: bool = False,
+    ) -> None:
+        # The approved S2 file still marks entry thresholds/pricing and risk caps
+        # PROVISIONAL/null. Default to no new orders until both gates are verified.
+        self.runtime_config_verified = runtime_config_verified
+        self.risk_limits_available = risk_limits_available
         self._trap_active = False
         self._entry_price: Decimal | None = None
         self._entry_instrument: str | None = None
@@ -108,9 +116,6 @@ class Track2AsymmetricTrap:
     def _close_signal(self, reason: str, direction: str, now: datetime) -> Signal:
         self._exit_pending = True
         self._pending_exit_reason = reason.split(" ", 1)[0]
-        if reason == "TAKE_PROFIT_TRAILING_STOP":
-            self._short_switch_at = now
-            self._short_switched = True
         return Signal(
             self.strategy_id, direction, 1.0, reason,
             execution_proposal=StrategyExecutionProposal(
@@ -125,9 +130,9 @@ class Track2AsymmetricTrap:
     ) -> dict[str, object]:
         if active_vol <= base_vol * self.LOW_VOL_THRESHOLD_RATIO:
             return {
-                "status": "ZERO_COST_WIDE_TRAP_SUCCESS",
-                "trap_type": "ZERO_COST_10PT_WIDE",
-                "pricing_mode": "MID_PRICE_OFFSET",
+                "status": "STRUCTURE_READY_NOT_PRICED",
+                "trap_type": "ASYMMETRIC_TRAP_WIDE",
+                "pricing_mode": "UNRESOLVED_LIMIT_PRICE",
                 "limit_offset_ticks": 1,
                 "signals": [
                     {
@@ -147,9 +152,9 @@ class Track2AsymmetricTrap:
                 ],
             }
         return {
-            "status": "GAMMA_PEAK_NARROW_TRAP_SUCCESS",
-            "trap_type": "GAMMA_5PT_NARROW",
-            "pricing_mode": "MID_PRICE_OFFSET",
+            "status": "STRUCTURE_READY_NOT_PRICED",
+            "trap_type": "ASYMMETRIC_TRAP_NARROW",
+            "pricing_mode": "UNRESOLVED_LIMIT_PRICE",
             "limit_offset_ticks": 1,
             "signals": [
                 {
@@ -176,6 +181,8 @@ class Track2AsymmetricTrap:
         active_vol: float,
         base_vol: float,
     ) -> MultiLegExecutionPlan:
+        if not self.runtime_config_verified or not self.risk_limits_available:
+            raise ValueError("TRACK2_CONFIG_OR_RISK_GATE_BLOCKED")
         trap = self.build_asymmetric_trap(current_atm, active_vol, base_vol)
         short = trap["signals"][0]["strikes"]
         long = trap["signals"][1]["strikes"]
@@ -191,34 +198,11 @@ class Track2AsymmetricTrap:
         )
 
     def evaluate_trap(self, current_price: Decimal, now: datetime) -> Sequence[Signal]:
-        if self._exit_pending:
-            return ()
-        if (
-            self._short_switch_at is not None
-            and now - self._short_switch_at >= self.COOLDOWN
-        ):
-            return (self._close_signal("SHORT_SWITCH_TIMEOUT_EXIT", "FLAT", now),)
-        if (
-            not self._trap_active
-            or self._entry_price is None
-            or self._entry_price <= 0
-        ):
-            return ()
-        pnl = (current_price - self._entry_price) / self._entry_price
-        if pnl <= self.STOP_LOSS_RATIO:
-            self._last_loss_at = now
-            return (self._close_signal(f"STOP_LOSS {pnl * 100:.1f}%", "FLAT", now),)
-        self._high_pnl_ratio = max(self._high_pnl_ratio, pnl)
-        if self._high_pnl_ratio >= self.TRAILING_ACTIVATION_RATIO:
-            trailing = (
-                self.TRAILING_RETAIN_HIGH_PNL
-                if self._high_pnl_ratio >= self.TRAILING_TIER_HIGH
-                else self.TRAILING_RETAIN_MID_PNL
-                if self._high_pnl_ratio >= self.TRAILING_TIER_MID
-                else self.TRAILING_RETAIN_LOW_PNL
-            )
-            if pnl <= self._high_pnl_ratio * trailing:
-                return (self._close_signal("TAKE_PROFIT_TRAILING_STOP", "SHORT", now),)
+        # current_price is the underlying/index price, not option-group P&L.
+        # The approved S2 specification requires authoritative option fills, marks,
+        # multiplier, remaining lots, fees and slippage. Until that input contract
+        # is wired, do not emit stop/trailing exits from an underlying-price proxy.
+        # Keep the signature for callers, but fail closed on P&L-driven decisions.
         return ()
 
     def feature_requirements(self):
@@ -240,6 +224,8 @@ class Track2AsymmetricTrap:
         from core.strategy.contracts import validate_strategy_features
 
         if context.strategy_id != self.strategy_id or context.analytics is None or self._exit_pending:
+            return ()
+        if not self.runtime_config_verified or not self.risk_limits_available:
             return ()
         metrics = validate_strategy_features(self.feature_requirements(), context.analytics)
         if any(m.status is not AnalyticsStatus.AVAILABLE or m.value is None for m in metrics):

@@ -1,0 +1,225 @@
+{
+  "schema_version": "kis-s5-atm-option-quote-probe-v1",
+  "collected_at_kst": "2026-10-22T02:21:20.617866+09:00",
+  "environment": "VTS",
+  "status": "PASS_SOURCE_RESPONSE_PARSED",
+  "purpose": "ATM contract quote evidence according to the pinned S5 spec's entry_option: ATM; not an entry approval.",
+  "master_date": "20261021",
+  "master_sha256": "efb5b80be190971eea41a73f20573e7f4a4b33caeabf1fc47ca8298a315e43eb",
+  "master_identity": {
+    "symbol": "B01611880",
+    "name": "C 202611   880.0",
+    "option_type": "CALL",
+    "product_series": "MONTHLY",
+    "instrument_family": "STANDARD",
+    "strike": "880.00",
+    "master_sha256": "efb5b80be190971eea41a73f20573e7f4a4b33caeabf1fc47ca8298a315e43eb"
+  },
+  "expiry_evidence": {
+    "expiry_yyyymmdd": "20261112",
+    "source": "KIS_REST:futs_last_tr_date",
+    "endpoint": "/uapi/domestic-futureoption/v1/quotations/inquire-price",
+    "tr_id": "FHMIF10000000",
+    "received_at_utc": "2026-10-21T17:21:19.383669+00:00",
+    "raw_response_sha256": "4afb3427a468650fc96aa1f3c42fd2dd58fd3f93daa7fcc1797ab84780399cf9",
+    "master_sha256": "efb5b80be190971eea41a73f20573e7f4a4b33caeabf1fc47ca8298a315e43eb"
+  },
+  "price_observation": {
+    "source_timestamp_raw": null,
+    "received_at_utc": "2026-10-21T17:21:19.383588+00:00",
+    "http_status": 200,
+    "rt_cd": "0",
+    "msg_cd": "MCA00000",
+    "raw_response_sha256": "d482df197a05a7c128fea10d1c8972dc168d17cd13893f409594aa6609963832",
+    "last_price": "46.50",
+    "previous_close": "32.30",
+    "accumulated_volume": "25",
+    "expiry_from_response": "20261112",
+    "raw_response": {
+      "output1": {
+        "hts_kor_isnm": "C 202611   880.0",
+        "futs_prpr": "46.50",
+        "futs_prdy_vrss": "14.20",
+        "prdy_vrss_sign": "2",
+        "futs_prdy_clpr": "32.30",
+        "futs_prdy_ctrt": "43.96",
+        "acml_vol": "25",
+        "acml_tr_pbmn": "290263",
+        "hts_otst_stpl_qty": "112",
+        "otst_stpl_qty_icdc": "4",
+        "futs_oprc": "42.60",
+        "futs_hgpr": "55.90",
+        "futs_lwpr": "42.00",
+        "futs_mxpr": "110.95",
+        "futs_llam": "0.01",
+        "futs_sdpr": "32.30",
+        "hts_thpr": "69.15",
+        "dprt": "-32.76",
+        "futs_last_tr_date": "20261112",
+        "hts_rmnn_dynu": "23",
+        "futs_lstn_medm_hgpr": "92.60",
+        "futs_lstn_medm_lwpr": "29.60",
+        "delta_val": "0.5665",
+        "gama": "0.0025",
+        "theta": "-1.4555",
+        "vega": "0.8603",
+        "rho": "0.2624",
+        "hist_vltl": "72.5752",
+        "hts_ints_vltl": "46.2280",
+        "acpr": "880.00"
+      },
+      "output2": {
+        "bstp_cls_code": "0001",
+        "hts_kor_isnm": "종합",
+        "bstp_nmix_prpr": "5735.66",
+        "prdy_vrss_sign": "2",
+        "bstp_nmix_prdy_vrss": "182.92",
+        "bstp_nmix_prdy_ctrt": "3.29"
+      },
+      "output3": {
+        "bstp_cls_code": "2001",
+        "hts_kor_isnm": "KOSPI200",
+        "bstp_nmix_prpr": "891.04",
+        "prdy_vrss_sign": "2",
+        "bstp_nmix_prdy_vrss": "32.26",
+        "bstp_nmix_prdy_ctrt": "3.76"
+      },
+      "rt_cd": "0",
+      "msg_cd": "MCA00000",
+      "msg1": "정상처리 되었습니다."
+    }
+  },
+  "order_book_observation": {
+    "source_timestamp_raw": "154500",
+    "received_at_utc": "2026-10-21T17:21:20.617769+00:00",
+    "http_status": 200,
+    "rt_cd": "0",
+    "msg_cd": "MCA00000",
+    "raw_response_sha256": "b61c6336a2e79095e5e6d0567c7f1cfd6c743c5440042aa6839e2e1445b274b8",
+    "top5_bids": [
+      {
+        "price": "40.05",
+        "quantity": "1"
+      },
+      {
+        "price": "1.88",
+        "quantity": "1"
+      },
+      {
+        "price": "1.87",
+        "quantity": "1"
+      },
+      {
+        "price": "0.43",
+        "quantity": "3"
+      },
+      {
+        "price": "0.09",
+        "quantity": "15"
+      }
+    ],
+    "top5_asks": [
+      {
+        "price": "80.00",
+        "quantity": "1"
+      },
+      {
+        "price": "0.00",
+        "quantity": "0"
+      },
+      {
+        "price": "0.00",
+        "quantity": "0"
+      },
+      {
+        "price": "0.00",
+        "quantity": "0"
+      },
+      {
+        "price": "0.00",
+        "quantity": "0"
+      }
+    ],
+    "raw_response": {
+      "output1": {
+        "hts_kor_isnm": "C 202611   880.0",
+        "futs_prpr": "46.50",
+        "prdy_vrss_sign": "2",
+        "futs_prdy_vrss": "14.20",
+        "futs_prdy_ctrt": "43.96",
+        "acml_vol": "25",
+        "futs_prdy_clpr": "32.30",
+        "futs_shrn_iscd": "B01611880"
+      },
+      "output2": {
+        "futs_askp1": "80.00",
+        "futs_askp2": "0.00",
+        "futs_askp3": "0.00",
+        "futs_askp4": "0.00",
+        "futs_askp5": "0.00",
+        "futs_bidp1": "40.05",
+        "futs_bidp2": "1.88",
+        "futs_bidp3": "1.87",
+        "futs_bidp4": "0.43",
+        "futs_bidp5": "0.09",
+        "askp_rsqn1": "1",
+        "askp_rsqn2": "0",
+        "askp_rsqn3": "0",
+        "askp_rsqn4": "0",
+        "askp_rsqn5": "0",
+        "bidp_rsqn1": "1",
+        "bidp_rsqn2": "1",
+        "bidp_rsqn3": "1",
+        "bidp_rsqn4": "3",
+        "bidp_rsqn5": "15",
+        "askp_csnu1": "1",
+        "askp_csnu2": "0",
+        "askp_csnu3": "0",
+        "askp_csnu4": "0",
+        "askp_csnu5": "0",
+        "bidp_csnu1": "1",
+        "bidp_csnu2": "1",
+        "bidp_csnu3": "1",
+        "bidp_csnu4": "1",
+        "bidp_csnu5": "1",
+        "total_askp_rsqn": "1",
+        "total_bidp_rsqn": "66",
+        "total_askp_csnu": "1",
+        "total_bidp_csnu": "8",
+        "aspr_acpt_hour": "154500"
+      },
+      "rt_cd": "0",
+      "msg_cd": "MCA00000",
+      "msg1": "정상처리 되었습니다."
+    }
+  },
+  "request_paths": [
+    {
+      "method": "POST",
+      "path": "/oauth2/tokenP",
+      "started_at_utc": "2026-10-21T17:21:18.063756+00:00"
+    },
+    {
+      "method": "GET",
+      "path": "/uapi/domestic-futureoption/v1/quotations/inquire-price",
+      "started_at_utc": "2026-10-21T17:21:19.313853+00:00"
+    },
+    {
+      "method": "GET",
+      "path": "/uapi/domestic-futureoption/v1/quotations/inquire-asking-price",
+      "started_at_utc": "2026-10-21T17:21:20.564418+00:00"
+    }
+  ],
+  "request_intervals_seconds": [
+    1.25,
+    1.251
+  ],
+  "request_interval_min_seconds": 1.25,
+  "live_or_account_api_calls": 0,
+  "runtime_eligible": false,
+  "limitations": [
+    "The source quote timestamp contains no date and the probe ran outside the operating window; freshness is not certified.",
+    "The KIS master identity does not provide contract_multiplier; the current Track5OptionContractSource remains blocked.",
+    "The pinned S5 spec says ATM while the current source code selects second/third OTM; implementation alignment remains unresolved."
+  ]
+}

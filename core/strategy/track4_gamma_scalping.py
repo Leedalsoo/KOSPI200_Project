@@ -28,6 +28,7 @@ class Track4MarketInput:
     accumulated_gamma_profit: Optional[Decimal] = None
     theta_decay_cost: Optional[Decimal] = None
     current_theta: Optional[Decimal] = None
+    max_hedge_qty: int | None = None
 
 
 @dataclass
@@ -42,8 +43,18 @@ class Track4GammaScalping:
     strategy_id = "track4_gamma_scalping"
     version = "1.0"
 
-    def __init__(self, equity_threshold: Decimal = Decimal("0")):
+    def __init__(
+        self,
+        equity_threshold: Decimal = Decimal("0"),
+        *,
+        enabled: bool = False,
+        capital_gate_min: Decimal | None = None,
+        risk_limits_available: bool = False,
+    ):
         self.equity_threshold = equity_threshold
+        self.enabled = enabled
+        self.capital_gate_min = capital_gate_min
+        self.risk_limits_available = risk_limits_available
         self.state = Track4State()
         self._exit_pending = False
 
@@ -92,7 +103,15 @@ class Track4GammaScalping:
             return (Signal(self.strategy_id, "BUILD", 1.0, f"ATM_BASECAMP call={atm} put={atm}", kind="NON_EXECUTION", non_execution_event=NonExecutionEvent("BASECAMP_BUILD", "TRACK4_BASECAMP_STATE_ONLY", {"call": atm, "put": atm})),)
         return ()
 
-    def evaluate_delta_hedge(self, data: Track4MarketInput, *, delta: Decimal, deadband: Decimal, equity: Decimal) -> Sequence[Signal]:
+    def evaluate_delta_hedge(
+        self,
+        data: Track4MarketInput,
+        *,
+        delta: Decimal,
+        deadband: Decimal,
+        equity: Decimal,
+        max_hedge_qty: int | None = None,
+    ) -> Sequence[Signal]:
         if self._exit_pending:
             return ()
         self.state.is_active = equity >= self.equity_threshold
@@ -105,7 +124,9 @@ class Track4GammaScalping:
             return ()
         if abs(delta) <= deadband:
             return ()
-        target_abs_qty = min(delta_to_mini_futures_qty(abs(delta)), 100)
+        if max_hedge_qty is None or max_hedge_qty <= 0:
+            return ()
+        target_abs_qty = min(delta_to_mini_futures_qty(abs(delta)), max_hedge_qty)
         target_signed_qty = -target_abs_qty if delta > 0 else target_abs_qty
         adjustment = target_signed_qty - self.state.active_hedge_qty
         if adjustment == 0:
@@ -141,6 +162,11 @@ class Track4GammaScalping:
         return ()
 
     def evaluate(self, context: StrategyContext) -> Sequence[Signal]:
+        # Approved S4 specification keeps the strategy disabled until a separate
+        # activation decision and authoritative capital/margin gate are supplied.
+        # Missing capital gate must not be interpreted as zero capital requirement.
+        if not self.enabled or self.capital_gate_min is None or not self.risk_limits_available:
+            return ()
         data = context.input.payload if context.input is not None else None
         analytics = context.analytics
         if not isinstance(data, Track4MarketInput) or analytics is None or context.strategy_id != self.strategy_id or self._exit_pending:
@@ -157,7 +183,15 @@ class Track4GammaScalping:
         premium_metric = analytics.get("portfolio.premium_spent")
         premium_spent = None if premium_metric is None or premium_metric.value is None else Decimal(str(premium_metric.value))
         signals = list(self.evaluate_basecamp(data, active_vol=active_vol, base_vol=base_vol))
-        signals.extend(self.evaluate_delta_hedge(data, delta=delta, deadband=deadband, equity=equity))
+        signals.extend(
+            self.evaluate_delta_hedge(
+                data,
+                delta=delta,
+                deadband=deadband,
+                equity=equity,
+                max_hedge_qty=data.max_hedge_qty,
+            )
+        )
         signals.extend(self.evaluate_profit_trailing(data, current_pnl=current_pnl, premium_spent=premium_spent))
         return tuple(signals)
 
