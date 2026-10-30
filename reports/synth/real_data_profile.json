@@ -1,0 +1,139 @@
+{
+  "report_version": "real-vts-profile-partial-v1",
+  "as_of": "2026-10-28",
+  "status": "BLOCKED_PARTIAL_EVIDENCE",
+  "purpose": "synthetic validation realism comparison and implementation-gap discovery; not profitability evidence",
+  "scope": {
+    "source_root": "data/kis_market_data_restart/YYYYMMDD/",
+    "archive_root_exists": false,
+    "today_partition_accessed": false,
+    "today_partition_note": "2026-10-28 raw contents and hashes were not accessed during the intraday guard",
+    "aggregate_execution": "BLOCKED_TOOL_UNAVAILABLE"
+  },
+  "observed_file_samples": [
+    {
+      "date": "2026-10-14",
+      "file": "REST raw JSONL",
+      "bytes": 16884875,
+      "scope": "sample metadata"
+    },
+    {
+      "date": "2026-10-14",
+      "file": "canonical observations",
+      "bytes": 12836916,
+      "scope": "sample metadata"
+    },
+    {
+      "date": "2026-10-14",
+      "file": "WebSocket raw JSONL",
+      "bytes": 105320999,
+      "scope": "sample metadata"
+    },
+    {
+      "date": "2026-10-14",
+      "file": "futures-underlying REST JSONL",
+      "lines": 289,
+      "bytes": 258946,
+      "scope": "sample metadata"
+    },
+    {
+      "date": "2026-10-14",
+      "file": "subscription events JSONL",
+      "lines": 40,
+      "bytes": 89064,
+      "scope": "sample metadata"
+    },
+    {
+      "date": "2026-10-27",
+      "file": "WebSocket raw JSONL",
+      "bytes": 36636743,
+      "scope": "sample metadata"
+    },
+    {
+      "date": "2026-10-27",
+      "file": "subscription events JSONL",
+      "lines": 11,
+      "bytes": 3388,
+      "scope": "sample metadata"
+    }
+  ],
+  "observations": [
+    {
+      "area": "canonical option quote",
+      "schema": "canonical-market-observation-v1",
+      "sample_values": {
+        "call_last": 15.0,
+        "put_last": 126.5,
+        "bid_ask_and_5_level_depth_prices_quantities": "all zero in inspected sample",
+        "observed_at": null,
+        "underlying_observed_hour": "000000"
+      },
+      "classification": "observed_sample_only",
+      "whole_dataset_rate": null
+    },
+    {
+      "area": "REST option raw",
+      "schema": "kis-rest-raw-market-response-v1",
+      "provider": "KISOptionRestAdapter",
+      "tr_id": "FHMIF10000000+FHMIF10010000",
+      "metadata_fields_observed": ["collected_at", "response status", "payload", "content hash"]
+    },
+    {
+      "area": "underlying REST",
+      "tr_id": "FHPIF05030200",
+      "symbol": "A05611",
+      "sample_anomaly": "adjacent records showed price 943.18 while ask/bid changed from 942.88/935.00 to 867.74/0.00",
+      "cause": "unknown",
+      "some_volume_fields_zero": true
+    },
+    {
+      "area": "WebSocket raw",
+      "schema": "kis-realtime-raw-v1",
+      "fields_observed": ["received_at", "trading_date", "instrument", "tr_id", "payload_sha256", "payload", "sequence"]
+    },
+    {
+      "area": "subscription events",
+      "date": "2026-10-27",
+      "active_count": 27,
+      "subscription_cap": 41,
+      "ack_status": "NOT_USED",
+      "actual_broker_ack_proven": false
+    }
+  ],
+  "hash_evidence": {
+    "websocket_raw_jsonl_manifest_match_dates": [
+      "2026-10-14",
+      "2026-10-15",
+      "2026-10-16",
+      "2026-10-20",
+      "2026-10-21",
+      "2026-10-22",
+      "2026-10-23",
+      "2026-10-26",
+      "2026-10-27"
+    ],
+    "subscription_event_manifest_match_dates": ["2026-10-26", "2026-10-27"],
+    "2026-10-14_parent_manifest_mismatches": [
+      "daily_status.json",
+      "kis_vts_subscription_events.manifest.json",
+      "kis_vts_websocket_raw.jsonl.manifest.json"
+    ],
+    "mismatch_causes": "unknown",
+    "overall_partition_integrity": "BLOCKED_NOT_ESTABLISHED"
+  },
+  "metrics": {
+    "date_tr_instrument_frame_counts": {"status": "UNMEASURED", "assumed": true},
+    "gap_rates": {"status": "UNMEASURED", "assumed": true},
+    "duplicate_rates": {"status": "UNMEASURED", "assumed": true},
+    "latency_distribution": {"status": "UNMEASURED", "assumed": true},
+    "zero_or_stale_quote_depth_rates": {"status": "UNMEASURED", "assumed": true},
+    "iv_surface_and_arbitrage_checks": {"status": "UNMEASURED", "assumed": true},
+    "authoritative_session_boundaries": {"status": "UNCONFIRMED", "assumed": true}
+  },
+  "production_runtime_eligible": false,
+  "next_steps": [
+    "When a safe read-only aggregation route is available, aggregate only existing dates other than 2026-10-28.",
+    "Investigate the 2026-10-14 auxiliary metadata hash mismatch generation/update path without modifying originals.",
+    "Use the measured profile and explicit assumptions in the synthetic generator v0.2 realism comparison."
+  ]
+}
