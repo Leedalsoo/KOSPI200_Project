@@ -61,6 +61,7 @@ def create_live_runtime_lifecycle_coordinator(
     execution_event_deduplicator: Any,
     position_aggregate: Any,
     safety_policy: Any,
+    settlement_store: Any | None = None,
     recovery_transport: Any | None = None,
     recovery_adapter: Any | None = None,
     runtime_transport: Any | None = None,
@@ -86,6 +87,7 @@ def create_live_runtime_lifecycle_coordinator(
         "position_fill_adapter": position_fill_adapter,
         "execution_event_deduplicator": execution_event_deduplicator,
         "position_aggregate": position_aggregate,
+        "settlement_store": settlement_store,
         "recovery_transport": recovery_transport,
         "recovery_adapter": recovery_adapter,
     }

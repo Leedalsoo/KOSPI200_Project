@@ -67,7 +67,11 @@ def create_live_runtime_bootstrap(*, runtime_transport=None, tick_entry=None, re
     execution = create_live_execution_runtime_composition(**execution_dependencies)
     if recovery_service is None:
         recovery_service = getattr(execution, "recovery_service", None)
-    router = StandardOrderRouter(order_state_machine=execution.settlement.order_state_machine, broker_adapter=execution.broker)
+    router = StandardOrderRouter(
+        order_state_machine=execution.settlement.order_state_machine,
+        broker_adapter=execution.broker,
+        reconciliation_guard=execution.settlement.settlement_store,
+    )
     return LiveRuntimeBootstrap(execution=execution, order_router=router, runtime_transport=runtime_transport, tick_entry=tick_entry, recovery_service=recovery_service)
 
 

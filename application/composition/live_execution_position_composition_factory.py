@@ -19,6 +19,7 @@ class LiveExecutionPositionComposition:
     execution_event_deduplicator: Any
     position_aggregate: Any
     settlement_bridge: LiveExecutionPositionBridge
+    settlement_store: Any | None = None
 
     def settle(self, report: ExecutionReport) -> object:
         """Resolve the originating BrokerOrderCommand from OMS and settle the report."""
@@ -32,6 +33,7 @@ def create_live_execution_position_composition(
     position_fill_adapter: Any,
     execution_event_deduplicator: Any,
     position_aggregate: Any,
+    settlement_store: Any | None = None,
 ) -> LiveExecutionPositionComposition:
     """Assemble existing Live execution/OMS/Position components without hidden defaults."""
     required = {
@@ -40,16 +42,24 @@ def create_live_execution_position_composition(
         "position_fill_adapter": position_fill_adapter,
         "execution_event_deduplicator": execution_event_deduplicator,
         "position_aggregate": position_aggregate,
+        "settlement_store": settlement_store,
     }
     missing = [name for name, value in required.items() if value is None]
     if missing:
         raise ValueError("LIVE_COMPOSITION_DEPENDENCY_REQUIRED:" + ",".join(missing))
+
+    settlement_store.ensure_authoritative_baseline_gate()
+    settlement_store.mark_startup_reconciliation_pending()
+    order_state_machine.set_persistence_store(settlement_store)
+    order_state_machine.persist_all_states()
+    execution_event_deduplicator.set_persistence_store(settlement_store)
 
     bridge = LiveExecutionPositionBridge(
         order_state_machine=order_state_machine,
         position_fill_adapter=position_fill_adapter,
         execution_event_deduplicator=execution_event_deduplicator,
         position_aggregate=position_aggregate,
+        settlement_store=settlement_store,
     )
     return LiveExecutionPositionComposition(
         execution_source=execution_source,
@@ -58,5 +68,6 @@ def create_live_execution_position_composition(
         position_fill_adapter=position_fill_adapter,
         execution_event_deduplicator=execution_event_deduplicator,
         position_aggregate=position_aggregate,
+        settlement_store=settlement_store,
         settlement_bridge=bridge,
     )

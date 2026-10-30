@@ -24,6 +24,7 @@ class LiveSafetyGate:
         approval_validity_seconds: float,
         now: Callable[[], datetime],
         allow_liquidation_reduction: bool,
+        reconciliation_guard=None,
     ):
         if risk_guard is None:
             raise ValueError("RISK_GUARD_REQUIRED")
@@ -39,6 +40,7 @@ class LiveSafetyGate:
         self.approval_validity_seconds = approval_validity_seconds
         self._now = now
         self.allow_liquidation_reduction = allow_liquidation_reduction
+        self._reconciliation_guard = reconciliation_guard
         self._approval: LiveApproval | None = None
 
     def approve(self, approval: LiveApproval) -> None:
@@ -82,6 +84,13 @@ class LiveSafetyGate:
         position_role: str | None = None,
     ) -> LiveGateResult:
         now = self._now()
+        if self._reconciliation_guard is not None:
+            try:
+                unresolved = self._reconciliation_guard.has_unresolved_reconciliation()
+            except Exception:
+                return LiveGateResult(False, "RECONCILIATION_STATUS_UNAVAILABLE")
+            if unresolved:
+                return LiveGateResult(False, "UNRESOLVED_EXECUTION_RECONCILIATION")
         if self._approval is None:
             return LiveGateResult(False, "live approval is missing")
         if self.policy.approval_state is not LiveApprovalState.APPROVED:

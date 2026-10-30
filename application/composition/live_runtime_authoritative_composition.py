@@ -8,6 +8,7 @@ and fail-loud validation without inventing synthetic defaults or fake dependenci
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 from typing import Any
 
 from core.oms.oms_fsm import OrderStateMachine
@@ -37,6 +38,7 @@ from environments.live.market.kis_futures_market_data import KISFuturesMarketDat
 from environments.live.position.live_position_aggregate import LivePositionAggregate
 from environments.live.position.live_position_fill_adapter import LivePositionFillAdapter
 from environments.live.reconciliation import LiveReconciler
+from environments.live.settlement.sqlite_settlement_store import SQLiteSettlementStore
 from environments.live.safety_gate import LiveSafetyGate
 from infrastructure.kis.auth import KISAuthManager
 from infrastructure.kis.futures_execution_transport import KISFuturesExecutionTransport
@@ -142,6 +144,10 @@ def create_authoritative_kis_live_runtime_composition(
         max_daily_loss=10_000_000.0,
         max_position_quantity=5,
     )
+    settlement_store = SQLiteSettlementStore(
+        os.getenv("KOSPI200_LIVE_SETTLEMENT_DB", "data/live_settlement/settlement.sqlite3")
+    )
+    settlement_store.ensure_authoritative_baseline_gate()
     gate = LiveSafetyGate(
         policy=policy,
         risk_guard=RiskGuard(),
@@ -149,6 +155,7 @@ def create_authoritative_kis_live_runtime_composition(
         approval_validity_seconds=900.0,
         now=lambda: datetime.now(timezone.utc),
         allow_liquidation_reduction=True,
+        reconciliation_guard=settlement_store,
     )
     idempotency = IdempotencyRegistry()
     broker = LiveBrokerAdapter(
@@ -160,10 +167,14 @@ def create_authoritative_kis_live_runtime_composition(
     )
 
     # 7. Assemble Position & OMS
-    order_state_machine = OrderStateMachine()
+    order_state_machine = OrderStateMachine(persistence_store=settlement_store)
+    order_state_machine.restore_from_store()
     position_aggregate = LivePositionAggregate(instrument_id=current_contract.shrn_iscd)
+    persisted_position = settlement_store.load_position_state(position_aggregate.instrument_id)
+    if persisted_position is not None:
+        position_aggregate.restore_persistence_record(persisted_position)
     position_fill_adapter = LivePositionFillAdapter(position_aggregate)
-    deduplicator = ExecutionEventDeduplicator()
+    deduplicator = ExecutionEventDeduplicator(persistence_store=settlement_store)
 
     # 8. Assemble Execution Path
     resolved_exec_transport = execution_transport or KISFuturesExecutionTransport(auth=auth)
@@ -204,6 +215,7 @@ def create_authoritative_kis_live_runtime_composition(
         position_fill_adapter=position_fill_adapter,
         execution_event_deduplicator=deduplicator,
         position_aggregate=position_aggregate,
+        settlement_store=settlement_store,
         safety_policy=policy,
         recovery_transport=resolved_recovery_transport,
         recovery_adapter=recovery_adapter,

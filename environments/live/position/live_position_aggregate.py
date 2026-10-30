@@ -58,5 +58,42 @@ class LivePositionAggregate:
         self.qty = quantity - self.qty
         self.avg_price = price
 
+    def preview_fill(self, *, side: str, quantity: int, price: Decimal) -> PositionAggregate:
+        projected = LivePositionAggregate(self.instrument_id)
+        projected.side = self.side
+        projected.qty = self.qty
+        projected.avg_price = self.avg_price
+        projected.apply_fill(side=side, quantity=quantity, price=price)
+        return projected.snapshot()
+
+    def restore_snapshot(self, snapshot: PositionAggregate) -> None:
+        if snapshot.instrument_id != self.instrument_id:
+            raise ValueError("POSITION_SNAPSHOT_INSTRUMENT_MISMATCH")
+        if snapshot.qty < 0 or (snapshot.qty == 0) != (snapshot.side is None):
+            raise ValueError("POSITION_SNAPSHOT_STATE_INVALID")
+        if snapshot.qty > 0 and snapshot.avg_price is None:
+            raise ValueError("POSITION_SNAPSHOT_AVERAGE_PRICE_REQUIRED")
+        self.side, self.qty, self.avg_price = snapshot.side, snapshot.qty, snapshot.avg_price
+
+    def persistence_record(self) -> dict[str, object]:
+        return {
+            "instrument_id": self.instrument_id,
+            "side": self.side,
+            "qty": self.qty,
+            "avg_price": str(self.avg_price) if self.avg_price is not None else None,
+        }
+
+    def restore_persistence_record(self, record: dict[str, object]) -> None:
+        if str(record.get("instrument_id", "")) != self.instrument_id:
+            raise ValueError("POSITION_SNAPSHOT_INSTRUMENT_MISMATCH")
+        avg = record.get("avg_price")
+        snapshot = PositionAggregate(
+            instrument_id=self.instrument_id,
+            side=record.get("side"),
+            qty=int(record.get("qty", 0)),
+            avg_price=Decimal(str(avg)) if avg is not None else None,
+        )
+        self.restore_snapshot(snapshot)
+
     def snapshot(self) -> PositionAggregate:
         return PositionAggregate(self.instrument_id, self.side, self.qty, self.avg_price)

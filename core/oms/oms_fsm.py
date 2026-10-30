@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from decimal import Decimal
 
-from contracts.types import BrokerOrderCommand, ExecutionReport, OrderAckEvent
+from contracts.futures_contract_spec import FuturesProductType
+from contracts.futures_identity_source_port import FuturesInstrumentIdentity
+from contracts.types import BrokerOrderCommand, ExecutionReport, OrderAckEvent, OptionInstrumentIdentity
 
 
 class OrderStateTransitionError(ValueError):
@@ -35,9 +37,125 @@ class ExecutionCorrelation:
 class OrderStateMachine:
     """OMS-owned order state and broker/client correlation boundary."""
 
-    def __init__(self) -> None:
+    def __init__(self, persistence_store=None) -> None:
         self._states: dict[str, OrderState] = {}
         self._broker_to_client: dict[str, str] = {}
+        self._persistence_store = persistence_store
+
+    def set_persistence_store(self, store) -> None:
+        if store is None:
+            raise ValueError("SETTLEMENT_STORE_REQUIRED")
+        self._persistence_store = store
+
+    @staticmethod
+    def _command_record(command: BrokerOrderCommand | None) -> dict | None:
+        if command is None:
+            return None
+        identity = command.instrument_identity
+        identity_record = None
+        if isinstance(identity, OptionInstrumentIdentity):
+            identity_record = {"kind": "option", "fields": {
+                "instrument_id": identity.instrument_id, "symbol": identity.symbol,
+                "expiry": identity.expiry, "option_type": identity.option_type,
+                "strike": str(identity.strike) if identity.strike is not None else None,
+                "contract_multiplier": str(identity.contract_multiplier) if identity.contract_multiplier is not None else None,
+                "identity_source": identity.identity_source,
+            }}
+        elif isinstance(identity, FuturesInstrumentIdentity):
+            identity_record = {"kind": "futures", "fields": {
+                "instrument_id": identity.instrument_id, "symbol": identity.symbol,
+                "product_type": identity.product_type.value,
+                "contract_multiplier": str(identity.contract_multiplier),
+                "identity_source": identity.identity_source,
+            }}
+        elif identity is not None:
+            raise OrderStateTransitionError("UNSUPPORTED_INSTRUMENT_IDENTITY_FOR_PERSISTENCE")
+        record = asdict(command)
+        record["requested_price"] = str(command.requested_price) if command.requested_price is not None else None
+        record["instrument_identity"] = identity_record
+        return record
+
+    @staticmethod
+    def _command_from_record(record: dict | None) -> BrokerOrderCommand | None:
+        if record is None:
+            return None
+        values = dict(record)
+        values["requested_price"] = Decimal(values["requested_price"]) if values.get("requested_price") is not None else None
+        identity = values.get("instrument_identity")
+        if identity:
+            fields = dict(identity["fields"])
+            if identity["kind"] == "option":
+                fields["strike"] = Decimal(fields["strike"]) if fields.get("strike") is not None else None
+                fields["contract_multiplier"] = Decimal(fields["contract_multiplier"]) if fields.get("contract_multiplier") is not None else None
+                values["instrument_identity"] = OptionInstrumentIdentity(**fields)
+            elif identity["kind"] == "futures":
+                fields["product_type"] = FuturesProductType(fields["product_type"])
+                fields["contract_multiplier"] = Decimal(fields["contract_multiplier"])
+                values["instrument_identity"] = FuturesInstrumentIdentity(**fields)
+            else:
+                raise OrderStateTransitionError("PERSISTED_INSTRUMENT_IDENTITY_KIND_INVALID")
+        else:
+            values["instrument_identity"] = None
+        return BrokerOrderCommand(**values)
+
+    @classmethod
+    def state_to_record(cls, state: OrderState) -> dict:
+        return {
+            "client_order_id": state.client_order_id,
+            "status": state.status,
+            "broker_order_id": state.broker_order_id,
+            "order_quantity": state.order_quantity,
+            "filled_quantity": state.filled_quantity,
+            "average_execution_price": str(state.average_execution_price) if state.average_execution_price is not None else None,
+            "broker_order_command": cls._command_record(state.broker_order_command),
+        }
+
+    @classmethod
+    def state_from_record(cls, record: dict) -> OrderState:
+        return OrderState(
+            client_order_id=str(record["client_order_id"]),
+            status=str(record["status"]),
+            broker_order_id=record.get("broker_order_id"),
+            order_quantity=int(record["order_quantity"]),
+            filled_quantity=int(record["filled_quantity"]),
+            broker_order_command=cls._command_from_record(record.get("broker_order_command")),
+            average_execution_price=Decimal(record["average_execution_price"]) if record.get("average_execution_price") is not None else None,
+        )
+
+    def restore_from_store(self) -> None:
+        if self._persistence_store is None:
+            raise OrderStateTransitionError("SETTLEMENT_STORE_REQUIRED")
+        states = [self.state_from_record(row) for row in self._persistence_store.load_order_state_payloads()]
+        broker_to_client: dict[str, str] = {}
+        for state in states:
+            if state.broker_order_id:
+                previous = broker_to_client.get(state.broker_order_id)
+                if previous is not None and previous != state.client_order_id:
+                    raise OrderStateTransitionError("PERSISTED_BROKER_ORDER_CORRELATION_CONFLICT")
+                broker_to_client[state.broker_order_id] = state.client_order_id
+        self._states = {state.client_order_id: state for state in states}
+        self._broker_to_client = broker_to_client
+
+    def replace_state(self, state: OrderState, *, persist: bool = False) -> OrderState:
+        if persist and self._persistence_store is not None:
+            self._persistence_store.save_order_state(state.client_order_id, self.state_to_record(state))
+        if state.broker_order_id:
+            previous = self._broker_to_client.get(state.broker_order_id)
+            if previous is not None and previous != state.client_order_id:
+                raise OrderStateTransitionError("BROKER_ORDER_ID_ALREADY_CORRELATED")
+            self._broker_to_client[state.broker_order_id] = state.client_order_id
+        self._states[state.client_order_id] = state
+        return state
+
+    def persist_all_states(self) -> None:
+        if self._persistence_store is None:
+            raise OrderStateTransitionError("SETTLEMENT_STORE_REQUIRED")
+        for state in self._states.values():
+            self._persist_state(state)
+
+    def _persist_state(self, state: OrderState) -> None:
+        if self._persistence_store is not None:
+            self._persistence_store.save_order_state(state.client_order_id, self.state_to_record(state))
 
     def apply_intent(self, intent) -> OrderState:
         client_order_id = str(intent.client_order_id).strip()
@@ -49,6 +167,7 @@ class OrderStateMachine:
         if client_order_id in self._states:
             raise OrderStateTransitionError("ORDER_INTENT_ALREADY_REGISTERED")
         state = OrderState(client_order_id, "SUBMITTED", order_quantity=quantity)
+        self._persist_state(state)
         self._states[client_order_id] = state
         return state
 
@@ -74,6 +193,7 @@ class OrderStateMachine:
             broker_order_command=command,
             average_execution_price=current.average_execution_price,
         )
+        self._persist_state(state)
         self._states[client_order_id] = state
         return state
 
@@ -103,6 +223,7 @@ class OrderStateMachine:
             broker_order_command=current.broker_order_command,
             average_execution_price=current.average_execution_price,
         )
+        self._persist_state(state)
         self._states[client_order_id] = state
         return state
 
@@ -140,7 +261,17 @@ class OrderStateMachine:
             raise OrderStateTransitionError("BROKER_ORDER_ID_MISMATCH")
         return state.broker_order_command
 
+    def preview_execution(self, report: ExecutionReport) -> OrderState:
+        """Calculate an execution transition on an isolated OMS projection."""
+        projected = object.__new__(OrderStateMachine)
+        projected._states = self._states.copy()
+        projected._broker_to_client = self._broker_to_client.copy()
+        projected._persistence_store = None
+        return projected.apply_execution(report)
+
     def apply_execution(self, report: ExecutionReport) -> OrderState:
+        if self._persistence_store is not None:
+            raise OrderStateTransitionError("EXECUTION_SETTLEMENT_BRIDGE_REQUIRED")
         client_order_id = str(report.client_order_id).strip()
         current = self._states.get(client_order_id)
         if current is None:
@@ -173,6 +304,7 @@ class OrderStateMachine:
             broker_order_command=current.broker_order_command,
             average_execution_price=average_execution_price,
         )
+        self._persist_state(state)
         self._states[client_order_id] = state
         return state
 
@@ -215,6 +347,7 @@ class OrderStateMachine:
             broker_order_command=current.broker_order_command,
             average_execution_price=current.average_execution_price,
         )
+        self._persist_state(state)
         self._states[client_order_id] = state
         return state
 

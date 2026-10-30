@@ -14,14 +14,22 @@ class OrderRouterError(RuntimeError):
 
 
 class StandardOrderRouter:
-    def __init__(self, *, order_state_machine: OrderStateMachine, broker_adapter: Any = None) -> None:
+    def __init__(self, *, order_state_machine: OrderStateMachine, broker_adapter: Any = None, reconciliation_guard: Any = None) -> None:
         if order_state_machine is None: raise ValueError("ORDER_STATE_MACHINE_REQUIRED")
         self._order_state_machine = order_state_machine
         self._broker_adapter = broker_adapter
+        self._reconciliation_guard = reconciliation_guard
 
     def register_and_route(self, command: BrokerOrderCommand, token: Any, *, broker_adapter: Any = None, **kwargs: Any) -> BrokerOrderResponse:
         if command is None: raise OrderRouterError("BROKER_ORDER_COMMAND_REQUIRED")
         if token is None: raise OrderRouterError("RISK_APPROVAL_TOKEN_REQUIRED")
+        if self._reconciliation_guard is not None:
+            try:
+                unresolved = self._reconciliation_guard.has_unresolved_reconciliation()
+            except Exception as exc:
+                raise OrderRouterError("RECONCILIATION_STATUS_UNAVAILABLE") from exc
+            if unresolved:
+                raise OrderRouterError("UNRESOLVED_EXECUTION_RECONCILIATION")
         freshness_verdict = kwargs.pop("freshness_verdict", None)
         if not isinstance(freshness_verdict, FreshnessVerdict) or freshness_verdict.status.value != "FRESH":
             raise OrderRouterError("MARKET_DATA_FRESHNESS_VERDICT_REQUIRED")
