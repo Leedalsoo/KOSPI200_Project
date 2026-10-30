@@ -1,0 +1,916 @@
+{
+  "catalogue_validation_status": "PASS",
+  "config_hash": "ec71dbe6ff44c50158425ce7ddb1bbf882871736214ccd680cc4f1135238ef4a",
+  "dataset": "SYN-EVT",
+  "generator_version": "psb-validation-only-syn-evt-v1",
+  "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+  "production_runtime_eligible": false,
+  "provenance": "DERIVED_SCENARIO",
+  "runtime_replay_executed": false,
+  "scenario_count": 22,
+  "scenarios": [
+    {
+      "catalogue_validation": {
+        "checks": [
+          "synthetic_provenance",
+          "versioned_schema",
+          "reproducibility_metadata",
+          "stable_event_and_invariant",
+          "approved_strategy_scope",
+          "identity_runtime_isolation",
+          "unique_scenario_id"
+        ],
+        "reasons": [],
+        "scenario_id": "missing_quote",
+        "status": "PASS"
+      },
+      "config_hash": "ec71dbe6ff44c50158425ce7ddb1bbf882871736214ccd680cc4f1135238ef4a",
+      "event_id": "bb3b34245ad3b127cc4986f03d1cb8609a2c9ccde0c1fa23e9a5b42dc07b8b52",
+      "event_kind": "quote_missing",
+      "expected_invariant": "Missing quote fails closed; never fabricate price.",
+      "generator_version": "psb-validation-only-syn-evt-v1",
+      "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+      "production_runtime_eligible": false,
+      "provenance": "DERIVED_SCENARIO",
+      "runtime_expected_status": "UNAVAILABLE",
+      "scenario_id": "missing_quote",
+      "schema_version": 1,
+      "seed": 20261029,
+      "sequence": 1,
+      "source_status": "SYNTHETIC_SCENARIO_SPEC_ONLY",
+      "strategy_ids": [
+        6,
+        7,
+        8,
+        1,
+        9,
+        5,
+        2
+      ],
+      "synthetic": true,
+      "validation_only": true
+    },
+    {
+      "catalogue_validation": {
+        "checks": [
+          "synthetic_provenance",
+          "versioned_schema",
+          "reproducibility_metadata",
+          "stable_event_and_invariant",
+          "approved_strategy_scope",
+          "identity_runtime_isolation",
+          "unique_scenario_id"
+        ],
+        "reasons": [],
+        "scenario_id": "delayed_stale_quote",
+        "status": "PASS"
+      },
+      "config_hash": "ec71dbe6ff44c50158425ce7ddb1bbf882871736214ccd680cc4f1135238ef4a",
+      "event_id": "9a31a4be13eecfa2e73975ab27529b62d066eef6dc28c1a299da0f13bf5b08a5",
+      "event_kind": "quote_delayed_stale",
+      "expected_invariant": "Stale source time is not current market data.",
+      "generator_version": "psb-validation-only-syn-evt-v1",
+      "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+      "production_runtime_eligible": false,
+      "provenance": "DERIVED_SCENARIO",
+      "runtime_expected_status": "BLOCKED",
+      "scenario_id": "delayed_stale_quote",
+      "schema_version": 1,
+      "seed": 20261029,
+      "sequence": 2,
+      "source_status": "SYNTHETIC_SCENARIO_SPEC_ONLY",
+      "strategy_ids": [
+        6,
+        7,
+        8,
+        1,
+        9,
+        5,
+        2
+      ],
+      "synthetic": true,
+      "validation_only": true
+    },
+    {
+      "catalogue_validation": {
+        "checks": [
+          "synthetic_provenance",
+          "versioned_schema",
+          "reproducibility_metadata",
+          "stable_event_and_invariant",
+          "approved_strategy_scope",
+          "identity_runtime_isolation",
+          "unique_scenario_id"
+        ],
+        "reasons": [],
+        "scenario_id": "duplicate_event",
+        "status": "PASS"
+      },
+      "config_hash": "ec71dbe6ff44c50158425ce7ddb1bbf882871736214ccd680cc4f1135238ef4a",
+      "event_id": "c079282dcf90d31b373b3495d71e1fd8b82434759297d431668f20a61e29b4b0",
+      "event_kind": "event_duplicate",
+      "expected_invariant": "Detect duplicate identity; preserve deterministic ordering.",
+      "generator_version": "psb-validation-only-syn-evt-v1",
+      "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+      "production_runtime_eligible": false,
+      "provenance": "DERIVED_SCENARIO",
+      "runtime_expected_status": "BLOCKED",
+      "scenario_id": "duplicate_event",
+      "schema_version": 1,
+      "seed": 20261029,
+      "sequence": 3,
+      "source_status": "SYNTHETIC_SCENARIO_SPEC_ONLY",
+      "strategy_ids": [
+        6,
+        7,
+        8,
+        1,
+        9,
+        5,
+        2
+      ],
+      "synthetic": true,
+      "validation_only": true
+    },
+    {
+      "catalogue_validation": {
+        "checks": [
+          "synthetic_provenance",
+          "versioned_schema",
+          "reproducibility_metadata",
+          "stable_event_and_invariant",
+          "approved_strategy_scope",
+          "identity_runtime_isolation",
+          "unique_scenario_id"
+        ],
+        "reasons": [],
+        "scenario_id": "zero_invalid_quote",
+        "status": "PASS"
+      },
+      "config_hash": "ec71dbe6ff44c50158425ce7ddb1bbf882871736214ccd680cc4f1135238ef4a",
+      "event_id": "86eb1aa12ae6e81e9104da0aa8bf3d1c03bb4c2a2965f0bd97de6245b80a15d1",
+      "event_kind": "quote_invalid_zero",
+      "expected_invariant": "Reject zero/invalid quote; never use fallback price.",
+      "generator_version": "psb-validation-only-syn-evt-v1",
+      "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+      "production_runtime_eligible": false,
+      "provenance": "DERIVED_SCENARIO",
+      "runtime_expected_status": "UNAVAILABLE",
+      "scenario_id": "zero_invalid_quote",
+      "schema_version": 1,
+      "seed": 20261029,
+      "sequence": 4,
+      "source_status": "SYNTHETIC_SCENARIO_SPEC_ONLY",
+      "strategy_ids": [
+        6,
+        7,
+        8,
+        1,
+        9,
+        5,
+        2
+      ],
+      "synthetic": true,
+      "validation_only": true
+    },
+    {
+      "catalogue_validation": {
+        "checks": [
+          "synthetic_provenance",
+          "versioned_schema",
+          "reproducibility_metadata",
+          "stable_event_and_invariant",
+          "approved_strategy_scope",
+          "identity_runtime_isolation",
+          "unique_scenario_id"
+        ],
+        "reasons": [],
+        "scenario_id": "orderbook_gap",
+        "status": "PASS"
+      },
+      "config_hash": "ec71dbe6ff44c50158425ce7ddb1bbf882871736214ccd680cc4f1135238ef4a",
+      "event_id": "b2a003625c89e0172cb2fdf519fabd226e5732034c7794c694df3e832553419d",
+      "event_kind": "orderbook_gap",
+      "expected_invariant": "Missing depth blocks liquidity-dependent decisions/fills.",
+      "generator_version": "psb-validation-only-syn-evt-v1",
+      "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+      "production_runtime_eligible": false,
+      "provenance": "DERIVED_SCENARIO",
+      "runtime_expected_status": "BLOCKED",
+      "scenario_id": "orderbook_gap",
+      "schema_version": 1,
+      "seed": 20261029,
+      "sequence": 5,
+      "source_status": "SYNTHETIC_SCENARIO_SPEC_ONLY",
+      "strategy_ids": [
+        6,
+        7,
+        8,
+        1,
+        9,
+        5
+      ],
+      "synthetic": true,
+      "validation_only": true
+    },
+    {
+      "catalogue_validation": {
+        "checks": [
+          "synthetic_provenance",
+          "versioned_schema",
+          "reproducibility_metadata",
+          "stable_event_and_invariant",
+          "approved_strategy_scope",
+          "identity_runtime_isolation",
+          "unique_scenario_id"
+        ],
+        "reasons": [],
+        "scenario_id": "wide_spread",
+        "status": "PASS"
+      },
+      "config_hash": "ec71dbe6ff44c50158425ce7ddb1bbf882871736214ccd680cc4f1135238ef4a",
+      "event_id": "593d3f8be27ebfa71593a09b1081aae08cd32bad6c40d1177feb541963bed9fe",
+      "event_kind": "orderbook_wide_spread",
+      "expected_invariant": "Keep spread visible; do not assume fill.",
+      "generator_version": "psb-validation-only-syn-evt-v1",
+      "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+      "production_runtime_eligible": false,
+      "provenance": "DERIVED_SCENARIO",
+      "runtime_expected_status": "BLOCKED",
+      "scenario_id": "wide_spread",
+      "schema_version": 1,
+      "seed": 20261029,
+      "sequence": 6,
+      "source_status": "SYNTHETIC_SCENARIO_SPEC_ONLY",
+      "strategy_ids": [
+        6,
+        7,
+        8,
+        1,
+        9,
+        5,
+        2
+      ],
+      "synthetic": true,
+      "validation_only": true
+    },
+    {
+      "catalogue_validation": {
+        "checks": [
+          "synthetic_provenance",
+          "versioned_schema",
+          "reproducibility_metadata",
+          "stable_event_and_invariant",
+          "approved_strategy_scope",
+          "identity_runtime_isolation",
+          "unique_scenario_id"
+        ],
+        "reasons": [],
+        "scenario_id": "insufficient_depth",
+        "status": "PASS"
+      },
+      "config_hash": "ec71dbe6ff44c50158425ce7ddb1bbf882871736214ccd680cc4f1135238ef4a",
+      "event_id": "15527ba7c8dce8c0d9cea02ce1e039dbc562cfae8b4448366dc001fab2237189",
+      "event_kind": "orderbook_insufficient_depth",
+      "expected_invariant": "Insufficient depth/volume cannot support fill.",
+      "generator_version": "psb-validation-only-syn-evt-v1",
+      "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+      "production_runtime_eligible": false,
+      "provenance": "DERIVED_SCENARIO",
+      "runtime_expected_status": "BLOCKED",
+      "scenario_id": "insufficient_depth",
+      "schema_version": 1,
+      "seed": 20261029,
+      "sequence": 7,
+      "source_status": "SYNTHETIC_SCENARIO_SPEC_ONLY",
+      "strategy_ids": [
+        6,
+        7,
+        8,
+        1,
+        9,
+        5
+      ],
+      "synthetic": true,
+      "validation_only": true
+    },
+    {
+      "catalogue_validation": {
+        "checks": [
+          "synthetic_provenance",
+          "versioned_schema",
+          "reproducibility_metadata",
+          "stable_event_and_invariant",
+          "approved_strategy_scope",
+          "identity_runtime_isolation",
+          "unique_scenario_id"
+        ],
+        "reasons": [],
+        "scenario_id": "underlying_gap",
+        "status": "PASS"
+      },
+      "config_hash": "ec71dbe6ff44c50158425ce7ddb1bbf882871736214ccd680cc4f1135238ef4a",
+      "event_id": "53f953e2379629d7d8743992c9f95b60f5c4e973049d7c20da313ea86bff5ee6",
+      "event_kind": "underlying_price_gap",
+      "expected_invariant": "Preserve gap provenance and event chronology.",
+      "generator_version": "psb-validation-only-syn-evt-v1",
+      "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+      "production_runtime_eligible": false,
+      "provenance": "DERIVED_SCENARIO",
+      "runtime_expected_status": "PASS_WITH_LIMITATION",
+      "scenario_id": "underlying_gap",
+      "schema_version": 1,
+      "seed": 20261029,
+      "sequence": 8,
+      "source_status": "SYNTHETIC_SCENARIO_SPEC_ONLY",
+      "strategy_ids": [
+        6,
+        8,
+        1,
+        5,
+        2
+      ],
+      "synthetic": true,
+      "validation_only": true
+    },
+    {
+      "catalogue_validation": {
+        "checks": [
+          "synthetic_provenance",
+          "versioned_schema",
+          "reproducibility_metadata",
+          "stable_event_and_invariant",
+          "approved_strategy_scope",
+          "identity_runtime_isolation",
+          "unique_scenario_id"
+        ],
+        "reasons": [],
+        "scenario_id": "volatility_1_3x",
+        "status": "PASS"
+      },
+      "config_hash": "ec71dbe6ff44c50158425ce7ddb1bbf882871736214ccd680cc4f1135238ef4a",
+      "event_id": "98a8ec9b1390a0961e616d5a3ed36bbbf2cdfe3c44f9b57b44b40a26a9f06442",
+      "event_kind": "volatility_regime_1_3x",
+      "expected_invariant": "Tag configured 1.3x regime; do not tune threshold.",
+      "generator_version": "psb-validation-only-syn-evt-v1",
+      "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+      "production_runtime_eligible": false,
+      "provenance": "DERIVED_SCENARIO",
+      "runtime_expected_status": "PASS_WITH_LIMITATION",
+      "scenario_id": "volatility_1_3x",
+      "schema_version": 1,
+      "seed": 20261029,
+      "sequence": 9,
+      "source_status": "SYNTHETIC_SCENARIO_SPEC_ONLY",
+      "strategy_ids": [
+        6,
+        7,
+        8,
+        1,
+        9,
+        5,
+        2
+      ],
+      "synthetic": true,
+      "validation_only": true
+    },
+    {
+      "catalogue_validation": {
+        "checks": [
+          "synthetic_provenance",
+          "versioned_schema",
+          "reproducibility_metadata",
+          "stable_event_and_invariant",
+          "approved_strategy_scope",
+          "identity_runtime_isolation",
+          "unique_scenario_id"
+        ],
+        "reasons": [],
+        "scenario_id": "whipsaw_reversal_1",
+        "status": "PASS"
+      },
+      "config_hash": "ec71dbe6ff44c50158425ce7ddb1bbf882871736214ccd680cc4f1135238ef4a",
+      "event_id": "c6c297b42d2cd19905722c79a80a4ec3124c112f4bcf48516d6c201c61ced472",
+      "event_kind": "whipsaw_reversal",
+      "expected_invariant": "Represent first reversal in deterministic order.",
+      "generator_version": "psb-validation-only-syn-evt-v1",
+      "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+      "production_runtime_eligible": false,
+      "provenance": "DERIVED_SCENARIO",
+      "runtime_expected_status": "PASS_WITH_LIMITATION",
+      "scenario_id": "whipsaw_reversal_1",
+      "schema_version": 1,
+      "seed": 20261029,
+      "sequence": 10,
+      "source_status": "SYNTHETIC_SCENARIO_SPEC_ONLY",
+      "strategy_ids": [
+        6,
+        8,
+        1,
+        5,
+        2
+      ],
+      "synthetic": true,
+      "validation_only": true
+    },
+    {
+      "catalogue_validation": {
+        "checks": [
+          "synthetic_provenance",
+          "versioned_schema",
+          "reproducibility_metadata",
+          "stable_event_and_invariant",
+          "approved_strategy_scope",
+          "identity_runtime_isolation",
+          "unique_scenario_id"
+        ],
+        "reasons": [],
+        "scenario_id": "whipsaw_reversal_2",
+        "status": "PASS"
+      },
+      "config_hash": "ec71dbe6ff44c50158425ce7ddb1bbf882871736214ccd680cc4f1135238ef4a",
+      "event_id": "5398f5aa8d8f0ae090d3186a3f6286352f7dd68b85ac4a3d612a30066a4a072b",
+      "event_kind": "whipsaw_reversal",
+      "expected_invariant": "Represent second reversal after reversal 1.",
+      "generator_version": "psb-validation-only-syn-evt-v1",
+      "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+      "production_runtime_eligible": false,
+      "provenance": "DERIVED_SCENARIO",
+      "runtime_expected_status": "PASS_WITH_LIMITATION",
+      "scenario_id": "whipsaw_reversal_2",
+      "schema_version": 1,
+      "seed": 20261029,
+      "sequence": 11,
+      "source_status": "SYNTHETIC_SCENARIO_SPEC_ONLY",
+      "strategy_ids": [
+        6,
+        8,
+        1,
+        5,
+        2
+      ],
+      "synthetic": true,
+      "validation_only": true
+    },
+    {
+      "catalogue_validation": {
+        "checks": [
+          "synthetic_provenance",
+          "versioned_schema",
+          "reproducibility_metadata",
+          "stable_event_and_invariant",
+          "approved_strategy_scope",
+          "identity_runtime_isolation",
+          "unique_scenario_id"
+        ],
+        "reasons": [],
+        "scenario_id": "trend_then_reversal",
+        "status": "PASS"
+      },
+      "config_hash": "ec71dbe6ff44c50158425ce7ddb1bbf882871736214ccd680cc4f1135238ef4a",
+      "event_id": "d815883a2a09102acdd26537d809ad6b4eb9fae4b029937fc69291ff6d7635e5",
+      "event_kind": "trend_reversal",
+      "expected_invariant": "Keep trend/reversal phases distinguishable.",
+      "generator_version": "psb-validation-only-syn-evt-v1",
+      "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+      "production_runtime_eligible": false,
+      "provenance": "DERIVED_SCENARIO",
+      "runtime_expected_status": "PASS_WITH_LIMITATION",
+      "scenario_id": "trend_then_reversal",
+      "schema_version": 1,
+      "seed": 20261029,
+      "sequence": 12,
+      "source_status": "SYNTHETIC_SCENARIO_SPEC_ONLY",
+      "strategy_ids": [
+        8,
+        1,
+        5,
+        2
+      ],
+      "synthetic": true,
+      "validation_only": true
+    },
+    {
+      "catalogue_validation": {
+        "checks": [
+          "synthetic_provenance",
+          "versioned_schema",
+          "reproducibility_metadata",
+          "stable_event_and_invariant",
+          "approved_strategy_scope",
+          "identity_runtime_isolation",
+          "unique_scenario_id"
+        ],
+        "reasons": [],
+        "scenario_id": "crash_rebound",
+        "status": "PASS"
+      },
+      "config_hash": "ec71dbe6ff44c50158425ce7ddb1bbf882871736214ccd680cc4f1135238ef4a",
+      "event_id": "ea13bace5985c104111bcb2cd0ded7954b3cd3ff9aa0f4cc694b58ba8b9637a8",
+      "event_kind": "crash_rebound",
+      "expected_invariant": "Preserve crash/rebound chronology; no profitability inference.",
+      "generator_version": "psb-validation-only-syn-evt-v1",
+      "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+      "production_runtime_eligible": false,
+      "provenance": "DERIVED_SCENARIO",
+      "runtime_expected_status": "PASS_WITH_LIMITATION",
+      "scenario_id": "crash_rebound",
+      "schema_version": 1,
+      "seed": 20261029,
+      "sequence": 13,
+      "source_status": "SYNTHETIC_SCENARIO_SPEC_ONLY",
+      "strategy_ids": [
+        6,
+        8,
+        1,
+        9,
+        5,
+        2
+      ],
+      "synthetic": true,
+      "validation_only": true
+    },
+    {
+      "catalogue_validation": {
+        "checks": [
+          "synthetic_provenance",
+          "versioned_schema",
+          "reproducibility_metadata",
+          "stable_event_and_invariant",
+          "approved_strategy_scope",
+          "identity_runtime_isolation",
+          "unique_scenario_id"
+        ],
+        "reasons": [],
+        "scenario_id": "d4_transition",
+        "status": "PASS"
+      },
+      "config_hash": "ec71dbe6ff44c50158425ce7ddb1bbf882871736214ccd680cc4f1135238ef4a",
+      "event_id": "4d7393669becf8f061cb8495c2a7c1762448dfdbbb22027d0e18366385defb5b",
+      "event_kind": "d4_transition",
+      "expected_invariant": "D-4 is scenario-only; expiry authority unverified.",
+      "generator_version": "psb-validation-only-syn-evt-v1",
+      "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+      "production_runtime_eligible": false,
+      "provenance": "DERIVED_SCENARIO",
+      "runtime_expected_status": "BLOCKED",
+      "scenario_id": "d4_transition",
+      "schema_version": 1,
+      "seed": 20261029,
+      "sequence": 14,
+      "source_status": "SYNTHETIC_SCENARIO_SPEC_ONLY",
+      "strategy_ids": [
+        7,
+        8,
+        1,
+        9,
+        5,
+        2
+      ],
+      "synthetic": true,
+      "validation_only": true
+    },
+    {
+      "catalogue_validation": {
+        "checks": [
+          "synthetic_provenance",
+          "versioned_schema",
+          "reproducibility_metadata",
+          "stable_event_and_invariant",
+          "approved_strategy_scope",
+          "identity_runtime_isolation",
+          "unique_scenario_id"
+        ],
+        "reasons": [],
+        "scenario_id": "expiry_cutoff",
+        "status": "PASS"
+      },
+      "config_hash": "ec71dbe6ff44c50158425ce7ddb1bbf882871736214ccd680cc4f1135238ef4a",
+      "event_id": "65d8ac2c582311150dd5781bae5b99d40672512c6794103c1d94c6d4dc48908f",
+      "event_kind": "expiry_cutoff",
+      "expected_invariant": "Expiry cutoff is scenario assumption, not authority.",
+      "generator_version": "psb-validation-only-syn-evt-v1",
+      "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+      "production_runtime_eligible": false,
+      "provenance": "DERIVED_SCENARIO",
+      "runtime_expected_status": "BLOCKED",
+      "scenario_id": "expiry_cutoff",
+      "schema_version": 1,
+      "seed": 20261029,
+      "sequence": 15,
+      "source_status": "SYNTHETIC_SCENARIO_SPEC_ONLY",
+      "strategy_ids": [
+        6,
+        7,
+        8,
+        1,
+        9,
+        5,
+        2
+      ],
+      "synthetic": true,
+      "validation_only": true
+    },
+    {
+      "catalogue_validation": {
+        "checks": [
+          "synthetic_provenance",
+          "versioned_schema",
+          "reproducibility_metadata",
+          "stable_event_and_invariant",
+          "approved_strategy_scope",
+          "identity_runtime_isolation",
+          "unique_scenario_id"
+        ],
+        "reasons": [],
+        "scenario_id": "data_quality_recovery",
+        "status": "PASS"
+      },
+      "config_hash": "ec71dbe6ff44c50158425ce7ddb1bbf882871736214ccd680cc4f1135238ef4a",
+      "event_id": "9e8ad5823d325efb104b2464ebd97a288762945a9f864f86863ddfcc4c69797d",
+      "event_kind": "data_quality_recovery",
+      "expected_invariant": "Recover only after new valid observation; no stale reuse.",
+      "generator_version": "psb-validation-only-syn-evt-v1",
+      "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+      "production_runtime_eligible": false,
+      "provenance": "DERIVED_SCENARIO",
+      "runtime_expected_status": "PASS_WITH_LIMITATION",
+      "scenario_id": "data_quality_recovery",
+      "schema_version": 1,
+      "seed": 20261029,
+      "sequence": 16,
+      "source_status": "SYNTHETIC_SCENARIO_SPEC_ONLY",
+      "strategy_ids": [
+        6,
+        7,
+        8,
+        1,
+        9,
+        5,
+        2
+      ],
+      "synthetic": true,
+      "validation_only": true
+    },
+    {
+      "catalogue_validation": {
+        "checks": [
+          "synthetic_provenance",
+          "versioned_schema",
+          "reproducibility_metadata",
+          "stable_event_and_invariant",
+          "approved_strategy_scope",
+          "identity_runtime_isolation",
+          "unique_scenario_id"
+        ],
+        "reasons": [],
+        "scenario_id": "identity_conflict",
+        "status": "PASS"
+      },
+      "config_hash": "ec71dbe6ff44c50158425ce7ddb1bbf882871736214ccd680cc4f1135238ef4a",
+      "event_id": "6d5470b9f4091fc4b7edf287f9caebfa274b0f6da11abe6a1f718c798ae58ced",
+      "event_kind": "contract_identity_conflict",
+      "expected_invariant": "Unresolved identity stays blocked; no production ID mint/alias.",
+      "generator_version": "psb-validation-only-syn-evt-v1",
+      "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+      "production_runtime_eligible": false,
+      "provenance": "DERIVED_SCENARIO",
+      "runtime_expected_status": "BLOCKED",
+      "scenario_id": "identity_conflict",
+      "schema_version": 1,
+      "seed": 20261029,
+      "sequence": 17,
+      "source_status": "SYNTHETIC_SCENARIO_SPEC_ONLY",
+      "strategy_ids": [
+        6,
+        7,
+        8,
+        1,
+        9,
+        5,
+        2
+      ],
+      "synthetic": true,
+      "validation_only": true
+    },
+    {
+      "catalogue_validation": {
+        "checks": [
+          "synthetic_provenance",
+          "versioned_schema",
+          "reproducibility_metadata",
+          "stable_event_and_invariant",
+          "approved_strategy_scope",
+          "identity_runtime_isolation",
+          "unique_scenario_id"
+        ],
+        "reasons": [],
+        "scenario_id": "unknown_multiplier",
+        "status": "PASS"
+      },
+      "config_hash": "ec71dbe6ff44c50158425ce7ddb1bbf882871736214ccd680cc4f1135238ef4a",
+      "event_id": "002d74f2ce92c6e4739b847dddf6bfe6e4483f02034efe017c933e37c17ddebb",
+      "event_kind": "contract_multiplier_missing",
+      "expected_invariant": "Missing multiplier blocks valuation and sizing.",
+      "generator_version": "psb-validation-only-syn-evt-v1",
+      "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+      "production_runtime_eligible": false,
+      "provenance": "DERIVED_SCENARIO",
+      "runtime_expected_status": "BLOCKED",
+      "scenario_id": "unknown_multiplier",
+      "schema_version": 1,
+      "seed": 20261029,
+      "sequence": 18,
+      "source_status": "SYNTHETIC_SCENARIO_SPEC_ONLY",
+      "strategy_ids": [
+        7,
+        8,
+        1,
+        9,
+        5,
+        2
+      ],
+      "synthetic": true,
+      "validation_only": true
+    },
+    {
+      "catalogue_validation": {
+        "checks": [
+          "synthetic_provenance",
+          "versioned_schema",
+          "reproducibility_metadata",
+          "stable_event_and_invariant",
+          "approved_strategy_scope",
+          "identity_runtime_isolation",
+          "unique_scenario_id"
+        ],
+        "reasons": [],
+        "scenario_id": "limit_wait_cancel_no_price_reach",
+        "status": "PASS"
+      },
+      "config_hash": "ec71dbe6ff44c50158425ce7ddb1bbf882871736214ccd680cc4f1135238ef4a",
+      "event_id": "61b10eeb0e49619b091b96048ea15047fbc0bc69dd9c19d155a5eb2037ade515",
+      "event_kind": "limit_order_wait_cancel",
+      "expected_invariant": "No price reach means no fill; preserve wait/cancel.",
+      "generator_version": "psb-validation-only-syn-evt-v1",
+      "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+      "production_runtime_eligible": false,
+      "provenance": "DERIVED_SCENARIO",
+      "runtime_expected_status": "PASS_WITH_LIMITATION",
+      "scenario_id": "limit_wait_cancel_no_price_reach",
+      "schema_version": 1,
+      "seed": 20261029,
+      "sequence": 19,
+      "source_status": "SYNTHETIC_SCENARIO_SPEC_ONLY",
+      "strategy_ids": [
+        6,
+        7,
+        8,
+        1,
+        9,
+        5,
+        2
+      ],
+      "synthetic": true,
+      "validation_only": true
+    },
+    {
+      "catalogue_validation": {
+        "checks": [
+          "synthetic_provenance",
+          "versioned_schema",
+          "reproducibility_metadata",
+          "stable_event_and_invariant",
+          "approved_strategy_scope",
+          "identity_runtime_isolation",
+          "unique_scenario_id"
+        ],
+        "reasons": [],
+        "scenario_id": "limit_price_reached_insufficient_volume",
+        "status": "PASS"
+      },
+      "config_hash": "ec71dbe6ff44c50158425ce7ddb1bbf882871736214ccd680cc4f1135238ef4a",
+      "event_id": "c9baed2f46ccf7518365301c1bbe3b1ee8f3f51f5e0aaf8c0ed8e538f90191c0",
+      "event_kind": "limit_order_volume_gate",
+      "expected_invariant": "Price reach without volume support is not a fill.",
+      "generator_version": "psb-validation-only-syn-evt-v1",
+      "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+      "production_runtime_eligible": false,
+      "provenance": "DERIVED_SCENARIO",
+      "runtime_expected_status": "PASS_WITH_LIMITATION",
+      "scenario_id": "limit_price_reached_insufficient_volume",
+      "schema_version": 1,
+      "seed": 20261029,
+      "sequence": 20,
+      "source_status": "SYNTHETIC_SCENARIO_SPEC_ONLY",
+      "strategy_ids": [
+        6,
+        7,
+        8,
+        1,
+        9,
+        5,
+        2
+      ],
+      "synthetic": true,
+      "validation_only": true
+    },
+    {
+      "catalogue_validation": {
+        "checks": [
+          "synthetic_provenance",
+          "versioned_schema",
+          "reproducibility_metadata",
+          "stable_event_and_invariant",
+          "approved_strategy_scope",
+          "identity_runtime_isolation",
+          "unique_scenario_id"
+        ],
+        "reasons": [],
+        "scenario_id": "one_order_at_a_time",
+        "status": "PASS"
+      },
+      "config_hash": "ec71dbe6ff44c50158425ce7ddb1bbf882871736214ccd680cc4f1135238ef4a",
+      "event_id": "cea3f904ee48026fde57e36fc7b6451a6cf959fdc92476d458dd4e4a3ffa7eed",
+      "event_kind": "order_serialization",
+      "expected_invariant": "Preserve sequential one-order-at-a-time constraint.",
+      "generator_version": "psb-validation-only-syn-evt-v1",
+      "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+      "production_runtime_eligible": false,
+      "provenance": "DERIVED_SCENARIO",
+      "runtime_expected_status": "PASS_WITH_LIMITATION",
+      "scenario_id": "one_order_at_a_time",
+      "schema_version": 1,
+      "seed": 20261029,
+      "sequence": 21,
+      "source_status": "SYNTHETIC_SCENARIO_SPEC_ONLY",
+      "strategy_ids": [
+        6,
+        7,
+        8,
+        1,
+        9,
+        5,
+        2
+      ],
+      "synthetic": true,
+      "validation_only": true
+    },
+    {
+      "catalogue_validation": {
+        "checks": [
+          "synthetic_provenance",
+          "versioned_schema",
+          "reproducibility_metadata",
+          "stable_event_and_invariant",
+          "approved_strategy_scope",
+          "identity_runtime_isolation",
+          "unique_scenario_id"
+        ],
+        "reasons": [],
+        "scenario_id": "synthetic_input_rejected_real_vts_live",
+        "status": "PASS"
+      },
+      "config_hash": "ec71dbe6ff44c50158425ce7ddb1bbf882871736214ccd680cc4f1135238ef4a",
+      "event_id": "d69e75295b10819094013aa056a15af40457ad18ac1e11442c03961d46de83e0",
+      "event_kind": "provenance_boundary",
+      "expected_invariant": "REAL_VTS/Live reject DERIVED_SCENARIO before routing.",
+      "generator_version": "psb-validation-only-syn-evt-v1",
+      "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+      "production_runtime_eligible": false,
+      "provenance": "DERIVED_SCENARIO",
+      "runtime_expected_status": "BLOCKED",
+      "scenario_id": "synthetic_input_rejected_real_vts_live",
+      "schema_version": 1,
+      "seed": 20261029,
+      "sequence": 22,
+      "source_status": "SYNTHETIC_SCENARIO_SPEC_ONLY",
+      "strategy_ids": [
+        6,
+        7,
+        8,
+        1,
+        9,
+        5,
+        2
+      ],
+      "synthetic": true,
+      "validation_only": true
+    }
+  ],
+  "schema": "SYN-EVT-CATALOGUE",
+  "schema_version": 1,
+  "seed": 20261029,
+  "source_status": "SYNTHETIC_SCENARIO_SPEC_ONLY",
+  "strategy_order": [
+    6,
+    7,
+    8,
+    1,
+    9,
+    5,
+    2
+  ],
+  "synthetic": true,
+  "validation_only": true
+}

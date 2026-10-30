@@ -13,10 +13,10 @@ from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
 from contracts.option_expiry import normalize_option_expiry
-from core.option.option_master import calculate_krx_monthly_option_expiry, calculate_krx_weekly_option_expiry
+
 
 SCHEMA = "reference-canonical-market-tick-v1"
-RULES_VERSION = "project200-synthetic-3m-v3"
+RULES_VERSION = "project200-synthetic-3m-v4-calendar-expiry"
 PATTERNS = ("trend_up", "trend_down", "mean_revert", "high_volatility", "low_volatility", "shock")
 BAR_INTERVAL_MINUTES = 5
 SESSION_OPEN = time(8, 45)
@@ -43,6 +43,47 @@ class Calendar:
             current -= timedelta(days=1)
         return current
 
+
+def _next_trading_day(calendar: Calendar, value: date) -> date:
+    current = value + timedelta(days=1)
+    while not calendar.is_trading_day(current):
+        current += timedelta(days=1)
+    return current
+
+
+def _nth_weekday(year: int, month: int, weekday: int, ordinal: int) -> date:
+    if ordinal < 1 or ordinal > 5:
+        raise RuntimeError(f"SYNTHETIC_EXPIRY_WEEK_ORDINAL_INVALID:{ordinal}")
+    first = date(year, month, 1)
+    offset = (weekday - first.weekday()) % 7
+    result = first + timedelta(days=offset + 7 * (ordinal - 1))
+    if result.month != month:
+        raise RuntimeError(f"SYNTHETIC_EXPIRY_WEEK_ORDINAL_OUT_OF_MONTH:{year}-{month:02d}-W{ordinal}")
+    return result
+
+
+def calculate_synthetic_monthly_option_expiry(year: int, month: int, calendar: Calendar) -> str:
+    """Synthetic-only rule: second Thursday, adjusted to the previous trading day."""
+    candidate = _nth_weekday(year, month, 3, 2)
+    while not calendar.is_trading_day(candidate):
+        candidate -= timedelta(days=1)
+    return format_trading_date(candidate)
+
+
+def calculate_synthetic_weekly_option_expiry(
+    year: int, month: int, week_num: int, calendar: Calendar, *, weekday: int = 3
+) -> str:
+    """Synthetic-only calendar rule; never authoritative production contract metadata."""
+    candidate = _nth_weekday(year, month, weekday, week_num)
+    if weekday == 3 and week_num == 2:
+        raise RuntimeError("SYNTHETIC_WEEKLY_SECOND_THURSDAY_CONFLICTS_WITH_MONTHLY_EXPIRY")
+    if weekday == 0:
+        while not calendar.is_trading_day(candidate):
+            candidate = _next_trading_day(calendar, candidate)
+    else:
+        while not calendar.is_trading_day(candidate):
+            candidate -= timedelta(days=1)
+    return format_trading_date(candidate)
 
 def add_calendar_months(value: date, months: int) -> date:
     """Add calendar months, clamping the day when the target month is shorter."""
@@ -253,7 +294,7 @@ def parse_master(root: Path, calendar: Calendar, path: Path) -> tuple[dict[str, 
             else:
                 # Without the listed weekday family, the expiry is not authoritative.
                 continue
-            expiry = calculate_krx_weekly_option_expiry(year, month, week_num, calendar, weekday=weekday)
+            expiry = calculate_synthetic_weekly_option_expiry(year, month, week_num, calendar, weekday=weekday)
             strike = Decimal(weekly_match.group(2).replace(",", ""))
             multiplier, multiplier_source = contract_multiplier_from_master_row(row)
             weekly_rows.append({"series": series, "month": f"{year:04d}{month:02d}", "expiry": expiry,
@@ -286,7 +327,7 @@ def parse_master(root: Path, calendar: Calendar, path: Path) -> tuple[dict[str, 
     monthly_expiries: dict[str, str] = {}
     for row in selected_monthly:
         month = row["month"]
-        expiry = calculate_krx_monthly_option_expiry(int(month[:4]), int(month[4:]), calendar)
+        expiry = calculate_synthetic_monthly_option_expiry(int(month[:4]), int(month[4:]), calendar)
         monthly_expiries[month] = expiry
         identity = {"instrument_id": row["code"], "month": month, "expiry": expiry,
                     "option_type": row["option_type"], "strike": row["strike"],

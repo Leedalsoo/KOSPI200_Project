@@ -24,6 +24,10 @@ class ReferenceCanonicalMarketTick:
     option_source: str = ""
     underlying_sequence: int = 0
     instrument_id: str = ""
+    # Kept distinct from instrument_id so synthetic identity provenance remains explicit.
+    synthetic_contract_id: str = ""
+    source_instrument_code: str = ""
+    instrument_identity_status: str = ""
     contract_class: str = "monthly"
     contract_month: str = ""
     theoretical_mid_price: float | None = None

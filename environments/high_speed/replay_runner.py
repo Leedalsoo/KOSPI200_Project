@@ -8,7 +8,25 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Iterable
 
+from contracts.clock import ClockProvider
 from environments.virtual.market.canonical import ReferenceCanonicalMarketTick
+
+
+class _SystemClockProvider:
+    """Default wall/pacing/performance clock; injectable in deterministic tests."""
+    def now(self) -> datetime:
+        return datetime.now()
+
+    def monotonic(self) -> float:
+        return time.perf_counter()
+
+    def sleep_policy(self, seconds: float) -> None:
+        if seconds < 0:
+            raise ValueError("seconds must be non-negative")
+        if seconds > 0:
+            time.sleep(seconds)
+
+from environments.high_speed.synthetic_replay_adapter import SyntheticReplayAdapter
 
 @dataclass(frozen=True)
 class ReplayReport:
@@ -23,8 +41,11 @@ class ReplayReport:
 
 class HighSpeedReplayRunner:
     """Period-independent replay runner for synthetic or historical canonical ticks."""
-    def __init__(self, dataset_path: str | Path):
+    def __init__(self, dataset_path: str | Path, *, synthetic_adapter: SyntheticReplayAdapter | None = None,
+                 clock: ClockProvider | None = None):
         self.root = Path(dataset_path)
+        self.synthetic_adapter = synthetic_adapter
+        self.clock = clock or _SystemClockProvider()
 
     def _files(self, start: str | None, end: str | None) -> list[Path]:
         files = sorted(self.root.glob("*.jsonl"))
@@ -52,11 +73,14 @@ class HighSpeedReplayRunner:
                         raise ValueError("SYNTHETIC_DATASET_PROVENANCE_REQUIRED")
                     if record.get("schema") != "reference-canonical-market-tick-v1":
                         raise ValueError("UNSUPPORTED_SYNTHETIC_DATASET_SCHEMA")
+                    if self.synthetic_adapter is not None:
+                        record = self.synthetic_adapter.adapt_record(record)
                     yield ReferenceCanonicalMarketTick(**record["tick"])
 
     @staticmethod
     def _sleep_for_speed(previous: ReferenceCanonicalMarketTick | None,
-                         current: ReferenceCanonicalMarketTick, speed: float) -> None:
+                         current: ReferenceCanonicalMarketTick, speed: float,
+                         clock: ClockProvider) -> None:
         if speed <= 0:
             raise ValueError("REPLAY_SPEED_MUST_BE_POSITIVE")
         if speed == float("inf") or previous is None:
@@ -66,7 +90,7 @@ class HighSpeedReplayRunner:
             - datetime.fromisoformat(previous.timestamp)
         ).total_seconds()
         if delta > 0:
-            time.sleep(delta / speed)
+            clock.sleep_policy(delta / speed)
     def run(
         self,
         *,
@@ -76,12 +100,12 @@ class HighSpeedReplayRunner:
         on_event: Callable[[ReferenceCanonicalMarketTick], None] | None = None,
         max_events: int | None = None,
     ) -> ReplayReport:
-        started = time.perf_counter()
+        started = self.clock.monotonic()
         count = 0
         first = None
         last = None
         for tick in self.events(start, end):
-            self._sleep_for_speed(last, tick, speed)
+            self._sleep_for_speed(last, tick, speed, self.clock)
             if first is None:
                 first = tick.timestamp
             if on_event is not None:
@@ -90,7 +114,7 @@ class HighSpeedReplayRunner:
             count += 1
             if max_events is not None and count >= max_events:
                 break
-        elapsed = max(time.perf_counter() - started, 1e-9)
+        elapsed = max(self.clock.monotonic() - started, 1e-9)
         return ReplayReport(
             dataset=self.root.name,
             events=count,

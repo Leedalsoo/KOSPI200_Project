@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from uuid import uuid4
 from decimal import Decimal
@@ -11,7 +11,10 @@ from application.bootstrap import create_virtual_runtime_bootstrap
 from application.composition.automated_virtual_runtime_factory import attach_standard_automated_loop
 from environments.high_speed.replay_runner import HighSpeedReplayRunner
 from environments.high_speed.synthetic_runtime_sources import SyntheticRuntimeSources, build_synthetic_option_master
+from environments.high_speed.synthetic_replay_adapter import SyntheticReplayAdapter
 from contracts.strategy_runtime_status import StrategyRuntimeStatus
+from contracts.clock import ClockProvider
+from environments.high_speed.replay_trace import ReplayExecutionObserver, ReplayLogMode, ReplayTraceController
 
 
 @dataclass(frozen=True)
@@ -35,24 +38,109 @@ class HighSpeedVirtualReplayReport:
     realized_pnl: float
     unrealized_pnl: float
     net_pnl: float
+    trace_status: str = "DISABLED_FAST_MODE"
+    execution_observer_summary: dict[str, object] | None = None
+
+
+def _publish_contract_scoped_replay_quote(tick, *, option_master, market, order_book) -> None:
+    """Publish only the quote carried by this exact synthetic option-contract tick."""
+    from math import isfinite
+    from decimal import Decimal
+    from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
+
+    synthetic_id = getattr(tick, "synthetic_contract_id", None)
+    instrument_id = getattr(tick, "instrument_id", None)
+    if not isinstance(synthetic_id, str) or not synthetic_id.startswith("SYNTHETIC_CONTRACT:"):
+        raise ValueError("DERIVED_SCENARIO_SYNTHETIC_CONTRACT_ID_REQUIRED")
+    if instrument_id != synthetic_id:
+        raise ValueError("DERIVED_SCENARIO_INSTRUMENT_ID_MISMATCH")
+    identity = option_master.get_contract_identity(synthetic_id)
+    if identity is None:
+        raise ValueError("DERIVED_SCENARIO_OPTION_CONTRACT_IDENTITY_REQUIRED")
+    if getattr(identity, "stnd_iscd", None) is not None:
+        raise ValueError("DERIVED_SCENARIO_STANDARD_ID_PROMOTION_FORBIDDEN")
+    if getattr(identity, "shrn_iscd", None) != synthetic_id:
+        raise ValueError("DERIVED_SCENARIO_CONTRACT_IDENTITY_MISMATCH")
+
+    try:
+        tick_expiry = require_exact_option_expiry(tick.expiry)
+        identity_expiry = require_exact_option_expiry(identity.expiry)
+    except (CanonicalOptionExpiryError, TypeError, ValueError) as exc:
+        raise ValueError("DERIVED_SCENARIO_EXACT_EXPIRY_REQUIRED") from exc
+    if tick_expiry != identity_expiry:
+        raise ValueError("DERIVED_SCENARIO_EXPIRY_IDENTITY_MISMATCH")
+    if str(tick.option_type).upper() != str(identity.option_type).upper():
+        raise ValueError("DERIVED_SCENARIO_OPTION_TYPE_IDENTITY_MISMATCH")
+    if Decimal(str(tick.strike_price)) != Decimal(str(identity.strike)):
+        raise ValueError("DERIVED_SCENARIO_STRIKE_IDENTITY_MISMATCH")
+
+    try:
+        bid, ask, last = float(tick.bid_price), float(tick.ask_price), float(tick.last_price)
+        multiplier = float(identity.contract_multiplier)
+        tick_multiplier = float(tick.contract_multiplier)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("DERIVED_SCENARIO_CONTRACT_QUOTE_INVALID") from exc
+    if not all(isfinite(value) and value > 0 for value in (bid, ask, last, multiplier, tick_multiplier)):
+        raise ValueError("DERIVED_SCENARIO_CONTRACT_QUOTE_INVALID")
+    if ask <= bid:
+        raise ValueError("DERIVED_SCENARIO_CONTRACT_BID_ASK_INVALID")
+    if tick_multiplier != multiplier:
+        raise ValueError("DERIVED_SCENARIO_MULTIPLIER_IDENTITY_MISMATCH")
+
+    option_type = str(identity.option_type).upper()
+    strike = float(identity.strike)
+    market.register_replay_option_quote(
+        symbol=synthetic_id,
+        option_type=option_type,
+        strike=strike,
+        expiry=tick_expiry,
+        bid=bid,
+        ask=ask,
+        last=last,
+        timestamp=tick.timestamp,
+        contract_multiplier=multiplier,
+    )
+    # Never route this validation-only identity through a Standard instrument ID.
+    order_book.update_bid_ask(bid, ask, instrument_id=synthetic_id)
 
 
 class HighSpeedVirtualRuntimeReplayRunner:
     """Feed high-speed replay events through the existing Virtual Runtime boundary."""
 
     def __init__(self, dataset: str | Path, *, run_id: str | None = None, strategy_keys=None,
-                 track3_runtime_input_source=None, initial_capital: float = 250_000_000.0, track5_opening_gap_points: float = 0.0):
+                 track3_runtime_input_source=None, initial_capital: float = 250_000_000.0, track5_opening_gap_points: float = 0.0,
+                 validation_only_synthetic: bool = False, clock: ClockProvider | None = None,
+                 log_mode: ReplayLogMode | str = ReplayLogMode.FAST, trace_output: str | Path | None = None):
         self.dataset = Path(dataset)
+        self.validation_only_synthetic = bool(validation_only_synthetic)
         self.run_id = run_id or f"HS-{uuid4()}"
         self.strategy_keys = tuple(strategy_keys) if strategy_keys else None
         self.track3_runtime_input_source = track3_runtime_input_source
         self.initial_capital = float(initial_capital)
         self.track5_opening_gap_points = float(track5_opening_gap_points)
+        self.clock = clock
+        self.trace = ReplayTraceController(log_mode, output_path=trace_output)
 
     def run(self, *, start: str | None = None, end: str | None = None,
             speed: float = float("inf"), max_events: int | None = None) -> HighSpeedVirtualReplayReport:
-        synthetic_sources = SyntheticRuntimeSources(track5_opening_gap_points=self.track5_opening_gap_points)
-        option_master = build_synthetic_option_master(self.dataset)
+        self.trace.emit(
+            "replay_started", run_id=self.run_id,
+            payload={"dataset": self.dataset.name, "log_mode": self.trace.mode.value,
+                     "strategy_keys": list(self.strategy_keys) if self.strategy_keys else None,
+                     "validation_only_synthetic": self.validation_only_synthetic},
+        )
+        # P5 requires an explicit validation-only mode. Legacy replay keeps its existing
+        # input contract and is never silently reinterpreted as a synthetic-ID dataset.
+        synthetic_adapter = SyntheticReplayAdapter(self.dataset) if self.validation_only_synthetic else None
+        synthetic_sources = SyntheticRuntimeSources(
+            track5_opening_gap_points=self.track5_opening_gap_points, clock=self.clock
+        )
+        if synthetic_adapter is None:
+            option_master = build_synthetic_option_master(self.dataset)
+        else:
+            option_master = build_synthetic_option_master(
+                self.dataset, validation_only_adapter=synthetic_adapter
+            )
         bootstrap = create_virtual_runtime_bootstrap(
             option_master=option_master, initial_capital=self.initial_capital
         )
@@ -80,6 +168,15 @@ class HighSpeedVirtualRuntimeReplayRunner:
             reports_reader=replay_bridge.group_reports,
             group_ids_reader=lambda: tuple(replay_bridge.position_groups.all().keys()),
         )
+        observer = None
+        if self.trace.mode is ReplayLogMode.DETAILED:
+            observer = ReplayExecutionObserver(self.trace, run_id=self.run_id)
+            try:
+                observer.attach(loop.broker_adapter, adapter_name="single_leg")
+                observer.attach(replay_bridge.ack, adapter_name="multi_leg")
+            except Exception:
+                observer.detach()
+                raise
         totals = {"events": 0, "signals": 0, "approved": 0, "routed": 0, "filled": 0, "rejected": 0}
         execution_ids: list[str] = []
         multi_leg_decisions = 0
@@ -116,60 +213,67 @@ class HighSpeedVirtualRuntimeReplayRunner:
                     account_source.update_tick_price(quote["last"], instrument_id=symbol)
 
         def publish(tick) -> None:
+            if observer is not None:
+                observer.event_sequence = totals["events"]
             # Keep the DERIVED_SCENARIO runtime-source snapshot aligned with the
             # current replay tick before StandardRuntimeInputProvider consumes it.
             synthetic_sources.set_tick(tick)
             spot = float(tick.underlying_price)
-            base_last = float(tick.last_price)
-            # DERIVED_SCENARIO quote materialization follows the authoritative synthetic
-            # Option Master strike/expiry set so Strategy-selected legs always have a
-            # corresponding scenario quote. This does not alter REAL_VTS evidence.
-            current_expiry = str(tick.expiry).replace("-", "")[:8]
-            identities = tuple(
-                identity
-                for identity in bootstrap.bundle.option_master.list_contract_identities()
-                if str(identity.expiry).replace("-", "")[:8] == current_expiry
-            )
-            if not identities:
-                raise ValueError("DERIVED_SCENARIO_OPTION_MASTER_EXPIRY_REQUIRED")
-            grid_center = round(spot / 2.5) * 2.5
-            requested_identities = list(identities)
-            for offset in range(-10, 11):
-                strike = grid_center + offset * 2.5
-                for option_type in ("CALL", "PUT"):
-                    identity = bootstrap.bundle.option_master.find_contract_identity(
-                        current_expiry, option_type, Decimal(str(strike))
-                    )
-                    if identity is not None:
-                        requested_identities.append(identity)
-            seen_keys: set[tuple[str, float]] = set()
-            for identity in requested_identities:
-                strike = float(identity.strike)
-                option_type = str(identity.option_type).upper()
-                key = (option_type, strike)
-                if key in seen_keys:
-                    continue
-                seen_keys.add(key)
-                intrinsic = max(0.0, spot - strike) if option_type == "CALL" else max(0.0, strike - spot)
-                mid = max(0.01, base_last * 0.35 + intrinsic * 0.10)
-                bid = max(0.01, mid - 0.02)
-                ask = mid + 0.02
-                symbol = identity.shrn_iscd or tick.symbol
-                bootstrap.bundle.market.register_replay_option_quote(
-                    symbol=symbol, option_type=option_type,
-                    strike=strike, expiry=current_expiry, bid=bid,
-                    ask=ask, last=mid, timestamp=tick.timestamp,
-                    contract_multiplier=float(identity.contract_multiplier or tick.contract_multiplier),
+            if self.validation_only_synthetic:
+                _publish_contract_scoped_replay_quote(
+                    tick,
+                    option_master=bootstrap.bundle.option_master,
+                    market=bootstrap.bundle.market,
+                    order_book=vssf_runtime.order_book,
                 )
-                # The DERIVED_SCENARIO quote must cross the same authoritative
-                # VSSF order-book boundary used by Virtual Broker execution.
-                # Market registration alone is not an execution quote.
-                for instrument_key in tuple(dict.fromkeys(
-                    value for value in (identity.stnd_iscd, identity.shrn_iscd, symbol) if value
-                )):
-                    vssf_runtime.order_book.update_bid_ask(
-                        bid, ask, instrument_id=instrument_key
+            else:
+                # Preserve the legacy non-synthetic replay contract. The P5
+                # DERIVED_SCENARIO path above must never infer other contracts'
+                # quotes from this row's option premium.
+                base_last = float(tick.last_price)
+                current_expiry = str(tick.expiry).replace("-", "")[:8]
+                identities = tuple(
+                    identity
+                    for identity in bootstrap.bundle.option_master.list_contract_identities()
+                    if str(identity.expiry).replace("-", "")[:8] == current_expiry
+                )
+                if not identities:
+                    raise ValueError("DERIVED_SCENARIO_OPTION_MASTER_EXPIRY_REQUIRED")
+                grid_center = round(spot / 2.5) * 2.5
+                requested_identities = list(identities)
+                for offset in range(-10, 11):
+                    strike = grid_center + offset * 2.5
+                    for option_type in ("CALL", "PUT"):
+                        identity = bootstrap.bundle.option_master.find_contract_identity(
+                            current_expiry, option_type, Decimal(str(strike))
+                        )
+                        if identity is not None:
+                            requested_identities.append(identity)
+                seen_keys: set[tuple[str, float]] = set()
+                for identity in requested_identities:
+                    strike = float(identity.strike)
+                    option_type = str(identity.option_type).upper()
+                    key = (option_type, strike)
+                    if key in seen_keys:
+                        continue
+                    seen_keys.add(key)
+                    intrinsic = max(0.0, spot - strike) if option_type == "CALL" else max(0.0, strike - spot)
+                    mid = max(0.01, base_last * 0.35 + intrinsic * 0.10)
+                    bid = max(0.01, mid - 0.02)
+                    ask = mid + 0.02
+                    symbol = identity.shrn_iscd or tick.symbol
+                    bootstrap.bundle.market.register_replay_option_quote(
+                        symbol=symbol, option_type=option_type,
+                        strike=strike, expiry=current_expiry, bid=bid,
+                        ask=ask, last=mid, timestamp=tick.timestamp,
+                        contract_multiplier=float(identity.contract_multiplier or tick.contract_multiplier),
                     )
+                    for instrument_key in tuple(dict.fromkeys(
+                        value for value in (identity.stnd_iscd, identity.shrn_iscd, symbol) if value
+                    )):
+                        vssf_runtime.order_book.update_bid_ask(
+                            bid, ask, instrument_id=instrument_key
+                        )
             bootstrap.bundle.market.publish_replay_tick(tick)
             result = loop.last_result
             if result is None:
@@ -194,11 +298,41 @@ class HighSpeedVirtualRuntimeReplayRunner:
                     filled_quantity=previous.filled_quantity + status.filled_quantity,
                 )
             mark_positions(spot)
+            self.trace.emit(
+                "market_event", run_id=self.run_id, event_sequence=totals["events"] - 1,
+                timestamp=tick.timestamp,
+                payload={
+                    "seq_id": getattr(tick, "seq_id", None),
+                    "instrument_id": getattr(tick, "instrument_id", None),
+                    "symbol": getattr(tick, "symbol", None),
+                    "underlying_price": spot,
+                    "signals": getattr(result, "signals", 0),
+                    "approved": getattr(result, "approved", 0),
+                    "routed": getattr(result, "routed", 0),
+                    "filled": getattr(result, "filled", 0),
+                    "rejected": getattr(result, "rejected", 0),
+                    "execution_ids": list(getattr(result, "execution_ids", ())),
+                    "cumulative_counts": dict(totals),
+                    "cumulative_strategy_signal_counts": dict(sorted(strategy_signal_counts.items())),
+                    "realized_pnl": float(vssf_runtime.account.realized_pnl),
+                    "unrealized_pnl": float(vssf_runtime.account.unrealized_pnl),
+                    "net_pnl": float(vssf_runtime.account.realized_pnl + vssf_runtime.account.unrealized_pnl),
+                    "order_records_status": (observer.summary()["order_records_status"] if observer is not None else "NOT_CAPTURED_FAST_MODE"),
+                    "fill_records_status": (observer.summary()["fill_records_status"] if observer is not None else "AGGREGATE_ONLY"),
+                    "execution_observer": (observer.summary() if observer is not None else {"status": "DISABLED_FAST_MODE"}),
+                },
+            )
 
-        report = HighSpeedReplayRunner(self.dataset).run(
-            start=start, end=end, speed=speed, on_event=publish, max_events=max_events,
-        )
-        return HighSpeedVirtualReplayReport(
+        try:
+            report = HighSpeedReplayRunner(
+                self.dataset, synthetic_adapter=synthetic_adapter, clock=self.clock
+            ).run(
+                start=start, end=end, speed=speed, on_event=publish, max_events=max_events,
+            )
+        finally:
+            if observer is not None:
+                observer.detach()
+        final_report = HighSpeedVirtualReplayReport(
             dataset=report.dataset,
             run_id=self.run_id,
             events=totals["events"],
@@ -218,7 +352,29 @@ class HighSpeedVirtualRuntimeReplayRunner:
             realized_pnl=float(vssf_runtime.account.realized_pnl),
             unrealized_pnl=float(vssf_runtime.account.unrealized_pnl),
             net_pnl=float(vssf_runtime.account.realized_pnl + vssf_runtime.account.unrealized_pnl),
+            trace_status=self.trace.status,
+            execution_observer_summary=(observer.summary() if observer is not None else {"status": "DISABLED_FAST_MODE"}),
         )
+        self.trace.emit(
+            "replay_finished", run_id=self.run_id,
+            payload={
+                "events": final_report.events, "signals": final_report.signals,
+                "approved": final_report.approved, "routed": final_report.routed,
+                "filled": final_report.filled, "rejected": final_report.rejected,
+                "execution_ids": list(final_report.execution_ids),
+                "realized_pnl": final_report.realized_pnl,
+                "unrealized_pnl": final_report.unrealized_pnl, "net_pnl": final_report.net_pnl,
+                "exhausted": final_report.exhausted,
+                "execution_observer": (observer.summary() if observer is not None else {"status": "DISABLED_FAST_MODE"}),
+            },
+        )
+        final_report = replace(
+            final_report,
+            trace_status=self.trace.status,
+            execution_observer_summary=(observer.summary() if observer is not None else {"status": "DISABLED_FAST_MODE"}),
+        )
+        return final_report
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", default="data/synthetic_market_data/1y_5min_v1")
@@ -226,11 +382,25 @@ def main() -> None:
     parser.add_argument("--end")
     parser.add_argument("--speed", type=float, default=float("inf"))
     parser.add_argument("--max-events", type=int)
+    parser.add_argument("--log-mode", choices=[mode.value for mode in ReplayLogMode], default=ReplayLogMode.FAST.value)
+    parser.add_argument("--trace-output", help="New JSONL path required for --log-mode detailed; existing files are never overwritten.")
+    parser.add_argument(
+        "--validation-only-synthetic", action="store_true",
+        help="Enable the fail-closed P5 DERIVED_SCENARIO identity adapter; never for REAL_VTS/Live.",
+    )
     args = parser.parse_args()
-    result = HighSpeedVirtualRuntimeReplayRunner(args.dataset).run(
+    result = HighSpeedVirtualRuntimeReplayRunner(
+        args.dataset, validation_only_synthetic=args.validation_only_synthetic,
+        log_mode=args.log_mode, trace_output=args.trace_output,
+    ).run(
         start=args.start, end=args.end, speed=args.speed, max_events=args.max_events,
     )
     print(f"DATASET={result.dataset}")
+    print(f"LOG_MODE={args.log_mode}")
+    print(f"TRACE_STATUS={result.trace_status}")
+    print(f"EXECUTION_OBSERVER={result.execution_observer_summary}")
+    if args.log_mode == ReplayLogMode.DETAILED.value:
+        print(f"TRACE_OUTPUT={args.trace_output}")
     print(f"RUN_ID={result.run_id}")
     print(f"EVENTS={result.events}")
     print(f"SIGNALS={result.signals}")

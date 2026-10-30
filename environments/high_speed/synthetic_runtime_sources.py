@@ -6,6 +6,7 @@ pretending that synthetic values are authoritative market evidence.
 """
 from __future__ import annotations
 from contracts.trading_date import format_trading_date, parse_trading_date
+from contracts.clock import ClockProvider
 
 import json
 from collections import deque
@@ -29,7 +30,8 @@ SYNTHETIC_SOURCE = "SYNTHETIC:high-speed-market-model-v2"
 
 
 class SyntheticRuntimeSources:
-    def __init__(self, *, track5_opening_gap_points: Decimal = Decimal("0")) -> None:
+    def __init__(self, *, track5_opening_gap_points: Decimal = Decimal("0"), clock: ClockProvider | None = None) -> None:
+        self._clock = clock
         self._tick: Any | None = None
         self._iv: dict[tuple[str, str, Decimal], Decimal] = {}
         self._history: deque[tuple[datetime, Decimal, Decimal]] = deque(maxlen=60)
@@ -50,7 +52,7 @@ class SyntheticRuntimeSources:
     @property
     def snapshot(self):
         from contracts.track4_kis_greeks_provider import Track4KisGreeksSnapshot
-        observed_at = self._tick.timestamp if self._tick is not None else datetime.now().isoformat()
+        observed_at = self._tick.timestamp if self._tick is not None else (self._clock.now().isoformat() if self._clock is not None else datetime.now().isoformat())
         instrument_id = self._tick.instrument_id if self._tick is not None else "SYNTHETIC"
         return Track4KisGreeksSnapshot(
             instrument_id=instrument_id, observed_at=observed_at,
@@ -190,7 +192,7 @@ class SyntheticRuntimeSources:
         return False
 
     def snapshot(self) -> RiskGuardStatusSnapshot:
-        observed = datetime.fromisoformat(self._tick.timestamp) if self._tick is not None else datetime.now()
+        observed = datetime.fromisoformat(self._tick.timestamp) if self._tick is not None else (self._clock.now() if self._clock is not None else datetime.now())
         return RiskGuardStatusSnapshot(observed, True, False, SensorLevel.GREEN, SYNTHETIC_SOURCE, "SYNTHETIC-HS-V2")
 
     def upcoming(self, *, run_id: str, as_of) -> object | None:
@@ -258,15 +260,25 @@ class SyntheticOptionContractMaster(InMemoryOptionContractMaster):
 
 
 
-def build_synthetic_option_master(dataset: str | Path) -> InMemoryOptionContractMaster:
-    """Load only source-supplied exact-date synthetic identities."""
+def build_synthetic_option_master(
+    dataset: str | Path, *, validation_only_adapter=None
+) -> InMemoryOptionContractMaster:
+    """Build a synthetic Option Master; adapter mode never assigns Standard IDs."""
     master = SyntheticOptionContractMaster(auto_load_kis_source=False)
     root = Path(dataset)
+    if validation_only_adapter is not None and Path(validation_only_adapter.root) != root:
+        raise ValueError("SYNTHETIC_REPLAY_ADAPTER_DATASET_MISMATCH")
     for path in sorted(root.glob("*.jsonl")):
         with path.open(encoding="utf-8") as handle:
             for line in handle:
                 record = json.loads(line)
                 tick = record["tick"]
+                if validation_only_adapter is not None:
+                    record = validation_only_adapter.adapt_record(record)
+                    tick = record["tick"]
+                    synthetic_id = str(tick["synthetic_contract_id"])
+                else:
+                    synthetic_id = str(tick["instrument_id"])
                 from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
                 try:
                     exact_expiry = require_exact_option_expiry(str(tick.get("expiry", "")))
@@ -275,15 +287,15 @@ def build_synthetic_option_master(dataset: str | Path) -> InMemoryOptionContract
                     # not a source from which to synthesize an expiry.
                     continue
                 identity = KisOptionContractIdentity(
-                    shrn_iscd=str(tick["instrument_id"]),
-                    stnd_iscd=str(tick["instrument_id"]),
+                    shrn_iscd=synthetic_id,
+                    stnd_iscd=None if validation_only_adapter is not None else str(tick["instrument_id"]),
                     expiry=exact_expiry,
                     option_type=str(tick["option_type"]),
                     strike=Decimal(str(tick["strike_price"])),
                     info_type="SYNTHETIC",
                     contract_multiplier=Decimal(str(tick["contract_multiplier"])),
                 )
-                existing = master.get_contract_identity(str(tick["instrument_id"]))
+                existing = master.get_contract_identity(synthetic_id)
                 if existing is not None:
                     if existing == identity:
                         continue
