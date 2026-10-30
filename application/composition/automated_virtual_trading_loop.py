@@ -107,6 +107,92 @@ class AutomatedVirtualTradingLoop:
         self.risk_gate = RiskGate(RiskEngine(risk_config or RiskConfig(), margin_engine=vssf.margin_engine), risk_guard_status_source=risk_guard_status_source)
         self._last_result: AutomatedTickResult | None = None
         self._last_strategy_status: tuple[StrategyRuntimeStatus, ...] = ()
+        self._quote_only_events: list[dict[str, object]] = []
+
+    @property
+    def quote_only_events(self) -> tuple[dict[str, object], ...]:
+        return tuple(self._quote_only_events)
+
+    def on_quote_only_tick(self, tick) -> dict[str, object]:
+        """Evaluate quote-only inputs without inventing trade fields or routing orders."""
+        event: dict[str, object] = {
+            "timestamp": tick.timestamp,
+            "seq_id": tick.seq_id,
+            "symbol": tick.symbol,
+            "source": getattr(tick, "option_source", None) or "UNKNOWN",
+            "status": "BLOCKED",
+            "reason": None,
+            "evaluation_mode": "QUOTE_ONLY_NO_EXECUTION",
+            "order_routing": "NOT_INVOKED",
+            "last_price": getattr(tick, "last_price", None),
+            "volume": getattr(tick, "volume", None),
+        }
+        bid_price = getattr(tick, "bid_price", None)
+        ask_price = getattr(tick, "ask_price", None)
+        event["bid_price"] = bid_price
+        event["ask_price"] = ask_price
+        try:
+            valid_book = (
+                bid_price is not None
+                and ask_price is not None
+                and Decimal(str(bid_price)) > 0
+                and Decimal(str(ask_price)) > 0
+                and Decimal(str(ask_price)) >= Decimal(str(bid_price))
+            )
+        except Exception:
+            valid_book = False
+        if not valid_book:
+            event["reason"] = "AUTHORITATIVE_TWO_SIDED_QUOTE_UNAVAILABLE"
+            self._quote_only_events.append(event)
+            return event
+
+        underlying_price = getattr(tick, "underlying_price", None)
+        if underlying_price is None or Decimal(str(underlying_price)) <= 0:
+            event["reason"] = "AUTHORITATIVE_UNDERLYING_PRICE_UNAVAILABLE"
+            self._quote_only_events.append(event)
+            return event
+
+        try:
+            as_of = datetime.fromisoformat(tick.timestamp)
+            state = MarketState(
+                as_of=as_of,
+                ticks={"KOSPI200": type("Tick", (), {
+                    "instrument_id": "KOSPI200",
+                    "observed_at": as_of,
+                    "price": Decimal(str(underlying_price)),
+                    "volume": None,
+                })()},
+                quality={},
+            )
+            contexts = self.context_builder(tick, state)
+            result = self.strategy_hub.run(contexts)
+            strategy_results: dict[str, dict[str, object]] = {}
+            for strategy_id in contexts:
+                strategy_results[strategy_id] = {
+                    "signals": sum(
+                        1 for signal in result.signals
+                        if getattr(signal, "strategy_id", None) == strategy_id
+                    ),
+                    "failures": [
+                        {
+                            "stage": failure.stage,
+                            "error_type": failure.error_type,
+                            "message": failure.message,
+                        }
+                        for failure in result.failures
+                        if failure.strategy_id == strategy_id
+                    ],
+                }
+            event["strategy_results"] = strategy_results
+            event["status"] = "EVALUATED_NO_EXECUTION"
+            event["reason"] = (
+                "STRATEGY_INPUTS_EVALUATED; NO ORDER/DECISION/EXECUTION PATH INVOKED"
+            )
+        except Exception as exc:
+            event["status"] = "EVALUATION_FAILED"
+            event["reason"] = f"{type(exc).__name__}:{exc}"
+        self._quote_only_events.append(event)
+        return event
 
     @property
     def last_result(self) -> AutomatedTickResult | None:

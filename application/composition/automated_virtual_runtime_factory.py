@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from decimal import Decimal
 
 from application.composition.automated_virtual_trading_loop import AutomatedVirtualTradingLoop
 from application.composition.standard_runtime_input_provider import StandardRuntimeInputProvider
@@ -13,6 +14,7 @@ from application.composition.track2_option_contract_source import Track2OptionCo
 from application.composition.track6_option_contract_source import Track6OptionContractSource
 from application.composition.track7_option_contract_source import Track7OptionContractSource
 from application.composition.track8_option_contract_source import Track8OptionContractSource
+from application.composition.track9_option_contract_source import Track9OptionContractSource
 from core.strategy.track7_volatility_skew_weekly_insurance import Track7VolatilitySkewWeeklyInsurance
 from core.strategy.track5_gap_divergence import Track5GapDivergence
 from contracts.types import OptionInstrumentIdentity
@@ -235,6 +237,15 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
 
 
 
+    track9_option_contract_source = (
+        Track9OptionContractSource(
+            orderbook_source=historical_observation_option_source,
+            s1_position_lot_store=multi_leg_bridge.position_lot_store,
+            run_id=run_id,
+        )
+        if synthetic_runtime_sources is None and historical_observation_option_source is not None
+        else None
+    )
     provider = StandardRuntimeInputProvider(
         bootstrap.bundle.market,
         track9_fee_ledger=fee_ledger,
@@ -258,6 +269,7 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         track6_option_contract_source=Track6OptionContractSource(bootstrap.bundle.option_master),
         track7_option_contract_source=Track7OptionContractSource(bootstrap.bundle.option_master),
         track8_option_contract_source=Track8OptionContractSource(bootstrap.bundle.option_master),
+        track9_option_contract_source=track9_option_contract_source,
         kospi200_daily_source=kospi200_daily_source,
         track6_volatility_source=track6_volatility_source,
         track1_fence_type_source=track1_fence_type_source,
@@ -422,6 +434,16 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         if str(getattr(proposal, "side", "")).upper() == "SELL":
             strategy = registry.get("track7_volatility_skew_weekly_insurance", "1.0")
             strategy.mark_exit_pending()
+            tag = str(getattr(proposal, "tag_id", "") or "")
+            if tag in {"WEEKLY_INSURANCE_CLOSE_PUT", "WEEKLY_INSURANCE_CLOSE_CALL"}:
+                return multi_leg_bridge.build_close_plan_from_open_lots(
+                    strategy_id="track7_volatility_skew_weekly_insurance",
+                    purpose=tag,
+                    asset_type="OPTION",
+                    option_type=str(getattr(proposal, "option_type", "") or ""),
+                    strike=Decimal(str(getattr(proposal, "strike"))),
+                    expiry=strategy.state.expiry,
+                )
             return multi_leg_bridge.build_close_plan_from_open_lots(
                 strategy_id="track7_volatility_skew_weekly_insurance",
                 purpose="WEEKLY_INSURANCE_CLOSE",
@@ -434,6 +456,17 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
     def resolve_track8(evaluation, canonical):
         proposal = getattr(evaluation.result, "execution_proposal", None)
         if proposal is not None and str(getattr(proposal, "side", "")).upper() == "SELL":
+            strategy = registry.get("track8_macro_regime_monthly_strangle", "2.0")
+            tag = str(getattr(proposal, "tag_id", "") or "")
+            if tag in {"MONTHLY_STRANGLE_CLOSE_CALL", "MONTHLY_STRANGLE_CLOSE_PUT"}:
+                return multi_leg_bridge.build_close_plan_from_open_lots(
+                    strategy_id="track8_macro_regime_monthly_strangle",
+                    purpose=tag,
+                    asset_type="OPTION",
+                    option_type=str(getattr(proposal, "option_type", "") or ""),
+                    strike=Decimal(str(getattr(proposal, "strike"))),
+                    expiry=strategy.state.expiry,
+                )
             return multi_leg_bridge.build_close_plan_from_open_lots(
                 strategy_id="track8_macro_regime_monthly_strangle",
                 purpose="MONTHLY_STRANGLE_CLOSE",
@@ -467,6 +500,11 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
                 strategy_id="track5_gap_divergence",
                 purpose="TRACK5_GAP_HEDGE_OPTION_EXIT",
                 asset_type="OPTION", leg_id_prefix="OPTION_EXIT",
+            )
+        if str(getattr(proposal, "asset_type", "")).upper() == "OPTION" and str(getattr(proposal, "side", "")).upper() == "BUY":
+            return strategy.build_execution_plan(
+                f"{run_id}-{canonical.signal_id}",
+                proposal=proposal,
             )
         futures_identity = futures_identity_for_evaluation(evaluation)
         return strategy.build_execution_plan(
@@ -518,6 +556,9 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         risk_guard_status_source=(risk_guard_status_source or synthetic_runtime_sources),
     )
     bootstrap.bundle.market.subscribe(loop.on_tick)
+    subscribe_quote_only = getattr(bootstrap.bundle.market, "subscribe_quote_only", None)
+    if callable(subscribe_quote_only):
+        subscribe_quote_only(loop.on_quote_only_tick)
     loop.track2_market_observation_sink = track2_market_observation_sink
     # Expose the actual execution bridge used by the loop so Run/Control Tower
     # read models observe the same PositionGroup/ExecutionReport registry.

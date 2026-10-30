@@ -16,6 +16,8 @@ class VMSMarketTickProjectionAdapter:
         self._instrument_id = instrument_id
 
     def project(self, tick: ReferenceCanonicalMarketTick) -> CanonicalMarketTick:
+        if tick.last_price is None or tick.volume is None:
+            raise ValueError("REFERENCE_TICK_TRADE_FIELDS_UNAVAILABLE")
         if tick.last_price <= 0:
             raise ValueError("reference tick last_price must be positive")
         try:

@@ -242,6 +242,8 @@
         "price.last",
         "calendar.is_new_week_start",
         "calendar.is_expiry_day",
+        "volatility.active",
+        "volatility.base",
         "options.track7_put_mark_price",
         "options.track7_call_mark_price"
       ],
@@ -271,6 +273,7 @@
       ],
       "required_analytics": [
         "options.dte",
+        "options.expiry_date",
         "options.call_iv",
         "options.put_iv",
         "options.atm_iv",
@@ -278,6 +281,8 @@
         "options.put_strike",
         "options.call_contract_multiplier",
         "options.put_contract_multiplier",
+        "options.track8_call_mark_price",
+        "options.track8_put_mark_price",
         "options.moneyness",
         "market.current_regime",
         "volatility.active",

@@ -181,6 +181,8 @@ class VirtualMultiLegExecutionBridge:
     def build_close_plan_from_open_lots(
         self, *, strategy_id: str, purpose: str,
         asset_type: str | None = None, leg_id_prefix: str | None = None,
+        option_type: str | None = None, strike: Decimal | None = None,
+        expiry: str | None = None,
     ) -> MultiLegExecutionPlan:
         """Build a close plan from authoritative lots, optionally scoped to an asset class."""
         from collections import defaultdict
@@ -210,6 +212,23 @@ class VirtualMultiLegExecutionBridge:
             lots = tuple(selected)
         else:
             lots = candidate_lots
+        if option_type is not None or strike is not None or expiry is not None:
+            requested_option_type = option_type.strip().upper() if option_type is not None else None
+            requested_strike = Decimal(str(strike)) if strike is not None else None
+            requested_expiry = require_exact_option_expiry(expiry) if expiry is not None else None
+            selected = []
+            for lot in lots:
+                identity = lot.instrument_identity
+                if not isinstance(identity, OptionInstrumentIdentity):
+                    continue
+                if requested_option_type is not None and identity.option_type != requested_option_type:
+                    continue
+                if requested_strike is not None and (identity.strike is None or Decimal(str(identity.strike)) != requested_strike):
+                    continue
+                if requested_expiry is not None and identity.expiry != requested_expiry:
+                    continue
+                selected.append(lot)
+            lots = tuple(selected)
         if not lots:
             raise ValueError(f"AUTHORITATIVE_OPEN_LOTS_REQUIRED:{strategy_id}:{asset_type or 'ALL'}")
         group_ids = {lot.group_id for lot in lots}

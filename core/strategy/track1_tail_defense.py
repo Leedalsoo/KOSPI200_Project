@@ -8,7 +8,6 @@ from typing import Sequence
 from core.strategy.contracts import Signal, Strategy, StrategyContext, StrategyPayload
 from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
 from core.instrument.strike_rules import round_to_strike_tick
-from core.risk.delta_hedge_quantity import delta_to_mini_futures_qty
 
 
 @dataclass(frozen=True)
@@ -57,14 +56,21 @@ class Track1TailDefense(Strategy):
         "HEDGE_REVERSION_POINTS", "DTE_CUTOFF",
     )
 
-    def __init__(self, profit_target: float = 500_000.0, max_hedge_allowed: int = 20) -> None:
+    def __init__(
+        self,
+        profit_target: float = 500_000.0,
+        max_hedge_allowed: int = 20,
+        *,
+        runtime_config_verified: bool = False,
+        risk_limits_available: bool = False,
+    ) -> None:
+        # Approved S1 configuration still has null hedge trigger and account-risk caps.
+        self.runtime_config_verified = runtime_config_verified
+        self.risk_limits_available = risk_limits_available
         self.profit_target = profit_target
         self.max_hedge_allowed = max_hedge_allowed
         self.state = Track1State(fence_distance=self.INITIAL_FENCE_DISTANCE)
         self._initialized = False
-        self._hedge_exit_pending = False
-        self._hedge_exit_pending = False
-        self._hedge_exit_pending = False
         self._hedge_exit_pending = False
 
     def feature_requirements(self) -> tuple[()]:
@@ -92,10 +98,11 @@ class Track1TailDefense(Strategy):
         payload = context.input.payload if context.input is not None else None
         return payload if isinstance(payload, Track1Input) else None
 
-    def _build_fence_signal(self, fence_type: str, strike: float, tag: int, reason: str) -> Signal:
-        # Legacy Track1 explicitly creates these fence legs as OPTION qty=1.
-        # The side is the explicit side of this signal, not a generic direction→side conversion.
-        side = "BUY" if fence_type == "CALL" else "SELL"
+    def _build_fence_signal(self, fence_type: str, strike: float, tag: int, reason: str, *, side: str) -> Signal:
+        # The approved S1 specification distinguishes long base options from short fence legs.
+        # Never infer order side from option type: both CALL and PUT can be BUY or SELL.
+        if side not in {"BUY", "SELL"}:
+            raise ValueError("TRACK1_OPTION_SIDE_INVALID")
         proposal = StrategyExecutionProposal(
             proposed_quantity=self.FENCE_QUANTITY,
             asset_type="OPTION",
@@ -109,15 +116,6 @@ class Track1TailDefense(Strategy):
         return Signal(self.strategy_id, side, 1.0,
                       f"FENCE_BUILD:{fence_type}:{strike}:#{tag}:{reason}",
                       execution_proposal=proposal)
-
-    def on_execution_result(self, purpose: str, result: object) -> None:
-        if purpose != "FUTURES_UNWIND" or not self._hedge_exit_pending:
-            return
-        if bool(getattr(result, "group_complete", False)) and bool(getattr(result, "position_flat", False)):
-            self.state.active_hedge = None
-            self.state.hedge_entry_price = None
-            self.state.active_hedge_quantity = 0
-            self._hedge_exit_pending = False
 
     def on_execution_result(self, purpose: str, result: object) -> None:
         if purpose != "FUTURES_UNWIND" or not self._hedge_exit_pending:
@@ -184,6 +182,11 @@ class Track1TailDefense(Strategy):
             if track_input.active_vol is not None and track_input.base_vol is not None:
                 self.state.fence_distance = self.OUTER_FENCE_DISTANCE if track_input.active_vol > track_input.base_vol * self.VOLATILITY_EXPANSION_MULTIPLIER else self.INITIAL_FENCE_DISTANCE
 
+        if not self.state.market_opened and (
+            not self.runtime_config_verified or not self.risk_limits_available
+        ):
+            return signals
+
         if not self.state.market_opened:
             self.state.base_price = price
             self.state.market_opened = True
@@ -194,9 +197,9 @@ class Track1TailDefense(Strategy):
             self.state.active_fence_strike = put_inner
             self.state.active_fence_tag = 1
             return (
-                self._build_fence_signal("CALL", call_outer, 0, "TAIL_DEFENSE_BUILD_OUTER"),
-                self._build_fence_signal("PUT", put_outer, 0, "TAIL_DEFENSE_BUILD_OUTER"),
-                self._build_fence_signal("PUT", put_inner, 1, "INITIAL_INNER_FENCE"),
+                self._build_fence_signal("CALL", call_outer, 0, "TAIL_DEFENSE_BUILD_OUTER", side="BUY"),
+                self._build_fence_signal("PUT", put_outer, 0, "TAIL_DEFENSE_BUILD_OUTER", side="BUY"),
+                self._build_fence_signal("PUT", put_inner, 1, "INITIAL_INNER_FENCE", side="SELL"),
             )
 
         if self.state.active_fence_type is None or self.state.active_fence_strike is None:
@@ -206,43 +209,13 @@ class Track1TailDefense(Strategy):
         warning = self.state.fence_distance * self.FENCE_APPROACH_RATIO
         approaching = (price <= base - warning if self.state.active_fence_type == "PUT" else price >= base + warning)
 
-        if approaching and self.state.active_hedge is None:
-            momentum_confirmed = track_input.momentum_confirmed if track_input is not None else False
-            if momentum_confirmed and self.state.futures_hedge_count < self.max_hedge_allowed:
-                self.state.active_hedge = "SELL" if self.state.active_fence_type == "PUT" else "BUY"
-                self.state.hedge_entry_price = price
-                hedge_qty = 0
-                if track_input.short_option_net_delta is not None:
-                    hedge_qty = delta_to_mini_futures_qty(track_input.short_option_net_delta)
-                if hedge_qty <= 0:
-                    self.state.active_hedge = None
-                    self.state.hedge_entry_price = None
-                    return signals
-                self.state.active_hedge_quantity = hedge_qty
-                self.state.futures_hedge_count += 1
-                signals.append(Signal(
-                    self.strategy_id,
-                    self.state.active_hedge,
-                    1.0,
-                    f"FUTURES_HEDGE_TRIGGER:#{self.state.futures_hedge_count}:price={price}:qty={hedge_qty}",
-                    execution_proposal=StrategyExecutionProposal(
-                        proposed_quantity=hedge_qty,
-                        asset_type="FUTURES",
-                        requested_price=None,
-                        side=self.state.active_hedge,
-                        track_id=self.strategy_id,
-                        tag_id="FUTURES_HEDGE",
-                        option_type=None,
-                        strike=None,
-                    ),
-                ))
-
-        if self.state.active_hedge and self.state.hedge_entry_price is not None:
-            reverted = ((self.state.active_hedge == "SELL" and price - self.state.hedge_entry_price >= self.HEDGE_REVERSION_POINTS) or
-                        (self.state.active_hedge == "BUY" and self.state.hedge_entry_price - price >= self.HEDGE_REVERSION_POINTS))
-            if reverted and not self._hedge_exit_pending:
-                signals.append(self._build_hedge_unwind_signal())
-                self._hedge_exit_pending = True
+        # The approved S1 specification explicitly excludes Mini Futures hedges.
+        # The replacement hedge is an option BUY linked 1:1 to authoritative remaining
+        # short-option lots; this input contract has no authoritative lot/contract identity,
+        # so do not synthesize a substitute futures order here. Leave this branch non-executing
+        # until the canonical option-lot input contract is implemented and verified.
+        if approaching:
+            return signals
 
         return signals
 

@@ -50,7 +50,18 @@ class Track7OptionContractSource:
             raise ValueError("TRACK7_PUT_STRIKE_REQUIRED")
 
         identities = tuple(self.option_master.list_contract_identities())
-        candidates = tuple(x for x in identities if str(getattr(x, "expiry", "")).replace("-", "")[:8] == str(expiry).replace("-", "")[:8])
+        # An exact expiry date alone does not prove a weekly product: monthly
+        # and weekly series can share an expiry. Require KIS-master series and
+        # standard-product classification before choosing either leg.
+        weekly_series = {"MONDAY_WEEKLY", "THURSDAY_WEEKLY"}
+        candidates = tuple(
+            x
+            for x in identities
+            if str(getattr(x, "expiry", "")).replace("-", "")[:8]
+            == str(expiry).replace("-", "")[:8]
+            and str(getattr(x, "product_series", "")).upper() in weekly_series
+            and str(getattr(x, "instrument_family", "")).upper() == "STANDARD"
+        )
         put_target = put_strike
         call_target = call_strike
         put = min((x for x in candidates if str(getattr(x, "option_type", "")).upper() == "PUT"), key=lambda x: abs(Decimal(str(x.strike)) - put_target), default=None)

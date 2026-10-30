@@ -1,7 +1,9 @@
 from __future__ import annotations
 from bisect import bisect_right
-from datetime import datetime
-from decimal import Decimal
+from datetime import datetime, time as datetime_time, timedelta
+from decimal import Decimal, InvalidOperation
+import re
+from zoneinfo import ZoneInfo
 from typing import Sequence
 from contracts.option_orderbook_source import OptionOrderBookSnapshot, OptionOrderBookLevel
 from contracts.track2_option_iv_source import Track2OptionIVSource
@@ -9,14 +11,23 @@ from contracts.types import MarketObservation
 
 class HistoricalObservationOptionSource(Track2OptionIVSource):
     """Replay-time option IV/order-book/Greeks source backed only by historical observations."""
+    @staticmethod
+    def _freshness_timestamp(observation: MarketObservation) -> datetime | None:
+        """Return a verified source timestamp, or None when semantics are unverified.
+
+        KIS REST and WebSocket HHMMSS values are retained in provenance as candidate
+        timestamps only. Neither is promoted to an absolute source time until its
+        semantics are independently verified and a freshness threshold is approved.
+        """
+        return None
     def __init__(self, observations: Sequence[MarketObservation]) -> None:
         self._as_of: datetime | None = None
         self._iv: dict[tuple[str, str, Decimal], list[tuple[datetime, Decimal]]] = {}
         self._iv_source: dict[tuple[str, str, Decimal], list[tuple[datetime, str]]] = {}
         self._delta: dict[tuple[str, str, Decimal], list[tuple[datetime, Decimal]]] = {}
         self._delta_by_instrument: dict[str, list[tuple[datetime, Decimal]]] = {}
-        self._books: dict[str, list[tuple[datetime, OptionOrderBookSnapshot]]] = {}
-        self._quotes: dict[str, list[tuple[datetime, object]]] = {}
+        self._books: dict[str, list[tuple[datetime, OptionOrderBookSnapshot, datetime | None]]] = {}
+        self._quotes: dict[str, list[tuple[datetime, object, datetime | None]]] = {}
         self._contracts_by_symbol: dict[str, object] = {}
         self._iv_times: dict[tuple[str, str, Decimal], list[datetime]] = {}
         self._iv_source_times: dict[tuple[str, str, Decimal], list[datetime]] = {}
@@ -27,6 +38,7 @@ class HistoricalObservationOptionSource(Track2OptionIVSource):
             observed_at = observation.observed_at or observation.collected_at
             if observed_at is None:
                 continue
+            freshness_at = self._freshness_timestamp(observation)
             identity = observation.contract
             self._contracts_by_symbol[str(identity.symbol)] = identity
             key = (str(identity.expiry).replace("-", "")[:8], str(identity.option_type).upper(), Decimal(str(identity.strike)))
@@ -41,17 +53,22 @@ class HistoricalObservationOptionSource(Track2OptionIVSource):
                 self._delta_by_instrument.setdefault(str(identity.instrument_id), []).append((observed_at, delta_value))
             quote = observation.quote
             if quote is not None:
-                self._quotes.setdefault(str(identity.symbol), []).append((observed_at, quote))
+                self._quotes.setdefault(str(identity.symbol), []).append((observed_at, quote, freshness_at))
             book = observation.order_book
-            if book is not None and len(book.bids) >= 5 and len(book.asks) >= 5:
-                snapshot = OptionOrderBookSnapshot(
-                    symbol=str(identity.symbol),
-                    observed_hour=observed_at.strftime("%H%M%S%f").rstrip("0"),
-                    ask_levels=tuple(OptionOrderBookLevel(price=Decimal(str(level.price)), quantity=Decimal(str(level.quantity))) for level in book.asks[:5]),
-                    bid_levels=tuple(OptionOrderBookLevel(price=Decimal(str(level.price)), quantity=Decimal(str(level.quantity))) for level in book.bids[:5]),
-                    source=f"HistoricalObservationStore:{observation.source}",
-                )
-                self._books.setdefault(str(identity.symbol), []).append((observed_at, snapshot))
+            if book is not None:
+                ask_levels = self._valid_order_book_levels(book.asks)
+                bid_levels = self._valid_order_book_levels(book.bids)
+                if len(bid_levels) >= 5 and len(ask_levels) >= 5:
+                    snapshot = OptionOrderBookSnapshot(
+                        symbol=str(identity.symbol),
+                        observed_hour=observed_at.strftime("%H%M%S%f").rstrip("0"),
+                        ask_levels=ask_levels[:5],
+                        bid_levels=bid_levels[:5],
+                        source=f"HistoricalObservationStore:{observation.source}",
+                    )
+                    self._books.setdefault(str(identity.symbol), []).append(
+                        (observed_at, snapshot, freshness_at)
+                    )
         for values in self._iv.values():
             values.sort(key=lambda item: item[0])
         for values in self._delta.values():
@@ -69,6 +86,20 @@ class HistoricalObservationOptionSource(Track2OptionIVSource):
             key: [item[0] for item in values] for key, values in self._delta_by_instrument.items()
         }
         self._book_times = {key: [item[0] for item in values] for key, values in self._books.items()}
+
+    @staticmethod
+    def _valid_order_book_levels(levels) -> tuple[OptionOrderBookLevel, ...]:
+        valid = []
+        for level in levels:
+            try:
+                price = Decimal(str(level.price))
+                quantity = Decimal(str(level.quantity))
+            except (InvalidOperation, TypeError, ValueError):
+                continue
+            if not price.is_finite() or not quantity.is_finite() or price <= 0 or quantity < 0:
+                continue
+            valid.append(OptionOrderBookLevel(price=price, quantity=quantity))
+        return tuple(valid)
 
     def set_as_of(self, observed_at: datetime) -> None:
         self._as_of = observed_at
@@ -181,10 +212,50 @@ class HistoricalObservationOptionSource(Track2OptionIVSource):
             }
         return result
 
-    def get_order_book(self, symbol: str) -> OptionOrderBookSnapshot | None:
+    def get_order_book_with_timestamp(
+        self, symbol: str, *, as_of: datetime | None = None
+    ) -> tuple[OptionOrderBookSnapshot | None, datetime | None]:
+        """Return the latest KIS book and verified freshness timestamp, if available.
+
+        Unverified REST/WebSocket HHMMSS values and local receipt time are not
+        treated as verified source timestamps; freshness remains UNKNOWN (None).
+        """
         key = str(symbol).strip()
-        return self._latest(
-            self._books.get(key, ()),
-            self._book_times.get(key, ()),
-            self._as_of,
-        )
+        target = as_of or self._as_of
+        values = self._books.get(key, ())
+        times = self._book_times.get(key, ())
+        if target is None or not values or not times:
+            return None, None
+        index = bisect_right(times, target) - 1
+        if index < 0:
+            return None, None
+        observed_at, snapshot, freshness_at = values[index]
+        return snapshot, freshness_at
+
+    def get_volume_with_timestamp(
+        self, symbol: str, *, as_of: datetime | None = None
+    ) -> tuple[Decimal | None, datetime | None]:
+        """Return the latest non-null KIS-reported volume without filling gaps."""
+        key = str(symbol).strip()
+        target = as_of or self._as_of
+        values = self._quotes.get(key, ())
+        if target is None or not values:
+            return None, None
+        times = [item[0] for item in values]
+        index = bisect_right(times, target) - 1
+        for candidate_index in range(index, -1, -1):
+            observed_at, quote, freshness_at = values[candidate_index]
+            value = getattr(quote, "volume", None)
+            if value is None:
+                continue
+            try:
+                volume = Decimal(str(value))
+            except (InvalidOperation, TypeError, ValueError):
+                continue
+            if volume.is_finite() and volume >= 0:
+                return volume, freshness_at
+        return None, None
+
+    def get_order_book(self, symbol: str) -> OptionOrderBookSnapshot | None:
+        book, _ = self.get_order_book_with_timestamp(symbol)
+        return book

@@ -1,4 +1,4 @@
-﻿"""FRESH-14 actual 2026-10-02 manifest/raw consistency and hash verification."""
+"""FRESH-14 actual 2026-10-02 manifest/raw consistency and hash verification."""
 import hashlib
 import json
 from pathlib import Path
@@ -39,8 +39,8 @@ def test_fresh14_real_20261002_manifest_lifecycle_mismatch_and_raw_sha256():
     assert DAY_MANIFEST.is_file() and RAW_MANIFEST.is_file() and RAW.is_file(), "actual evidence files unavailable"
     day_manifest = json.loads(DAY_MANIFEST.read_text(encoding="utf-8-sig"))
     raw_manifest = json.loads(RAW_MANIFEST.read_text(encoding="utf-8-sig"))
-    assert day_manifest.get("trading_date") == "2026-10-02"
-    assert raw_manifest.get("trading_date") == "2026-10-02"
+    assert day_manifest.get("trading_date") == "20261002"
+    assert raw_manifest.get("trading_date") == "20261002"
     assert day_manifest.get("collectors", {}).get("websocket", {}).get("status") == "NOT_STARTED"
     assert raw_manifest.get("record_count") == 87741
     assert _line_count(RAW) == raw_manifest.get("record_count"), "actual JSONL line count differs from raw manifest"

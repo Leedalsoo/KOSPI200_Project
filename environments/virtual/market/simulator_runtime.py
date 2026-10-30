@@ -35,6 +35,7 @@ class VirtualMarketSimulatorRuntime:
         self._price = 350.0
         self._initial_price = 350.0
         self._subscribers = []
+        self._quote_only_subscribers = []
         self._futures_quote_subscribers = []
         self._futures_observation_subscribers = []
         self._futures_observation_replay = None
@@ -203,6 +204,12 @@ class VirtualMarketSimulatorRuntime:
                 subscriber(observation)
         return len(observations)
 
+    def subscribe_quote_only(self, callback) -> None:
+        """Subscribe to quote-only replay events without projecting them as trades."""
+        if not callable(callback):
+            raise TypeError("VMS_QUOTE_ONLY_SUBSCRIBER_REQUIRED")
+        self._quote_only_subscribers.append(callback)
+
     def subscribe_futures_quote(self, callback) -> None:
         if not callable(callback):
             raise TypeError("VMS_FUTURES_QUOTE_SUBSCRIBER_REQUIRED")
@@ -260,6 +267,11 @@ class VirtualMarketSimulatorRuntime:
                 raise TypeError("VMS_AUTHORITATIVE_OPTION_QUOTE_PROVIDER_RESULT_REQUIRED")
             for key, quote in authoritative_quotes.items():
                 self.publish_authoritative_option_quote(key, quote)
+        if tick.last_price is None or tick.volume is None:
+            # Quote-only events never enter the legacy trade-tick strategy path.
+            for subscriber in tuple(self._quote_only_subscribers):
+                subscriber(tick)
+            return tick
         for subscriber in tuple(self._subscribers):
             subscriber(tick)
         return tick

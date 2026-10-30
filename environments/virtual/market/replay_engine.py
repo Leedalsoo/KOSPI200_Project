@@ -10,6 +10,11 @@ class HistoricalReplayEngine:
     def __init__(self, ticks: Optional[Iterable[ReferenceCanonicalMarketTick]] = None) -> None:
         self._ticks: List[ReferenceCanonicalMarketTick] = list(ticks or [])
         self._cursor = 0
+        self._projection_errors: list[dict[str, str]] = []
+
+    @property
+    def projection_errors(self) -> tuple[dict[str, str], ...]:
+        return tuple(self._projection_errors)
 
     @classmethod
     def from_store(cls, store: HistoricalMarketStore, *, source: str | None = None) -> "HistoricalReplayEngine":
@@ -20,7 +25,24 @@ class HistoricalReplayEngine:
         observations = store.load_observations()
         if source is not None:
             observations = [item for item in observations if item.source == source]
-        return cls(cls.project_observation(item, seq_id=index) for index, item in enumerate(observations, start=1))
+        engine = cls()
+        ticks: list[ReferenceCanonicalMarketTick] = []
+        projection_errors: list[dict[str, str]] = []
+        for index, observation in enumerate(observations, start=1):
+            try:
+                ticks.append(cls.project_observation(observation, seq_id=index))
+            except ValueError as exc:
+                # A malformed quote is excluded with explicit evidence; identity/schema
+                # errors remain fatal and are not silently filtered.
+                if str(exc) != "CANONICAL_QUOTE_REQUIRED_FIELDS_MISSING":
+                    raise
+                projection_errors.append({
+                    "observation_id": observation.observation_id,
+                    "reason": str(exc),
+                })
+        engine.load(ticks)
+        engine._projection_errors = projection_errors
+        return engine
 
     @property
     def active(self) -> bool:
@@ -37,6 +59,7 @@ class HistoricalReplayEngine:
     def load(self, ticks: Iterable[ReferenceCanonicalMarketTick]) -> None:
         self._ticks = list(ticks)
         self._cursor = 0
+        self._projection_errors = []
 
     def load_store(self, store: HistoricalMarketStore, *, source: str | None = None) -> None:
         self.load(store.load_ticks(source=source))
@@ -52,14 +75,15 @@ class HistoricalReplayEngine:
     def project_observation(observation: MarketObservation, *, seq_id: int = 0) -> ReferenceCanonicalMarketTick:
         quote = observation.quote
         if (
-            quote.last is None
-            or quote.bid is None
+            quote.bid is None
             or quote.ask is None
-            or quote.volume is None
+            or float(quote.bid) <= 0
+            or float(quote.ask) <= 0
+            or float(quote.ask) < float(quote.bid)
             or observation.contract.strike is None
             or observation.contract.option_type is None
         ):
-            raise ValueError("LEGACY_TICK_REQUIRED_MARKET_VALUE_MISSING")
+            raise ValueError("CANONICAL_QUOTE_REQUIRED_FIELDS_MISSING")
         replay_time = observation.observed_at or observation.collected_at
         return ReferenceCanonicalMarketTick(
             timestamp=replay_time.isoformat(),
@@ -71,8 +95,8 @@ class HistoricalReplayEngine:
             ),
             bid_price=float(quote.bid),
             ask_price=float(quote.ask),
-            last_price=float(quote.last),
-            volume=int(quote.volume) if quote.volume is not None else 0,
+            last_price=float(quote.last) if quote.last is not None else None,
+            volume=int(quote.volume) if quote.volume is not None else None,
             seq_id=seq_id,
             expiry=observation.contract.expiry or "",
             symbol=observation.contract.symbol,

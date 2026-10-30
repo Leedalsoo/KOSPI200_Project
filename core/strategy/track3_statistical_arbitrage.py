@@ -35,6 +35,10 @@ class Track3MarketInput:
     contract_multiplier: float | None = None
     regime: str | None = None
     date_str: str = ""
+    # Source adapter must affirm validated spread/contract identity and cost inputs.
+    spread_identity_verified: bool = False
+    futures_identity_verified: bool = False
+    cost_model_verified: bool = False
 
 
 @dataclass(frozen=True)
@@ -49,6 +53,11 @@ class Track3Result:
 class Track3StatisticalArbitrage:
     strategy_id: str = "Strategy_3_StatArb"
     version: str = "1.0"
+    # The approved specification keeps S3 disabled until the calendar-spread
+    # identity and capital/risk gate are authoritative and explicitly configured.
+    enabled: bool = False
+    capital_gate_min: float | None = None
+    risk_limits_available: bool = False
     z_entry_threshold: float = 2.0
     z_exit_threshold: float = 0.2
     z_stop_loss_threshold: float = 3.5
@@ -199,8 +208,6 @@ class Track3StatisticalArbitrage:
                 self.group_integrity = True
 
         z_score = float(analytics.get("spread.z_score").value)
-        if self._exit_pending:
-            return Track3Result("EXIT_PENDING", regime, z_score)
         spread_std = float(analytics.get("spread.std").value)
         vol_ratio = float(analytics.get("volatility.ratio").value)
         bid_ask_spread = float(analytics.get("microstructure.spread").value)
@@ -214,6 +221,14 @@ class Track3StatisticalArbitrage:
             bid_ask_spread=bid_ask_spread,
             gap_pct=gap_pct,
         )
+        if self._exit_pending:
+            return Track3Result("EXIT_PENDING", regime, z_score)
+        if self.active_position is None and (
+            not self.enabled or self.capital_gate_min is None or not self.risk_limits_available
+            or not data.spread_identity_verified or not data.futures_identity_verified
+            or not data.cost_model_verified
+        ):
+            return Track3Result("BLOCKED", regime, z_score)
         total_fees = float(analytics.get("cost.fees").value)
         effective_pnl = float(analytics.get("portfolio.current_pnl").value) + float(analytics.get("portfolio.options_pnl").value)
         premium_spent = float(analytics.get("portfolio.premium_spent").value)

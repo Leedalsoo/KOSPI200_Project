@@ -126,12 +126,36 @@ class KISOptionExpiryResolver:
                 payload = json.loads(raw_bytes.decode("utf-8"))
                 if payload.get("schema_version") != EXPIRY_CACHE_SCHEMA or payload.get("symbol") != symbol:
                     raise KISOptionExpiryResolutionError("KIS_OPTION_EXPIRY_CACHE_SCHEMA_INVALID")
+                # An exact expiry is bound to the master snapshot that was used to request it.
+                # Stale snapshots remain append-only evidence but are never reused for a new master.
+                if payload.get("master_sha256") != self.master_sha256:
+                    continue
+                if payload.get("environment") != self.environment:
+                    continue
+                if (
+                    payload.get("source") != "KIS_REST:futs_last_tr_date"
+                    or payload.get("endpoint") != EXPIRY_ENDPOINT
+                    or payload.get("tr_id") != EXPIRY_TR_ID
+                    or payload.get("response_field") != "output1.futs_last_tr_date"
+                    or int(payload.get("http_status", 0)) != 200
+                    or str(payload.get("rt_cd")) != "0"
+                ):
+                    raise KISOptionExpiryResolutionError("KIS_OPTION_EXPIRY_CACHE_SOURCE_INVALID")
                 response = payload.get("raw_response")
                 if not isinstance(response, dict):
                     raise KISOptionExpiryResolutionError("KIS_OPTION_EXPIRY_CACHE_RAW_RESPONSE_REQUIRED")
                 response_hash = hashlib.sha256(self._canonical_json(response)).hexdigest()
                 if response_hash != payload.get("raw_response_sha256"):
                     raise KISOptionExpiryResolutionError("KIS_OPTION_EXPIRY_CACHE_RESPONSE_HASH_MISMATCH")
+                output = response.get("output1")
+                if isinstance(output, list):
+                    output = output[0] if output and isinstance(output[0], Mapping) else {}
+                if (
+                    not isinstance(output, Mapping)
+                    or str(output.get("futs_last_tr_date") or "").strip()
+                    != str(payload.get("expiry_yyyymmdd") or "").strip()
+                ):
+                    raise KISOptionExpiryResolutionError("KIS_OPTION_EXPIRY_CACHE_VALUE_MISMATCH")
                 records.append(KISOptionExpiryRecord(
                     symbol=payload["symbol"],
                     expiry_yyyymmdd=payload["expiry_yyyymmdd"],
@@ -156,6 +180,29 @@ class KISOptionExpiryResolver:
         if len({record.expiry_yyyymmdd for record in records}) > 1:
             raise KISOptionExpiryResolutionError("KIS_OPTION_EXPIRY_IMMUTABILITY_CONFLICT")
         return records
+
+    def cached_records_for_current_master(self) -> tuple[KISOptionExpiryRecord, ...]:
+        """Return validated append-only expiry evidence bound to this exact master hash."""
+        if not self.cache_dir.is_dir():
+            return ()
+        symbols: set[str] = set()
+        for path in self.cache_dir.glob("expiry_*.json"):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except Exception as exc:
+                raise KISOptionExpiryResolutionError("KIS_OPTION_EXPIRY_CACHE_INVALID") from exc
+            if payload.get("schema_version") != EXPIRY_CACHE_SCHEMA:
+                continue
+            if payload.get("master_sha256") != self.master_sha256:
+                continue
+            symbol = str(payload.get("symbol") or "").strip()
+            if not re.fullmatch(r"[A-Za-z0-9_-]{1,32}", symbol):
+                raise KISOptionExpiryResolutionError("KIS_OPTION_EXPIRY_SYMBOL_INVALID")
+            symbols.add(symbol)
+        records: list[KISOptionExpiryRecord] = []
+        for symbol in sorted(symbols):
+            records.extend(self._cached_records(symbol))
+        return tuple(records)
 
     def _append_record(self, record: KISOptionExpiryRecord) -> KISOptionExpiryRecord:
         cached = self._cached_records(record.symbol)

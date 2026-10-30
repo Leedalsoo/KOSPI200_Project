@@ -14,8 +14,9 @@ class ReferenceCanonicalMarketTick:
     contract_multiplier: float | None = None
     bid_price: float = 0.0
     ask_price: float = 0.0
-    last_price: float = 0.0
-    volume: int = 0
+    # Missing trade fields stay missing; quote prices/quantities are not trades.
+    last_price: float | None = None
+    volume: int | None = None
     seq_id: int = 0
     expiry: str = ""
     symbol: str = ""

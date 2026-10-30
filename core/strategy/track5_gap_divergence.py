@@ -20,7 +20,8 @@ class Track5ExecutionInput:
     strike_rank: int
     liquidity_score: Decimal
     option_quantity: int = 1
-    mini_futures_quantity: int = 5
+    # Retained only for compatibility with legacy position reconciliation; new S5 entries never open futures.
+    mini_futures_quantity: int = 0
 
     def __post_init__(self) -> None:
         try:
@@ -33,6 +34,7 @@ class Track5ExecutionInput:
 @dataclass(frozen=True)
 class Track5State:
     is_active: bool = False
+    entry_pending: bool = False
     direction: str | None = None
     entry_price: Decimal = Decimal("0")
     target_price: Decimal = Decimal("0")
@@ -57,14 +59,24 @@ class Track5State:
 class Track5GapDivergence:
     strategy_id = "track5_gap_divergence"
     version = "2.0"
-    ENTRY_QUANTITY = 1
-    MINI_FUTURES_QUANTITY = 5
+    # No.1168: two same-direction standard KOSPI200 option contracts; no new futures hedge.
+    ENTRY_QUANTITY = 2
+    MINI_FUTURES_QUANTITY = 5  # legacy close/reconciliation only; never used for new entry
     # Counts evaluate_mean_reversion calls while a position is open, not elapsed minutes or bars.
     MAX_OPEN_EVALUATIONS = 30
     CONFIGURABLE_PARAMETERS = ("ENTRY_QUANTITY", "MINI_FUTURES_QUANTITY", "MAX_OPEN_EVALUATIONS")
 
-    def __init__(self, z_threshold: Decimal = Decimal("1.5")) -> None:
+    def __init__(
+        self,
+        z_threshold: Decimal = Decimal("1.5"),
+        *,
+        runtime_config_verified: bool = False,
+        risk_limits_available: bool = False,
+    ) -> None:
         self.z_threshold = z_threshold
+        # S5 config remains PROVISIONAL and capital/premium/max-loss gates are unset.
+        self.runtime_config_verified = runtime_config_verified
+        self.risk_limits_available = risk_limits_available
         self.state = Track5State()
 
     def feature_requirements(self) -> Sequence[StrategyFeatureRequirement]:
@@ -145,7 +157,9 @@ class Track5GapDivergence:
         )
 
     def evaluate_gap(self, snapshot: AnalyticsSnapshot, execution_input: Track5ExecutionInput | None = None) -> Sequence[Signal]:
-        if self.state.is_active:
+        if not self.runtime_config_verified or not self.risk_limits_available:
+            return ()
+        if self.state.is_active or self.state.entry_pending:
             return ()
         required = self._required(snapshot)
         if required is None or execution_input is None:
@@ -187,7 +201,8 @@ class Track5GapDivergence:
             expected_move_pts=expected_move, gap_source=source,
             gap_extreme_price=entry_price, option_type=option_type,
             selected_strike=execution_input.selected_strike,
-            futures_side=futures_side, futures_closed=False,
+            # New S5 intent is option-only; mark the futures leg absent, not pending.
+            futures_side=None, futures_closed=True, entry_pending=True,
         )
         return (Signal(
             strategy_id=self.strategy_id,
@@ -198,7 +213,7 @@ class Track5GapDivergence:
                 f"ENTRY:{entry_price};TARGET:{target_price};STOP:{stop};"
                 f"WINDOW_MINUTES:{elapsed_minutes};OPTION:{option_type};"
                 f"STRIKE:{execution_input.selected_strike};STRIKE_RANK:{execution_input.strike_rank};"
-                f"MINI_FUTURES_QTY:{self.MINI_FUTURES_QUANTITY}"
+                f"OPTION_ONLY_QTY:{self.ENTRY_QUANTITY}"
             ),
             kind=SignalKind.EXECUTION,
             execution_proposal=self._proposal(
@@ -246,19 +261,30 @@ class Track5GapDivergence:
 
     def on_execution_result(self, purpose: str, result: object) -> None:
         """Advance lifecycle only from correlated fills and authoritative flatness."""
-        if not self.state.is_active:
+        if not self.state.is_active and not self.state.entry_pending:
             return
         reports = tuple(getattr(result, "reports", ()) or ())
-        entry = purpose == "TRACK5_GAP_HEDGE_ENTRY"
+        entry = purpose in {"TRACK5_GAP_HEDGE_ENTRY", "TRACK5_OPTION_ONLY_ENTRY"}
         terminal = purpose == "TRACK5_GAP_HEDGE_TERMINAL_EXIT"
         futures_exit = purpose == "TRACK5_GAP_HEDGE_FUTURES_EXIT"
         option_exit = purpose == "TRACK5_GAP_HEDGE_OPTION_EXIT"
         if entry:
-            # A rejected/no-route entry must not leave a phantom active position.
-            # Preserve state whenever any leg has a fill; partial execution needs
-            # position reconciliation rather than an unconditional reset.
+            # Entry becomes active only after the two-contract option order is fully filled
+            # and the authoritative position read model confirms the open lot.
             terminal_failures = {"REJECTED", "FAILED", "CANCELLED", "EXPIRED"}
             has_fill = any(int(getattr(report, "filled_quantity", 0) or 0) > 0 for report in reports)
+            confirmed = bool(reports) and all(
+                str(getattr(report, "status", "")).strip().upper() == "FILLED"
+                and int(getattr(report, "filled_quantity", 0) or 0) == self.ENTRY_QUANTITY
+                and int(getattr(report, "remaining_quantity", -1)) == 0
+                and bool(getattr(report, "execution_id", None))
+                and getattr(report, "execution_timestamp", None) is not None
+                and getattr(report, "execution_price", None) is not None
+                for report in reports
+            )
+            if confirmed and bool(getattr(result, "group_complete", False)) and not bool(getattr(result, "position_flat", True)):
+                self.state = replace(self.state, is_active=True, entry_pending=False)
+                return
             no_route = (
                 not reports
                 and int(getattr(result, "pending_legs", 0) or 0) == 0
@@ -271,6 +297,9 @@ class Track5GapDivergence:
             )
             if not has_fill and (no_route or all_legs_rejected):
                 self.reset()
+            elif has_fill:
+                self.state = replace(self.state, is_active=False, entry_pending=True,
+                                     futures_close_error="ENTRY_PARTIAL_OR_POSITION_UNRECONCILED")
             return
         if not (terminal or futures_exit or option_exit):
             return
@@ -435,23 +464,25 @@ class Track5GapDivergence:
         self.state = state
         return ()
 
-    def build_execution_plan(self, group_id: str, *, proposal: StrategyExecutionProposal, futures_identity) -> MultiLegExecutionPlan:
+    def build_execution_plan(self, group_id: str, *, proposal: StrategyExecutionProposal, futures_identity=None) -> MultiLegExecutionPlan:
         if proposal.track_id != self.strategy_id:
             raise ValueError("TRACK5_STRATEGY_REQUIRED")
         if proposal.asset_type == "OPTION" and proposal.side == "BUY":
+            if not self.runtime_config_verified or not self.risk_limits_available:
+                raise ValueError("TRACK5_CONFIG_OR_RISK_GATE_BLOCKED")
             if proposal.option_type not in {"CALL", "PUT"} or proposal.strike is None:
                 raise ValueError("TRACK5_OPTION_ENTRY_PROPOSAL_REQUIRED")
-            futures_side = "SELL" if proposal.option_type == "CALL" else "BUY"
             return MultiLegExecutionPlan(
                 group_id=group_id,
                 strategy_id=self.strategy_id,
-                purpose="TRACK5_GAP_HEDGE_ENTRY",
+                purpose="TRACK5_OPTION_ONLY_ENTRY",
                 legs=(
-                    ExecutionLeg("OPTION", "BUY", self.ENTRY_QUANTITY, proposal.option_type, proposal.strike, position_role="NONE"),
-                    ExecutionLeg("MINI_FUTURES", futures_side, self.MINI_FUTURES_QUANTITY, position_role="NONE"),
+                    ExecutionLeg("OPTION_ENTRY", "BUY", self.ENTRY_QUANTITY, proposal.option_type, proposal.strike, position_role="NONE"),
                 ),
             )
         if proposal.asset_type == "FUTURES":
+            if not self.state.is_active or self.state.futures_closed:
+                raise ValueError("TRACK5_NEW_FUTURES_ORDERS_DISABLED_BY_APPROVED_SPEC")
             return MultiLegExecutionPlan(
                 group_id=group_id,
                 strategy_id=self.strategy_id,
