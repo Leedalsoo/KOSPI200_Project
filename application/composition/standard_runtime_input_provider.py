@@ -27,6 +27,7 @@ from contracts.risk_guard import RiskGuardStatusSource
 from core.analytics.common import COMMON_METRIC_CONTRACTS, build_common_analytics_snapshot
 from core.sensor.market_condition_sensor import MarketConditionSensor
 from application.composition.track9_analytics_provider import build_track9_analytics_snapshot
+from application.composition.track9_option_contract_source import Track9OptionContractSource
 from contracts.option_expiry_source import OptionExpirySource
 from contracts.option_orderbook_source import OptionOrderBookSource
 from contracts.volume_profile_source import VolumeProfileSource
@@ -54,7 +55,7 @@ from application.composition.track8_analytics_provider import build_track8_analy
 class StandardRuntimeInputProvider:
     """Build standard inputs from observable VMS/VSSF sources only."""
 
-    def __init__(self, market: Any, *, track9_fee_ledger: Track9FeeLedger | None = None, track9_margin_read_model: Track9MarginReadModel | None = None, track9_position_execution_source: Track9PositionExecutionReadModel | None = None, track9_event_source: Track9EventSource | None = None, track9_event_risk_source: Track9EventRiskSource | None = None, run_id: str | None = None, track7_order_timeout_source: Any | None = None, track7_support_resistance_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None, track6_option_contract_source: Track6OptionContractSource | None = None, track7_option_contract_source: Track7OptionContractSource | None = None, track8_option_contract_source: Track8OptionContractSource | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None, track4_greeks_provider: Track4KisGreeksProvider | None = None, kospi200_daily_source: KOSPI200DailySource | None = None, track6_volatility_source: Track6VolatilitySource | None = None, track1_fence_type_source: Any | None = None, track1_position_lot_store: Any | None = None, track1_option_delta_source: Any | None = None, strategy_keys: tuple[str, ...] | None = None) -> None:
+    def __init__(self, market: Any, *, track9_fee_ledger: Track9FeeLedger | None = None, track9_margin_read_model: Track9MarginReadModel | None = None, track9_position_execution_source: Track9PositionExecutionReadModel | None = None, track9_event_source: Track9EventSource | None = None, track9_event_risk_source: Track9EventRiskSource | None = None, run_id: str | None = None, track7_order_timeout_source: Any | None = None, track7_support_resistance_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None, track6_option_contract_source: Track6OptionContractSource | None = None, track7_option_contract_source: Track7OptionContractSource | None = None, track8_option_contract_source: Track8OptionContractSource | None = None, track9_option_contract_source: Track9OptionContractSource | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None, track4_greeks_provider: Track4KisGreeksProvider | None = None, kospi200_daily_source: KOSPI200DailySource | None = None, track6_volatility_source: Track6VolatilitySource | None = None, track1_fence_type_source: Any | None = None, track1_position_lot_store: Any | None = None, track1_option_delta_source: Any | None = None, strategy_keys: tuple[str, ...] | None = None) -> None:
         self.risk_guard_status_source = risk_guard_status_source
         self.strategy_keys = frozenset(strategy_keys or ())
         self.market_condition_sensor = MarketConditionSensor()
@@ -74,6 +75,7 @@ class StandardRuntimeInputProvider:
         self.track5_option_contract_source = Track5OptionContractSource(option_master, option_orderbook_source) if option_master is not None else None
         self.track7_option_contract_source = track7_option_contract_source
         self.track8_option_contract_source = track8_option_contract_source
+        self.track9_option_contract_source = track9_option_contract_source
         self.option_orderbook_source = option_orderbook_source
         self.data = VirtualRuntimeDataProvider(
             market, option_expiry_source=option_expiry_source, track7_order_timeout_source=track7_order_timeout_source, track7_support_resistance_source=track7_support_resistance_source, trading_calendar=trading_calendar, option_master=option_master,
@@ -544,108 +546,50 @@ class StandardRuntimeInputProvider:
                 ),
             )
 
-        # Strategy9 is deliberately independent of macro/event/IV indicators.
-        # Its only strategy-specific market dependency is the authoritative
-        # ATM PUT/CALL contract pair used for the overnight insurance.
-        track9_common_required = ("price.last",)
-        track9_strategy_required = (
-            "options.atm_call_strike",
-            "options.atm_put_strike",
-            "options.contract_multiplier",
-        )
-        track9_required = track9_common_required + track9_strategy_required
-
-        track9_selection = None
-        if self.track6_option_contract_source is not None:
-            try:
-                track9_selection = self.track6_option_contract_source.select(
-                    expiry=getattr(tick, "expiry", ""),
-                    current_price=(
-                        Decimal(str(getattr(tick, "underlying_price")))
-                        if getattr(tick, "underlying_price", None) is not None
-                        else None
+        # Strategy 9 uses exact KIS master/expiry evidence and S1 short-PUT lots.
+        # Missing quote freshness, liquidity, or linkage policies stay BLOCKED.
+        if "track9_event_overnight_insurance" in self.strategy_keys:
+            if self.track9_option_contract_source is None:
+                contexts["track9_event_overnight_insurance"] = self._unavailable(
+                    "track9_event_overnight_insurance",
+                    (
+                        "kis_official_option_master",
+                        "kis_exact_option_expiry_evidence",
+                        "kis_two_sided_option_quote",
+                        "s1_short_put_position_lots",
                     ),
+                    "TRACK9_OPTION_CONTRACT_SOURCE_UNAVAILABLE",
                 )
-            except (ValueError, TypeError, AttributeError):
-                track9_selection = None
-
-        track9_option_prices = {}
-        if track9_selection is not None and self.option_orderbook_source is not None:
-            try:
-                put_book = self.option_orderbook_source.get_order_book(
-                    str(track9_selection.put.shrn_iscd)
+            elif d.underlying_price is None or d.as_of is None:
+                contexts["track9_event_overnight_insurance"] = self._unavailable(
+                    "track9_event_overnight_insurance",
+                    ("authoritative_underlying_price", "runtime_as_of"),
+                    "TRACK9_UNDERLYING_OR_AS_OF_UNAVAILABLE",
                 )
-                call_book = self.option_orderbook_source.get_order_book(
-                    str(track9_selection.call.shrn_iscd)
-                )
-                if (
-                    put_book is not None
-                    and call_book is not None
-                    and put_book.ask_levels
-                    and call_book.ask_levels
-                    and put_book.bid_levels
-                    and call_book.bid_levels
-                ):
-                    track9_option_prices = {
-                        "put_mark_price": Decimal(str(put_book.bid_levels[0].price)),
-                        "call_mark_price": Decimal(str(call_book.bid_levels[0].price)),
-                    }
-            except (AttributeError, TypeError, ValueError):
-                track9_option_prices = {}
-
-        # Entry prices become authoritative only after the VSSF reports both
-        # option legs FILLED. Never substitute the pre-trade ASK as a fill price.
-        if self.track9_position_execution_source is not None and self.run_id:
-            execution_snapshot = self.track9_position_execution_source.snapshot(
-                run_id=self.run_id,
-                strategy_id="track9_event_overnight_insurance",
-            )
-            if execution_snapshot is not None:
-                put_ts = execution_snapshot.put_entry_timestamp
-                call_ts = execution_snapshot.call_entry_timestamp
-                current_date = d.as_of.date()
-                if (
-                    put_ts is not None
-                    and call_ts is not None
-                    and getattr(put_ts, "date", lambda: None)() == current_date
-                    and getattr(call_ts, "date", lambda: None)() == current_date
-                    and execution_snapshot.put_entry_price is not None
-                    and execution_snapshot.call_entry_price is not None
-                ):
-                    track9_option_prices["put_entry_price"] = execution_snapshot.put_entry_price
-                    track9_option_prices["call_entry_price"] = execution_snapshot.call_entry_price
-
-        track9_analytics = build_track9_analytics_snapshot(
-            d,
-            run_id=self.run_id or "virtual",
-            as_of=d.as_of,
-            option_contract_selection=track9_selection,
-            option_prices=track9_option_prices,
-            common_snapshot=common_analytics,
-        )
-        track9_missing = tuple(
-            key for key in track9_required
-            if (
-                track9_analytics is None
-                or track9_analytics.get(key) is None
-                or track9_analytics.get(key).status != AnalyticsStatus.AVAILABLE
-            )
-        )
-        if track9_selection is None:
-            track9_missing = tuple(
-                dict.fromkeys(track9_missing + ("track9_authoritative_option_contract",))
-            )
-        if track9_missing:
-            contexts["track9_event_overnight_insurance"] = self._unavailable(
-                "track9_event_overnight_insurance",
-                track9_missing,
-                "TRACK9_REQUIRED_CANONICAL_AND_AUTHORITATIVE_SOURCES_UNAVAILABLE",
-            )
-        else:
-            contexts["track9_event_overnight_insurance"] = StrategyContext(
-                market_state,
-                "track9_event_overnight_insurance",
-                StrategyInput(common),
-                analytics=track9_analytics,
-            )
+            else:
+                try:
+                    track9_selection = self.track9_option_contract_source.select(
+                        current_price=Decimal(str(d.underlying_price)),
+                        as_of=d.as_of,
+                    )
+                except (ValueError, TypeError, AttributeError) as exc:
+                    reason = str(exc) or "TRACK9_OPTION_SELECTION_BLOCKED"
+                    contexts["track9_event_overnight_insurance"] = self._unavailable(
+                        "track9_event_overnight_insurance",
+                        ("s1_short_put_position_lots", "kis_exact_option_expiry_evidence"),
+                        reason,
+                    )
+                else:
+                    contexts["track9_event_overnight_insurance"] = StrategyContext(
+                        market_state,
+                        "track9_event_overnight_insurance",
+                        StrategyInput(
+                            common,
+                            track9_selection,
+                            data_status={
+                                "track9_option_contract_selection": track9_selection.status,
+                                "track9_blockers": ",".join(track9_selection.blockers),
+                            },
+                        ),
+                    )
         return contexts
