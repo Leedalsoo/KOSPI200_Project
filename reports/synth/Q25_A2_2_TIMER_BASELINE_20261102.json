@@ -1,0 +1,21 @@
+{
+    "exit_code":  0,
+    "elapsed_seconds":  0.02191,
+    "validation_only":  true,
+    "schema_version":  "q25-a2-2-timer-baseline-v1",
+    "jsonl_sha256":  "8F27AC5C28E904FAECC0258984D07BE48C50735C92C6081FA5200FE9E7E87290",
+    "notes":  [
+                  "Single run only; no statistical repeat or tuning.",
+                  "Measures JSONL parsing and canonical tick construction only, not StrategyHub/Risk/OMS/Position/PnL runtime.",
+                  "All timestamps identical; no pacing sleep; no natural strategy signal claim.",
+                  "Temporary dataset created under %TEMP%, not in repository data directories.",
+                  "First attempt failed due to UTF-8 BOM in temporary fixture; corrected once with UTF-8 without BOM. No repeated identical error."
+              ],
+    "status":  "BASELINE_ONLY",
+    "production_runtime_eligible":  false,
+    "events_per_second":  45641.47,
+    "dataset_provenance":  "DERIVED_SCENARIO",
+    "rows":  1000,
+    "date":  "2026-11-02",
+    "execution":  "py -m environments.high_speed.replay_runner --dataset %TEMP%\\q25_a2_timer_baseline_dataset_20261102_v2 --max-events 1000"
+}
