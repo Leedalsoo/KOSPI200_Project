@@ -546,4 +546,3 @@ def test_track8_ten_minute_timeout_cancel_reaches_bridge_and_strategy_hub():
     assert strategy.state.entry_pending is True
     assert bridge.position_lot_store.open_lots() == ()
     assert vssf.metrics["order_commands"] == 2
-

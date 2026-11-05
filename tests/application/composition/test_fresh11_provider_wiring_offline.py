@@ -38,14 +38,14 @@ class ReadModelSpy:
         self.records.append(record)
 
 
-def test_fresh11_factory_bridge_call_omits_authoritative_freshness_provider():
+def test_fresh11_factory_bridge_call_wires_authoritative_freshness_provider():
     source = (ROOT / "application/composition/automated_virtual_runtime_factory.py").read_text(encoding="utf-8-sig")
     tree = ast.parse(source)
     calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
         and isinstance(node.func, ast.Name) and node.func.id == "VirtualMultiLegExecutionBridge"]
     assert len(calls) == 1
     supplied_keywords = {kw.arg for kw in calls[0].keywords}
-    assert "freshness_verdict_provider" not in supplied_keywords
+    assert "freshness_verdict_provider" in supplied_keywords
 
 
 def test_fresh11_actual_bridge_execute_rejects_missing_provider_before_any_submit(monkeypatch):
@@ -69,6 +69,7 @@ def test_fresh11_actual_bridge_execute_rejects_missing_provider_before_any_submi
     bridge.option_master = SimpleNamespace(get_contract_identity=lambda instrument_id: SimpleNamespace(contract_multiplier=Decimal("100")))
     bridge.groups = {}
     bridge.freshness_verdict_provider = None
+    bridge.validation_order_gate = None
     bridge.command_context = SimpleNamespace(build_command=lambda command: command)
     bridge.risk_gate = RiskGateStub()
     bridge.risk_approval_read_model = ReadModelSpy()

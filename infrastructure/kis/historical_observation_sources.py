@@ -5,6 +5,7 @@ from decimal import Decimal, InvalidOperation
 import re
 from zoneinfo import ZoneInfo
 from typing import Sequence
+from contracts.market_data_freshness import FreshnessEvidence
 from contracts.option_orderbook_source import OptionOrderBookSnapshot, OptionOrderBookLevel
 from contracts.track2_option_iv_source import Track2OptionIVSource
 from contracts.types import MarketObservation
@@ -29,6 +30,7 @@ class HistoricalObservationOptionSource(Track2OptionIVSource):
         self._books: dict[str, list[tuple[datetime, OptionOrderBookSnapshot, datetime | None]]] = {}
         self._quotes: dict[str, list[tuple[datetime, object, datetime | None]]] = {}
         self._contracts_by_symbol: dict[str, object] = {}
+        self._observations_by_symbol: dict[str, list[MarketObservation]] = {}
         self._iv_times: dict[tuple[str, str, Decimal], list[datetime]] = {}
         self._iv_source_times: dict[tuple[str, str, Decimal], list[datetime]] = {}
         self._delta_times: dict[tuple[str, str, Decimal], list[datetime]] = {}
@@ -40,7 +42,9 @@ class HistoricalObservationOptionSource(Track2OptionIVSource):
                 continue
             freshness_at = self._freshness_timestamp(observation)
             identity = observation.contract
-            self._contracts_by_symbol[str(identity.symbol)] = identity
+            symbol = str(identity.symbol)
+            self._observations_by_symbol.setdefault(symbol, []).append(observation)
+            self._contracts_by_symbol[symbol] = identity
             key = (str(identity.expiry).replace("-", "")[:8], str(identity.option_type).upper(), Decimal(str(identity.strike)))
             iv = getattr(observation.analytics, "implied_volatility", None)
             if iv is not None:
@@ -103,6 +107,49 @@ class HistoricalObservationOptionSource(Track2OptionIVSource):
 
     def set_as_of(self, observed_at: datetime) -> None:
         self._as_of = observed_at
+
+    def get_freshness_evidence(self, symbol: str, *, as_of: datetime | None = None) -> FreshnessEvidence | None:
+        """Expose provenance for the latest eligible observation without promoting its time to verified source time."""
+        key = str(symbol).strip()
+        target = as_of or self._as_of
+        if not key or target is None:
+            return None
+        eligible = []
+        for observation in self._observations_by_symbol.get(key, ()):
+            observed_at = observation.observed_at or observation.collected_at
+            if observed_at is None:
+                continue
+            try:
+                if observed_at <= target:
+                    eligible.append((observed_at, observation))
+            except TypeError:
+                # Naive/aware timestamp mixtures are not comparable evidence.
+                continue
+        if not eligible:
+            return None
+        observation = max(eligible, key=lambda item: item[0])[1]
+        provenance = observation.provenance
+        metadata = dict(getattr(provenance, "metadata", ()) or ())
+        raw_reference = getattr(observation, "raw_reference", None)
+        source_times = tuple(getattr(provenance, "source_timestamps", ()) or ())
+        endpoints = tuple(getattr(provenance, "endpoints", ()) or ())
+        tr_ids = tuple(getattr(provenance, "tr_ids", ()) or ())
+        contract = observation.contract
+        return FreshnessEvidence(
+            source=str(getattr(observation, "source", "") or ""),
+            endpoint=str(endpoints[0] if endpoints else ""),
+            tr_id=str(tr_ids[0] if tr_ids else ""),
+            environment=str(metadata.get("environment", metadata.get("kis_environment", "")) or ""),
+            instrument_id=str(getattr(contract, "instrument_id", "") or ""),
+            symbol=str(getattr(contract, "symbol", "") or ""),
+            raw_source_time=str(source_times[0] if source_times else ""),
+            source_instant=self._freshness_timestamp(observation),
+            received_at=getattr(observation, "collected_at", None),
+            raw_payload_sha256=getattr(raw_reference, "content_hash", None),
+            source_time_semantics_verified=False,
+            capability_verified=False,
+            metadata={"evidence_origin": "HistoricalObservationOptionSource", "source_time_status": "UNVERIFIED"},
+        )
 
     @staticmethod
     def _latest(values, timestamps, as_of: datetime | None):

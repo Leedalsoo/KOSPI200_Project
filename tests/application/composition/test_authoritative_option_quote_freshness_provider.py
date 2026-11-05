@@ -1,4 +1,4 @@
-﻿from datetime import datetime
+from datetime import datetime
 from decimal import Decimal
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
@@ -208,4 +208,3 @@ def test_runtime_historical_source_evidence_is_connected_but_remains_fail_closed
     assert verdict.environment == "KIS_VTS"
     assert verdict.source_instant is None
     assert verdict.admits_risk_increase is False
-

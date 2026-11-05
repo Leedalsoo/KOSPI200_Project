@@ -1,4 +1,4 @@
-﻿from decimal import Decimal
+from decimal import Decimal
 from pathlib import Path
 import pytest
 from environments.high_speed.validation_only_option_risk_budget import (
@@ -49,4 +49,3 @@ def test_missing_or_invalid_risk_inputs_fail_closed():
             [SyntheticLongOptionLeg("put", "BUY", 1, Decimal("0"), Decimal("250000"))],
             profile,
         )
-
