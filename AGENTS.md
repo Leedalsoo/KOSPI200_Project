@@ -21,7 +21,7 @@ Notion `질문과답변`은 작업 연속성 및 실행 기록의 기준이다. 
 - 상태·시세·체결·포지션이 불명확하거나 authoritative input이 누락/오래된 경우 임의 추정으로 주문하지 않고 fail-closed 및 BLOCKED/UNAVAILABLE 처리한다.
 - 전략/아키텍처/데이터 기준 변경은 commit/push 전에 사용자 사전 승인을 받는다. Decision Log는 삭제하지 않고 폐기 시 상태를 `폐기됨`으로 변경해 근거를 남긴다. 다른 Notion 페이지 삭제는 사전 승인을 받는다.
 
-현재 개발 단계는 **수집기 v2 재구성·검증**이다. 런타임 데이터 기준은 KIS API만 사용하며 KRX는 런타임 소스가 아니다. VTS 전용이고 KIS Live 및 주문·정정·취소·계좌·잔고·증거금 API는 명시 승인 전까지 금지한다. 장중 운영 가드 08:29~16:01에는 수집기와 수집 코드를 수정·중지·재시작하지 않는다. 모의 REST 요청 간격은 최소 1.25초다.
+현재 개발 단계는 **수집기 v2 재구성·검증**이다. 런타임 데이터 기준은 KIS API만 사용하며 KRX는 런타임 소스가 아니다. VTS 전용이고 KIS Live 및 주문·정정·취소·계좌·잔고·증거금 API는 명시 승인 전까지 금지한다. 장중 운영 가드 08:29~16:01에는 수집기와 수집 코드를 수정·중지·재시작하지 않는다. 모의 REST 요청 간격은 최소 1.25초다. 별도 Q25 A1-3/A2 검증 트랙은 Section 20에 따라 합성 데이터셋을 주 입력으로 사용해 실제 프로젝트 코드 경로를 validation-only Virtual 환경에서 검증하며, 이를 KIS 운영 데이터 검증과 혼동하지 않는다.
 
 ---
 
@@ -31,7 +31,7 @@ Notion `질문과답변`은 작업 연속성 및 실행 기록의 기준이다. 
 - Live credential과 실제 Live market-data frame 증거가 없으면 Live E2E PASS를 선언하지 않는다.
 - KIS VTS 모의계좌 자격정보와 Live 자격정보를 혼용하지 않는다.
 - credential, token, `.env` 내용을 로그·Notion·Git에 기록하지 않는다.
-- authoritative source가 없는 값은 고정값, 0/False, 추정값, synthetic 값으로 정상 runtime을 가장하지 않는다. 필요한 경우 `UNAVAILABLE` 또는 `BLOCKED`로 종료한다.
+- Production Runtime에서는 authoritative source가 없는 값을 고정값, 0/False, 추정값, synthetic 값으로 보정하지 않고 `UNAVAILABLE` 또는 `BLOCKED`로 fail-closed 한다. 단, 별도 validation-only 실행 경계에서는 Section 20의 합성 입력·검증용 verdict를 사용해 프로젝트 코드 경로를 검증할 수 있다. 이는 production authority를 대체하지 않는다.
 - Mock/Synthetic/DERIVED_SCENARIO 결과를 REAL_VTS 또는 Live 검증 결과로 표현하지 않는다.
 - 검증할 수 없는 결과를 PASS로 표현하지 않는다.
 - 실제 데이터·계정·파일의 손상/유실 가능성이 있거나 credential 노출 가능성이 있으면 즉시 중단하고 보고한다.
@@ -439,6 +439,28 @@ Push 후 반드시 원격 `Project200` HEAD가 해당 commit SHA를 가리키는
 - `third_strike_insufficient_action=WAIT_AND_RECHECK`는 승인된 설계 범위 규칙이다. 동일 exact contract의 새 호가를 재확인하고 임의 가격 또는 대체 계약을 사용하지 않는다. 재시도 횟수·간격은 미확정이므로 실행 경로는 계속 BLOCKED다.
 - 실제 S1 잔여 short PUT과 연결된 authoritative position/lot 및 execution provenance는 확인되지 않았다. `s1_put_link_ratio`는 null/BLOCKED다. 계좌·잔고·증거금 API는 호출하지 않는다. quote age, 최종 spread/depth, quantity rounding, initial limit price, repricing/cancel 정책도 미확정이다. 따라서 S9 Runtime 및 전략 구현은 계속 BLOCKED다.
 - 2026-10-21 19:08 KST 상태 확인에서 `Project200-KIS-VTS-WebSocket-Collector` 예약 작업은 `Running`, 관련 PID 17800/13360/1228이 존재했다. `LastTaskResult=2147946720`의 의미는 미확인이다. 프로세스·스케줄러를 변경하지 않았다.
+## 20. Q25 합성데이터 기반 프로젝트 검증 기준
+
+현재 Q25 A1-3/A2 검증은 KIS 관측 데이터의 운영 적합성 검증이 아니라 승인된 SYNTHETIC/DERIVED_SCENARIO 데이터로 프로젝트의 실제 코드 경로를 검증하는 작업이다. 이 절은 Section 7~8의 REAL_VTS 운영 데이터 정책과 구분되는 validation-only 규칙이다.
+
+### 20.1 입력·출처 경계
+- 합성 데이터셋은 validation-only Runtime에서 테스트 입력의 기준(source of test truth)으로 사용할 수 있다. 데이터셋·manifest·seed·scenario_id·run_id·SHA-256을 결과에 연결하고 원본 데이터는 불변으로 보존한다.
+- 합성 quote, account, position, contract 및 risk-limit 입력은 명시적인 synthetic provenance와 scenario manifest를 가진 adapter/provider로 공급한다. 실제 KIS 계좌·관측 데이터가 없다는 이유만으로 합성 검증을 중단하지 않는다.
+- validation-only Freshness producer는 합성 이벤트의 timestamp, 계약 identity, quote 필드 및 provenance가 시나리오 계약에 부합하는지 검증한 뒤 검증용 FRESH verdict를 만들 수 있다. 해당 verdict는 validation-only 환경/정책 버전으로 식별하며 production Freshness evidence 또는 KIS source-time/capability 증거로 승격하지 않는다.
+- runtime_config_verified, risk_limits_available 등 운영 권한·준비 상태 기본값은 합성 검증을 위해 변경하지 않는다. 합성 설정의 유효성은 validation-only adapter/config에서 별도로 명시하고 검증한다.
+
+### 20.2 검증 대상 코드 경로
+- 가능한 경우 테스트 전용 가짜 경로가 아니라 실제 등록된 StrategyHub/Strategy 코드에 합성 Runtime Input을 공급한다.
+- 자연 신호는 실제 StrategyHub에 등록된 전략 코드가 합성 시장 입력에서 생성한 경우만 인정한다. Fixture/hardcoded/injected signal은 PLUMBING_ONLY다.
+- 검증 범위는 Market Event → Runtime Input → Strategy Signal → Decision → RiskEngine/RiskGate → OMS/Order Router → Virtual Broker/Execution → Position → PnL 순서로 확장한다. 단계별 결과와 거부 원인을 기록하고, 미실행 단계는 PASS로 간주하지 않는다.
+- 주문·체결 수명주기 검증은 Virtual Broker/Virtual Execution 내부에서만 수행한다. KIS API, Live/실계좌 API, 실제 주문·정정·취소는 호출하지 않는다.
+
+### 20.3 동등성·안전·판정
+- Fast/Detailed Replay는 동일 dataset hash, manifest, scenario, run scope 및 clock 기준을 사용한다. 이벤트 수, 자연 신호, Decision/Risk 판정, 주문 상태 전이, fill, Position/PnL 및 observer/trace 결과를 비교한다.
+- 의도된 합성 시나리오(예: 단방향 호가)는 시나리오 계약에 명시된 범위에서 허용할 수 있다. 음수·비유한 값, identity 충돌, 시간 역전, manifest/hash 불일치 등 데이터 무결성 위반은 계속 거부한다.
+- PSB_PASS는 명시한 합성 검증 범위에만 적용한다. Fixture 기반 연결은 PLUMBING_ONLY, 미실행/증거 부족은 UNVERIFIED 또는 구체적 BLOCKED_*로 남긴다. 합성 검증 결과를 REAL_VTS 또는 Live 운영 PASS로 표현하지 않는다.
+- Strategy 3·4는 현재 Q25 검증 범위에서 제외한다. Synthetic-yield 및 전략 파라미터 튜닝, 기존 데이터셋 덮어쓰기, raw KIS 데이터 변경은 금지한다.
+- 기존 미커밋 변경은 보존한다. 코드 변경·커밋·푸시·Decision Log 등록은 각 단계의 명시 승인 게이트를 따른다.
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
