@@ -58,3 +58,20 @@ def test_synthetic_execution_gate_rejects_generated_non_dataset_identity(gate):
             prepared_leg("put", price="0.2", identity_id="SYN-20261105-PUT-487.5"),
             prepared_leg("call", price="0.2"),
         ])
+
+
+
+def test_synthetic_execution_gate_allows_identity_bound_per_leg_exit_without_entry_budget(gate):
+    exit_plan = SimpleNamespace(
+        strategy_id="track6_daily_tail_insurance",
+        purpose="DAILY_TAIL_INSURANCE_TRAILING_CLOSE_PUT",
+    )
+    leg = SimpleNamespace(leg_id="close-put-001", side="SELL", quantity=1)
+    identity = SimpleNamespace(
+        instrument_id="SYNTHETIC_CONTRACT:SYNTH-S6-1-20261102-PUT-487.5",
+        identity_source="OPTION_MASTER", option_type="PUT",
+        contract_multiplier=Decimal("250000"),
+    )
+    gate.validate_group(exit_plan, [
+        (leg, identity, "client-close-put", None, None, Decimal("0.5"), Decimal("0.6")),
+    ])

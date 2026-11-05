@@ -93,7 +93,29 @@ class Track6SyntheticExecutionGate:
         strategy.risk_limits_available = True
 
     def validate_group(self, plan: Any, prepared: list[tuple]) -> None:
-        if getattr(plan, "strategy_id", None) != STRATEGY_ID or getattr(plan, "purpose", None) != "DAILY_TAIL_INSURANCE_ENTRY":
+        if getattr(plan, "strategy_id", None) != STRATEGY_ID:
+            raise ValueError("TRACK6_SYNTHETIC_EXECUTION_PLAN_SCOPE_INVALID")
+        purpose = str(getattr(plan, "purpose", "") or "")
+        exit_purposes = {
+            "DAILY_TAIL_INSURANCE_TRAILING_CLOSE_PUT",
+            "DAILY_TAIL_INSURANCE_TRAILING_CLOSE_CALL",
+            "DAILY_TAIL_INSURANCE_FORCE_CLOSE",
+        }
+        if purpose in exit_purposes:
+            if len(prepared) not in {1, 2}:
+                raise ValueError("TRACK6_SYNTHETIC_EXECUTION_EXIT_LEGS_REQUIRED")
+            for leg, identity, _client_id, _command, _canonical, bid, ask in prepared:
+                instrument_id = str(getattr(identity, "instrument_id", ""))
+                if (not instrument_id.startswith(SYNTHETIC_ID_PREFIX)
+                        or str(getattr(identity, "identity_source", "")) != "OPTION_MASTER"
+                        or str(getattr(leg, "side", "")).upper() != "SELL"
+                        or int(getattr(leg, "quantity", 0) or 0) <= 0
+                        or str(getattr(identity, "option_type", "")).upper() not in {"PUT", "CALL"}
+                        or Decimal(str(getattr(identity, "contract_multiplier", "0"))) <= 0
+                        or Decimal(str(bid)) <= 0 or Decimal(str(ask)) < Decimal(str(bid))):
+                    raise ValueError("TRACK6_SYNTHETIC_EXECUTION_EXIT_LEG_INVALID")
+            return
+        if purpose != "DAILY_TAIL_INSURANCE_ENTRY":
             raise ValueError("TRACK6_SYNTHETIC_EXECUTION_PLAN_SCOPE_INVALID")
         if len(prepared) != 2:
             raise ValueError("TRACK6_SYNTHETIC_EXECUTION_TWO_LEGS_REQUIRED")
@@ -161,7 +183,7 @@ class Track6SyntheticFreshnessProvider:
                 symbol=symbol, source_instant=observed, received_at=observed, evidence_sha256=digest)
         if getattr(plan, "strategy_id", None) != STRATEGY_ID or not instrument_id.startswith(SYNTHETIC_ID_PREFIX):
             return verdict(FreshnessStatus.IDENTITY_CONFLICT, "SYNTHETIC_STRATEGY_OR_IDENTITY_REQUIRED")
-        master = self.option_master.get_contract_identity(symbol)
+        master = self.option_master.get_contract_identity(instrument_id)
         if master is None or str(getattr(master, "shrn_iscd", "")) != instrument_id:
             return verdict(FreshnessStatus.IDENTITY_CONFLICT, "SYNTHETIC_OPTION_MASTER_IDENTITY_MISMATCH")
         if (str(getattr(master, "option_type", "")).upper() != str(getattr(identity, "option_type", "")).upper()
@@ -169,11 +191,14 @@ class Track6SyntheticFreshnessProvider:
                 or str(getattr(master, "expiry", "")).replace("-", "")[:8] != str(getattr(identity, "expiry", "")).replace("-", "")[:8]
                 or str(getattr(master, "contract_multiplier", "")) != str(getattr(identity, "contract_multiplier", ""))):
             return verdict(FreshnessStatus.IDENTITY_CONFLICT, "SYNTHETIC_OPTION_MASTER_CONTRACT_MISMATCH")
-        quote = next((value for key, value in getattr(self.market, "option_quotes", {}).items()
-            if isinstance(key, tuple) and len(key) == 3
-            and str(key[0]).upper() == str(identity.option_type).upper()
-            and Decimal(str(key[1])) == Decimal(str(identity.strike))
-            and str(key[2]).replace("-", "")[:8] == str(identity.expiry).replace("-", "")[:8]), None)
+        quote = getattr(self.market, "option_quotes_by_instrument_id", {}).get(instrument_id)
+        if not isinstance(quote, dict) or quote.get("source") != "SYNTHETIC:DERIVED_SCENARIO":
+            return verdict(FreshnessStatus.UNKNOWN, "SYNTHETIC_IDENTITY_BOUND_QUOTE_MISSING")
+        if (str(quote.get("instrument_id", "")) != instrument_id
+                or str(quote.get("option_type", "")).upper() != str(identity.option_type).upper()
+                or Decimal(str(quote.get("strike", "0"))) != Decimal(str(identity.strike))
+                or str(quote.get("expiry", "")).replace("-", "")[:8] != str(identity.expiry).replace("-", "")[:8]):
+            return verdict(FreshnessStatus.IDENTITY_CONFLICT, "SYNTHETIC_QUOTE_CONTRACT_IDENTITY_MISMATCH")
         if not isinstance(quote, dict):
             return verdict(FreshnessStatus.UNKNOWN, "SYNTHETIC_QUOTE_MISSING")
         try:

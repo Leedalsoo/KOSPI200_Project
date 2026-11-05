@@ -7,7 +7,10 @@ UnavailableStrategyPayload and never by a numeric/boolean placeholder.
 from __future__ import annotations
 from contracts.trading_date import format_trading_date
 
+from datetime import datetime, timedelta
 from decimal import Decimal
+from hashlib import sha256
+import re
 from typing import Any
 
 from application.composition.virtual_runtime_data_provider import VirtualRuntimeDataProvider
@@ -19,7 +22,7 @@ from application.composition.track1_runtime_input_provider import Track1RuntimeI
 from application.composition.track3_runtime_input_provider import Track3RuntimeInputProvider
 from core.strategy.track4_gamma_scalping import Track4MarketInput
 from core.strategy.track5_gap_divergence import Track5ExecutionInput
-from core.strategy.track6_daily_tail_insurance import Track6ExecutionInput
+from core.strategy.track6_daily_tail_insurance import Track6ExecutionInput, Track6OptionMark
 from core.strategy.track7_volatility_skew_weekly_insurance import Track7ExecutionInput
 from application.composition.track7_option_contract_source import Track7OptionContractSource
 from contracts.analytics import AnalyticsProvenance, AnalyticsStatus, MarketSnapshot
@@ -41,6 +44,7 @@ from contracts.track9_margin_read_model import Track9MarginReadModel
 from contracts.track9_authoritative_sources import Track9PositionExecutionReadModel, Track9EventSource, Track9EventRiskSource
 from contracts.kis_kospi200_daily_source import KOSPI200DailySource
 from contracts.track6_volatility_source import Track6VolatilitySource
+from contracts.types import OptionInstrumentIdentity
 from application.composition.track6_option_contract_source import Track6OptionContractSource
 from application.composition.track5_option_contract_source import Track5OptionContractSource
 from application.composition.track8_option_contract_source import Track8OptionContractSource
@@ -55,7 +59,7 @@ from application.composition.track8_analytics_provider import build_track8_analy
 class StandardRuntimeInputProvider:
     """Build standard inputs from observable VMS/VSSF sources only."""
 
-    def __init__(self, market: Any, *, track9_fee_ledger: Track9FeeLedger | None = None, track9_margin_read_model: Track9MarginReadModel | None = None, track9_position_execution_source: Track9PositionExecutionReadModel | None = None, track9_event_source: Track9EventSource | None = None, track9_event_risk_source: Track9EventRiskSource | None = None, run_id: str | None = None, track7_order_timeout_source: Any | None = None, track7_support_resistance_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None, track6_option_contract_source: Track6OptionContractSource | None = None, track7_option_contract_source: Track7OptionContractSource | None = None, track8_option_contract_source: Track8OptionContractSource | None = None, track9_option_contract_source: Track9OptionContractSource | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None, track4_greeks_provider: Track4KisGreeksProvider | None = None, kospi200_daily_source: KOSPI200DailySource | None = None, track6_volatility_source: Track6VolatilitySource | None = None, track1_fence_type_source: Any | None = None, track1_position_lot_store: Any | None = None, track1_option_delta_source: Any | None = None, strategy_keys: tuple[str, ...] | None = None, validation_only_s8_runtime_adapter: Any | None = None) -> None:
+    def __init__(self, market: Any, *, track9_fee_ledger: Track9FeeLedger | None = None, track9_margin_read_model: Track9MarginReadModel | None = None, track9_position_execution_source: Track9PositionExecutionReadModel | None = None, track9_event_source: Track9EventSource | None = None, track9_event_risk_source: Track9EventRiskSource | None = None, run_id: str | None = None, track7_order_timeout_source: Any | None = None, track7_support_resistance_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None, track6_option_contract_source: Track6OptionContractSource | None = None, track6_option_mark_max_age_seconds: int | None = None, track7_option_contract_source: Track7OptionContractSource | None = None, track8_option_contract_source: Track8OptionContractSource | None = None, track9_option_contract_source: Track9OptionContractSource | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None, track4_greeks_provider: Track4KisGreeksProvider | None = None, kospi200_daily_source: KOSPI200DailySource | None = None, track6_volatility_source: Track6VolatilitySource | None = None, track1_fence_type_source: Any | None = None, track1_position_lot_store: Any | None = None, track1_option_delta_source: Any | None = None, strategy_keys: tuple[str, ...] | None = None, validation_only_s8_runtime_adapter: Any | None = None) -> None:
         self.risk_guard_status_source = risk_guard_status_source
         self.strategy_keys = frozenset(strategy_keys or ())
         self.market_condition_sensor = MarketConditionSensor()
@@ -72,6 +76,7 @@ class StandardRuntimeInputProvider:
         self.track7_order_timeout_source = track7_order_timeout_source
         self.track7_support_resistance_source = track7_support_resistance_source
         self.track6_option_contract_source = track6_option_contract_source
+        self.track6_option_mark_max_age_seconds = track6_option_mark_max_age_seconds
         self.track5_option_contract_source = Track5OptionContractSource(option_master, option_orderbook_source) if option_master is not None else None
         self.track7_option_contract_source = track7_option_contract_source
         self.track8_option_contract_source = track8_option_contract_source
@@ -108,6 +113,55 @@ class StandardRuntimeInputProvider:
             ),
         )
 
+
+    def _track6_option_marks(self, as_of: datetime) -> tuple[Track6OptionMark, ...]:
+        max_age = self.track6_option_mark_max_age_seconds
+        if max_age is None or max_age < 0:
+            return ()
+        market = self.data.market
+        quotes = getattr(market, "option_quotes_by_instrument_id", {})
+        option_master = getattr(self.track6_option_contract_source, "option_master", None)
+        if not isinstance(quotes, dict) or option_master is None:
+            return ()
+        marks = []
+        for instrument_id, quote in quotes.items():
+            if not str(instrument_id).startswith("SYNTHETIC_CONTRACT:") or not isinstance(quote, dict):
+                continue
+            if quote.get("source") != "SYNTHETIC:DERIVED_SCENARIO":
+                continue
+            identity = option_master.get_contract_identity(str(instrument_id))
+            if identity is None or str(getattr(identity, "shrn_iscd", "")) != str(instrument_id):
+                continue
+            try:
+                bid = Decimal(str(quote["bid"]))
+                ask = Decimal(str(quote["ask"]))
+                last = Decimal(str(quote["last"]))
+                multiplier = Decimal(str(quote["contract_multiplier"]))
+                observed = datetime.fromisoformat(str(quote["timestamp"]))
+                strike = Decimal(str(quote["strike"]))
+                expiry = str(quote["expiry"])
+                option_type = str(quote["option_type"]).upper()
+            except (KeyError, TypeError, ValueError):
+                continue
+            if (str(quote.get("instrument_id", "")) != str(instrument_id)
+                    or observed.tzinfo is None or as_of.tzinfo is None or observed > as_of
+                    or as_of - observed > timedelta(seconds=max_age)
+                    or bid <= 0 or ask < bid or last <= 0 or multiplier <= 0
+                    or option_type not in {"PUT", "CALL"}
+                    or option_type != str(getattr(identity, "option_type", "")).upper()
+                    or strike != Decimal(str(getattr(identity, "strike", "0")))
+                    or expiry.replace("-", "")[:8] != str(getattr(identity, "expiry", "")).replace("-", "")[:8]
+                    or multiplier != Decimal(str(getattr(identity, "contract_multiplier", "0")))):
+                continue
+            digest = sha256(
+                f"{instrument_id}|{option_type}|{strike}|{expiry}|{observed.isoformat()}|{bid}|{ask}|{last}|{quote['source']}".encode("utf-8")
+            ).hexdigest()
+            marks.append(Track6OptionMark(
+                instrument_id=str(instrument_id), option_type=option_type, strike=strike,
+                expiry=expiry, bid_price=bid, ask_price=ask, last_price=last,
+                as_of=observed, source=str(quote["source"]), evidence_sha256=digest,
+            ))
+        return tuple(marks)
 
     @staticmethod
     def _position_values(account: Any | None) -> tuple[int, int]:
@@ -394,8 +448,17 @@ class StandardRuntimeInputProvider:
             )
         else:
             try:
+                identity_prefix = None
+                if self.track6_option_mark_max_age_seconds is not None:
+                    current_instrument_id = str(getattr(tick, "instrument_id", "") or "")
+                    scope_match = re.match(r"^(SYNTHETIC_CONTRACT:SYNTH-S6-\d+-\d{8})-", current_instrument_id)
+                    if scope_match is None:
+                        raise ValueError("TRACK6_SYNTHETIC_CONTRACT_SCOPE_REQUIRED")
+                    identity_prefix = scope_match.group(1)
                 selection = self.track6_option_contract_source.select(
-                    expiry=getattr(tick, "expiry", ""), current_price=(Decimal(str(getattr(tick, "underlying_price"))) if getattr(tick, "underlying_price", None) is not None else None)
+                    expiry=getattr(tick, "expiry", ""),
+                    current_price=(Decimal(str(getattr(tick, "underlying_price"))) if getattr(tick, "underlying_price", None) is not None else None),
+                    identity_prefix=identity_prefix,
                 )
                 multiplier = Decimal(str(selection.put.contract_multiplier))
                 call_multiplier = Decimal(str(selection.call.contract_multiplier))
@@ -406,6 +469,24 @@ class StandardRuntimeInputProvider:
                     "track6_daily_tail_insurance", ("listed_option_contracts",), str(exc)
                 )
             else:
+                put_identity = OptionInstrumentIdentity(
+                    instrument_id=str(selection.put.shrn_iscd),
+                    symbol=str(selection.put.shrn_iscd),
+                    expiry=str(selection.put.expiry),
+                    option_type=str(selection.put.option_type).upper(),
+                    strike=Decimal(str(selection.put.strike)),
+                    contract_multiplier=multiplier,
+                    identity_source="OPTION_MASTER",
+                )
+                call_identity = OptionInstrumentIdentity(
+                    instrument_id=str(selection.call.shrn_iscd),
+                    symbol=str(selection.call.shrn_iscd),
+                    expiry=str(selection.call.expiry),
+                    option_type=str(selection.call.option_type).upper(),
+                    strike=Decimal(str(selection.call.strike)),
+                    contract_multiplier=call_multiplier,
+                    identity_source="OPTION_MASTER",
+                )
                 execution_input = Track6ExecutionInput(
                     strategy_id="track6_daily_tail_insurance",
                     date_str=format_trading_date(d.as_of.date()),
@@ -413,6 +494,12 @@ class StandardRuntimeInputProvider:
                     listed_put_strike=Decimal(str(selection.put.strike)),
                     listed_call_strike=Decimal(str(selection.call.strike)),
                     contract_multiplier=multiplier,
+                    listed_put_instrument_id=str(selection.put.shrn_iscd),
+                    listed_call_instrument_id=str(selection.call.shrn_iscd),
+                    listed_put_identity=put_identity,
+                    listed_call_identity=call_identity,
+                    expiry=str(selection.put.expiry),
+                    option_marks=self._track6_option_marks(d.as_of),
                 )
                 contexts["track6_daily_tail_insurance"] = StrategyContext(
                     market_state, "track6_daily_tail_insurance", StrategyInput(common, execution_input),

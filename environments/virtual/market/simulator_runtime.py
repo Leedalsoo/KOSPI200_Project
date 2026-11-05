@@ -45,6 +45,7 @@ class VirtualMarketSimulatorRuntime:
         self._underlying_history = deque(maxlen=600)
         self.last_tick = None
         self._option_quotes = {}
+        self._option_quotes_by_instrument_id = {}
         self._authoritative_option_quote_provider = None
         self._futures_price = self._price
 
@@ -59,6 +60,10 @@ class VirtualMarketSimulatorRuntime:
     @property
     def option_quotes(self):
         return dict(self._option_quotes)
+
+    @property
+    def option_quotes_by_instrument_id(self):
+        return {key: dict(value) for key, value in self._option_quotes_by_instrument_id.items()}
 
     @property
     def futures_price(self):
@@ -149,8 +154,8 @@ class VirtualMarketSimulatorRuntime:
     def unsubscribe(self, callback) -> None:
         self._subscribers = [item for item in self._subscribers if item != callback]
 
-    def register_replay_option_quote(self, *, symbol: str, option_type: str, strike: float, expiry: str, bid: float, ask: float, last: float, timestamp: str, contract_multiplier: float) -> None:
-        """Register an external replay quote without triggering strategy evaluation."""
+    def register_replay_option_quote(self, *, symbol: str, option_type: str, strike: float, expiry: str, bid: float, ask: float, last: float, timestamp: str, contract_multiplier: float, source: str = "VMS:REPLAY") -> None:
+        """Register an external replay quote under both contract identity and strike key."""
         if not symbol or option_type not in {"CALL", "PUT"} or not expiry:
             raise ValueError("VMS_REPLAY_OPTION_QUOTE_REQUIRED")
         from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
@@ -158,6 +163,19 @@ class VirtualMarketSimulatorRuntime:
             normalized_expiry = require_exact_option_expiry(expiry)
         except CanonicalOptionExpiryError as exc:
             raise ValueError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
+        quote = {
+            "instrument_id": symbol,
+            "option_type": option_type.upper(),
+            "strike": float(strike),
+            "expiry": normalized_expiry,
+            "bid": float(bid),
+            "ask": float(ask),
+            "last": float(last),
+            "timestamp": timestamp,
+            "contract_multiplier": float(contract_multiplier),
+            "source": str(source),
+        }
+        self._option_quotes_by_instrument_id[symbol] = dict(quote)
         self._option_quotes[(option_type.upper(), float(strike), normalized_expiry)] = {
             "bid": float(bid),
             "ask": float(ask),

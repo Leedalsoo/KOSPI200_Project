@@ -34,6 +34,7 @@ class SyntheticRuntimeSources:
         self._clock = clock
         self._tick: Any | None = None
         self._iv: dict[tuple[str, str, Decimal], Decimal] = {}
+        self._option_quote_cache: dict[str, dict[str, Any]] = {}
         self._history: deque[tuple[datetime, Decimal, Decimal]] = deque(maxlen=60)
         self._poc: Decimal | None = None
         self._basis: Decimal | None = None
@@ -81,6 +82,27 @@ class SyntheticRuntimeSources:
     def set_tick(self, tick: Any) -> None:
         self._tick = tick
         observed = datetime.fromisoformat(tick.timestamp)
+        instrument_id = str(getattr(tick, "instrument_id", "") or "")
+        if instrument_id.startswith("SYNTHETIC_CONTRACT:"):
+            try:
+                bid = Decimal(str(tick.bid_price))
+                ask = Decimal(str(tick.ask_price))
+                last = Decimal(str(tick.last_price))
+                if bid > 0 and ask >= bid and last > 0:
+                    self._option_quote_cache[instrument_id] = {
+                        "instrument_id": instrument_id,
+                        "option_type": str(tick.option_type).upper(),
+                        "strike": Decimal(str(tick.strike_price)),
+                        "expiry": str(tick.expiry),
+                        "bid": bid,
+                        "ask": ask,
+                        "last": last,
+                        "timestamp": observed,
+                        "volume": max(1, int(getattr(tick, "volume", 1) or 1)),
+                        "source": "SYNTHETIC:DERIVED_SCENARIO",
+                    }
+            except (AttributeError, TypeError, ValueError):
+                pass
         price = Decimal(str(tick.last_price))
         trading_date = observed.date()
         if self._track5_daily_context is None or self._track5_daily_context.trading_date != trading_date:
@@ -159,8 +181,25 @@ class SyntheticRuntimeSources:
     def get_order_book(self, symbol: str) -> OptionOrderBookSnapshot | None:
         if self._tick is None or not symbol:
             return None
-        # DERIVED_SCENARIO supplies a synthetic top-of-book for every listed
-        # candidate so Strategy5 can exercise its 2nd/3rd-strike liquidity rule.
+        if str(symbol).startswith("SYNTHETIC_CONTRACT:"):
+            quote = self._option_quote_cache.get(str(symbol))
+            if quote is None or quote.get("source") != "SYNTHETIC:DERIVED_SCENARIO":
+                return None
+            observed = quote.get("timestamp")
+            current = datetime.fromisoformat(self._tick.timestamp)
+            if (not isinstance(observed, datetime) or observed.tzinfo is None
+                    or current.tzinfo is None or observed > current
+                    or current - observed > timedelta(seconds=5)):
+                return None
+            qty = Decimal(str(quote.get("volume", 1)))
+            bid = Decimal(str(quote["bid"]))
+            ask = Decimal(str(quote["ask"]))
+            asks = tuple(OptionOrderBookLevel(ask + Decimal("0.01") * i, qty + Decimal(i * 2)) for i in range(5))
+            bids = tuple(OptionOrderBookLevel(max(Decimal("0.01"), bid - Decimal("0.01") * i), qty + Decimal(i * 2)) for i in range(5))
+            return OptionOrderBookSnapshot(str(symbol), observed.strftime("%H:%M:%S"), asks, bids,
+                                            f"{SYNTHETIC_SOURCE}:identity-bound")
+        # Non-synthetic symbols retain the legacy modelled book used by other
+        # validation-only strategies; synthetic option IDs never fall back to it.
         mid = Decimal(str(self._tick.last_price))
         qty = Decimal(str(max(1, int(self._tick.volume))))
         trigger = int(self._tick.seq_id) % 17 == 0

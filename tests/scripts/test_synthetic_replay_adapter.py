@@ -171,3 +171,151 @@ def test_external_manifest_validates_output_hash_bytes_and_rows(tmp_path: Path, 
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     with pytest.raises(ValueError, match="MANIFEST_ROWS_MISMATCH"):
         SyntheticReplayAdapter(dataset, manifest_path=manifest_path)
+
+
+
+def test_external_manifest_accepts_dataset_scenario_ids_list(tmp_path: Path, monkeypatch) -> None:
+    import hashlib
+
+    project = tmp_path
+    dataset = project / "data" / "derived_scenario" / "q25_a2_1_strategy6"
+    dataset.mkdir(parents=True)
+    monkeypatch.chdir(project)
+    record = {
+        "schema": "reference-canonical-market-tick-v1",
+        "synthetic": True,
+        "provenance": "DERIVED_SCENARIO",
+        "tick": {
+            "timestamp": "2026-11-02T08:45:00+09:00",
+            "underlying_price": 500.0,
+            "strike_price": 487.5,
+            "option_type": "PUT",
+            "contract_multiplier": 250000.0,
+            "bid_price": 0.8,
+            "ask_price": 0.9,
+            "last_price": 0.85,
+            "expiry": "20261102",
+            "symbol": "KOSPI200",
+            "synthetic_contract_id": "SYNTHETIC_CONTRACT:0123456789abcdef01234567",
+            "source_instrument_code": "B016AA12",
+            "instrument_identity_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+        },
+        "scenario_metadata": {
+            "scenario_id": "premium_2x_drawdown_10pct",
+            "validation_only": True,
+            "regime": "NORMAL",
+            "contract_identity_authority": "SYNTHETIC_ONLY",
+        },
+    }
+    data_path = dataset / "20261102.jsonl"
+    data_path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    raw = data_path.read_bytes()
+    manifest = {
+        "schema_version": "q25-a2-1-s6-syn-evt-manifest-v1",
+        "source_type": "DERIVED_SCENARIO",
+        "provenance": "DERIVED_SCENARIO",
+        "synthetic": True,
+        "validation_only": True,
+        "production_runtime_eligible": False,
+        "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+        "scenario_count": 2,
+        "scenario_ids": ["volatility_1_3x", "premium_2x_drawdown_10pct"],
+        "output_path": "data\\\\derived_scenario\\\\q25_a2_1_strategy6\\\\20261102.jsonl",
+        "output_sha256": hashlib.sha256(raw).hexdigest(),
+        "output_bytes": len(raw),
+        "rows": 1,
+    }
+    manifest_path = project / "Q25_A2_1_S6_SYN_EVT_MANIFEST.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    adapter = SyntheticReplayAdapter(dataset, manifest_path=manifest_path)
+    adapted = adapter.adapt_record(record)
+    assert adapted["tick"]["scenario_id"] == "premium_2x_drawdown_10pct"
+    assert adapted["scenario_metadata"]["dte_trading_days"] == 0
+    assert adapted["scenario_metadata"]["dte_provenance"] == "DERIVED_EXACT_SAME_DAY_EXPIRY"
+
+    unknown = dict(record)
+    unknown["scenario_metadata"] = dict(record["scenario_metadata"], scenario_id="unknown_scenario")
+    with pytest.raises(ValueError, match="SCENARIO_ID_MISMATCH"):
+        adapter.adapt_record(unknown)
+
+    future_expiry = dict(record)
+    future_expiry["tick"] = dict(record["tick"], expiry="20261103")
+    with pytest.raises(ValueError, match="TRADING_DAY_DTE_REQUIRED"):
+        adapter.adapt_record(future_expiry)
+
+
+
+def test_adapter_derives_future_expiry_dte_only_from_explicit_synthetic_calendar(tmp_path: Path, monkeypatch) -> None:
+    import hashlib
+
+    project = tmp_path
+    dataset = project / "data" / "derived_scenario" / "q25_a2_1_strategy6"
+    dataset.mkdir(parents=True)
+    monkeypatch.chdir(project)
+    record = {
+        "schema": "reference-canonical-market-tick-v1",
+        "synthetic": True,
+        "provenance": "DERIVED_SCENARIO",
+        "tick": {
+            "timestamp": "2026-11-02T08:45:00+09:00",
+            "underlying_price": 500.0,
+            "strike_price": 487.5,
+            "option_type": "PUT",
+            "contract_multiplier": 250000.0,
+            "bid_price": 0.8,
+            "ask_price": 0.9,
+            "last_price": 0.85,
+            "expiry": "20261105",
+            "symbol": "KOSPI200",
+            "synthetic_contract_id": "SYNTHETIC_CONTRACT:0123456789abcdef01234567",
+            "source_instrument_code": "B016AA12",
+            "instrument_identity_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+        },
+        "scenario_metadata": {
+            "scenario_id": "premium_2x_drawdown_10pct",
+            "validation_only": True,
+            "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+        },
+    }
+    data_path = dataset / "20261102.jsonl"
+    data_path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    raw = data_path.read_bytes()
+    manifest = {
+        "schema_version": "q25-a2-1-s6-syn-evt-manifest-v1",
+        "scenario_id": "Q25_SYNTHETIC_MULTI_SCENARIO_CALENDAR",
+        "source_type": "DERIVED_SCENARIO",
+        "provenance": "DERIVED_SCENARIO",
+        "synthetic": True,
+        "validation_only": True,
+        "production_runtime_eligible": False,
+        "runtime_eligible": False,
+        "expiry_is_authoritative": False,
+        "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+        "scenario_count": 2,
+        "scenario_ids": ["volatility_1_3x", "premium_2x_drawdown_10pct"],
+        "scenario_regimes": {"volatility_1_3x": "HIGH_VOL", "premium_2x_drawdown_10pct": "NORMAL"},
+        "dataset_sha256": hashlib.sha256(raw).hexdigest(),
+        "trading_calendar": {
+            "calendar_id": "Q25_SYNTHETIC_CALENDAR_20261102_05",
+            "source_type": "SYNTHETIC",
+            "authoritative": False,
+            "timezone": "Asia/Seoul",
+            "trading_days": ["2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05"],
+        },
+        "output_path": "data\\\\derived_scenario\\\\q25_a2_1_strategy6\\\\20261102.jsonl",
+        "output_sha256": hashlib.sha256(raw).hexdigest(),
+        "output_bytes": len(raw),
+        "rows": 1,
+    }
+    manifest_path = project / "Q25_A2_1_S6_SYN_EVT_MANIFEST.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    adapter = SyntheticReplayAdapter(dataset, manifest_path=manifest_path)
+    adapted = adapter.adapt_record(record)
+    assert adapted["scenario_metadata"]["dte_trading_days"] == 3
+    assert adapted["scenario_metadata"]["dte_provenance"] == "DERIVED_SYNTHETIC_VALIDATION_CALENDAR"
+    assert adapted["scenario_metadata"]["regime"] == "NORMAL"
+    assert adapted["scenario_metadata"]["regime_provenance"] == "DERIVED_FROM_MANIFEST_SCENARIO_REGIME"
+    assert adapted["scenario_metadata"]["contract_identity_authority"] == "SYNTHETIC_ONLY"
+    assert adapted["scenario_metadata"]["identity_authority_provenance"] == "DERIVED_FROM_BLOCKED_IDENTITY_STATUS"

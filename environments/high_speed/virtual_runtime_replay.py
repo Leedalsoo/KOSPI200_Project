@@ -105,6 +105,7 @@ def _publish_contract_scoped_replay_quote(tick, *, option_master, market, order_
         last=last,
         timestamp=tick.timestamp,
         contract_multiplier=multiplier,
+        source="SYNTHETIC:DERIVED_SCENARIO",
     )
     # Never route this validation-only identity through a Standard instrument ID.
     order_book.update_bid_ask(bid, ask, instrument_id=synthetic_id)
@@ -266,8 +267,17 @@ class HighSpeedVirtualRuntimeReplayRunner:
                 if identity is None or identity.option_type is None or identity.strike is None:
                     continue
                 expiry = str(identity.expiry).replace("-", "")[:8]
-                key = (str(identity.option_type).upper(), float(identity.strike), expiry)
-                quote = bootstrap.bundle.market.option_quotes.get(key)
+                if str(symbol).startswith("SYNTHETIC_CONTRACT:"):
+                    quote = bootstrap.bundle.market.option_quotes_by_instrument_id.get(symbol)
+                    if (not isinstance(quote, dict)
+                            or quote.get("source") != "SYNTHETIC:DERIVED_SCENARIO"
+                            or str(quote.get("instrument_id", "")) != str(symbol)
+                            or str(quote.get("option_type", "")).upper() != str(identity.option_type).upper()
+                            or str(quote.get("expiry", "")).replace("-", "")[:8] != expiry):
+                        continue
+                else:
+                    key = (str(identity.option_type).upper(), float(identity.strike), expiry)
+                    quote = bootstrap.bundle.market.option_quotes.get(key)
                 if quote is not None:
                     account_source.update_tick_price(quote["last"], instrument_id=symbol)
 

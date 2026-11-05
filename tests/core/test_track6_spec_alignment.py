@@ -55,6 +55,10 @@ def test_track6_entry_becomes_active_only_after_authoritative_pair_fills() -> No
 
     assert strategy.state.is_active is True
     assert strategy.state.entry_pending is False
+    assert strategy.state.put_entry_fill_price == Decimal("2.0")
+    assert strategy.state.call_entry_fill_price == Decimal("2.1")
+    assert strategy.state.put_open is True
+    assert strategy.state.call_open is True
 
 
 def test_track6_force_close_boundary_is_1510_and_not_1500_or_1515() -> None:

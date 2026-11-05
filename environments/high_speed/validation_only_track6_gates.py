@@ -28,6 +28,7 @@ class Track6ValidationGateEvidence:
     strategy_max_gross_premium_outlay_krw: int
     strategy_max_loss_krw: int
     strategy_max_concurrent_positions: int
+    max_quote_age_seconds: int
 
 
 def load_track6_validation_gate_evidence(
@@ -76,6 +77,7 @@ def load_track6_validation_gate_evidence(
         strategy_max_gross_premium_outlay_krw=limit.max_gross_premium_outlay_krw,
         strategy_max_loss_krw=limit.max_loss_krw,
         strategy_max_concurrent_positions=limit.max_concurrent_positions,
+        max_quote_age_seconds=config.max_quote_age_seconds,
     )
 
 

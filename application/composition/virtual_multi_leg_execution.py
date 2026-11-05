@@ -195,10 +195,43 @@ class VirtualMultiLegExecutionBridge:
             if instrument_id in instrument_ids
         )
 
+    def _position_flat_for_result(self, plan: MultiLegExecutionPlan) -> bool:
+        """Return flatness for the closed leg scope; S8 keeps full-group semantics."""
+        purpose = str(plan.purpose or "").strip().upper()
+        if plan.strategy_id == "track6_daily_tail_insurance" and (
+            purpose == "DAILY_TAIL_INSURANCE_FORCE_CLOSE"
+            or purpose in {"DAILY_TAIL_INSURANCE_TRAILING_CLOSE_PUT", "DAILY_TAIL_INSURANCE_TRAILING_CLOSE_CALL"}
+        ):
+            try:
+                instrument_ids = {self.identity_for_leg(plan, leg).instrument_id for leg in plan.legs}
+            except (ValueError, TypeError, AttributeError):
+                return False
+            if not instrument_ids:
+                return False
+            if any(
+                lot.run_id == self.run_id and lot.strategy_id == plan.strategy_id
+                and lot.group_id == plan.group_id and lot.instrument_id in instrument_ids
+                and lot.remaining_quantity > 0
+                for lot in self.position_lot_store.open_lots()
+            ):
+                return False
+            vssf = self.bundle.execution._authoritative_execute.__self__.vssf_runtime
+            return not any(
+                Decimal(str(position.get("qty", 0))) > 0
+                for instrument_id, position in vssf.account.positions.items()
+                if instrument_id in instrument_ids
+            )
+        return self._position_flat_for_plan(plan)
+
     def _is_terminal_execution_plan(self, plan: MultiLegExecutionPlan) -> bool:
+        purpose = str(plan.purpose or "").strip().upper()
+        if plan.strategy_id == "track6_daily_tail_insurance":
+            return purpose == "DAILY_TAIL_INSURANCE_FORCE_CLOSE" or purpose in {
+                "DAILY_TAIL_INSURANCE_TRAILING_CLOSE_PUT",
+                "DAILY_TAIL_INSURANCE_TRAILING_CLOSE_CALL",
+            }
         if plan.strategy_id != "track8_macro_regime_monthly_strangle":
             return False
-        purpose = str(plan.purpose or "").strip().upper()
         return any(token in purpose for token in ("CLOSE", "EXPIRY", "SETTLEMENT", "LIQUIDATION"))
 
     def _build_terminal_position_group_snapshot(
@@ -733,11 +766,20 @@ class VirtualMultiLegExecutionBridge:
                 execution_reference = futures_price
             else:
                 option_quotes = getattr(self.bundle.market, "option_quotes", {})
-                quote_key = next((key for key in option_quotes if isinstance(key, tuple) and len(key) == 3
-                    and str(key[0]).upper() == identity.option_type
-                    and float(key[1]) == float(identity.strike)
-                    and str(key[2]).replace("-", "")[:8] == identity.expiry.replace("-", "")[:8]), None)
-                quote = option_quotes.get(quote_key)
+                if str(identity.instrument_id).startswith("SYNTHETIC_CONTRACT:"):
+                    quote = getattr(self.bundle.market, "option_quotes_by_instrument_id", {}).get(identity.instrument_id)
+                    if (not isinstance(quote, dict) or quote.get("source") != "SYNTHETIC:DERIVED_SCENARIO"
+                            or str(quote.get("instrument_id", "")) != identity.instrument_id
+                            or str(quote.get("option_type", "")).upper() != identity.option_type
+                            or Decimal(str(quote.get("strike", "0"))) != Decimal(str(identity.strike))
+                            or str(quote.get("expiry", "")).replace("-", "")[:8] != identity.expiry.replace("-", "")[:8]):
+                        quote = None
+                else:
+                    quote_key = next((key for key in option_quotes if isinstance(key, tuple) and len(key) == 3
+                        and str(key[0]).upper() == identity.option_type
+                        and float(key[1]) == float(identity.strike)
+                        and str(key[2]).replace("-", "")[:8] == identity.expiry.replace("-", "")[:8]), None)
+                    quote = option_quotes.get(quote_key)
                 authoritative = self.option_master.get_contract_identity(identity.instrument_id)
                 if authoritative is None or authoritative.contract_multiplier is None:
                     raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_MULTIPLIER_REQUIRED")
@@ -793,7 +835,7 @@ class VirtualMultiLegExecutionBridge:
                     group_id=plan.group_id, strategy_id=plan.strategy_id,
                     planned_legs=len(group_plan.legs), approved_legs=0, routed_legs=0,
                     filled_legs=0, reports=merged_reports, group_complete=False,
-                    pending_legs=0, position_flat=self._position_flat_for_plan(group_plan),
+                    pending_legs=0, position_flat=self._position_flat_for_result(group_plan),
                 )
                 if self.execution_result_callback is not None:
                     self.execution_result_callback(plan, result)
@@ -904,7 +946,7 @@ class VirtualMultiLegExecutionBridge:
             else: self.position_groups.replace(group)
             self.groups[plan.group_id] = list(merged_reports)
             result = MultiLegExecutionResult(plan.group_id, plan.strategy_id, len(plan.legs), 0, 0, 0,
-                tuple(reports), False, 0, self._position_flat_for_plan(group_plan))
+                tuple(reports), False, 0, self._position_flat_for_result(group_plan))
             if self.execution_result_callback is not None: self.execution_result_callback(plan, result)
             return result
 
@@ -1055,6 +1097,7 @@ class VirtualMultiLegExecutionBridge:
             self.position_groups.replace(existing_group)
         current_futures = float(getattr(self.bundle.market, "futures_price", price))
         option_quotes = getattr(self.bundle.market, "option_quotes", {})
+        option_quotes_by_id = getattr(self.bundle.market, "option_quotes_by_instrument_id", {})
         pnl_legs = []
         for leg in group_plan.legs:
             leg_reports = [r for r in merged_reports if r.leg_id == leg.leg_id and r.filled_quantity > 0 and r.execution_price is not None]
@@ -1076,19 +1119,24 @@ class VirtualMultiLegExecutionBridge:
             if isinstance(identity, FuturesInstrumentIdentity):
                 current = current_futures
             else:
-                quote = next(
-                    (
-                        value
-                        for key, value in option_quotes.items()
-                        if isinstance(key, tuple)
-                        and len(key) == 3
-                        and str(key[0]).upper() == identity.option_type
-                        and float(key[1]) == float(identity.strike)
-                        and str(key[2]).replace("-", "")[:8]
-                        == identity.expiry.replace("-", "")[:8]
-                    ),
-                    None,
-                )
+                if str(identity.instrument_id).startswith("SYNTHETIC_CONTRACT:"):
+                    quote = option_quotes_by_id.get(identity.instrument_id)
+                    if not isinstance(quote, dict) or quote.get("source") != "SYNTHETIC:DERIVED_SCENARIO":
+                        quote = None
+                else:
+                    quote = next(
+                        (
+                            value
+                            for key, value in option_quotes.items()
+                            if isinstance(key, tuple)
+                            and len(key) == 3
+                            and str(key[0]).upper() == identity.option_type
+                            and float(key[1]) == float(identity.strike)
+                            and str(key[2]).replace("-", "")[:8]
+                            == identity.expiry.replace("-", "")[:8]
+                        ),
+                        None,
+                    )
                 if quote is None or quote.get("last") is None:
                     raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_MARK_NOT_FOUND")
                 current = float(quote["last"])
@@ -1142,14 +1190,19 @@ class VirtualMultiLegExecutionBridge:
                 identity = self.option_master.get_contract_identity(instrument_id)
                 if identity is None:
                     raise ValueError(f"POSITION_GROUP_TERMINAL_OPTION_IDENTITY_REQUIRED:{instrument_id}")
-                quote_key = next((
-                    key for key in option_quotes
-                    if isinstance(key, tuple) and len(key) == 3
-                    and str(key[0]).upper() == str(identity.option_type).upper()
-                    and Decimal(str(key[1])) == Decimal(str(identity.strike))
-                    and str(key[2]).replace("-", "")[:8] == str(identity.expiry).replace("-", "")[:8]
-                ), None)
-                quote = option_quotes.get(quote_key) if quote_key is not None else None
+                if str(instrument_id).startswith("SYNTHETIC_CONTRACT:"):
+                    quote = option_quotes_by_id.get(instrument_id)
+                    if not isinstance(quote, dict) or quote.get("source") != "SYNTHETIC:DERIVED_SCENARIO":
+                        quote = None
+                else:
+                    quote_key = next((
+                        key for key in option_quotes
+                        if isinstance(key, tuple) and len(key) == 3
+                        and str(key[0]).upper() == str(identity.option_type).upper()
+                        and Decimal(str(key[1])) == Decimal(str(identity.strike))
+                        and str(key[2]).replace("-", "")[:8] == str(identity.expiry).replace("-", "")[:8]
+                    ), None)
+                    quote = option_quotes.get(quote_key) if quote_key is not None else None
                 if not isinstance(quote, dict) or quote.get("last") is None:
                     raise ValueError(f"POSITION_GROUP_TERMINAL_ACCOUNT_MARK_REQUIRED:{instrument_id}")
                 vssf.account.update_tick_price(
@@ -1190,7 +1243,7 @@ class VirtualMultiLegExecutionBridge:
                 if self._client_order_id(group_plan, leg, self.identity_for_leg(group_plan, leg)) in self.pending_legs
                 and not any(r.leg_id == leg.leg_id and r.status == "FILLED" for r in merged_reports)
             ),
-            position_flat=self._position_flat_for_plan(group_plan),
+            position_flat=self._position_flat_for_result(group_plan),
         )
         if self.execution_result_callback is not None:
             self.execution_result_callback(plan, result)

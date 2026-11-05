@@ -150,6 +150,17 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         proposal = evaluation.result.execution_proposal
         if proposal is None:
             return None
+        if str(getattr(proposal, "tag_id", "")) == "DAILY_TAIL_INSURANCE_FORCE_CLOSE":
+            # Canonical arbitration needs one concrete identity; the resolver below
+            # still builds the complete close plan from every open S6 PositionLot.
+            open_lots = tuple(
+                lot for lot in multi_leg_bridge.position_lot_store.open_lots()
+                if lot.run_id == run_id and lot.strategy_id == "track6_daily_tail_insurance"
+                and lot.remaining_quantity > 0
+            )
+            if not open_lots or open_lots[0].instrument_identity is None:
+                raise ValueError("TRACK6_FORCE_CLOSE_OPEN_LOT_IDENTITY_REQUIRED")
+            return open_lots[0].instrument_identity
         resolved_asset_type = str(asset_type or proposal.asset_type).upper()
         if resolved_asset_type == "FUTURES":
             if synthetic_runtime_sources is not None:
@@ -353,6 +364,10 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         option_expiry_source=expiry_source,
         trading_calendar=market_calendar_hub,
         option_master=bootstrap.bundle.option_master,
+        track6_option_mark_max_age_seconds=(
+            track6_validation_gate_evidence.max_quote_age_seconds
+            if track6_validation_gate_evidence is not None else None
+        ),
         track2_option_iv_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else track2_option_iv_source),
         track4_greeks_provider=track4_greeks_provider,
         option_orderbook_source=(synthetic_runtime_sources if synthetic_runtime_sources is not None else historical_observation_option_source),
@@ -517,9 +532,18 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
     def resolve_track6(evaluation, canonical):
         proposal = getattr(evaluation.result, "execution_proposal", None)
         if proposal is not None and str(getattr(proposal, "side", "")).upper() == "SELL":
+            tag = str(getattr(proposal, "tag_id", "") or "DAILY_TAIL_INSURANCE_CLOSE")
+            close_scope = {}
+            if tag in {"DAILY_TAIL_INSURANCE_TRAILING_CLOSE_PUT", "DAILY_TAIL_INSURANCE_TRAILING_CLOSE_CALL"}:
+                close_scope = {
+                    "option_type": str(getattr(proposal, "option_type", "") or ""),
+                    "strike": Decimal(str(getattr(proposal, "strike"))),
+                }
             return multi_leg_bridge.build_close_plan_from_open_lots(
                 strategy_id="track6_daily_tail_insurance",
-                purpose=str(getattr(proposal, "tag_id", "") or "DAILY_TAIL_INSURANCE_CLOSE"),
+                purpose=tag,
+                asset_type="OPTION",
+                **close_scope,
             )
         if str(getattr(evaluation.result, "direction", "")) != "BUY_INSURANCE":
             return None

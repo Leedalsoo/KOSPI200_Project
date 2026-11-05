@@ -1,0 +1,94 @@
+{
+  "schema_version": "q25-a2-1-s6-syn-evt-manifest-v1",
+  "created_at": "2026-11-02",
+  "status": "GENERATED_VALIDATION_ONLY",
+  "source_type": "DERIVED_SCENARIO",
+  "provenance": "DERIVED_SCENARIO",
+  "synthetic": true,
+  "validation_only": true,
+  "production_runtime_eligible": false,
+  "seed": 20261029,
+  "catalogue_path": "reports/synth/SYN_EVT_CATALOGUE_20261029.json",
+  "catalogue_sha256": "193c5bf281ac0fe1a681366c04e4994fabb728b098342d99d12298ec11897b34",
+  "catalogue_config_hash": "ec71dbe6ff44c50158425ce7ddb1bbf882871736214ccd680cc4f1135238ef4a",
+  "scenario_count": 8,
+  "scenario_ids": [
+    "volatility_1_3x",
+    "before_11_cutoff",
+    "strike_5_to_6",
+    "wait_unfilled_10m",
+    "one_sided_then_opposite_quote",
+    "premium_2x_drawdown_10pct",
+    "force_exit_1510",
+    "no_retry_after_exit"
+  ],
+  "rows": 37056,
+  "rows_per_scenario": 4632,
+  "minutes_per_scenario": 386,
+  "first_timestamp": "2026-11-02T08:45:00+09:00",
+  "last_timestamp": "2026-11-02T15:10:00+09:00",
+  "strike_candidates": [
+    450.0,
+    462.5,
+    475.0,
+    487.5,
+    500.0,
+    512.5
+  ],
+  "option_types": [
+    "PUT",
+    "CALL"
+  ],
+  "output_path": "data/derived_scenario/q25_a2_1_strategy6/20261102.jsonl",
+  "output_sha256": "ace58f804fd811d6bc73cbeba3837ee7bea80a67b15b6c7d7342ffb997833b80",
+  "output_bytes": 67369559,
+  "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+  "natural_strategy_signal": "NOT_INJECTED_NOT_GUARANTEED",
+  "execution_orders_fills_positions_pnl": "NOT_GENERATED_BY_DATASET_GENERATOR",
+  "guardrails": [
+    "DERIVED_SCENARIO only; never REAL_VTS or Live input.",
+    "No KIS API, account, order, collector, subscription, or raw market partition touched.",
+    "No strategy signal, order, fill, position, exit, or PnL injected.",
+    "Synthetic contract identity remains blocked; no authoritative identity invented.",
+    "No strategy parameter tuning; Strategy 3 and 4 excluded.",
+    "Market ticks are scenario assumptions, not historical truth."
+  ],
+  "scenario_invariants": {
+    "volatility_1_3x": "Tag a synthetic 1.3x volatility regime; do not tune strategy parameters.",
+    "before_11_cutoff": "Only market observations before the 11:00 entry cutoff; no signal injected.",
+    "strike_5_to_6": "Expose six synthetic strike candidates; authoritative option identity remains blocked.",
+    "wait_unfilled_10m": "Quote path only; do not fabricate an order or fill during the wait interval.",
+    "one_sided_then_opposite_quote": "Represent a temporary one-sided quote then recovery; quote is not execution evidence.",
+    "premium_2x_drawdown_10pct": "Synthetic premium/underlying path for later risk-gate observation; no exit signal injected.",
+    "force_exit_1510": "Include market observations through 15:10; no forced close is fabricated.",
+    "no_retry_after_exit": "Repeated observations remain market data only; no retry/order is injected."
+  },
+  "scenario_id": "Q25_A3_1_S6_MULTI_SCENARIO_VALIDATION",
+  "dataset_sha256": "ace58f804fd811d6bc73cbeba3837ee7bea80a67b15b6c7d7342ffb997833b80",
+  "runtime_eligible": false,
+  "expiry_is_authoritative": false,
+  "trading_calendar": {
+    "calendar_id": "Q25_A3_1_S6_SYNTHETIC_CALENDAR_20261102_05",
+    "source_type": "SYNTHETIC",
+    "authoritative": false,
+    "timezone": "Asia/Seoul",
+    "trading_days": [
+      "2026-11-02",
+      "2026-11-03",
+      "2026-11-04",
+      "2026-11-05"
+    ]
+  },
+  "dte_derivation": "Synthetic validation calendar only; not an exchange calendar or authoritative expiry source.",
+  "scenario_regimes": {
+    "volatility_1_3x": "HIGH_VOL",
+    "before_11_cutoff": "NORMAL",
+    "strike_5_to_6": "NORMAL",
+    "wait_unfilled_10m": "NORMAL",
+    "one_sided_then_opposite_quote": "NORMAL",
+    "premium_2x_drawdown_10pct": "NORMAL",
+    "force_exit_1510": "NORMAL",
+    "no_retry_after_exit": "NORMAL"
+  },
+  "scenario_regimes_provenance": "Synthetic scenario labels only; not observed market regimes."
+}

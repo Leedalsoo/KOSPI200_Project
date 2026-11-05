@@ -1,0 +1,92 @@
+{
+  "schema_version": "q25-a2-1-s6-syn-evt-manifest-v1",
+  "scenario_id": "Q25_A3_1_S6_BUDGET_FIT_MULTI_SCENARIO",
+  "created_at": "2026-11-05",
+  "status": "GENERATED_VALIDATION_ONLY_TEST_TRANSFORM",
+  "source_type": "DERIVED_SCENARIO",
+  "provenance": "DERIVED_SCENARIO",
+  "synthetic": true,
+  "validation_only": true,
+  "production_runtime_eligible": false,
+  "runtime_eligible": false,
+  "expiry_is_authoritative": false,
+  "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+  "seed": 20261029,
+  "scenario_count": 1,
+  "scenario_ids": [
+    "premium_2x_drawdown_10pct"
+  ],
+  "scenario_regimes": {
+    "premium_2x_drawdown_10pct": "NORMAL"
+  },
+  "scenario_regimes_provenance": "Synthetic scenario label only; not observed market regime.",
+  "rows": 4632,
+  "rows_per_scenario": 4632,
+  "minutes_per_scenario": 386,
+  "first_timestamp": "2026-11-02T08:45:00+09:00",
+  "last_timestamp": "2026-11-02T15:10:00+09:00",
+  "output_path": "data/derived_scenario/q25_a3_1_s6_budget_fit/20261102.jsonl",
+  "output_sha256": "9089556e0c74b1e4a9b3bbf676408cef89e4fdcc7b0fe35db73c3f9e853c62a5",
+  "dataset_sha256": "9089556e0c74b1e4a9b3bbf676408cef89e4fdcc7b0fe35db73c3f9e853c62a5",
+  "output_bytes": 8881572,
+  "source_dataset_path": "data/derived_scenario/q25_a2_1_strategy6/20261102.jsonl",
+  "source_dataset_sha256": "ace58f804fd811d6bc73cbeba3837ee7bea80a67b15b6c7d7342ffb997833b80",
+  "synthetic_price_transform": {
+    "method": "intrinsic_plus_scaled_extrinsic_value",
+    "extrinsic_scale_factor": 0.4,
+    "fields": [
+      "bid_price",
+      "ask_price",
+      "last_price",
+      "time_value",
+      "theoretical_mid_price"
+    ],
+    "purpose": "Test-only to exercise the unchanged 250000 KRW validation cap; no production or real-market equivalence.",
+    "no_strategy_signal_or_execution_injected": true
+  },
+  "synthetic_mark_stress": {
+    "instrument": "CALL 512.5",
+    "events": {
+      "2026-11-02T10:30:00+09:00": {
+        "bid": 1.1,
+        "ask": 1.12,
+        "last": 1.11
+      },
+      "2026-11-02T10:31:00+09:00": {
+        "bid": 1.08,
+        "ask": 1.1,
+        "last": 1.09
+      },
+      "2026-11-02T10:32:00+09:00": {
+        "bid": 0.99,
+        "ask": 1.01,
+        "last": 1.0
+      }
+    },
+    "expected_rule": "Per-leg bid reaches >= 2x entry fill, then falls >= 10% from high-water mark.",
+    "intrinsic_floor_preserved": true
+  },
+  "trading_calendar": {
+    "calendar_id": "Q25_A3_1_S6_SYNTHETIC_CALENDAR_20261102_05",
+    "source_type": "SYNTHETIC",
+    "authoritative": false,
+    "timezone": "Asia/Seoul",
+    "trading_days": [
+      "2026-11-02",
+      "2026-11-03",
+      "2026-11-04",
+      "2026-11-05"
+    ]
+  },
+  "dte_derivation": "Synthetic validation calendar only; not an exchange calendar or authoritative expiry source.",
+  "natural_strategy_signal": "NOT_INJECTED_NOT_GUARANTEED",
+  "execution_orders_fills_positions_pnl": "GENERATED_ONLY_BY_VIRTUAL_RUNTIME_DURING_TEST",
+  "guardrails": [
+    "DERIVED_SCENARIO only; never REAL_VTS or Live input.",
+    "No KIS API, account, order, collector, subscription, or raw market partition touched.",
+    "Original Q25 A2-1 dataset and manifest remain unchanged.",
+    "Synthetic identity remains blocked; no Standard instrument ID is assigned.",
+    "Price transform and CALL mark stress are test-only assumptions, not market observations.",
+    "Production risk config and 250000 KRW validation cap remain unchanged."
+  ]
+}

@@ -25,6 +25,7 @@ def test_track6_validation_gate_reads_disabled_operational_limits() -> None:
     assert evidence.strategy_max_gross_premium_outlay_krw == 250_000
     assert evidence.strategy_max_loss_krw == 250_000
     assert evidence.strategy_max_concurrent_positions == 1
+    assert evidence.max_quote_age_seconds == 5
 
 
 def test_track6_validation_gate_applies_only_for_synthetic_source() -> None:

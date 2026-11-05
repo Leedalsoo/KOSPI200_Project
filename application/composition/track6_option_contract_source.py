@@ -21,10 +21,21 @@ class Track6OptionContractSource:
     def __init__(self, option_master: Any) -> None:
         self.option_master = option_master
 
-    def select(self, *, expiry: str, current_price: Decimal) -> Track6OptionContractSelection:
+    def select(self, *, expiry: str, current_price: Decimal,
+               identity_prefix: str | None = None) -> Track6OptionContractSelection:
         if self.option_master is None:
             raise ValueError("TRACK6_OPTION_MASTER_REQUIRED")
         identities = tuple(self.option_master.list_contract_identities(expiry))
+        if identity_prefix is not None:
+            prefix = str(identity_prefix).strip()
+            if not prefix.startswith("SYNTHETIC_CONTRACT:"):
+                raise ValueError("TRACK6_SYNTHETIC_IDENTITY_SCOPE_INVALID")
+            identities = tuple(
+                identity for identity in identities
+                if str(getattr(identity, "shrn_iscd", "")).startswith(prefix + "-")
+            )
+            if not identities:
+                raise ValueError("TRACK6_SYNTHETIC_IDENTITY_SCOPE_EMPTY")
         calls = {}
         puts = {}
         for identity in identities:
