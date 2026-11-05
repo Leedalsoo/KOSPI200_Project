@@ -1,0 +1,909 @@
+{
+  "expiry_settlement": {
+    "reason": "Both scenario manifests explicitly set expiry_is_authoritative=false; the current Virtual execution contract has no authoritative option cash-settlement adapter or settlement-price source. A synthetic expiry payoff is not promoted to an expiry execution PASS.",
+    "status": "BLOCKED_NOT_AUTHORITATIVE"
+  },
+  "scope": "VALIDATION_ONLY_DERIVED_SCENARIO_VIRTUAL_S8",
+  "terminal_close": [
+    {
+      "account_pnl": {
+        "net": -332499.99999999994,
+        "realized": -332499.99999999994,
+        "unrealized": 0.0
+      },
+      "account_positions": {},
+      "close_events": [
+        {
+          "execution_id": "EXEC-000003",
+          "execution_timestamp": "2026-11-12 15:10:00+09:00",
+          "quantity": 1,
+          "source_lot_execution_id": "EXEC-000001"
+        },
+        {
+          "execution_id": "EXEC-000004",
+          "execution_timestamp": "2026-11-12 15:10:00+09:00",
+          "quantity": 1,
+          "source_lot_execution_id": "EXEC-000002"
+        }
+      ],
+      "close_results": [
+        {
+          "option_type": "CALL",
+          "plan": {
+            "attempt_id": null,
+            "group_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+            "legs": [
+              {
+                "instrument_identity": {
+                  "contract_multiplier": "250000.0",
+                  "expiry": "20261119",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:CALL:515",
+                  "option_type": "CALL",
+                  "strike": "515.0",
+                  "symbol": "SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:CALL:515"
+                },
+                "leg_id": "close-93cf6659c300",
+                "option_type": "CALL",
+                "position_role": "NONE",
+                "quantity": 1,
+                "requested_price": null,
+                "side": "SELL",
+                "strike": "515.0"
+              }
+            ],
+            "purpose": "MONTHLY_STRANGLE_CLOSE_CALL",
+            "strategy_code_version": null,
+            "strategy_config_hash": null,
+            "strategy_config_version": null,
+            "strategy_id": "track8_macro_regime_monthly_strangle"
+          },
+          "position_flat": false,
+          "result": {
+            "approved_legs": 1,
+            "filled_legs": 1,
+            "group_complete": true,
+            "group_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+            "pending_legs": 0,
+            "planned_legs": 1,
+            "position_flat": false,
+            "reports": [
+              {
+                "broker_order_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-close-93cf6659c300-710999088a8e",
+                "client_order_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-close-93cf6659c300-710999088a8e",
+                "execution_fills": [
+                  {
+                    "execution_id": "EXEC-000003",
+                    "execution_price": "0.52",
+                    "execution_timestamp": "2026-11-12 15:10:00+09:00",
+                    "fee": "0.0",
+                    "filled_quantity": 1
+                  }
+                ],
+                "execution_id": "EXEC-000003",
+                "execution_price": "0.52",
+                "execution_timestamp": "2026-11-12 15:10:00+09:00",
+                "fee": "0.0",
+                "filled_quantity": 1,
+                "group_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+                "leg_id": "close-93cf6659c300",
+                "lifecycle_reason": null,
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "source_freshness": {
+                  "is_complete": true,
+                  "is_fresh": true,
+                  "reason": "vssf_authoritative_order_lifecycle",
+                  "source_available": true
+                },
+                "status": "FILLED",
+                "submitted_at": "2026-11-12 15:10:00+09:00"
+              }
+            ],
+            "routed_legs": 1,
+            "strategy_id": "track8_macro_regime_monthly_strangle"
+          }
+        },
+        {
+          "option_type": "PUT",
+          "plan": {
+            "attempt_id": null,
+            "group_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+            "legs": [
+              {
+                "instrument_identity": {
+                  "contract_multiplier": "250000.0",
+                  "expiry": "20261119",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:PUT:485",
+                  "option_type": "PUT",
+                  "strike": "485.0",
+                  "symbol": "SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:PUT:485"
+                },
+                "leg_id": "close-a17472232d28",
+                "option_type": "PUT",
+                "position_role": "NONE",
+                "quantity": 1,
+                "requested_price": null,
+                "side": "SELL",
+                "strike": "485.0"
+              }
+            ],
+            "purpose": "MONTHLY_STRANGLE_CLOSE_PUT",
+            "strategy_code_version": null,
+            "strategy_config_hash": null,
+            "strategy_config_version": null,
+            "strategy_id": "track8_macro_regime_monthly_strangle"
+          },
+          "position_flat": true,
+          "result": {
+            "approved_legs": 1,
+            "filled_legs": 1,
+            "group_complete": true,
+            "group_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+            "pending_legs": 0,
+            "planned_legs": 1,
+            "position_flat": true,
+            "reports": [
+              {
+                "broker_order_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-close-a17472232d28-73868bd4ec7f",
+                "client_order_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-close-a17472232d28-73868bd4ec7f",
+                "execution_fills": [
+                  {
+                    "execution_id": "EXEC-000004",
+                    "execution_price": "0.57",
+                    "execution_timestamp": "2026-11-12 15:10:00+09:00",
+                    "fee": "0.0",
+                    "filled_quantity": 1
+                  }
+                ],
+                "execution_id": "EXEC-000004",
+                "execution_price": "0.57",
+                "execution_timestamp": "2026-11-12 15:10:00+09:00",
+                "fee": "0.0",
+                "filled_quantity": 1,
+                "group_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+                "leg_id": "close-a17472232d28",
+                "lifecycle_reason": null,
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "source_freshness": {
+                  "is_complete": true,
+                  "is_fresh": true,
+                  "reason": "vssf_authoritative_order_lifecycle",
+                  "source_available": true
+                },
+                "status": "FILLED",
+                "submitted_at": "2026-11-12 15:10:00+09:00"
+              }
+            ],
+            "routed_legs": 1,
+            "strategy_id": "track8_macro_regime_monthly_strangle"
+          }
+        }
+      ],
+      "dataset_sha256": "6667d0d0a7b700ceaa927289ad1bce6454342c8577af1ee0d3b6dc65aecdc48a",
+      "entry_group": {
+        "direction": "MULTI_LEG",
+        "group_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+        "legs": [
+          {
+            "contract_multiplier": "250000.0",
+            "group_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+            "identity_source": "OPTION_MASTER",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:CALL:515",
+            "leg_id": "call",
+            "quantity": 1,
+            "side": "BUY",
+            "status": "FILLED"
+          },
+          {
+            "contract_multiplier": "250000.0",
+            "group_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+            "identity_source": "OPTION_MASTER",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:PUT:485",
+            "leg_id": "put",
+            "quantity": 1,
+            "side": "BUY",
+            "status": "FILLED"
+          }
+        ],
+        "strategy_id": "track8_macro_regime_monthly_strangle"
+      },
+      "entry_lots": [
+        {
+          "client_order_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-call-66b52bdc5f4e",
+          "contract_multiplier": "250000.0",
+          "execution_id": "EXEC-000001",
+          "execution_timestamp": "2026-11-02 08:45:00+09:00",
+          "group_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+          "identity_source": "OPTION_MASTER",
+          "instrument_id": "SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:CALL:515",
+          "instrument_identity": {
+            "contract_multiplier": "250000.0",
+            "expiry": "20261119",
+            "identity_source": "OPTION_MASTER",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:CALL:515",
+            "option_type": "CALL",
+            "strike": "515.0",
+            "symbol": "SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:CALL:515"
+          },
+          "leg_id": "call",
+          "opened_quantity": 1,
+          "position_role": "NONE",
+          "remaining_quantity": 1,
+          "run_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105",
+          "side": "BUY",
+          "strategy_id": "track8_macro_regime_monthly_strangle"
+        },
+        {
+          "client_order_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-put-0a0025808fd0",
+          "contract_multiplier": "250000.0",
+          "execution_id": "EXEC-000002",
+          "execution_timestamp": "2026-11-02 08:45:00+09:00",
+          "group_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+          "identity_source": "OPTION_MASTER",
+          "instrument_id": "SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:PUT:485",
+          "instrument_identity": {
+            "contract_multiplier": "250000.0",
+            "expiry": "20261119",
+            "identity_source": "OPTION_MASTER",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:PUT:485",
+            "option_type": "PUT",
+            "strike": "485.0",
+            "symbol": "SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:PUT:485"
+          },
+          "leg_id": "put",
+          "opened_quantity": 1,
+          "position_role": "NONE",
+          "remaining_quantity": 1,
+          "run_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105",
+          "side": "BUY",
+          "strategy_id": "track8_macro_regime_monthly_strangle"
+        }
+      ],
+      "entry_snapshot": {
+        "complete": true,
+        "group_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+        "legs": [
+          {
+            "avg_price": 1.16,
+            "client_order_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-call-66b52bdc5f4e",
+            "contract_multiplier": "250000.0",
+            "current_price": 0.55,
+            "execution_id": "EXEC-000001",
+            "execution_ids": [
+              "EXEC-000001"
+            ],
+            "group_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+            "identity_source": "OPTION_MASTER",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:CALL:515",
+            "leg_id": "call",
+            "quantity": 1,
+            "run_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105",
+            "unrealized_pnl": -152500.0
+          },
+          {
+            "avg_price": 1.26,
+            "client_order_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-put-0a0025808fd0",
+            "contract_multiplier": "250000.0",
+            "current_price": 0.6,
+            "execution_id": "EXEC-000002",
+            "execution_ids": [
+              "EXEC-000002"
+            ],
+            "group_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+            "identity_source": "OPTION_MASTER",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:PUT:485",
+            "leg_id": "put",
+            "quantity": 1,
+            "run_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105",
+            "unrealized_pnl": -165000.0
+          }
+        ],
+        "realized_pnl": 0.0,
+        "strategy_id": "track8_macro_regime_monthly_strangle",
+        "total_pnl": -317500.0,
+        "unrealized_pnl": -317500.0
+      },
+      "fee_records": [
+        {
+          "client_order_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-call-66b52bdc5f4e",
+          "executed_at": "2026-11-02 08:45:00+09:00",
+          "executed_price": "1.16",
+          "executed_quantity": 1,
+          "execution_id": "EXEC-000001",
+          "fee_amount": "0.0",
+          "group_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:CALL:515",
+          "leg_id": "call",
+          "run_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105",
+          "source": "VSSF:CanonicalExecutionReport.fee",
+          "strategy_id": "track8_macro_regime_monthly_strangle"
+        },
+        {
+          "client_order_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-put-0a0025808fd0",
+          "executed_at": "2026-11-02 08:45:00+09:00",
+          "executed_price": "1.26",
+          "executed_quantity": 1,
+          "execution_id": "EXEC-000002",
+          "fee_amount": "0.0",
+          "group_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:PUT:485",
+          "leg_id": "put",
+          "run_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105",
+          "source": "VSSF:CanonicalExecutionReport.fee",
+          "strategy_id": "track8_macro_regime_monthly_strangle"
+        },
+        {
+          "client_order_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-close-93cf6659c300-710999088a8e",
+          "executed_at": "2026-11-12 15:10:00+09:00",
+          "executed_price": "0.52",
+          "executed_quantity": 1,
+          "execution_id": "EXEC-000003",
+          "fee_amount": "0.0",
+          "group_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:CALL:515",
+          "leg_id": "close-93cf6659c300",
+          "run_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105",
+          "source": "VSSF:CanonicalExecutionReport.fee",
+          "strategy_id": "track8_macro_regime_monthly_strangle"
+        },
+        {
+          "client_order_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-close-a17472232d28-73868bd4ec7f",
+          "executed_at": "2026-11-12 15:10:00+09:00",
+          "executed_price": "0.57",
+          "executed_quantity": 1,
+          "execution_id": "EXEC-000004",
+          "fee_amount": "0.0",
+          "group_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:PUT:485",
+          "leg_id": "close-a17472232d28",
+          "run_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105",
+          "source": "VSSF:CanonicalExecutionReport.fee",
+          "strategy_id": "track8_macro_regime_monthly_strangle"
+        }
+      ],
+      "final_group": {
+        "direction": "MULTI_LEG",
+        "group_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+        "legs": [
+          {
+            "contract_multiplier": "250000.0",
+            "group_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+            "identity_source": "OPTION_MASTER",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:CALL:515",
+            "leg_id": "call",
+            "quantity": 1,
+            "side": "BUY",
+            "status": "FILLED"
+          },
+          {
+            "contract_multiplier": "250000.0",
+            "group_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+            "identity_source": "OPTION_MASTER",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:PUT:485",
+            "leg_id": "put",
+            "quantity": 1,
+            "side": "BUY",
+            "status": "FILLED"
+          }
+        ],
+        "strategy_id": "track8_macro_regime_monthly_strangle"
+      },
+      "final_snapshot": {
+        "complete": true,
+        "group_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+        "legs": [
+          {
+            "avg_price": 1.16,
+            "client_order_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-call-66b52bdc5f4e",
+            "contract_multiplier": "250000.0",
+            "current_price": 0.52,
+            "execution_id": "EXEC-000001",
+            "execution_ids": [
+              "EXEC-000001"
+            ],
+            "group_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+            "identity_source": "OPTION_MASTER",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:CALL:515",
+            "leg_id": "call",
+            "quantity": 0,
+            "run_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105",
+            "unrealized_pnl": 0.0
+          },
+          {
+            "avg_price": 1.26,
+            "client_order_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-put-0a0025808fd0",
+            "contract_multiplier": "250000.0",
+            "current_price": 0.57,
+            "execution_id": "EXEC-000002",
+            "execution_ids": [
+              "EXEC-000002"
+            ],
+            "group_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+            "identity_source": "OPTION_MASTER",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:PUT:485",
+            "leg_id": "put",
+            "quantity": 0,
+            "run_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105",
+            "unrealized_pnl": 0.0
+          }
+        ],
+        "realized_pnl": -332499.99999999994,
+        "strategy_id": "track8_macro_regime_monthly_strangle",
+        "total_pnl": -332499.99999999994,
+        "unrealized_pnl": 0.0
+      },
+      "flat_state": "PASS",
+      "manifest_sha256": "a1eaeea94643db7aa7cb80ffc34627b348ee16aebec6dbe2b93dffb9192ae08a",
+      "natural_replay": {
+        "approved": 2,
+        "events": 216,
+        "execution_ids": [
+          "EXEC-000001",
+          "EXEC-000002"
+        ],
+        "filled": 2,
+        "rejected": 0,
+        "routed": 2,
+        "signals": 2
+      },
+      "open_lots": [],
+      "realized_pnl_reconciliation": "PASS",
+      "risk_profile_sha256": "9ee3ec0ee755e55a010d7678fe9b4e05c6ac3b57ff6523ca668403d5066c4b1a",
+      "run_id": "Q25-S8-TERMINAL-CLOSE-NORMAL-20261105",
+      "scenario": "NORMAL"
+    },
+    {
+      "account_pnl": {
+        "net": -445000.0,
+        "realized": -445000.0,
+        "unrealized": 0.0
+      },
+      "account_positions": {},
+      "close_events": [
+        {
+          "execution_id": "EXEC-000003",
+          "execution_timestamp": "2026-11-12 15:10:00+09:00",
+          "quantity": 1,
+          "source_lot_execution_id": "EXEC-000001"
+        },
+        {
+          "execution_id": "EXEC-000004",
+          "execution_timestamp": "2026-11-12 15:10:00+09:00",
+          "quantity": 1,
+          "source_lot_execution_id": "EXEC-000002"
+        }
+      ],
+      "close_results": [
+        {
+          "option_type": "CALL",
+          "plan": {
+            "attempt_id": null,
+            "group_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+            "legs": [
+              {
+                "instrument_identity": {
+                  "contract_multiplier": "250000.0",
+                  "expiry": "20261119",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8V3:HIGH_VOL:20261119:CALL:515",
+                  "option_type": "CALL",
+                  "strike": "515.0",
+                  "symbol": "SYNTHETIC_CONTRACT:S8V3:HIGH_VOL:20261119:CALL:515"
+                },
+                "leg_id": "close-7da9fcc500ff",
+                "option_type": "CALL",
+                "position_role": "NONE",
+                "quantity": 1,
+                "requested_price": null,
+                "side": "SELL",
+                "strike": "515.0"
+              }
+            ],
+            "purpose": "MONTHLY_STRANGLE_CLOSE_CALL",
+            "strategy_code_version": null,
+            "strategy_config_hash": null,
+            "strategy_config_version": null,
+            "strategy_id": "track8_macro_regime_monthly_strangle"
+          },
+          "position_flat": false,
+          "result": {
+            "approved_legs": 1,
+            "filled_legs": 1,
+            "group_complete": true,
+            "group_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+            "pending_legs": 0,
+            "planned_legs": 1,
+            "position_flat": false,
+            "reports": [
+              {
+                "broker_order_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-close-7da9fcc500ff-97788d17b992",
+                "client_order_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-close-7da9fcc500ff-97788d17b992",
+                "execution_fills": [
+                  {
+                    "execution_id": "EXEC-000003",
+                    "execution_price": "0.71",
+                    "execution_timestamp": "2026-11-12 15:10:00+09:00",
+                    "fee": "0.0",
+                    "filled_quantity": 1
+                  }
+                ],
+                "execution_id": "EXEC-000003",
+                "execution_price": "0.71",
+                "execution_timestamp": "2026-11-12 15:10:00+09:00",
+                "fee": "0.0",
+                "filled_quantity": 1,
+                "group_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+                "leg_id": "close-7da9fcc500ff",
+                "lifecycle_reason": null,
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "source_freshness": {
+                  "is_complete": true,
+                  "is_fresh": true,
+                  "reason": "vssf_authoritative_order_lifecycle",
+                  "source_available": true
+                },
+                "status": "FILLED",
+                "submitted_at": "2026-11-12 15:10:00+09:00"
+              }
+            ],
+            "routed_legs": 1,
+            "strategy_id": "track8_macro_regime_monthly_strangle"
+          }
+        },
+        {
+          "option_type": "PUT",
+          "plan": {
+            "attempt_id": null,
+            "group_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+            "legs": [
+              {
+                "instrument_identity": {
+                  "contract_multiplier": "250000.0",
+                  "expiry": "20261119",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8V3:HIGH_VOL:20261119:PUT:485",
+                  "option_type": "PUT",
+                  "strike": "485.0",
+                  "symbol": "SYNTHETIC_CONTRACT:S8V3:HIGH_VOL:20261119:PUT:485"
+                },
+                "leg_id": "close-0803e137e3dc",
+                "option_type": "PUT",
+                "position_role": "NONE",
+                "quantity": 1,
+                "requested_price": null,
+                "side": "SELL",
+                "strike": "485.0"
+              }
+            ],
+            "purpose": "MONTHLY_STRANGLE_CLOSE_PUT",
+            "strategy_code_version": null,
+            "strategy_config_hash": null,
+            "strategy_config_version": null,
+            "strategy_id": "track8_macro_regime_monthly_strangle"
+          },
+          "position_flat": true,
+          "result": {
+            "approved_legs": 1,
+            "filled_legs": 1,
+            "group_complete": true,
+            "group_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+            "pending_legs": 0,
+            "planned_legs": 1,
+            "position_flat": true,
+            "reports": [
+              {
+                "broker_order_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-close-0803e137e3dc-315d7d1e4836",
+                "client_order_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-close-0803e137e3dc-315d7d1e4836",
+                "execution_fills": [
+                  {
+                    "execution_id": "EXEC-000004",
+                    "execution_price": "0.77",
+                    "execution_timestamp": "2026-11-12 15:10:00+09:00",
+                    "fee": "0.0",
+                    "filled_quantity": 1
+                  }
+                ],
+                "execution_id": "EXEC-000004",
+                "execution_price": "0.77",
+                "execution_timestamp": "2026-11-12 15:10:00+09:00",
+                "fee": "0.0",
+                "filled_quantity": 1,
+                "group_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+                "leg_id": "close-0803e137e3dc",
+                "lifecycle_reason": null,
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "source_freshness": {
+                  "is_complete": true,
+                  "is_fresh": true,
+                  "reason": "vssf_authoritative_order_lifecycle",
+                  "source_available": true
+                },
+                "status": "FILLED",
+                "submitted_at": "2026-11-12 15:10:00+09:00"
+              }
+            ],
+            "routed_legs": 1,
+            "strategy_id": "track8_macro_regime_monthly_strangle"
+          }
+        }
+      ],
+      "dataset_sha256": "fda113074213919b2037cbaf8c3076406f4efe92d5d2b45ae6b935f37df84050",
+      "entry_group": {
+        "direction": "MULTI_LEG",
+        "group_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+        "legs": [
+          {
+            "contract_multiplier": "250000.0",
+            "group_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+            "identity_source": "OPTION_MASTER",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8V3:HIGH_VOL:20261119:CALL:515",
+            "leg_id": "call",
+            "quantity": 1,
+            "side": "BUY",
+            "status": "FILLED"
+          },
+          {
+            "contract_multiplier": "250000.0",
+            "group_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+            "identity_source": "OPTION_MASTER",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8V3:HIGH_VOL:20261119:PUT:485",
+            "leg_id": "put",
+            "quantity": 1,
+            "side": "BUY",
+            "status": "FILLED"
+          }
+        ],
+        "strategy_id": "track8_macro_regime_monthly_strangle"
+      },
+      "entry_lots": [
+        {
+          "client_order_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-call-28d2fdbfa914",
+          "contract_multiplier": "250000.0",
+          "execution_id": "EXEC-000001",
+          "execution_timestamp": "2026-11-02 08:45:00+09:00",
+          "group_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+          "identity_source": "OPTION_MASTER",
+          "instrument_id": "SYNTHETIC_CONTRACT:S8V3:HIGH_VOL:20261119:CALL:515",
+          "instrument_identity": {
+            "contract_multiplier": "250000.0",
+            "expiry": "20261119",
+            "identity_source": "OPTION_MASTER",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8V3:HIGH_VOL:20261119:CALL:515",
+            "option_type": "CALL",
+            "strike": "515.0",
+            "symbol": "SYNTHETIC_CONTRACT:S8V3:HIGH_VOL:20261119:CALL:515"
+          },
+          "leg_id": "call",
+          "opened_quantity": 1,
+          "position_role": "NONE",
+          "remaining_quantity": 1,
+          "run_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105",
+          "side": "BUY",
+          "strategy_id": "track8_macro_regime_monthly_strangle"
+        },
+        {
+          "client_order_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-put-2fba05ccb0c8",
+          "contract_multiplier": "250000.0",
+          "execution_id": "EXEC-000002",
+          "execution_timestamp": "2026-11-02 08:45:00+09:00",
+          "group_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+          "identity_source": "OPTION_MASTER",
+          "instrument_id": "SYNTHETIC_CONTRACT:S8V3:HIGH_VOL:20261119:PUT:485",
+          "instrument_identity": {
+            "contract_multiplier": "250000.0",
+            "expiry": "20261119",
+            "identity_source": "OPTION_MASTER",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8V3:HIGH_VOL:20261119:PUT:485",
+            "option_type": "PUT",
+            "strike": "485.0",
+            "symbol": "SYNTHETIC_CONTRACT:S8V3:HIGH_VOL:20261119:PUT:485"
+          },
+          "leg_id": "put",
+          "opened_quantity": 1,
+          "position_role": "NONE",
+          "remaining_quantity": 1,
+          "run_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105",
+          "side": "BUY",
+          "strategy_id": "track8_macro_regime_monthly_strangle"
+        }
+      ],
+      "entry_snapshot": {
+        "complete": true,
+        "group_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+        "legs": [
+          {
+            "avg_price": 1.56,
+            "client_order_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-call-28d2fdbfa914",
+            "contract_multiplier": "250000.0",
+            "current_price": 0.74,
+            "execution_id": "EXEC-000001",
+            "execution_ids": [
+              "EXEC-000001"
+            ],
+            "group_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+            "identity_source": "OPTION_MASTER",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8V3:HIGH_VOL:20261119:CALL:515",
+            "leg_id": "call",
+            "quantity": 1,
+            "run_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105",
+            "unrealized_pnl": -205000.0
+          },
+          {
+            "avg_price": 1.7,
+            "client_order_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-put-2fba05ccb0c8",
+            "contract_multiplier": "250000.0",
+            "current_price": 0.81,
+            "execution_id": "EXEC-000002",
+            "execution_ids": [
+              "EXEC-000002"
+            ],
+            "group_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+            "identity_source": "OPTION_MASTER",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8V3:HIGH_VOL:20261119:PUT:485",
+            "leg_id": "put",
+            "quantity": 1,
+            "run_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105",
+            "unrealized_pnl": -222500.0
+          }
+        ],
+        "realized_pnl": 0.0,
+        "strategy_id": "track8_macro_regime_monthly_strangle",
+        "total_pnl": -427500.0,
+        "unrealized_pnl": -427500.0
+      },
+      "fee_records": [
+        {
+          "client_order_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-call-28d2fdbfa914",
+          "executed_at": "2026-11-02 08:45:00+09:00",
+          "executed_price": "1.56",
+          "executed_quantity": 1,
+          "execution_id": "EXEC-000001",
+          "fee_amount": "0.0",
+          "group_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:S8V3:HIGH_VOL:20261119:CALL:515",
+          "leg_id": "call",
+          "run_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105",
+          "source": "VSSF:CanonicalExecutionReport.fee",
+          "strategy_id": "track8_macro_regime_monthly_strangle"
+        },
+        {
+          "client_order_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-put-2fba05ccb0c8",
+          "executed_at": "2026-11-02 08:45:00+09:00",
+          "executed_price": "1.7",
+          "executed_quantity": 1,
+          "execution_id": "EXEC-000002",
+          "fee_amount": "0.0",
+          "group_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:S8V3:HIGH_VOL:20261119:PUT:485",
+          "leg_id": "put",
+          "run_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105",
+          "source": "VSSF:CanonicalExecutionReport.fee",
+          "strategy_id": "track8_macro_regime_monthly_strangle"
+        },
+        {
+          "client_order_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-close-7da9fcc500ff-97788d17b992",
+          "executed_at": "2026-11-12 15:10:00+09:00",
+          "executed_price": "0.71",
+          "executed_quantity": 1,
+          "execution_id": "EXEC-000003",
+          "fee_amount": "0.0",
+          "group_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:S8V3:HIGH_VOL:20261119:CALL:515",
+          "leg_id": "close-7da9fcc500ff",
+          "run_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105",
+          "source": "VSSF:CanonicalExecutionReport.fee",
+          "strategy_id": "track8_macro_regime_monthly_strangle"
+        },
+        {
+          "client_order_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-close-0803e137e3dc-315d7d1e4836",
+          "executed_at": "2026-11-12 15:10:00+09:00",
+          "executed_price": "0.77",
+          "executed_quantity": 1,
+          "execution_id": "EXEC-000004",
+          "fee_amount": "0.0",
+          "group_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:S8V3:HIGH_VOL:20261119:PUT:485",
+          "leg_id": "close-0803e137e3dc",
+          "run_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105",
+          "source": "VSSF:CanonicalExecutionReport.fee",
+          "strategy_id": "track8_macro_regime_monthly_strangle"
+        }
+      ],
+      "final_group": {
+        "direction": "MULTI_LEG",
+        "group_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+        "legs": [
+          {
+            "contract_multiplier": "250000.0",
+            "group_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+            "identity_source": "OPTION_MASTER",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8V3:HIGH_VOL:20261119:CALL:515",
+            "leg_id": "call",
+            "quantity": 1,
+            "side": "BUY",
+            "status": "FILLED"
+          },
+          {
+            "contract_multiplier": "250000.0",
+            "group_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+            "identity_source": "OPTION_MASTER",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8V3:HIGH_VOL:20261119:PUT:485",
+            "leg_id": "put",
+            "quantity": 1,
+            "side": "BUY",
+            "status": "FILLED"
+          }
+        ],
+        "strategy_id": "track8_macro_regime_monthly_strangle"
+      },
+      "final_snapshot": {
+        "complete": true,
+        "group_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+        "legs": [
+          {
+            "avg_price": 1.56,
+            "client_order_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-call-28d2fdbfa914",
+            "contract_multiplier": "250000.0",
+            "current_price": 0.71,
+            "execution_id": "EXEC-000001",
+            "execution_ids": [
+              "EXEC-000001"
+            ],
+            "group_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+            "identity_source": "OPTION_MASTER",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8V3:HIGH_VOL:20261119:CALL:515",
+            "leg_id": "call",
+            "quantity": 0,
+            "run_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105",
+            "unrealized_pnl": 0.0
+          },
+          {
+            "avg_price": 1.7,
+            "client_order_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1-put-2fba05ccb0c8",
+            "contract_multiplier": "250000.0",
+            "current_price": 0.77,
+            "execution_id": "EXEC-000002",
+            "execution_ids": [
+              "EXEC-000002"
+            ],
+            "group_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+            "identity_source": "OPTION_MASTER",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8V3:HIGH_VOL:20261119:PUT:485",
+            "leg_id": "put",
+            "quantity": 0,
+            "run_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105",
+            "unrealized_pnl": 0.0
+          }
+        ],
+        "realized_pnl": -445000.0,
+        "strategy_id": "track8_macro_regime_monthly_strangle",
+        "total_pnl": -445000.0,
+        "unrealized_pnl": 0.0
+      },
+      "flat_state": "PASS",
+      "manifest_sha256": "01f204506929a2db2a55c209c247b98353918fc5bd053f64bfd7ed049564ce01",
+      "natural_replay": {
+        "approved": 2,
+        "events": 216,
+        "execution_ids": [
+          "EXEC-000001",
+          "EXEC-000002"
+        ],
+        "filled": 2,
+        "rejected": 0,
+        "routed": 2,
+        "signals": 2
+      },
+      "open_lots": [],
+      "realized_pnl_reconciliation": "PASS",
+      "risk_profile_sha256": "ca5292a17c45d1317849f4b62e1b9dafae3c7cfa7ae935c68dbde16e1e1deb25",
+      "run_id": "Q25-S8-TERMINAL-CLOSE-HIGH_VOL-20261105",
+      "scenario": "HIGH_VOL"
+    }
+  ]
+}

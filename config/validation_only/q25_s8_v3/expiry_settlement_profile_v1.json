@@ -1,0 +1,29 @@
+{
+  "schema_version": "q25-s8-validation-only-expiry-profile-v1",
+  "profile_id": "Q25_S8_EXPIRY_BENCHMARK_V1",
+  "validation_only": true,
+  "runtime_eligible": false,
+  "production_runtime_eligible": false,
+  "allow_kis_api": false,
+  "allow_live_orders": false,
+  "allow_real_account": false,
+  "provenance": "SYNTHETIC_VALIDATION_BENCHMARK",
+  "instrument_family": "STANDARD",
+  "currency": "KRW",
+  "contract_multiplier": "250000",
+  "contract_multiplier_basis": "Project standard KOSPI200 option benchmark; core/option/option_master.py and SyntheticOptionContractMaster. Not a KIS master field assertion.",
+  "commission_per_contract_per_side_krw": "3000",
+  "commission_basis": "Validation benchmark copied from core/analytics/execution_cost.py fee_per_leg=3000. Not an actual brokerage/account fee schedule.",
+  "rounding": "ROUND_HALF_UP_TO_WON",
+  "settlement_price_source": "SYNTHETIC_SCENARIO_EXPIRY_FIXTURE",
+  "settlement_price_by_scenario": {
+    "Q25_S8_MONTHLY_V3_NORMAL": "520",
+    "Q25_S8_MONTHLY_V3_HIGH_VOL": "480"
+  },
+  "notes": [
+    "This profile is permitted only for SYNTHETIC/DERIVED_SCENARIO validation-only Virtual runs.",
+    "The synthetic expiry settlement price is a test fixture, not an exchange-published final settlement price.",
+    "The multiplier and commission are explicit test assumptions; they do not authorize production or live accounting.",
+    "Actual KIS/firm fees, contract specifications and official expiry settlement data must replace these values when a real-account integration is explicitly enabled."
+  ]
+}
