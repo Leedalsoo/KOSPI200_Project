@@ -11,6 +11,7 @@ def build_track8_analytics_snapshot(data, *, run_id: str, as_of, option_contract
         # Common Analytics owns regime, volatility, portfolio/PnL, margin and risk
         # metrics. Track8 only materializes strategy-specific option inputs here.
         "current_price": data.price, "dte": data.days_to_expiry,
+        "expiry_date": data.option_expiry.strftime("%Y%m%d") if data.option_expiry is not None else None,
         "call_iv": data.option_iv, "put_iv": data.put_iv, "atm_iv": data.option_iv,
         "call_strike": getattr(option_contract_selection.call, "strike", None) if option_contract_selection is not None else getattr(data, "call_strike", None), "put_strike": getattr(option_contract_selection.put, "strike", None) if option_contract_selection is not None else getattr(data, "put_strike", None),
         "call_contract_multiplier": getattr(option_contract_selection.call, "contract_multiplier", None) if option_contract_selection is not None else getattr(data, "call_contract_multiplier", None),
@@ -20,7 +21,8 @@ def build_track8_analytics_snapshot(data, *, run_id: str, as_of, option_contract
         provenance=AnalyticsProvenance(source="standard-runtime.track8"), instrument_identity=None,
         observations=observations)
     defs = {
-        "options.dte": ("dte",), "options.call_iv": ("call_iv",), "options.put_iv": ("put_iv",),
+        "options.dte": ("dte",), "options.expiry_date": ("expiry_date",),
+        "options.call_iv": ("call_iv",), "options.put_iv": ("put_iv",),
         "options.atm_iv": ("atm_iv",), "options.call_strike": ("call_strike",),
         "options.put_strike": ("put_strike",), "options.call_contract_multiplier": ("call_contract_multiplier",),
         "options.put_contract_multiplier": ("put_contract_multiplier",),

@@ -290,12 +290,26 @@ class VirtualRuntimeDataProvider:
             except (ValueError, TypeError):
                 option_expiry = None
         if option_expiry is not None:
-            days_to_expiry = (option_expiry - observed_at.date()).days
-            expiry_status = RuntimeDataStatus(True, True, "KIS.OptionMaster.expiry")
+            if bool(getattr(tick, "validation_only", False)):
+                validation_dte = getattr(tick, "dte_trading_days", None)
+                if isinstance(validation_dte, bool) or not isinstance(validation_dte, int) or validation_dte < 0:
+                    raise ValueError("S8_VALIDATION_TRADING_DAY_DTE_REQUIRED")
+                days_to_expiry = validation_dte
+                expiry_status = RuntimeDataStatus(
+                    True, True, f"SYNTHETIC_VALIDATION_ONLY:{getattr(tick, 'scenario_id', '')}"
+                )
+            else:
+                days_to_expiry = (option_expiry - observed_at.date()).days
+                expiry_status = RuntimeDataStatus(True, True, "KIS.OptionMaster.expiry")
         if self.trading_calendar is not None:
             try:
                 calendar_flags = self.trading_calendar.flags(observed_at.date(), option_expiry)
-                calendar_status = RuntimeDataStatus(True, True, "ProductionTradingCalendar")
+                calendar_source = (
+                    f"SYNTHETIC_VALIDATION_ONLY:{getattr(tick, 'scenario_id', '')}"
+                    if bool(getattr(tick, "validation_only", False))
+                    else "ProductionTradingCalendar"
+                )
+                calendar_status = RuntimeDataStatus(True, True, calendar_source)
             except (ValueError, TypeError):
                 calendar_flags = (None, None, None)
                 calendar_status = RuntimeDataStatus(False, False, "ProductionTradingCalendar", "TRACK7_TRADING_CALENDAR_UNAVAILABLE")

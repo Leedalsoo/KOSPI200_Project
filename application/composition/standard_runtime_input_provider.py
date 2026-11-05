@@ -55,7 +55,7 @@ from application.composition.track8_analytics_provider import build_track8_analy
 class StandardRuntimeInputProvider:
     """Build standard inputs from observable VMS/VSSF sources only."""
 
-    def __init__(self, market: Any, *, track9_fee_ledger: Track9FeeLedger | None = None, track9_margin_read_model: Track9MarginReadModel | None = None, track9_position_execution_source: Track9PositionExecutionReadModel | None = None, track9_event_source: Track9EventSource | None = None, track9_event_risk_source: Track9EventRiskSource | None = None, run_id: str | None = None, track7_order_timeout_source: Any | None = None, track7_support_resistance_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None, track6_option_contract_source: Track6OptionContractSource | None = None, track7_option_contract_source: Track7OptionContractSource | None = None, track8_option_contract_source: Track8OptionContractSource | None = None, track9_option_contract_source: Track9OptionContractSource | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None, track4_greeks_provider: Track4KisGreeksProvider | None = None, kospi200_daily_source: KOSPI200DailySource | None = None, track6_volatility_source: Track6VolatilitySource | None = None, track1_fence_type_source: Any | None = None, track1_position_lot_store: Any | None = None, track1_option_delta_source: Any | None = None, strategy_keys: tuple[str, ...] | None = None) -> None:
+    def __init__(self, market: Any, *, track9_fee_ledger: Track9FeeLedger | None = None, track9_margin_read_model: Track9MarginReadModel | None = None, track9_position_execution_source: Track9PositionExecutionReadModel | None = None, track9_event_source: Track9EventSource | None = None, track9_event_risk_source: Track9EventRiskSource | None = None, run_id: str | None = None, track7_order_timeout_source: Any | None = None, track7_support_resistance_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None, track6_option_contract_source: Track6OptionContractSource | None = None, track7_option_contract_source: Track7OptionContractSource | None = None, track8_option_contract_source: Track8OptionContractSource | None = None, track9_option_contract_source: Track9OptionContractSource | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None, track4_greeks_provider: Track4KisGreeksProvider | None = None, kospi200_daily_source: KOSPI200DailySource | None = None, track6_volatility_source: Track6VolatilitySource | None = None, track1_fence_type_source: Any | None = None, track1_position_lot_store: Any | None = None, track1_option_delta_source: Any | None = None, strategy_keys: tuple[str, ...] | None = None, validation_only_s8_runtime_adapter: Any | None = None) -> None:
         self.risk_guard_status_source = risk_guard_status_source
         self.strategy_keys = frozenset(strategy_keys or ())
         self.market_condition_sensor = MarketConditionSensor()
@@ -75,6 +75,7 @@ class StandardRuntimeInputProvider:
         self.track5_option_contract_source = Track5OptionContractSource(option_master, option_orderbook_source) if option_master is not None else None
         self.track7_option_contract_source = track7_option_contract_source
         self.track8_option_contract_source = track8_option_contract_source
+        self.validation_only_s8_runtime_adapter = validation_only_s8_runtime_adapter
         self.track9_option_contract_source = track9_option_contract_source
         self.option_orderbook_source = option_orderbook_source
         self.data = VirtualRuntimeDataProvider(
@@ -513,14 +514,21 @@ class StandardRuntimeInputProvider:
                 or metric.status != AnalyticsStatus.AVAILABLE
             )
         )
+        track8_validation_pair_quotes_ready = True
+        if self.validation_only_s8_runtime_adapter is not None:
+            track8_validation_pair_quotes_ready = self.validation_only_s8_runtime_adapter.pair_quotes_ready(
+                track8_selection, market=self.data.market, tick=tick
+            )
         track8_required = (
             d.days_to_expiry,
             d.option_iv,
             d.put_iv,
             track8_selection,
             self.track9_margin_ratio,
+            track8_validation_pair_quotes_ready,
         )
-        if not all(value is not None for value in track8_required) or track8_common_missing:
+        if (not all(value is not None for value in track8_required)
+                or track8_common_missing or not track8_validation_pair_quotes_ready):
             missing = []
             if track8_selection is None:
                 missing.append("track8_authoritative_option_contract")
@@ -530,6 +538,8 @@ class StandardRuntimeInputProvider:
                 missing.append("option_iv_chain")
             if self.track9_margin_ratio is None:
                 missing.append("margin_read_model")
+            if not track8_validation_pair_quotes_ready:
+                missing.append("validation_only_current_timestamp_call_put_quotes")
             missing.extend(track8_common_missing)
             contexts["track8_macro_regime_monthly_strangle"] = self._unavailable(
                 "track8_macro_regime_monthly_strangle",

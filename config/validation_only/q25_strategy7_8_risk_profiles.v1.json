@@ -1,0 +1,43 @@
+{
+  "allow_kis_api": false,
+  "allow_live_orders": false,
+  "allow_real_account": false,
+  "audit_fields_required": [
+    "computed_gross_premium_krw",
+    "computed_max_loss_krw",
+    "computed_concurrent_exposure_krw",
+    "operational_reference_overage_krw",
+    "validation_budget_overage_krw",
+    "run_id",
+    "scenario_id",
+    "manifest_sha256",
+    "dataset_sha256"
+  ],
+  "currency": "KRW",
+  "enforcement_mode": "VALIDATION_ONLY_ALLOW_WITH_OVERAGE_AUDIT",
+  "operational_config_mutated": false,
+  "operational_config_path": "config/risk/option-hedge-risk.v1.json",
+  "profiles": {
+    "track7_weekly_insurance": {
+      "budget_basis": "sum of both BUY legs across two independent expiry groups; max loss capped at premium paid",
+      "dataset_manifest": "data/derived_scenario/q25_strategy7_8/strategy7_weekly/manifest.json",
+      "max_concurrent_groups": 2,
+      "max_gross_premium_outlay_krw": 3300000,
+      "max_loss_krw": 3300000,
+      "operational_reference_limit_krw": 250000
+    },
+    "track8_monthly_strangle": {
+      "budget_basis": "one CALL + one PUT BUY pair; max loss capped at premium paid; no macro scale-up",
+      "dataset_manifest": "data/derived_scenario/q25_strategy7_8/strategy8_monthly/manifest.json",
+      "entry_policy": "Use confirmed No.1169 DTE >= 10 trading days; 200,000 KRW minimum-budget gate retired. This profile does not change strategy code.",
+      "max_concurrent_groups": 1,
+      "max_gross_premium_outlay_krw": 2300000,
+      "max_loss_krw": 2300000,
+      "operational_reference_limit_krw": 250000
+    }
+  },
+  "risk_checks_enabled": true,
+  "runtime_eligible": false,
+  "schema_version": "q25-validation-only-risk-profile-v1",
+  "validation_only": true
+}

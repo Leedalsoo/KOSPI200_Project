@@ -36,6 +36,7 @@ from application.strategy_hub.hub import StrategyHub
 from application.composition.track2_execution_plan_adapter import Track2ExecutionPlanAdapter
 from application.composition.market_calendar_hub import MarketCalendarHub
 from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
+from application.composition.authoritative_option_quote_freshness_provider import AuthoritativeOptionQuoteFreshnessProvider
 from application.composition.execution_multi_leg_resolver_registry import ExecutionMultiLegResolverRegistry
 from contracts.types import MultiLegExecutionPlan, ExecutionLeg
 from infrastructure.kis.instrument_master_provider import KisFuturesInstrumentMasterProvider
@@ -49,14 +50,51 @@ from application.composition.track3_multi_leg_execution_plan_adapter import Trac
 from decimal import Decimal
 from contracts.risk_guard import RiskGuardStatusSource
 from core.strategy.standard_registry import STANDARD_STRATEGY_KEYS, build_standard_strategy_registry
+from environments.high_speed.validation_only_track6_gates import apply_track6_validation_gates
+from environments.high_speed.validation_only_track6_execution import Track6SyntheticFreshnessProvider
 
 logger = logging.getLogger(__name__)
 
 
-def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=None, strategy_keys=None, track9_iv_history_path=None, run_id=None, historical_observation_option_source=None, risk_guard_status_source: RiskGuardStatusSource | None = None, synthetic_runtime_sources=None, track4_greeks_provider=None, market_calendar_hub=None):
+def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=None, strategy_keys=None, track9_iv_history_path=None, run_id=None, historical_observation_option_source=None, risk_guard_status_source: RiskGuardStatusSource | None = None, synthetic_runtime_sources=None, track4_greeks_provider=None, market_calendar_hub=None, validation_only_track6_signal_mode: bool = False, validation_only_track6_execution_gate=None, validation_only_s8_runtime_adapter=None):
     """Attach all nine Standard strategies to the RuntimeController-owned VMS."""
     selected_keys = tuple(strategy_keys) if strategy_keys else STANDARD_STRATEGY_KEYS
     registry = build_standard_strategy_registry()
+    track6_validation_gate_evidence = None
+    if validation_only_track6_execution_gate is not None:
+        if validation_only_track6_signal_mode or synthetic_runtime_sources is None:
+            raise ValueError("TRACK6_SYNTHETIC_EXECUTION_MODE_CONFLICT")
+        selected_ids = {key[0] if isinstance(key, tuple) else str(key) for key in selected_keys}
+        if "track6_daily_tail_insurance" not in selected_ids:
+            raise ValueError("TRACK6_SYNTHETIC_EXECUTION_STRATEGY_NOT_SELECTED")
+        validation_only_track6_execution_gate.apply_to_strategy(
+            registry.get("track6_daily_tail_insurance", "1.0"), synthetic_sources=synthetic_runtime_sources
+        )
+        track6_validation_gate_evidence = validation_only_track6_execution_gate.evidence
+    if validation_only_track6_signal_mode:
+        if synthetic_runtime_sources is None:
+            raise ValueError("TRACK6_VALIDATION_SYNTHETIC_RUNTIME_REQUIRED")
+        selected_strategy_ids = {
+            key[0] if isinstance(key, tuple) else str(key)
+            for key in selected_keys
+        }
+        if "track6_daily_tail_insurance" not in selected_strategy_ids:
+            raise ValueError("TRACK6_VALIDATION_STRATEGY_NOT_SELECTED")
+        track6_validation_gate_evidence = apply_track6_validation_gates(
+            registry.get("track6_daily_tail_insurance", "1.0"),
+            validation_only_synthetic=True,
+            synthetic_runtime_sources=synthetic_runtime_sources,
+        )
+    if validation_only_s8_runtime_adapter is not None:
+        if validation_only_track6_execution_gate is not None or validation_only_track6_signal_mode:
+            raise ValueError("S8_VALIDATION_GATE_MODE_CONFLICT")
+        selected_ids = {key[0] if isinstance(key, tuple) else str(key) for key in selected_keys}
+        if "track8_macro_regime_monthly_strangle" not in selected_ids or synthetic_runtime_sources is None:
+            raise ValueError("S8_VALIDATION_STRATEGY_OR_SOURCE_REQUIRED")
+        validation_only_s8_runtime_adapter.apply_to_strategy(
+            registry.get("track8_macro_regime_monthly_strangle", "2.0"),
+            synthetic_sources=synthetic_runtime_sources,
+        )
     strategy_hub = StrategyHub(registry, selected_keys)
     expiry_source = KisOptionMasterExpirySource(bootstrap.bundle.option_master)
     track2_option_iv_source = historical_observation_option_source or KISTrack2OptionIVSource(bootstrap.bundle.option_master)
@@ -97,6 +135,17 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         getattr(bootstrap.bundle.option_master, "calendar", None)
         or getattr(synthetic_runtime_sources, "calendar", None)
     )
+    if synthetic_runtime_sources is not None:
+        retry_calendar = (
+            getattr(synthetic_runtime_sources, "calendar", None)
+            or getattr(market_calendar_hub, "calendar", None)
+        )
+        if (
+            getattr(retry_calendar, "source_type", None) == "SYNTHETIC"
+            and getattr(retry_calendar, "authoritative", True) is False
+            and callable(getattr(retry_calendar, "is_retry_window_open", None))
+        ):
+            registry.get("track8_macro_regime_monthly_strangle", "2.0").retry_calendar = retry_calendar
     def identity(evaluation, tick, *, asset_type=None):
         proposal = evaluation.result.execution_proposal
         if proposal is None:
@@ -158,7 +207,20 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
                 if same_target:
                     identity = observed_identity
                     break
-        if identity is None:
+        if identity is None and (validation_only_track6_execution_gate is not None or validation_only_s8_runtime_adapter is not None):
+            # Execution validation may only route an identity already present in the
+            # manifest-adapted dataset Option Master. Never invoke the synthetic
+            # fallback identity generator for an unlisted contract.
+            requested_expiry = str(tick.expiry).replace("-", "")[:8]
+            identity = next((
+                candidate for candidate in bootstrap.bundle.option_master.list_contract_identities()
+                if str(candidate.expiry).replace("-", "")[:8] == requested_expiry
+                and str(candidate.option_type).upper() == str(proposal.option_type).upper()
+                and candidate.strike is not None
+                and Decimal(str(candidate.strike)) == Decimal(str(proposal.strike))
+                and str(getattr(candidate, "shrn_iscd", "")).startswith("SYNTHETIC_CONTRACT:")
+            ), None)
+        elif identity is None:
             identity = bootstrap.bundle.option_master.find_contract_identity(
                 tick.expiry, proposal.option_type, proposal.strike
             )
@@ -201,20 +263,21 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
     track2_option_contract_source = Track2OptionContractSource(bootstrap.bundle.option_master)
     track3_plan_adapter = Track3MultiLegExecutionPlanAdapter()
     futures_identity_source = None
-    try:
-        futures_master = KisFuturesInstrumentMasterProvider(
-            source_url=KIS_INDEX_MASTER_URL,
-        ).current_mini_futures_source(underlying_short_code="2001")
-        futures_identity_source = KisFuturesIdentitySource(
-            futures_master,
-            FuturesTargetConfiguration(
-                underlying_short_code="2001",
-                product_type=FuturesProductType.MINI,
-            ),
-        )
-    except Exception as exc:
-        # Keep the Virtual runtime available, but never fall back to a stale local master.
-        logger.warning("VIRTUAL_FUTURES_IDENTITY_SOURCE_UNAVAILABLE: %s", exc)
+    if synthetic_runtime_sources is None:
+        try:
+            futures_master = KisFuturesInstrumentMasterProvider(
+                source_url=KIS_INDEX_MASTER_URL,
+            ).current_mini_futures_source(underlying_short_code="2001")
+            futures_identity_source = KisFuturesIdentitySource(
+                futures_master,
+                FuturesTargetConfiguration(
+                    underlying_short_code="2001",
+                    product_type=FuturesProductType.MINI,
+                ),
+            )
+        except Exception as exc:
+            # Keep the Virtual runtime available, but never fall back to a stale local master.
+            logger.warning("VIRTUAL_FUTURES_IDENTITY_SOURCE_UNAVAILABLE: %s", exc)
     multi_leg_bridge = VirtualMultiLegExecutionBridge(
         bundle=bootstrap.bundle,
         run_id=run_id,
@@ -222,8 +285,44 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         futures_identity_source=futures_identity_source,
         option_expiry_source=expiry_source,
         risk_guard_status_source=(risk_guard_status_source or synthetic_runtime_sources),
-        execution_result_callback=lambda plan, result: strategy_hub.on_execution_result(
-            plan.strategy_id, plan.purpose or "", result
+        execution_result_callback=lambda plan, result: (
+            strategy_hub.on_execution_result(plan.strategy_id, plan.purpose or "", result),
+            validation_only_s8_runtime_adapter.release_all_groups()
+            if validation_only_s8_runtime_adapter is not None
+            and plan.strategy_id == "track8_macro_regime_monthly_strangle"
+            and bool(getattr(result, "position_flat", False))
+            else None,
+        ),
+        freshness_verdict_provider=(
+            Track6SyntheticFreshnessProvider(
+                option_master=bootstrap.bundle.option_master, market=bootstrap.bundle.market,
+                max_age_seconds=validation_only_track6_execution_gate.evidence.max_quote_age_seconds,
+                synthetic_sources=synthetic_runtime_sources,
+            ) if validation_only_track6_execution_gate is not None else (
+                (lambda plan, _leg, identity, command: validation_only_s8_runtime_adapter.freshness_verdict(
+                    plan=plan, identity=identity, command=command,
+                    option_master=bootstrap.bundle.option_master,
+                    market=bootstrap.bundle.market, synthetic_sources=synthetic_runtime_sources,
+                )) if validation_only_s8_runtime_adapter is not None else AuthoritativeOptionQuoteFreshnessProvider(
+                    option_master=bootstrap.bundle.option_master,
+                evidence_provider=(
+                    lambda _plan, _leg, _identity, command: (
+                        historical_observation_option_source.get_freshness_evidence(
+                            str(command.broker_symbol or command.instrument_id or "")
+                        )
+                        if historical_observation_option_source is not None
+                        else None
+                    )
+                ),
+                )
+            )
+        ),
+        validation_order_gate=(
+            validation_only_track6_execution_gate.validate_group
+            if validation_only_track6_execution_gate is not None
+            else validation_only_s8_runtime_adapter.validate_group
+            if validation_only_s8_runtime_adapter is not None
+            else None
         ),
     )
 
@@ -269,6 +368,7 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         track6_option_contract_source=Track6OptionContractSource(bootstrap.bundle.option_master),
         track7_option_contract_source=Track7OptionContractSource(bootstrap.bundle.option_master),
         track8_option_contract_source=Track8OptionContractSource(bootstrap.bundle.option_master),
+        validation_only_s8_runtime_adapter=validation_only_s8_runtime_adapter,
         track9_option_contract_source=track9_option_contract_source,
         kospi200_daily_source=kospi200_daily_source,
         track6_volatility_source=track6_volatility_source,
@@ -471,8 +571,9 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
                 strategy_id="track8_macro_regime_monthly_strangle",
                 purpose="MONTHLY_STRANGLE_CLOSE",
             )
-        return registry.get("track8_macro_regime_monthly_strangle", "2.0").build_execution_plan(
-            f"{run_id}-{canonical.signal_id}"
+        strategy = registry.get("track8_macro_regime_monthly_strangle", "2.0")
+        return strategy.build_execution_plan(
+            f"{run_id}-{canonical.signal_id}", proposal=proposal
         )
 
     def resolve_track5(evaluation, canonical):
@@ -554,7 +655,9 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         multi_leg_executor=multi_leg_bridge.execute,
         pending_multi_leg_processor=multi_leg_bridge.process_pending_quotes,
         risk_guard_status_source=(risk_guard_status_source or synthetic_runtime_sources),
+        signal_observation_only=validation_only_track6_signal_mode,
     )
+    loop.track6_validation_gate_evidence = track6_validation_gate_evidence
     bootstrap.bundle.market.subscribe(loop.on_tick)
     subscribe_quote_only = getattr(bootstrap.bundle.market, "subscribe_quote_only", None)
     if callable(subscribe_quote_only):

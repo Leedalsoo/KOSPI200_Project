@@ -52,6 +52,7 @@ class PositionGroupLegPnL:
     run_id: str
     client_order_id: str
     execution_id: str
+    execution_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

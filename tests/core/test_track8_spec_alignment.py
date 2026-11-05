@@ -14,17 +14,46 @@ def _metric(value):
     return SimpleNamespace(status=AnalyticsStatus.AVAILABLE, value=value)
 
 
-def test_track8_default_unresolved_dte_budget_and_risk_gate_blocks_entry() -> None:
+def test_track8_default_risk_gate_blocks_entry_but_no1169_policy_is_loaded() -> None:
     strategy = Track8MacroRegimeMonthlyStrangle()
     context = SimpleNamespace(
         strategy_id=strategy.strategy_id,
         analytics=SimpleNamespace(as_of=datetime(2026, 10, 21, 10, 0), get=lambda key: _metric(Decimal("20"))),
-        input=SimpleNamespace(common=SimpleNamespace(budget=Decimal("500000"), date_str="20261021")),
+        input=SimpleNamespace(common=SimpleNamespace(budget=None, date_str="20261021")),
     )
 
-    assert strategy.DTE_ENTRY is None
-    assert strategy.MIN_BUDGET is None
-    assert strategy.evaluate_entry(context) == ()
+    assert strategy.DTE_ENTRY == Decimal("10")
+    assert strategy.MIN_BUDGET is None  # No.1169 retired the old minimum-budget gate.
+    assert strategy.evaluate_entry(context) == ()  # Operational readiness flags remain fail-closed by default.
+
+
+def test_track8_no1169_dte10_entry_does_not_require_retired_minimum_budget() -> None:
+    strategy = Track8MacroRegimeMonthlyStrangle(
+        runtime_config_verified=True, risk_limits_available=True
+    )
+    values = {
+        "options.dte": Decimal("10"),
+        "market.current_regime": "NORMAL",
+        "options.call_strike": Decimal("515"),
+        "options.put_strike": Decimal("485"),
+        "options.call_contract_multiplier": Decimal("250000"),
+        "options.put_contract_multiplier": Decimal("250000"),
+        "options.expiry_date": "20261119",
+    }
+    context = SimpleNamespace(
+        strategy_id=strategy.strategy_id,
+        analytics=SimpleNamespace(
+            as_of=datetime(2026, 11, 2, 9, 0),
+            get=lambda key: _metric(values.get(key)),
+        ),
+        input=SimpleNamespace(common=SimpleNamespace(budget=None, date_str="20261102")),
+    )
+
+    signals = strategy.evaluate_entry(context)
+
+    assert len(signals) == 1
+    assert signals[0].execution_proposal.option_type == "CALL"
+    assert strategy.state.entry_pending is True
 
 
 def test_track8_macro_put_overlay_and_profit_rebuild_are_retired() -> None:

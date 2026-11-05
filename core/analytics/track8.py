@@ -46,7 +46,8 @@ def _moneyness(snapshot, request):
 
 def build_track8_evaluators() -> Mapping[str, object]:
     return {
-        "options.dte": _passthrough("dte", "days"),
+        "options.dte": _passthrough("dte", "trading-days"),
+        "options.expiry_date": _passthrough("expiry_date", "YYYYMMDD"),
         "options.call_iv": _passthrough("call_iv", "iv-points"),
         "options.put_iv": _passthrough("put_iv", "iv-points"),
         "options.atm_iv": _passthrough("atm_iv", "iv-points"),

@@ -85,7 +85,8 @@ class AutomatedVirtualTradingLoop:
                  multi_leg_plan_resolver: Callable[[object, object], MultiLegExecutionPlan | None] | None = None,
                  multi_leg_executor: Callable[[MultiLegExecutionPlan], object] | None = None,
                  pending_multi_leg_processor: Callable[[], int] | None = None,
-                 risk_config: RiskConfig | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None) -> None:
+                 risk_config: RiskConfig | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None,
+                 signal_observation_only: bool = False) -> None:
         if not run_id.strip():
             raise ValueError("AUTOMATED_RUNTIME_RUN_ID_REQUIRED")
         self.bundle = bundle
@@ -97,6 +98,7 @@ class AutomatedVirtualTradingLoop:
         self.multi_leg_plan_resolver = multi_leg_plan_resolver
         self.multi_leg_executor = multi_leg_executor
         self.pending_multi_leg_processor = pending_multi_leg_processor
+        self.signal_observation_only = bool(signal_observation_only)
         self.strategy_results = RuntimeStrategyResultCollectionAdapter()
         self.strategy_to_decision = RuntimeStrategyToDecisionAdapter(DecisionArbiter())
         self.decision_to_command = RuntimeDecisionCommandAdapter()
@@ -213,7 +215,7 @@ class AutomatedVirtualTradingLoop:
             quality={},
         )
         pending_execution_results: tuple[object, ...] = ()
-        if self.pending_multi_leg_processor is not None:
+        if self.pending_multi_leg_processor is not None and not self.signal_observation_only:
             pending_result = self.pending_multi_leg_processor()
             if isinstance(pending_result, (tuple, list)):
                 pending_execution_results = tuple(pending_result)
@@ -259,6 +261,21 @@ class AutomatedVirtualTradingLoop:
                 execution_signals=int(kind is SignalKind.EXECUTION),
                 non_execution_signals=int(kind is SignalKind.NON_EXECUTION),
             )
+        if self.signal_observation_only:
+            self._last_strategy_status = tuple(
+                sorted(status_by_strategy.values(), key=lambda item: item.strategy_id)
+            )
+            self._last_result = AutomatedTickResult(
+                tick_sequence=tick.seq_id,
+                signals=len(strategy_result.signals),
+                approved=0,
+                routed=0,
+                filled=0,
+                rejected=0,
+                execution_ids=(),
+                strategy_status=self._last_strategy_status,
+            )
+            return self._last_result
         decision = self.strategy_to_decision.arbitrate(
             evaluations, price=tick.ask_price, timestamp=tick.timestamp,
             account=self.bundle.account.snapshot(),
