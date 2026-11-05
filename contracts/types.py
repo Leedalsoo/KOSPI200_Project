@@ -118,6 +118,7 @@ class MultiLegExecutionPlan:
     strategy_code_version: str | None = None
     strategy_config_version: str | None = None
     strategy_config_hash: str | None = None
+    attempt_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.strategy_config_version is not None and (
@@ -231,6 +232,27 @@ class OrderAckEvent:
 
 
 @dataclass(frozen=True)
+class ExecutionFill:
+    """One immutable execution event belonging to an order lifecycle."""
+
+    execution_id: str
+    filled_quantity: int
+    execution_price: Decimal
+    execution_timestamp: datetime
+    fee: Decimal
+
+    def __post_init__(self) -> None:
+        if not self.execution_id or not self.execution_id.strip():
+            raise ValueError("EXECUTION_FILL_ID_REQUIRED")
+        if self.filled_quantity <= 0:
+            raise ValueError("EXECUTION_FILL_QUANTITY_INVALID")
+        if self.execution_price <= 0 or self.fee < 0:
+            raise ValueError("EXECUTION_FILL_VALUE_INVALID")
+        if self.execution_timestamp is None:
+            raise ValueError("EXECUTION_FILL_TIMESTAMP_REQUIRED")
+
+
+@dataclass(frozen=True)
 class ExecutionReport:
     """Canonical execution result returned by an Environment adapter."""
 
@@ -247,6 +269,9 @@ class ExecutionReport:
     rejected_reason: str | None = None
     group_id: str | None = None
     leg_id: str | None = None
+    submitted_at: datetime | None = None
+    lifecycle_reason: str | None = None
+    execution_fills: tuple[ExecutionFill, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -286,6 +311,7 @@ __all__: Sequence[str] = (
     "CanonicalMarketTick",
     "DataQuality",
     "EnvironmentType",
+    "ExecutionFill",
     "ExecutionReport",
     "ExecutionLeg",
     "MultiLegExecutionPlan",

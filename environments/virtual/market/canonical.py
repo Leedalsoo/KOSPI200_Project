@@ -41,6 +41,12 @@ class ReferenceCanonicalMarketTick:
     gamma: float | None = None
     theta: float | None = None
     vega: float | None = None
+    # Manifest-bound fields are populated only by the explicit synthetic replay adapter.
+    validation_only: bool = False
+    scenario_id: str = ""
+    scenario_group_id: str = ""
+    scenario_regime: str = ""
+    dte_trading_days: int | None = None
 
     def __post_init__(self) -> None:
         if self.expiry:

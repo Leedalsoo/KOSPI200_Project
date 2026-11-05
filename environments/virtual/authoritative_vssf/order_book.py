@@ -31,6 +31,8 @@ class OrderBook:
         bid, ask = quote
         limit_price = getattr(command, "requested_price", None)
         if limit_price is None:
+            limit_price = getattr(command, "price", None)
+        if limit_price is None:
             return ask if side == "BUY" else bid
         limit = float(limit_price)
         if limit <= 0:
