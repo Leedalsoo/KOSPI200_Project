@@ -126,3 +126,48 @@ def test_adapter_refuses_conflicting_instrument_id(tmp_path: Path) -> None:
     }
     with pytest.raises(ValueError, match="PRODUCTION_ID_FIELD_FORBIDDEN"):
         adapter.adapt_tick(tick)
+
+def test_external_manifest_validates_output_hash_bytes_and_rows(tmp_path: Path, monkeypatch) -> None:
+    project = tmp_path
+    dataset = project / "data" / "derived_scenario" / "q25_a2_1_strategy6"
+    dataset.mkdir(parents=True)
+    monkeypatch.chdir(project)
+    row = {
+        "schema": "reference-canonical-market-tick-v1",
+        "synthetic": True,
+        "provenance": "DERIVED_SCENARIO",
+        "tick": {
+            "timestamp": "2026-11-02T08:45:00+09:00",
+            "synthetic_contract_id": "SYNTHETIC_CONTRACT:0123456789abcdef01234567",
+            "source_instrument_code": "B016AA12",
+            "instrument_identity_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+        },
+    }
+    data_path = dataset / "20261102.jsonl"
+    data_path.write_text(json.dumps(row), encoding="utf-8")
+    import hashlib
+
+    raw = data_path.read_bytes()
+    manifest = {
+        "schema_version": "q25-a2-1-s6-syn-evt-manifest-v1",
+        "source_type": "DERIVED_SCENARIO",
+        "provenance": "DERIVED_SCENARIO",
+        "synthetic": True,
+        "validation_only": True,
+        "production_runtime_eligible": False,
+        "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+        "output_path": "data\\\\derived_scenario\\\\q25_a2_1_strategy6\\\\20261102.jsonl",
+        "output_sha256": hashlib.sha256(raw).hexdigest(),
+        "output_bytes": len(raw),
+        "rows": 1,
+    }
+    manifest_path = project / "Q25_A2_1_S6_SYN_EVT_MANIFEST.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    adapter = SyntheticReplayAdapter(dataset, manifest_path=manifest_path)
+    assert adapter.manifest["rows"] == 1
+
+    manifest["rows"] = 2
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(ValueError, match="MANIFEST_ROWS_MISMATCH"):
+        SyntheticReplayAdapter(dataset, manifest_path=manifest_path)

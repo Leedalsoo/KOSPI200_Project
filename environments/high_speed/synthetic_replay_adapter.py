@@ -5,6 +5,7 @@ instrument identifiers and this adapter must not be used for REAL_VTS or Live da
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -13,21 +14,35 @@ SYNTHETIC_ID_PREFIX = "SYNTHETIC_CONTRACT:"
 EXPECTED_PROVENANCE = "DERIVED_SCENARIO"
 EXPECTED_IDENTITY_STATUS = "BLOCKED_IDENTITY_OWNER_UNRESOLVED"
 EXPECTED_SCHEMA = "reference-canonical-market-tick-v1"
+EXPECTED_EXTERNAL_MANIFEST_SCHEMA = "q25-a2-1-s6-syn-evt-manifest-v1"
 
 
 class SyntheticReplayAdapter:
-    """Validate a P5 dataset and adapt its synthetic ID only for validation replay."""
+    """Validate a synthetic dataset and adapt its ID only for validation replay."""
 
-    def __init__(self, dataset: str | Path) -> None:
-        self.root = Path(dataset)
-        manifest_path = self.root / "manifest.json"
-        if not manifest_path.is_file():
+    def __init__(
+        self,
+        dataset: str | Path,
+        *,
+        manifest_path: str | Path | None = None,
+    ) -> None:
+        self.root = Path(dataset).resolve()
+        self._external_manifest = manifest_path is not None
+        self.manifest_path = (
+            Path(manifest_path).resolve()
+            if manifest_path is not None
+            else self.root / "manifest.json"
+        )
+        if not self.manifest_path.is_file():
             raise ValueError("SYNTHETIC_REPLAY_MANIFEST_REQUIRED")
-        self.manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
         self._validate_manifest()
 
     def _validate_manifest(self) -> None:
         manifest = self.manifest
+        if self._external_manifest:
+            self._validate_external_manifest()
+            return
         if manifest.get("schema") != EXPECTED_SCHEMA:
             raise ValueError("SYNTHETIC_REPLAY_SCHEMA_MISMATCH")
         if manifest.get("synthetic") is not True:
@@ -49,6 +64,56 @@ class SyntheticReplayAdapter:
             raise ValueError("SYNTHETIC_REPLAY_ID_NAMESPACE_MISMATCH")
         if policy.get("production_standard_instrument_id_assigned") is not False:
             raise ValueError("SYNTHETIC_REPLAY_STANDARD_ID_ASSIGNMENT_FORBIDDEN")
+
+    def _validate_external_manifest(self) -> None:
+        manifest = self.manifest
+        if manifest.get("schema_version") != EXPECTED_EXTERNAL_MANIFEST_SCHEMA:
+            raise ValueError("SYNTHETIC_REPLAY_EXTERNAL_MANIFEST_SCHEMA_MISMATCH")
+        if manifest.get("source_type") != EXPECTED_PROVENANCE or manifest.get("provenance") != EXPECTED_PROVENANCE:
+            raise ValueError("SYNTHETIC_REPLAY_PROVENANCE_REQUIRED")
+        if manifest.get("synthetic") is not True:
+            raise ValueError("SYNTHETIC_REPLAY_SYNTHETIC_FLAG_REQUIRED")
+        if manifest.get("validation_only") is not True:
+            raise ValueError("SYNTHETIC_REPLAY_VALIDATION_ONLY_REQUIRED")
+        if manifest.get("production_runtime_eligible") is not False:
+            raise ValueError("SYNTHETIC_REPLAY_PRODUCTION_ELIGIBILITY_MUST_BE_FALSE")
+        if manifest.get("identity_source_status") != EXPECTED_IDENTITY_STATUS:
+            raise ValueError("SYNTHETIC_REPLAY_IDENTITY_STATUS_BLOCKED_REQUIRED")
+
+        output_path = manifest.get("output_path")
+        expected_sha256 = manifest.get("output_sha256")
+        expected_bytes = manifest.get("output_bytes")
+        expected_rows = manifest.get("rows")
+        if not isinstance(output_path, str) or not output_path.strip():
+            raise ValueError("SYNTHETIC_REPLAY_MANIFEST_OUTPUT_PATH_REQUIRED")
+        if not isinstance(expected_sha256, str) or len(expected_sha256) != 64:
+            raise ValueError("SYNTHETIC_REPLAY_MANIFEST_OUTPUT_SHA256_REQUIRED")
+        if not isinstance(expected_bytes, int) or expected_bytes < 0:
+            raise ValueError("SYNTHETIC_REPLAY_MANIFEST_OUTPUT_BYTES_REQUIRED")
+        if not isinstance(expected_rows, int) or expected_rows < 0:
+            raise ValueError("SYNTHETIC_REPLAY_MANIFEST_ROWS_REQUIRED")
+
+        normalized_path = output_path.replace("\\\\", "\\")
+        output_file = (Path.cwd() / normalized_path).resolve()
+        if (output_file != self.root and output_file.parent != self.root) or not output_file.is_file():
+            raise ValueError("SYNTHETIC_REPLAY_MANIFEST_DATASET_PATH_MISMATCH")
+        if output_file.stat().st_size != expected_bytes:
+            raise ValueError("SYNTHETIC_REPLAY_MANIFEST_OUTPUT_BYTES_MISMATCH")
+
+        digest = hashlib.sha256()
+        with output_file.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        if digest.hexdigest() != expected_sha256.lower():
+            raise ValueError("SYNTHETIC_REPLAY_MANIFEST_OUTPUT_SHA256_MISMATCH")
+
+        row_count = 0
+        with output_file.open("rb") as handle:
+            for line in handle:
+                if line.strip():
+                    row_count += 1
+        if row_count != expected_rows:
+            raise ValueError("SYNTHETIC_REPLAY_MANIFEST_ROWS_MISMATCH")
 
     def adapt_tick(self, tick: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(tick, dict):
@@ -79,5 +144,30 @@ class SyntheticReplayAdapter:
         if record.get("provenance") != EXPECTED_PROVENANCE:
             raise ValueError("SYNTHETIC_DATASET_PROVENANCE_REQUIRED")
         adapted = dict(record)
-        adapted["tick"] = self.adapt_tick(record.get("tick"))
+        tick = self.adapt_tick(record.get("tick"))
+        metadata = record.get("scenario_metadata")
+        if metadata is not None:
+            if not isinstance(metadata, dict) or metadata.get("validation_only") is not True:
+                raise ValueError("SYNTHETIC_REPLAY_SCENARIO_METADATA_INVALID")
+            scenario_id = str(metadata.get("scenario_id") or "")
+            if not scenario_id or scenario_id != str(self.manifest.get("scenario_id") or ""):
+                raise ValueError("SYNTHETIC_REPLAY_SCENARIO_ID_MISMATCH")
+            dte = metadata.get("dte_trading_days")
+            if isinstance(dte, bool) or not isinstance(dte, int) or dte < 0:
+                raise ValueError("SYNTHETIC_REPLAY_TRADING_DAY_DTE_REQUIRED")
+            regime = str(metadata.get("regime") or "").upper()
+            if regime not in {"NORMAL", "HIGH_VOL"}:
+                raise ValueError("SYNTHETIC_REPLAY_SCENARIO_REGIME_INVALID")
+            if str(metadata.get("contract_identity_authority") or "") != "SYNTHETIC_ONLY":
+                raise ValueError("SYNTHETIC_REPLAY_SCENARIO_IDENTITY_AUTHORITY_INVALID")
+            namespace = str(self.manifest.get("validation_identity_namespace") or "")
+            synthetic_id = str(tick.get("synthetic_contract_id") or "")
+            if namespace and not synthetic_id.startswith(namespace):
+                raise ValueError("SYNTHETIC_REPLAY_SCENARIO_IDENTITY_NAMESPACE_MISMATCH")
+            tick["validation_only"] = True
+            tick["scenario_id"] = scenario_id
+            tick["scenario_group_id"] = str(metadata.get("group_id") or "")
+            tick["scenario_regime"] = regime
+            tick["dte_trading_days"] = dte
+        adapted["tick"] = tick
         return adapted

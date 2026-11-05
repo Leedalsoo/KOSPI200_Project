@@ -12,6 +12,7 @@ from application.composition.automated_virtual_runtime_factory import attach_sta
 from environments.high_speed.replay_runner import HighSpeedReplayRunner
 from environments.high_speed.synthetic_runtime_sources import SyntheticRuntimeSources, build_synthetic_option_master
 from environments.high_speed.synthetic_replay_adapter import SyntheticReplayAdapter
+from environments.high_speed.validation_only_track6_execution import Track6SyntheticExecutionGate
 from contracts.strategy_runtime_status import StrategyRuntimeStatus
 from contracts.clock import ClockProvider
 from environments.high_speed.replay_trace import ReplayExecutionObserver, ReplayLogMode, ReplayTraceController
@@ -80,7 +81,12 @@ def _publish_contract_scoped_replay_quote(tick, *, option_master, market, order_
         tick_multiplier = float(tick.contract_multiplier)
     except (TypeError, ValueError) as exc:
         raise ValueError("DERIVED_SCENARIO_CONTRACT_QUOTE_INVALID") from exc
-    if not all(isfinite(value) and value > 0 for value in (bid, ask, last, multiplier, tick_multiplier)):
+    # A zero bid is an intentional one-sided-quote scenario in the synthetic
+    # dataset. Preserve it as unavailable bid liquidity; reject negative/non-finite
+    # prices and require a positive ask/last/multiplier.
+    if not all(isfinite(value) for value in (bid, ask, last, multiplier, tick_multiplier)):
+        raise ValueError("DERIVED_SCENARIO_CONTRACT_QUOTE_INVALID")
+    if bid < 0 or not all(value > 0 for value in (ask, last, multiplier, tick_multiplier)):
         raise ValueError("DERIVED_SCENARIO_CONTRACT_QUOTE_INVALID")
     if ask <= bid:
         raise ValueError("DERIVED_SCENARIO_CONTRACT_BID_ASK_INVALID")
@@ -109,10 +115,27 @@ class HighSpeedVirtualRuntimeReplayRunner:
 
     def __init__(self, dataset: str | Path, *, run_id: str | None = None, strategy_keys=None,
                  track3_runtime_input_source=None, initial_capital: float = 250_000_000.0, track5_opening_gap_points: float = 0.0,
-                 validation_only_synthetic: bool = False, clock: ClockProvider | None = None,
+                 validation_only_synthetic: bool = False,
+                 validation_only_synthetic_manifest: str | Path | None = None,
+                 validation_only_s8_risk_profile: str | Path | None = None,
+                 validation_only_track6_signal_mode: bool = False,
+                 validation_only_track6_execution_mode: bool = False,
+                 clock: ClockProvider | None = None,
                  log_mode: ReplayLogMode | str = ReplayLogMode.FAST, trace_output: str | Path | None = None):
         self.dataset = Path(dataset)
         self.validation_only_synthetic = bool(validation_only_synthetic)
+        self.validation_only_synthetic_manifest = validation_only_synthetic_manifest
+        self.validation_only_s8_risk_profile = validation_only_s8_risk_profile
+        if self.validation_only_s8_risk_profile is not None and (not self.validation_only_synthetic or self.validation_only_synthetic_manifest is None):
+            raise ValueError("S8_VALIDATION_RISK_PROFILE_REQUIRES_SYNTHETIC_MANIFEST")
+        if self.validation_only_synthetic_manifest is not None and not self.validation_only_synthetic:
+            raise ValueError("SYNTHETIC_MANIFEST_REQUIRES_VALIDATION_ONLY_MODE")
+        self.validation_only_track6_signal_mode = bool(validation_only_track6_signal_mode)
+        self.validation_only_track6_execution_mode = bool(validation_only_track6_execution_mode)
+        if self.validation_only_track6_execution_mode and (not self.validation_only_synthetic or self.validation_only_track6_signal_mode or self.validation_only_synthetic_manifest is None):
+            raise ValueError("TRACK6_SYNTHETIC_EXECUTION_REQUIRES_EXPLICIT_SYNTHETIC_MANIFEST")
+        if self.validation_only_track6_signal_mode and not self.validation_only_synthetic:
+            raise ValueError("TRACK6_SIGNAL_OBSERVATION_REQUIRES_SYNTHETIC_VALIDATION_MODE")
         self.run_id = run_id or f"HS-{uuid4()}"
         self.strategy_keys = tuple(strategy_keys) if strategy_keys else None
         self.track3_runtime_input_source = track3_runtime_input_source
@@ -120,6 +143,8 @@ class HighSpeedVirtualRuntimeReplayRunner:
         self.track5_opening_gap_points = float(track5_opening_gap_points)
         self.clock = clock
         self.trace = ReplayTraceController(log_mode, output_path=trace_output)
+        self.track6_synthetic_execution_gate = None
+        self.s8_validation_runtime_adapter = None
 
     def run(self, *, start: str | None = None, end: str | None = None,
             speed: float = float("inf"), max_events: int | None = None) -> HighSpeedVirtualReplayReport:
@@ -127,14 +152,45 @@ class HighSpeedVirtualRuntimeReplayRunner:
             "replay_started", run_id=self.run_id,
             payload={"dataset": self.dataset.name, "log_mode": self.trace.mode.value,
                      "strategy_keys": list(self.strategy_keys) if self.strategy_keys else None,
-                     "validation_only_synthetic": self.validation_only_synthetic},
+                     "validation_only_synthetic": self.validation_only_synthetic,
+                     "validation_only_track6_execution_mode": self.validation_only_track6_execution_mode},
         )
         # P5 requires an explicit validation-only mode. Legacy replay keeps its existing
         # input contract and is never silently reinterpreted as a synthetic-ID dataset.
-        synthetic_adapter = SyntheticReplayAdapter(self.dataset) if self.validation_only_synthetic else None
-        synthetic_sources = SyntheticRuntimeSources(
-            track5_opening_gap_points=self.track5_opening_gap_points, clock=self.clock
+        synthetic_adapter = (
+            SyntheticReplayAdapter(
+                self.dataset,
+                manifest_path=self.validation_only_synthetic_manifest,
+            )
+            if self.validation_only_synthetic
+            else None
         )
+        validation_calendar = None
+        if self.validation_only_synthetic_manifest is not None:
+            from environments.high_speed.validation_only_trading_calendar import (
+                load_validation_only_trading_calendar,
+            )
+            validation_calendar = load_validation_only_trading_calendar(
+                self.validation_only_synthetic_manifest, self.dataset
+            )
+        synthetic_sources = SyntheticRuntimeSources(
+            track5_opening_gap_points=self.track5_opening_gap_points,
+            clock=self.clock,
+            calendar=validation_calendar,
+        )
+        if self.validation_only_s8_risk_profile is not None:
+            selected_ids = {key[0] if isinstance(key, tuple) else str(key) for key in (self.strategy_keys or ())}
+            if selected_ids != {"track8_macro_regime_monthly_strangle"}:
+                raise ValueError("S8_VALIDATION_RUN_MUST_SELECT_ONLY_STRATEGY8")
+            from environments.high_speed.validation_only_s8_runtime_adapter import S8ValidationOnlyRuntimeAdapter
+            self.s8_validation_runtime_adapter = S8ValidationOnlyRuntimeAdapter(dataset=self.dataset, manifest_path=self.validation_only_synthetic_manifest, risk_profile_path=self.validation_only_s8_risk_profile)
+            self.s8_validation_runtime_adapter.bind_run_id(self.run_id)
+        if self.validation_only_track6_execution_mode:
+            from environments.high_speed.validation_only_track6_execution import Track6SyntheticExecutionGate
+            self.track6_synthetic_execution_gate = Track6SyntheticExecutionGate(
+                dataset=self.dataset, manifest_path=self.validation_only_synthetic_manifest
+            )
+            self.initial_capital = float(self.track6_synthetic_execution_gate.evidence.configured_capital_krw)
         if synthetic_adapter is None:
             option_master = build_synthetic_option_master(self.dataset)
         else:
@@ -157,6 +213,9 @@ class HighSpeedVirtualRuntimeReplayRunner:
             track3_runtime_input_source=self.track3_runtime_input_source,
             synthetic_runtime_sources=synthetic_sources,
             track4_greeks_provider=synthetic_sources,
+            validation_only_track6_signal_mode=self.validation_only_track6_signal_mode,
+            validation_only_track6_execution_gate=self.track6_synthetic_execution_gate,
+            validation_only_s8_runtime_adapter=self.s8_validation_runtime_adapter,
         )
         # High-speed replay replaces the bootstrap loop; rebind the broker read model
         # to the bridge actually executing this replay instead of the detached bridge.
@@ -298,6 +357,8 @@ class HighSpeedVirtualRuntimeReplayRunner:
                     filled_quantity=previous.filled_quantity + status.filled_quantity,
                 )
             mark_positions(spot)
+            if self.validation_only_s8_risk_profile is not None:
+                replay_bridge.refresh_position_group_marks()
             self.trace.emit(
                 "market_event", run_id=self.run_id, event_sequence=totals["events"] - 1,
                 timestamp=tick.timestamp,
@@ -388,9 +449,16 @@ def main() -> None:
         "--validation-only-synthetic", action="store_true",
         help="Enable the fail-closed P5 DERIVED_SCENARIO identity adapter; never for REAL_VTS/Live.",
     )
+    parser.add_argument("--validation-only-synthetic-manifest", help="Explicit external manifest for a validation-only synthetic dataset.")
+    parser.add_argument("--validation-only-s8-risk-profile", help="Manifest-bound validation-only S8 risk profile; requires Strategy 8 only.")
+    parser.add_argument("--validation-only-track6-execution-mode", action="store_true", help="Enable isolated Strategy 6 synthetic entry lifecycle validation; never Live/KIS.")
     args = parser.parse_args()
     result = HighSpeedVirtualRuntimeReplayRunner(
         args.dataset, validation_only_synthetic=args.validation_only_synthetic,
+        validation_only_synthetic_manifest=args.validation_only_synthetic_manifest,
+        validation_only_s8_risk_profile=args.validation_only_s8_risk_profile,
+        validation_only_track6_execution_mode=args.validation_only_track6_execution_mode,
+        strategy_keys=(("track6_daily_tail_insurance", "1.0"),) if args.validation_only_track6_execution_mode else None,
         log_mode=args.log_mode, trace_output=args.trace_output,
     ).run(
         start=args.start, end=args.end, speed=args.speed, max_events=args.max_events,

@@ -30,7 +30,7 @@ SYNTHETIC_SOURCE = "SYNTHETIC:high-speed-market-model-v2"
 
 
 class SyntheticRuntimeSources:
-    def __init__(self, *, track5_opening_gap_points: Decimal = Decimal("0"), clock: ClockProvider | None = None) -> None:
+    def __init__(self, *, track5_opening_gap_points: Decimal = Decimal("0"), clock: ClockProvider | None = None, calendar: Any | None = None) -> None:
         self._clock = clock
         self._tick: Any | None = None
         self._iv: dict[tuple[str, str, Decimal], Decimal] = {}
@@ -38,7 +38,7 @@ class SyntheticRuntimeSources:
         self._poc: Decimal | None = None
         self._basis: Decimal | None = None
         self._metrics: Track2MarketMetrics | None = None
-        self.calendar = SyntheticTradingCalendar()
+        self.calendar = calendar or SyntheticTradingCalendar()
         self.source_name = SYNTHETIC_SOURCE
         self._track5_daily_context: KOSPI200DailyContext | None = None
         self._track5_opening_gap_points = Decimal(str(track5_opening_gap_points))
@@ -266,7 +266,7 @@ def build_synthetic_option_master(
     """Build a synthetic Option Master; adapter mode never assigns Standard IDs."""
     master = SyntheticOptionContractMaster(auto_load_kis_source=False)
     root = Path(dataset)
-    if validation_only_adapter is not None and Path(validation_only_adapter.root) != root:
+    if validation_only_adapter is not None and Path(validation_only_adapter.root).resolve() != root.resolve():
         raise ValueError("SYNTHETIC_REPLAY_ADAPTER_DATASET_MISMATCH")
     for path in sorted(root.glob("*.jsonl")):
         with path.open(encoding="utf-8") as handle:
@@ -294,6 +294,8 @@ def build_synthetic_option_master(
                     strike=Decimal(str(tick["strike_price"])),
                     info_type="SYNTHETIC",
                     contract_multiplier=Decimal(str(tick["contract_multiplier"])),
+                    instrument_family=(str(record.get("scenario_metadata", {}).get("instrument_family") or "STANDARD") if validation_only_adapter is not None else None),
+                    product_series=(str(record.get("scenario_metadata", {}).get("product_series") or "") if validation_only_adapter is not None else None),
                 )
                 existing = master.get_contract_identity(synthetic_id)
                 if existing is not None:
