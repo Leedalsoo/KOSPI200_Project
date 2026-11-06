@@ -70,8 +70,61 @@ class Track7VolatilitySkewWeeklyInsurance:
         self.runtime_config_verified = runtime_config_verified
         self.risk_limits_available = risk_limits_available
         self.insurance_qty = insurance_qty
-        self.state = Track7State()
-        self._exit_pending = False
+        self._legacy_state = Track7State()
+        self._active_expiry: str | None = None
+        self._states_by_expiry: dict[str, Track7State] = {}
+        self._group_expiry: dict[str, str] = {}
+        self._legacy_exit_pending = False
+        self._exit_pending_expiries: set[str] = set()
+
+    @property
+    def state(self) -> Track7State:
+        if self._active_expiry is not None:
+            return self._states_by_expiry.get(
+                self._active_expiry, Track7State(expiry=self._active_expiry)
+            )
+        return self._legacy_state
+
+    @state.setter
+    def state(self, value: Track7State) -> None:
+        if value.expiry is not None:
+            self._active_expiry = value.expiry
+            self._states_by_expiry[value.expiry] = value
+        else:
+            self._active_expiry = None
+            self._legacy_state = value
+
+    @property
+    def _exit_pending(self) -> bool:
+        if self._active_expiry is None:
+            return self._legacy_exit_pending
+        return self._active_expiry in self._exit_pending_expiries
+
+    @_exit_pending.setter
+    def _exit_pending(self, value: bool) -> None:
+        if self._active_expiry is None:
+            self._legacy_exit_pending = bool(value)
+        elif value:
+            self._exit_pending_expiries.add(self._active_expiry)
+        else:
+            self._exit_pending_expiries.discard(self._active_expiry)
+
+    def _activate_expiry(self, expiry: str | None) -> None:
+        if expiry is None:
+            self._active_expiry = None
+            return
+        canonical = require_exact_option_expiry(expiry)
+        self._active_expiry = canonical
+        self._states_by_expiry.setdefault(canonical, Track7State(expiry=canonical))
+
+    def _bind_group(self, group_id: str) -> None:
+        expiry = self.state.expiry
+        if expiry is None:
+            return
+        existing = self._group_expiry.get(group_id)
+        if existing is not None and existing != expiry:
+            raise ValueError("TRACK7_GROUP_EXPIRY_CONFLICT")
+        self._group_expiry[group_id] = expiry
 
     def feature_requirements(self) -> Sequence[StrategyFeatureRequirement]:
         return tuple(StrategyFeatureRequirement(k, "tick", 1.0, frozenset({AnalyticsStatus.AVAILABLE}))
@@ -86,14 +139,38 @@ class Track7VolatilitySkewWeeklyInsurance:
         return None
 
     def reset(self) -> None:
-        self.state = Track7State()
-        self._exit_pending = False
+        self._legacy_state = Track7State()
+        self._active_expiry = None
+        self._states_by_expiry.clear()
+        self._group_expiry.clear()
+        self._legacy_exit_pending = False
+        self._exit_pending_expiries.clear()
+
+    def _reset_active_expiry(self) -> None:
+        expiry = self._active_expiry
+        if expiry is None:
+            self._legacy_state = Track7State()
+            self._legacy_exit_pending = False
+            return
+        self._states_by_expiry.pop(expiry, None)
+        self._exit_pending_expiries.discard(expiry)
+        self._group_expiry = {
+            group_id: group_expiry
+            for group_id, group_expiry in self._group_expiry.items()
+            if group_expiry != expiry
+        }
 
     def mark_exit_pending(self) -> None:
         self._exit_pending = True
 
     def on_execution_result(self, purpose: str, result: object) -> None:
-        """Promote entry only from both authoritative fills; reset only after confirmed flat."""
+        """Route fills to the expiry state bound to the execution group."""
+        group_id = getattr(result, "group_id", None)
+        if group_id:
+            expiry = self._group_expiry.get(str(group_id))
+            if expiry is None:
+                return
+            self._activate_expiry(expiry)
         reports = tuple(getattr(result, "reports", ()) or ())
         if purpose == "WEEKLY_INSURANCE_ENTRY" and self.state.entry_pending:
             by_leg = {str(getattr(report, "leg_id", "")).lower(): report for report in reports}
@@ -113,10 +190,10 @@ class Track7VolatilitySkewWeeklyInsurance:
                     call_open=False if purpose.endswith("_CALL") else self.state.call_open)
                 self._exit_pending = False
                 if not self.state.put_open and not self.state.call_open and bool(getattr(result, "position_flat", False)):
-                    self.reset()
+                    self._reset_active_expiry()
             return
         if purpose == "WEEKLY_INSURANCE_CLOSE" and self._exit_pending and bool(getattr(result, "group_complete", False)) and bool(getattr(result, "position_flat", False)):
-            self.reset()
+            self._reset_active_expiry()
         # Partial/unknown outcomes stay pending; do not silently reopen entry evaluation.
 
     @staticmethod
@@ -146,7 +223,12 @@ class Track7VolatilitySkewWeeklyInsurance:
                 option_type=option_type or "PUT", strike=strike))
 
     def evaluate(self, context: StrategyContext) -> Sequence[Signal]:
-        if context.strategy_id != self.strategy_id or context.analytics is None or self._exit_pending:
+        if context.strategy_id != self.strategy_id or context.analytics is None:
+            return ()
+        execution_input = self._execution_input(context)
+        if execution_input is not None:
+            self._activate_expiry(execution_input.expiry)
+        if self._exit_pending:
             return ()
         if self.state.entry_pending:
             return ()
@@ -208,6 +290,7 @@ class Track7VolatilitySkewWeeklyInsurance:
                 raise ValueError("TRACK7_CONFIG_OR_RISK_GATE_BLOCKED")
             if proposal.option_type != "PUT" or Decimal(str(proposal.strike)) != self.state.put_strike:
                 raise ValueError("TRACK7_EXECUTION_STRIKE_MISMATCH")
+            self._bind_group(group_id)
             return MultiLegExecutionPlan(group_id=group_id, strategy_id=self.strategy_id,
                 purpose="WEEKLY_INSURANCE_ENTRY",
                 legs=(ExecutionLeg("put","BUY",self.insurance_qty,"PUT",self.state.put_strike),
@@ -217,17 +300,20 @@ class Track7VolatilitySkewWeeklyInsurance:
             if proposal.tag_id == "WEEKLY_INSURANCE_CLOSE_PUT":
                 if proposal.option_type != "PUT" or Decimal(str(proposal.strike)) != self.state.put_strike:
                     raise ValueError("TRACK7_PUT_CLOSE_IDENTITY_MISMATCH")
+                self._bind_group(group_id)
                 return MultiLegExecutionPlan(group_id=group_id, strategy_id=self.strategy_id,
                     purpose="WEEKLY_INSURANCE_CLOSE_PUT",
                     legs=(ExecutionLeg("put","SELL",self.insurance_qty,"PUT",self.state.put_strike),))
             if proposal.tag_id == "WEEKLY_INSURANCE_CLOSE_CALL":
                 if proposal.option_type != "CALL" or Decimal(str(proposal.strike)) != self.state.call_strike:
                     raise ValueError("TRACK7_CALL_CLOSE_IDENTITY_MISMATCH")
+                self._bind_group(group_id)
                 return MultiLegExecutionPlan(group_id=group_id, strategy_id=self.strategy_id,
                     purpose="WEEKLY_INSURANCE_CLOSE_CALL",
                     legs=(ExecutionLeg("call","SELL",self.insurance_qty,"CALL",self.state.call_strike),))
             if proposal.option_type != "PUT" or Decimal(str(proposal.strike)) != self.state.put_strike:
                 raise ValueError("TRACK7_EXECUTION_STRIKE_MISMATCH")
+            self._bind_group(group_id)
             return MultiLegExecutionPlan(group_id=group_id, strategy_id=self.strategy_id,
                 purpose="WEEKLY_INSURANCE_CLOSE",
                 legs=(ExecutionLeg("put","SELL",self.insurance_qty,"PUT",self.state.put_strike),

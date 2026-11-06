@@ -125,3 +125,96 @@ def test_track7_expiry_close_boundary_is_1510() -> None:
     signals = strategy.evaluate(context(datetime(2026, 10, 21, 15, 10, 0)))
     assert len(signals) == 1
     assert signals[0].reason == "WEEKLY_EXACT_EXPIRY_15:10"
+
+
+def test_track7_expiry_states_keep_high_water_independent() -> None:
+    strategy = Track7VolatilitySkewWeeklyInsurance(
+        runtime_config_verified=True, risk_limits_available=True
+    )
+    strategy.state = Track7State(
+        insurance_active=True, expiry="20261022",
+        put_entry_fill_price=Decimal("1.0"), call_entry_fill_price=Decimal("1.0"),
+        put_peak_mark=Decimal("1.0"), call_peak_mark=Decimal("1.0"),
+        put_open=True, call_open=True,
+    )
+    strategy.state = Track7State(
+        insurance_active=True, expiry="20261029",
+        put_entry_fill_price=Decimal("2.0"), call_entry_fill_price=Decimal("2.0"),
+        put_peak_mark=Decimal("2.0"), call_peak_mark=Decimal("2.0"),
+        put_open=True, call_open=True,
+    )
+
+    def context(expiry: str, put_mark: str, call_mark: str):
+        analytics = SimpleNamespace(
+            as_of=datetime(2026, 10, 20, 13, 0),
+            get=lambda key: _metric({
+                "options.track7_put_mark_price": Decimal(put_mark),
+                "options.track7_call_mark_price": Decimal(call_mark),
+            }.get(key)),
+        )
+        return SimpleNamespace(
+            strategy_id=strategy.strategy_id, analytics=analytics,
+            input=SimpleNamespace(payload=Track7ExecutionInput(
+                strategy_id=strategy.strategy_id, expiry=expiry,
+                reference_price=Decimal("500"), put_strike=Decimal("487.5"),
+                call_strike=Decimal("512.5"), contract_multiplier=Decimal("250000"),
+            )),
+        )
+
+    assert strategy.evaluate(context("20261022", "1.5", "1.1")) == ()
+    assert strategy.evaluate(context("20261029", "2.8", "2.2")) == ()
+    assert strategy._states_by_expiry["20261022"].put_peak_mark == Decimal("1.5")
+    assert strategy._states_by_expiry["20261029"].put_peak_mark == Decimal("2.8")
+
+    strategy._activate_expiry("20261022")
+    strategy.mark_exit_pending()
+    assert strategy._exit_pending is True
+    strategy._activate_expiry("20261029")
+    assert strategy._exit_pending is False
+
+
+def test_track7_execution_callback_updates_only_bound_expiry_group() -> None:
+    strategy = Track7VolatilitySkewWeeklyInsurance(
+        runtime_config_verified=True, risk_limits_available=True
+    )
+    proposal = StrategyExecutionProposal(
+        proposed_quantity=1, asset_type="OPTION", side="BUY", track_id=strategy.strategy_id,
+        tag_id="WEEKLY_INSURANCE_ENTRY", option_type="PUT", strike=Decimal("487.5"),
+    )
+    strategy.state = Track7State(
+        entry_pending=True, expiry="20261022", put_strike=Decimal("487.5"),
+        call_strike=Decimal("512.5"), contract_multiplier=Decimal("250000"),
+    )
+    strategy.build_execution_plan(group_id="s7-monday", proposal=proposal)
+    strategy.state = Track7State(
+        entry_pending=True, expiry="20261029", put_strike=Decimal("487.5"),
+        call_strike=Decimal("512.5"), contract_multiplier=Decimal("250000"),
+    )
+    strategy.build_execution_plan(group_id="s7-thursday", proposal=proposal)
+
+    ts = datetime(2026, 10, 20, 9, 35)
+    reports = [
+        SimpleNamespace(leg_id="put", status="FILLED", filled_quantity=1,
+                        remaining_quantity=0, execution_id="p1", execution_timestamp=ts,
+                        execution_price=Decimal("1.2")),
+        SimpleNamespace(leg_id="call", status="FILLED", filled_quantity=1,
+                        remaining_quantity=0, execution_id="c1", execution_timestamp=ts,
+                        execution_price=Decimal("1.1")),
+    ]
+    strategy.on_execution_result(
+        "WEEKLY_INSURANCE_ENTRY",
+        SimpleNamespace(group_id="s7-monday", reports=reports,
+                        group_complete=True, position_flat=False),
+    )
+
+    assert strategy.state.expiry == "20261022"
+    assert strategy.state.insurance_active is True
+    assert strategy._states_by_expiry["20261029"].entry_pending is True
+
+    strategy.on_execution_result(
+        "WEEKLY_INSURANCE_ENTRY",
+        SimpleNamespace(group_id="unknown-group", reports=reports,
+                        group_complete=True, position_flat=False),
+    )
+    assert strategy.state.expiry == "20261022"
+    assert strategy._states_by_expiry["20261029"].entry_pending is True
