@@ -1,0 +1,8 @@
+# Preserve exact bytes for hash-bound synthetic validation artifacts on Windows.
+data/derived_scenario/** -text
+data/derived_scenario/**/manifest.json text eol=lf
+reports/synth/**/*.jsonl -text
+reports/synth/**/*.json -text
+reports/synth/**/*.sha256 -text
+config/validation_only/**/*.json -text
+config/validation_only/**/*.sha256 -text
