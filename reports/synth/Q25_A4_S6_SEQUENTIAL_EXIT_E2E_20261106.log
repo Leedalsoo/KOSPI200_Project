@@ -1,0 +1,1 @@
+{"output": "reports\\synth\\Q25_A4_S6_SEQUENTIAL_EXIT_E2E_20261106.json", "sha256": "5f88c826e9151a2b031ae094473d83b280d1e651a5b88d76fecf28d801dfbe9e", "verdict": "PSB_PASS", "equivalent": true, "flat": true, "trailing_tags": {"trailing_close_put": 0, "trailing_close_call": 1, "force_close_1510": 1}, "events": 4632, "signals": 4, "filled": 4, "rejected": 0}

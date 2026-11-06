@@ -15,6 +15,14 @@ class Track6OptionContractSelection:
     source: str = "OptionMaster.list_contract_identities"
 
 
+@dataclass(frozen=True)
+class Track6RankedOptionContractSelection:
+    rank: int
+    atm_strike: Decimal
+    put: Any
+    call: Any
+
+
 class Track6OptionContractSource:
     """Resolve Track6 insurance contracts from listed Option Master identities."""
 
@@ -89,4 +97,54 @@ class Track6OptionContractSource:
             raise ValueError("TRACK6_CONTRACT_MULTIPLIER_MISMATCH")
         return Track6OptionContractSelection(atm, put, call)
 
+    def select_ranked_candidates(self, *, expiry: str, current_price: Decimal,
+                                 identity_prefix: str | None = None) -> tuple[Track6RankedOptionContractSelection, ...]:
+        """Return only listed rank-5/rank-6 symmetric pairs; never invent strikes."""
+        if self.option_master is None:
+            raise ValueError("TRACK6_OPTION_MASTER_REQUIRED")
+        if current_price is None or Decimal(str(current_price)) <= 0:
+            raise ValueError("TRACK6_CURRENT_PRICE_REQUIRED")
+        identities = tuple(self.option_master.list_contract_identities(expiry))
+        if identity_prefix is not None:
+            prefix = str(identity_prefix).strip()
+            if not prefix.startswith("SYNTHETIC_CONTRACT:"):
+                raise ValueError("TRACK6_SYNTHETIC_IDENTITY_SCOPE_INVALID")
+            identities = tuple(
+                identity for identity in identities
+                if str(getattr(identity, "shrn_iscd", "")).startswith(prefix + "-")
+            )
+            if not identities:
+                raise ValueError("TRACK6_SYNTHETIC_IDENTITY_SCOPE_EMPTY")
+        calls: dict[Decimal, Any] = {}
+        puts: dict[Decimal, Any] = {}
+        for identity in identities:
+            multiplier = getattr(identity, "contract_multiplier", None)
+            if multiplier is None or Decimal(str(multiplier)) != KIS_KOSPI200_OPTION_CONTRACT_MULTIPLIER:
+                continue
+            option_type = str(getattr(identity, "option_type", "")).upper()
+            strike_value = getattr(identity, "strike", None)
+            if option_type not in {"CALL", "PUT"} or strike_value is None:
+                continue
+            strike = Decimal(str(strike_value))
+            if strike <= 0 or not getattr(identity, "shrn_iscd", ""):
+                continue
+            (calls if option_type == "CALL" else puts)[strike] = identity
+
+        centers = sorted(set(calls) & set(puts))
+        ranked: list[Track6RankedOptionContractSelection] = []
+        for rank, offset in ((5, Decimal("12.5")), (6, Decimal("15.0"))):
+            valid_centers = [
+                center for center in centers
+                if center - offset in puts and center + offset in calls
+            ]
+            if not valid_centers:
+                continue
+            center = min(valid_centers, key=lambda value: (abs(value - Decimal(str(current_price))), value))
+            put, call = puts[center - offset], calls[center + offset]
+            if (Decimal(str(put.contract_multiplier)) <= 0
+                    or Decimal(str(call.contract_multiplier)) <= 0
+                    or Decimal(str(put.contract_multiplier)) != Decimal(str(call.contract_multiplier))):
+                continue
+            ranked.append(Track6RankedOptionContractSelection(rank, center, put, call))
+        return tuple(ranked)
 

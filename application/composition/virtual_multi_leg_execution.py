@@ -708,8 +708,10 @@ class VirtualMultiLegExecutionBridge:
     ) -> MultiLegExecutionResult:
         if group_plan is None:
             group_plan = plan
-            if (plan.strategy_id == "track8_macro_regime_monthly_strangle"
-                    and plan.purpose in {"MONTHLY_STRANGLE_ENTRY_CALL", "MONTHLY_STRANGLE_ENTRY_PUT"}):
+            if ((plan.strategy_id == "track8_macro_regime_monthly_strangle"
+                    and plan.purpose in {"MONTHLY_STRANGLE_ENTRY_CALL", "MONTHLY_STRANGLE_ENTRY_PUT"})
+                    or (plan.strategy_id == "track6_daily_tail_insurance"
+                        and plan.purpose == "DAILY_TAIL_INSURANCE_ENTRY")):
                 prior_group_plan = self._group_plans.get(plan.group_id)
                 if prior_group_plan is not None:
                     merged_legs = {leg.leg_id: leg for leg in prior_group_plan.legs}
@@ -1247,6 +1249,31 @@ class VirtualMultiLegExecutionBridge:
         )
         if self.execution_result_callback is not None:
             self.execution_result_callback(plan, result)
+        return result
+
+    def cancel_pending_order(self, client_order_id: str) -> MultiLegExecutionResult:
+        pending = self.pending_legs.get(client_order_id)
+        if pending is None:
+            raise ValueError("VIRTUAL_PENDING_ORDER_NOT_FOUND")
+        group_plan, leg, broker_command = pending
+        cancel = getattr(self.ack.broker, "cancel", None)
+        query = getattr(self.ack.broker, "query", None)
+        if not callable(cancel) or not callable(query):
+            raise RuntimeError("VIRTUAL_CANCEL_QUERY_PORT_REQUIRED")
+        cancel(client_order_id)
+        confirmed = query(client_order_id)
+        status = str(getattr(confirmed, "status", "")).upper() if confirmed is not None else ""
+        if status not in {"CANCELLED", "FILLED", "REJECTED"}:
+            raise RuntimeError("VIRTUAL_CANCEL_TERMINAL_RECONCILIATION_REQUIRED")
+        single_plan = MultiLegExecutionPlan(
+            group_id=group_plan.group_id, strategy_id=group_plan.strategy_id,
+            purpose=group_plan.purpose, legs=(leg,), attempt_id=group_plan.attempt_id,
+        )
+        result = self.execute(
+            single_plan, group_plan=group_plan,
+            reconciled_reports={client_order_id: confirmed},
+            reconciled_commands={client_order_id: broker_command},
+        )
         return result
 
     def process_pending_quotes(self) -> tuple[MultiLegExecutionResult, ...]:

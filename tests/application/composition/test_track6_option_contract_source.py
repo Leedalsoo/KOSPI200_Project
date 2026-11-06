@@ -52,3 +52,41 @@ def test_synthetic_contract_selection_rejects_empty_or_invalid_scope():
         assert str(exc) == "TRACK6_SYNTHETIC_IDENTITY_SCOPE_EMPTY"
     else:
         raise AssertionError("empty scenario scope must fail closed")
+
+
+def test_ranked_contract_candidates_return_rank5_and_rank6_without_selecting_a_default():
+    identities = [
+        identity(1, "PUT", "487.5"),
+        identity(1, "PUT", "485"),
+        identity(1, "PUT", "500"),
+        identity(1, "CALL", "500"),
+        identity(1, "CALL", "512.5"),
+        identity(1, "CALL", "515"),
+    ]
+    source = Track6OptionContractSource(Master(identities))
+    candidates = source.select_ranked_candidates(
+        expiry="20261102",
+        current_price=Decimal("500"),
+        identity_prefix="SYNTHETIC_CONTRACT:SYNTH-S6-1-20261102",
+    )
+    assert [item.rank for item in candidates] == [5, 6]
+    assert candidates[0].put.strike == Decimal("487.5")
+    assert candidates[0].call.strike == Decimal("512.5")
+    assert candidates[1].put.strike == Decimal("485")
+    assert candidates[1].call.strike == Decimal("515")
+
+
+def test_ranked_contract_candidates_omit_unlisted_rank_instead_of_inventing_contracts():
+    identities = [
+        identity(1, "PUT", "485"),
+        identity(1, "PUT", "500"),
+        identity(1, "CALL", "500"),
+        identity(1, "CALL", "515"),
+    ]
+    source = Track6OptionContractSource(Master(identities))
+    candidates = source.select_ranked_candidates(
+        expiry="20261102",
+        current_price=Decimal("500"),
+        identity_prefix="SYNTHETIC_CONTRACT:SYNTH-S6-1-20261102",
+    )
+    assert [item.rank for item in candidates] == [6]

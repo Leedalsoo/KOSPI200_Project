@@ -1,6 +1,6 @@
 from contracts.trading_date import format_trading_date
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Sequence
 
@@ -10,6 +10,9 @@ from contracts.types import MultiLegExecutionPlan
 from core.strategy.contracts import NonExecutionEvent, Signal, SignalKind, StrategyContext, StrategyFeatureRequirement
 from core.strategy.multi_leg_plan import build_pair_plan
 from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
+from core.strategy.track6_order_lifecycle import (
+    Track6LifecycleConfig, Track6LifecycleStatus, Track6OrderLifecycle,
+)
 
 
 @dataclass(frozen=True)
@@ -42,6 +45,7 @@ class Track6ExecutionInput:
     listed_call_identity: Any | None = None
     expiry: str | None = None
     option_marks: tuple[Track6OptionMark, ...] = ()
+    ranked_candidates: tuple[Any, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -81,6 +85,9 @@ class Track6DailyTailInsurance:
         *,
         runtime_config_verified: bool = False,
         risk_limits_available: bool = False,
+        lifecycle_config: Track6LifecycleConfig | None = None,
+        lifecycle_state_store: Any | None = None,
+        lifecycle_run_id: str | None = None,
     ) -> None:
         self.vol_trigger_multiplier = vol_trigger_multiplier
         self.insurance_qty = insurance_qty
@@ -88,6 +95,82 @@ class Track6DailyTailInsurance:
         self.runtime_config_verified = runtime_config_verified
         self.risk_limits_available = risk_limits_available
         self.state = Track6State()
+        self.lifecycle_config = lifecycle_config
+        self.lifecycle_state_store = lifecycle_state_store
+        self.lifecycle_run_id = lifecycle_run_id
+        self.lifecycle: Track6OrderLifecycle | None = None
+        self.restart_reconciliation_provider = None
+        self.restart_reconciliation_restore_provider = None
+
+    @property
+    def sequential_lifecycle_enabled(self) -> bool:
+        return self.lifecycle_config is not None
+
+    def configure_validation_lifecycle(self, config: Track6LifecycleConfig, *, state_store: Any, run_id: str) -> None:
+        if not run_id or state_store is None:
+            raise ValueError("TRACK6_VALIDATION_LIFECYCLE_STORE_AND_RUN_ID_REQUIRED")
+        self.lifecycle_config = config
+        self.lifecycle_state_store = state_store
+        self.lifecycle_run_id = run_id
+        self.lifecycle = None
+
+    def _ensure_lifecycle(self, trading_date: str) -> Track6OrderLifecycle | None:
+        if self.lifecycle_config is None or not self.lifecycle_run_id:
+            return None
+        if self.lifecycle is not None and self.lifecycle.snapshot.trading_date != trading_date:
+            prior = self.lifecycle.snapshot
+            if (prior.status in {Track6LifecycleStatus.FLAT_CONFIRMED, Track6LifecycleStatus.ENTRY_WINDOW_CLOSED}
+                    and not any(prior.open_quantity.values()) and prior.working_client_order_id is None):
+                self.lifecycle = Track6OrderLifecycle(
+                    self.lifecycle_config, run_id=self.lifecycle_run_id, trading_date=trading_date,
+                )
+        if self.lifecycle is None:
+            self.lifecycle = Track6OrderLifecycle(
+                self.lifecycle_config, run_id=self.lifecycle_run_id, trading_date=trading_date,
+            )
+            if self.lifecycle_state_store is not None:
+                latest = self.lifecycle_state_store.load_latest()
+                if latest is not None:
+                    prior = latest["snapshot"]
+                    prior_flat = (
+                        prior.get("status") in {"FLAT_CONFIRMED", "ENTRY_WINDOW_CLOSED"}
+                        and not any(int(value) for value in prior.get("open_quantity", {}).values())
+                        and not prior.get("working_client_order_id")
+                    )
+                    if str(prior.get("trading_date")) == trading_date or not prior_flat:
+                        self.lifecycle = Track6OrderLifecycle.restore_snapshot(
+                            self.lifecycle_config, prior,
+                        )
+        return self.lifecycle
+
+    def _persist_lifecycle(self) -> None:
+        if self.lifecycle is not None and self.lifecycle_state_store is not None:
+            self.lifecycle_state_store.append(self.lifecycle.export_snapshot())
+
+    def lifecycle_clock_action(self, now: datetime):
+        if self.lifecycle is None:
+            return None
+        before = self.lifecycle.export_snapshot()
+        kst = now.astimezone(__import__("zoneinfo").ZoneInfo("Asia/Seoul"))
+        if kst.strftime("%H:%M:%S") >= "15:10:00" and self.lifecycle.snapshot.status in {
+            Track6LifecycleStatus.ORDER_WORKING, Track6LifecycleStatus.CANCEL_PENDING,
+        }:
+            action = self.lifecycle.force_close_due(now)
+        else:
+            action = self.lifecycle.timeout_action(now)
+        if self.lifecycle.export_snapshot() != before:
+            self._persist_lifecycle()
+        return action
+
+    def complete_restart_reconciliation(self, *, open_orders: dict[str, str], positions: dict[str, int],
+                                         order_ids_match: bool):
+        if self.lifecycle is None:
+            raise RuntimeError("TRACK6_LIFECYCLE_NOT_INITIALIZED")
+        action = self.lifecycle.complete_restart_reconciliation(
+            open_orders=open_orders, positions=positions, order_ids_match=order_ids_match,
+        )
+        self._persist_lifecycle()
+        return action
 
     def feature_requirements(self) -> Sequence[StrategyFeatureRequirement]:
         return tuple(
@@ -100,6 +183,53 @@ class Track6DailyTailInsurance:
 
     def initialize(self, context: StrategyContext) -> None:
         self.reset()
+        if not self.sequential_lifecycle_enabled or context.analytics is None:
+            return
+        data = self._as_execution_input(context)
+        if data is None:
+            return
+        lifecycle = self._ensure_lifecycle(self._as_date(context.analytics))
+        if lifecycle is None or lifecycle.snapshot.status != Track6LifecycleStatus.RECONCILIATION_REQUIRED:
+            return
+        selected = next((item for item in data.ranked_candidates
+                         if item.rank == lifecycle.snapshot.selected_rank), None)
+        if selected is None:
+            return
+        self.state = replace(
+            self.state,
+            bought_date=lifecycle.snapshot.trading_date,
+            long_put_strike=Decimal(str(selected.put_strike)),
+            long_call_strike=Decimal(str(selected.call_strike)),
+            put_instrument_id=selected.put_identity.instrument_id,
+            call_instrument_id=selected.call_identity.instrument_id,
+            put_instrument_identity=selected.put_identity,
+            call_instrument_identity=selected.call_identity,
+            is_active=any(lifecycle.snapshot.open_quantity.values()),
+            entry_pending=bool(lifecycle.snapshot.working_client_order_id),
+            put_open=lifecycle.snapshot.open_quantity.get("put", 0) > 0,
+            call_open=lifecycle.snapshot.open_quantity.get("call", 0) > 0,
+            put_entry_fill_price=lifecycle.snapshot.average_fill_price.get("put") or Decimal("0"),
+            call_entry_fill_price=lifecycle.snapshot.average_fill_price.get("call") or Decimal("0"),
+        )
+        provider = self.restart_reconciliation_provider
+        if not callable(provider):
+            return
+        open_orders, positions, order_ids_match = provider(data, lifecycle)
+        action = self.complete_restart_reconciliation(
+            open_orders=open_orders, positions=positions, order_ids_match=order_ids_match,
+        )
+        if action.kind == "RECONCILED":
+            restore_provider = self.restart_reconciliation_restore_provider
+            if callable(restore_provider):
+                restore_provider(data, lifecycle)
+            snapshot = lifecycle.snapshot
+            self.state = replace(
+                self.state,
+                is_active=any(snapshot.open_quantity.values()),
+                entry_pending=bool(snapshot.working_client_order_id),
+                put_open=snapshot.open_quantity.get("put", 0) > 0,
+                call_open=snapshot.open_quantity.get("call", 0) > 0,
+            )
 
     def on_market_state(self, context: StrategyContext) -> None:
         return None
@@ -111,6 +241,75 @@ class Track6DailyTailInsurance:
 
     def on_execution_result(self, purpose: str, result: object) -> None:
         reports = tuple(getattr(result, "reports", ()) or ())
+        if (self.sequential_lifecycle_enabled and purpose in {
+                "DAILY_TAIL_INSURANCE_TRAILING_CLOSE_PUT",
+                "DAILY_TAIL_INSURANCE_TRAILING_CLOSE_CALL",
+            } and self.lifecycle is not None):
+            report = next((item for item in reversed(reports)
+                           if str(getattr(item, "status", "")).upper() == "FILLED"
+                           and int(getattr(item, "filled_quantity", 0) or 0) == 1), None)
+            if report is None or not bool(getattr(result, "group_complete", False)):
+                return
+            leg_id = "put" if purpose.endswith("_PUT") else "call"
+            action = self.lifecycle.close_leg_filled(leg_id=leg_id, filled_quantity=1)
+            self._persist_lifecycle()
+            if action.kind in {"LEG_CLOSED", "FLAT_CONFIRMED"}:
+                self.state = replace(
+                    self.state,
+                    put_open=False if leg_id == "put" else self.state.put_open,
+                    call_open=False if leg_id == "call" else self.state.call_open,
+                    put_exit_pending=False if leg_id == "put" else self.state.put_exit_pending,
+                    call_exit_pending=False if leg_id == "call" else self.state.call_exit_pending,
+                )
+                if action.kind == "FLAT_CONFIRMED":
+                    self.reset()
+            return
+        if (self.sequential_lifecycle_enabled and purpose == "DAILY_TAIL_INSURANCE_FORCE_CLOSE"
+                and self.lifecycle is not None):
+            flat = bool(getattr(result, "position_flat", False))
+            no_pending = int(getattr(result, "pending_legs", 0) or 0) == 0
+            action = self.lifecycle.complete_force_close(
+                remaining_positions={"put": 0, "call": 0} if flat else dict(self.lifecycle.snapshot.open_quantity),
+                orders_reconciled=no_pending,
+            )
+            self._persist_lifecycle()
+            if action.kind == "FLAT_CONFIRMED":
+                self.reset()
+            return
+        if self.sequential_lifecycle_enabled and purpose == "DAILY_TAIL_INSURANCE_ENTRY" and self.lifecycle is not None:
+            expected_id = self.lifecycle.snapshot.working_client_order_id
+            report = next((item for item in reversed(reports)
+                           if getattr(item, "client_order_id", None) == expected_id), None)
+            if report is not None:
+                observed_at = (getattr(report, "execution_timestamp", None)
+                               or getattr(report, "submitted_at", None)
+                               or datetime.now(timezone.utc))
+                action = self.lifecycle.execution_report(
+                    leg_id=str(getattr(report, "leg_id", self.lifecycle.snapshot.working_leg) or ""),
+                    client_order_id=str(getattr(report, "client_order_id", "")),
+                    status=str(getattr(report, "status", "UNKNOWN")),
+                    filled_quantity=int(getattr(report, "filled_quantity", 0) or 0),
+                    remaining_quantity=int(getattr(report, "remaining_quantity", 0) or 0),
+                    average_fill_price=(Decimal(str(report.execution_price))
+                                        if getattr(report, "execution_price", None) is not None else None),
+                    now=observed_at,
+                )
+                snap = self.lifecycle.snapshot
+                self.state = replace(
+                    self.state,
+                    is_active=any(snap.open_quantity.values()),
+                    entry_pending=snap.status in {
+                        Track6LifecycleStatus.SINGLE_LEG_FILLED,
+                        Track6LifecycleStatus.ORDER_WORKING,
+                        Track6LifecycleStatus.CANCEL_PENDING,
+                    },
+                    put_open=snap.open_quantity.get("put", 0) > 0,
+                    call_open=snap.open_quantity.get("call", 0) > 0,
+                    put_entry_fill_price=snap.average_fill_price.get("put") or self.state.put_entry_fill_price,
+                    call_entry_fill_price=snap.average_fill_price.get("call") or self.state.call_entry_fill_price,
+                )
+                self._persist_lifecycle()
+            return
         group_complete = bool(getattr(result, "group_complete", False))
         position_flat = bool(getattr(result, "position_flat", False))
         if purpose == "DAILY_TAIL_INSURANCE_ENTRY" and self.state.entry_pending:
@@ -203,6 +402,55 @@ class Track6DailyTailInsurance:
             return ()
         if base_vol <= 0 or active_vol < base_vol * self.vol_trigger_multiplier:
             return ()
+        if self.sequential_lifecycle_enabled:
+            lifecycle = self._ensure_lifecycle(self._as_date(analytics))
+            if lifecycle is None or not lifecycle.config_valid:
+                return ()
+            if not data.ranked_candidates:
+                return ()
+            if lifecycle.snapshot.status == Track6LifecycleStatus.RECONCILIATION_REQUIRED:
+                return ()
+            action = lifecycle.start_preflight(
+                tuple(data.ranked_candidates), analytics.as_of,
+                group_id=f"{self.lifecycle_run_id}-track6-{self.state.bought_date or analytics.as_of.strftime('%Y%m%d')}",
+            )
+            by_rank = {item.rank: item for item in data.ranked_candidates}
+            while action.kind == "PREFLIGHT":
+                candidate = by_rank.get(action.rank)
+                action = lifecycle.preflight_result(
+                    rank=action.rank, available=candidate is not None, now=analytics.as_of,
+                )
+            if action.kind != "SELECT_RANK":
+                self._persist_lifecycle()
+                return ()
+            candidate = by_rank.get(action.rank)
+            if candidate is None:
+                self._persist_lifecycle()
+                return ()
+            self.state = replace(
+                self.state, is_active=False, entry_pending=True,
+                bought_date=self._as_date(analytics),
+                long_put_strike=Decimal(str(candidate.put_strike)),
+                long_call_strike=Decimal(str(candidate.call_strike)),
+                put_instrument_id=str(candidate.put_identity.instrument_id),
+                call_instrument_id=str(candidate.call_identity.instrument_id),
+                put_instrument_identity=candidate.put_identity,
+                call_instrument_identity=candidate.call_identity,
+                put_high_watermark=Decimal("0"), call_high_watermark=Decimal("0"),
+                put_trailing_active=False, call_trailing_active=False,
+                put_open=False, call_open=False,
+                put_exit_pending=False, call_exit_pending=False, force_close_pending=False,
+            )
+            self._persist_lifecycle()
+            return (Signal(
+                self.strategy_id, "BUY_INSURANCE", 1.0,
+                f"VOL_SPIKE:{active_vol}>={base_vol * self.vol_trigger_multiplier};RANK:{action.rank};SEQUENTIAL_ENTRY",
+                execution_proposal=StrategyExecutionProposal(
+                    proposed_quantity=self.insurance_qty, asset_type="OPTION", side="BUY",
+                    track_id=self.strategy_id, tag_id="DAILY_TAIL_INSURANCE_ENTRY",
+                    option_type="PUT", strike=self.state.long_put_strike,
+                ),
+            ),)
         put_strike = data.listed_put_strike
         call_strike = data.listed_call_strike
         self.state = replace(
@@ -277,6 +525,31 @@ class Track6DailyTailInsurance:
             for leg in plan.legs
         )
         return replace(plan, legs=legs)
+
+    def build_sequential_execution_plan(self, group_id: str, *, now: datetime,
+                                        client_order_id_factory) -> MultiLegExecutionPlan | None:
+        if self.lifecycle is None or not self.sequential_lifecycle_enabled:
+            return self.build_execution_plan(group_id)
+        if self.state.put_instrument_identity is None or self.state.call_instrument_identity is None:
+            return None
+        pair = self.build_execution_plan(group_id)
+        if pair is None:
+            return None
+        open_qty = self.lifecycle.snapshot.open_quantity
+        leg_id = "call" if open_qty.get("put", 0) else "put"
+        leg = next((item for item in pair.legs if item.leg_id.lower() == leg_id), None)
+        if leg is None:
+            return None
+        identity = leg.instrument_identity
+        client_order_id = client_order_id_factory(pair, leg, identity)
+        action = self.lifecycle.submit_order(
+            leg_id=leg_id, client_order_id=client_order_id, quantity=int(leg.quantity), now=now,
+        )
+        if action.kind != "SUBMIT":
+            self._persist_lifecycle()
+            return None
+        self._persist_lifecycle()
+        return replace(pair, legs=(leg,))
 
     def evaluate_take_profit(self, context: StrategyContext) -> Sequence[Signal]:
         analytics = context.analytics
@@ -368,6 +641,31 @@ class Track6DailyTailInsurance:
     def evaluate(self, context: StrategyContext) -> Sequence[Signal]:
         if context.strategy_id != self.strategy_id or context.analytics is None:
             return ()
+        if (self.sequential_lifecycle_enabled and self.lifecycle is not None
+                and self.lifecycle.snapshot.status == Track6LifecycleStatus.SINGLE_LEG_FILLED
+                and self.lifecycle.snapshot.working_client_order_id is None
+                and context.analytics.as_of.astimezone(__import__("zoneinfo").ZoneInfo("Asia/Seoul")).strftime("%H:%M:%S") < "15:10:00"):
+            data = self._as_execution_input(context)
+            next_leg = "call" if self.lifecycle.snapshot.open_quantity.get("put", 0) else "put"
+            option_type = "CALL" if next_leg == "call" else "PUT"
+            strike = self.state.long_call_strike if next_leg == "call" else self.state.long_put_strike
+            instrument_id = self.state.call_instrument_id if next_leg == "call" else self.state.put_instrument_id
+            mark = next((item for item in (data.option_marks if data is not None else ())
+                         if item.instrument_id == instrument_id), None)
+            if data is None or not self._valid_option_mark(
+                mark, option_type=option_type, strike=strike, expiry=data.expiry or "",
+                as_of=context.analytics.as_of,
+            ):
+                return ()
+            return (Signal(
+                self.strategy_id, "BUY_INSURANCE_OPPOSITE", 1.0,
+                f"SEQUENTIAL_OPPOSITE_LEG:{option_type}",
+                execution_proposal=StrategyExecutionProposal(
+                    proposed_quantity=self.insurance_qty, asset_type="OPTION", side="BUY",
+                    track_id=self.strategy_id, tag_id="DAILY_TAIL_INSURANCE_ENTRY",
+                    option_type=option_type, strike=strike,
+                ),
+            ),)
         if self.state.is_active:
             cutoff = self.evaluate_expiry_cutoff(context)
             return cutoff or self.evaluate_take_profit(context)

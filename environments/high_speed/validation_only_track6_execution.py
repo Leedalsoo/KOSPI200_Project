@@ -20,6 +20,7 @@ from core.risk.option_hedge_risk_config import DEFAULT_CONFIG_PATH, load_option_
 STRATEGY_ID = "track6_daily_tail_insurance"
 MANIFEST_SCHEMA = "q25-a2-1-s6-syn-evt-manifest-v1"
 SYNTHETIC_ID_PREFIX = "SYNTHETIC_CONTRACT:"
+DEFAULT_VALIDATION_RISK_PROFILE = Path("config/validation_only/q25_s6_v1/risk_profile.json")
 
 
 @dataclass(frozen=True)
@@ -29,10 +30,14 @@ class Track6SyntheticExecutionEvidence:
     dataset_sha256: str
     dataset_rows: int
     config_sha256: str
+    risk_profile_path: str
+    risk_profile_sha256: str
+    scenario_id: str
     configured_capital_krw: int
     max_premium_krw: int
     max_loss_krw: int
     max_concurrent_positions: int
+    operational_reference_limit_krw: int
     max_quote_age_seconds: int
 
 
@@ -40,9 +45,11 @@ class Track6SyntheticExecutionGate:
     """Fail-closed budget and provenance gate for one synthetic S6 entry group."""
 
     def __init__(self, *, dataset: str | Path, manifest_path: str | Path,
-                 config_path: str | Path = DEFAULT_CONFIG_PATH) -> None:
+                 config_path: str | Path = DEFAULT_CONFIG_PATH,
+                 risk_profile_path: str | Path = DEFAULT_VALIDATION_RISK_PROFILE) -> None:
         self.dataset = Path(dataset).resolve()
         self.manifest_path = Path(manifest_path).resolve()
+        self.risk_profile_path = Path(risk_profile_path).resolve()
         self.manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
         m = self.manifest
         if (m.get("schema_version") != MANIFEST_SCHEMA
@@ -64,24 +71,81 @@ class Track6SyntheticExecutionGate:
             raise ValueError("TRACK6_SYNTHETIC_EXECUTION_OPERATIONAL_CONFIG_MUST_STAY_DISABLED")
         if config.allow_live_orders or config.allow_synthetic_quotes:
             raise ValueError("TRACK6_SYNTHETIC_EXECUTION_CAPABILITY_MUST_STAY_DISABLED")
-        limit = config.strategies.get(STRATEGY_ID)
-        if limit is None or not limit.enabled or min(
-            limit.max_gross_premium_outlay_krw, limit.max_loss_krw,
-            limit.max_concurrent_positions,
-        ) <= 0:
-            raise ValueError("TRACK6_SYNTHETIC_EXECUTION_RISK_LIMITS_INVALID")
+        # Operational RiskConfig remains read-only and disabled. The separately
+        # approved validation-only profile supplies the synthetic admission cap.
+        operational_limit = config.strategies.get(STRATEGY_ID)
+        if (operational_limit is None or not operational_limit.enabled or min(
+            operational_limit.max_gross_premium_outlay_krw,
+            operational_limit.max_loss_krw,
+            operational_limit.max_concurrent_positions,
+        ) <= 0):
+            raise ValueError("TRACK6_SYNTHETIC_EXECUTION_OPERATIONAL_REFERENCE_INVALID")
+
+        profile_payload = json.loads(self.risk_profile_path.read_text(encoding="utf-8"))
+        if (profile_payload.get("schema_version") != "q25-validation-only-risk-profile-v1"
+                or profile_payload.get("validation_only") is not True
+                or profile_payload.get("runtime_eligible") is not False
+                or profile_payload.get("allow_kis_api") is not False
+                or profile_payload.get("allow_live_orders") is not False
+                or profile_payload.get("allow_real_account") is not False
+                or profile_payload.get("operational_config_mutated") is not False
+                or profile_payload.get("operational_config_path") != "config/risk/option-hedge-risk.v1.json"
+                or profile_payload.get("risk_checks_enabled") is not True
+                or profile_payload.get("enforcement_mode") != "VALIDATION_ONLY_HARD_CAP_WITH_OVERAGE_AUDIT"):
+            raise ValueError("TRACK6_SYNTHETIC_EXECUTION_RISK_PROFILE_INVALID")
+        profile = profile_payload.get("profiles", {}).get(STRATEGY_ID)
+        if not isinstance(profile, dict):
+            raise ValueError("TRACK6_SYNTHETIC_EXECUTION_RISK_PROFILE_MISSING")
+        expected_manifest = str(self.manifest_path.relative_to(Path.cwd())).replace("\\", "/")
+        configured_manifests = {
+            str(value).replace("\\", "/")
+            for value in profile.get("dataset_manifests", ())
+        }
+        if expected_manifest not in configured_manifests:
+            raise ValueError("TRACK6_SYNTHETIC_EXECUTION_RISK_MANIFEST_MISMATCH")
+        limits = tuple(int(profile.get(key, 0)) for key in (
+            "max_gross_premium_outlay_krw", "max_loss_krw",
+            "max_concurrent_groups", "operational_reference_limit_krw",
+        ))
+        required_audit = {
+            "computed_gross_premium_krw", "computed_max_loss_krw",
+            "computed_concurrent_exposure_krw", "operational_reference_overage_krw",
+            "validation_budget_overage_krw", "run_id", "scenario_id",
+            "manifest_sha256", "dataset_sha256",
+        }
+        if (min(limits) <= 0
+                or not required_audit.issubset(set(profile_payload.get("audit_fields_required", ())))
+                or limits[3] != operational_limit.max_gross_premium_outlay_krw
+                or profile.get("fee_policy") != "ACCOUNT_SEPARATELY; FEES ARE NOT INCLUDED IN THE GROSS PREMIUM CAP"):
+            raise ValueError("TRACK6_SYNTHETIC_EXECUTION_RISK_LIMITS_OR_AUDIT_INVALID")
+
+        self.max_concurrent_groups = limits[2]
+        self.run_id = "UNBOUND"
+        self.risk_audit_records: list[dict[str, Any]] = []
+        self._group_premium_by_leg: dict[str, dict[str, dict[str, Any]]] = {}
         self.evidence = Track6SyntheticExecutionEvidence(
             manifest_path=str(self.manifest_path),
             manifest_sha256=sha256(self.manifest_path.read_bytes()).hexdigest(),
             dataset_sha256=digest,
             dataset_rows=int(m["rows"]),
             config_sha256=sha256(Path(config_path).read_bytes()).hexdigest(),
+            risk_profile_path=str(self.risk_profile_path),
+            risk_profile_sha256=sha256(self.risk_profile_path.read_bytes()).hexdigest(),
+            scenario_id=str(m.get("scenario_id") or ",".join(m.get("scenario_ids", ())) or self.dataset.name),
             configured_capital_krw=config.configured_capital_krw,
-            max_premium_krw=limit.max_gross_premium_outlay_krw,
-            max_loss_krw=limit.max_loss_krw,
-            max_concurrent_positions=limit.max_concurrent_positions,
+            max_premium_krw=limits[0],
+            max_loss_krw=limits[1],
+            max_concurrent_positions=limits[2],
+            operational_reference_limit_krw=limits[3],
             max_quote_age_seconds=config.max_quote_age_seconds,
         )
+
+    def bind_run_id(self, run_id: str) -> None:
+        if not run_id or not str(run_id).strip():
+            raise ValueError("TRACK6_SYNTHETIC_EXECUTION_RUN_ID_REQUIRED")
+        if self.run_id != "UNBOUND" and self.run_id != str(run_id):
+            raise ValueError("TRACK6_SYNTHETIC_EXECUTION_RUN_ID_ALREADY_BOUND")
+        self.run_id = str(run_id)
 
     def apply_to_strategy(self, strategy: Any, *, synthetic_sources: Any) -> None:
         if getattr(strategy, "strategy_id", None) != STRATEGY_ID:
@@ -117,11 +181,18 @@ class Track6SyntheticExecutionGate:
             return
         if purpose != "DAILY_TAIL_INSURANCE_ENTRY":
             raise ValueError("TRACK6_SYNTHETIC_EXECUTION_PLAN_SCOPE_INVALID")
-        if len(prepared) != 2:
-            raise ValueError("TRACK6_SYNTHETIC_EXECUTION_TWO_LEGS_REQUIRED")
+        if len(prepared) not in {1, 2}:
+            raise ValueError("TRACK6_SYNTHETIC_EXECUTION_ONE_OR_TWO_ENTRY_LEGS_REQUIRED")
+        group_id = str(getattr(plan, "group_id", "") or "")
+        if not group_id:
+            raise ValueError("TRACK6_SYNTHETIC_EXECUTION_GROUP_ID_REQUIRED")
+        if (group_id not in self._group_premium_by_leg
+                and len(self._group_premium_by_leg) >= self.max_concurrent_groups):
+            raise ValueError("TRACK6_SYNTHETIC_EXECUTION_CONCURRENT_GROUP_LIMIT_EXCEEDED")
+        existing = self._group_premium_by_leg.get(group_id, {})
+        updates = {key: dict(value) for key, value in existing.items()}
         seen: set[str] = set()
-        total_premium = Decimal("0")
-        for leg, identity, _client_id, command, _canonical, bid, ask in prepared:
+        for leg, identity, client_id, command, _canonical, bid, ask in prepared:
             leg_id = str(getattr(leg, "leg_id", "")).lower()
             option_type = str(getattr(identity, "option_type", "")).upper()
             instrument_id = str(getattr(identity, "instrument_id", ""))
@@ -146,9 +217,43 @@ class Track6SyntheticExecutionGate:
             multiplier = Decimal(str(getattr(identity, "contract_multiplier", "0")))
             if price <= 0 or multiplier <= 0 or bid <= 0 or ask < bid:
                 raise ValueError("TRACK6_SYNTHETIC_EXECUTION_QUOTE_INVALID")
-            total_premium += price * Decimal(str(leg.quantity)) * multiplier
-        if seen != {"put", "call"}:
+            premium = price * Decimal(str(leg.quantity)) * multiplier
+            prior = updates.get(leg_id)
+            if prior is not None:
+                if (prior.get("client_order_id") != str(client_id)
+                        or prior.get("instrument_id") != instrument_id
+                        or Decimal(str(prior.get("premium_krw", "0"))) != premium):
+                    raise ValueError("TRACK6_SYNTHETIC_EXECUTION_DUPLICATE_LEG_INTENT_MISMATCH")
+            else:
+                updates[leg_id] = {
+                    "client_order_id": str(client_id),
+                    "instrument_id": instrument_id,
+                    "premium_krw": str(premium),
+                }
+        total_premium = sum((Decimal(str(item["premium_krw"])) for item in updates.values()), Decimal("0"))
+        if len(updates) > 2:
             raise ValueError("TRACK6_SYNTHETIC_EXECUTION_PUT_CALL_PAIR_REQUIRED")
+        operational_overage = max(
+            Decimal("0"), total_premium - Decimal(self.evidence.operational_reference_limit_krw),
+        )
+        validation_overage = max(
+            Decimal("0"), total_premium - Decimal(self.evidence.max_premium_krw),
+        )
+        self.risk_audit_records.append({
+            "group_id": group_id,
+            "group_leg_count": len(updates),
+            "group_pair_complete": set(updates) == {"put", "call"},
+            "group_leg_premiums_krw": {key: value["premium_krw"] for key, value in updates.items()},
+            "computed_gross_premium_krw": str(total_premium),
+            "computed_max_loss_krw": str(total_premium),
+            "computed_concurrent_exposure_krw": str(total_premium),
+            "operational_reference_overage_krw": str(operational_overage),
+            "validation_budget_overage_krw": str(validation_overage),
+            "run_id": self.run_id,
+            "scenario_id": self.evidence.scenario_id,
+            "manifest_sha256": self.evidence.manifest_sha256,
+            "dataset_sha256": self.evidence.dataset_sha256,
+        })
         if total_premium > Decimal(self.evidence.max_premium_krw):
             raise ValueError(
                 f"TRACK6_SYNTHETIC_EXECUTION_PREMIUM_LIMIT_EXCEEDED:"
@@ -161,6 +266,37 @@ class Track6SyntheticExecutionGate:
             )
         if self.evidence.max_concurrent_positions < 1:
             raise ValueError("TRACK6_SYNTHETIC_EXECUTION_CONCURRENT_POSITION_LIMIT_EXCEEDED")
+        self._group_premium_by_leg[group_id] = updates
+
+    def sync_group_reservation(self, group_id: str, leg_premiums: dict[str, dict[str, Any]]) -> None:
+        group = str(group_id or "")
+        if not group:
+            raise ValueError("TRACK6_SYNTHETIC_GROUP_RESERVATION_ID_REQUIRED")
+        if group not in self._group_premium_by_leg and len(self._group_premium_by_leg) >= self.max_concurrent_groups:
+            raise ValueError("TRACK6_SYNTHETIC_EXECUTION_CONCURRENT_GROUP_LIMIT_EXCEEDED")
+        normalized: dict[str, dict[str, Any]] = {}
+        for leg, item in leg_premiums.items():
+            leg_id = str(leg).lower()
+            premium = Decimal(str(item.get("premium_krw", "0")))
+            instrument_id = str(item.get("instrument_id", ""))
+            client_order_id = str(item.get("client_order_id", ""))
+            if (leg_id not in {"put", "call"} or premium <= 0
+                    or not instrument_id.startswith(SYNTHETIC_ID_PREFIX) or not client_order_id):
+                raise ValueError("TRACK6_SYNTHETIC_RESTORED_GROUP_EVIDENCE_INVALID")
+            normalized[leg_id] = {
+                "client_order_id": client_order_id,
+                "instrument_id": instrument_id,
+                "premium_krw": str(premium),
+            }
+        total = sum((Decimal(item["premium_krw"]) for item in normalized.values()), Decimal("0"))
+        if total > Decimal(self.evidence.max_premium_krw) or total > Decimal(self.evidence.max_loss_krw):
+            raise ValueError("TRACK6_SYNTHETIC_RESTORED_GROUP_BUDGET_EXCEEDED")
+        if normalized:
+            self._group_premium_by_leg[group] = normalized
+
+    def release_group(self, group_id: str) -> None:
+        self._group_premium_by_leg.pop(str(group_id), None)
+
 
 
 class Track6SyntheticFreshnessProvider:

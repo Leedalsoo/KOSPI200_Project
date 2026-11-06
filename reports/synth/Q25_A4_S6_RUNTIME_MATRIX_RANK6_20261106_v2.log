@@ -1,0 +1,5 @@
+{"case": [5, "per_order"], "verdict": "PSB_PASS", "equivalent": true, "both_candidates": true, "selected_rank": 5, "available_ranks": [5, 6], "events": 43232, "signals": 3, "filled": 4, "rejected": 0, "net_pnl": -14999.999999999958}
+{"case": [5, "shared_elapsed"], "verdict": "PSB_PASS", "equivalent": true, "both_candidates": true, "selected_rank": 5, "available_ranks": [5, 6], "events": 43232, "signals": 3, "filled": 4, "rejected": 0, "net_pnl": -14999.999999999958}
+{"case": [6, "per_order"], "verdict": "PSB_PASS", "equivalent": true, "both_candidates": true, "selected_rank": 6, "available_ranks": [5, 6], "events": 43232, "signals": 3, "filled": 4, "rejected": 0, "net_pnl": -14999.999999999958}
+{"case": [6, "shared_elapsed"], "verdict": "PSB_PASS", "equivalent": true, "both_candidates": true, "selected_rank": 6, "available_ranks": [5, 6], "events": 43232, "signals": 3, "filled": 4, "rejected": 0, "net_pnl": -14999.999999999958}
+{"output": "reports\\synth\\Q25_A4_S6_RUNTIME_MATRIX_RANK6_20261106_v2.json", "sha256": "59bef0891c36256e58e56f18ebfddb58ea490ed54d424957150006c9d108c7e9", "case_verdicts": ["PSB_PASS", "PSB_PASS", "PSB_PASS", "PSB_PASS"]}

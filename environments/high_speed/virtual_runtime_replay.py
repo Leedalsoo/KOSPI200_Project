@@ -14,6 +14,7 @@ from environments.high_speed.synthetic_runtime_sources import SyntheticRuntimeSo
 from environments.high_speed.synthetic_replay_adapter import SyntheticReplayAdapter
 from environments.high_speed.validation_only_track6_execution import Track6SyntheticExecutionGate
 from contracts.strategy_runtime_status import StrategyRuntimeStatus
+from core.strategy.track6_order_lifecycle import Track6LifecycleConfig
 from contracts.clock import ClockProvider
 from environments.high_speed.replay_trace import ReplayExecutionObserver, ReplayLogMode, ReplayTraceController
 
@@ -121,6 +122,8 @@ class HighSpeedVirtualRuntimeReplayRunner:
                  validation_only_s8_risk_profile: str | Path | None = None,
                  validation_only_track6_signal_mode: bool = False,
                  validation_only_track6_execution_mode: bool = False,
+                 validation_only_track6_lifecycle_config: Track6LifecycleConfig | None = None,
+                 validation_only_track6_risk_profile: str | Path | None = None,
                  clock: ClockProvider | None = None,
                  log_mode: ReplayLogMode | str = ReplayLogMode.FAST, trace_output: str | Path | None = None):
         self.dataset = Path(dataset)
@@ -133,6 +136,12 @@ class HighSpeedVirtualRuntimeReplayRunner:
             raise ValueError("SYNTHETIC_MANIFEST_REQUIRES_VALIDATION_ONLY_MODE")
         self.validation_only_track6_signal_mode = bool(validation_only_track6_signal_mode)
         self.validation_only_track6_execution_mode = bool(validation_only_track6_execution_mode)
+        self.validation_only_track6_lifecycle_config = validation_only_track6_lifecycle_config
+        self.validation_only_track6_risk_profile = validation_only_track6_risk_profile
+        if self.validation_only_track6_risk_profile is not None and not self.validation_only_track6_execution_mode:
+            raise ValueError("TRACK6_RISK_PROFILE_REQUIRES_VALIDATION_ONLY_EXECUTION_MODE")
+        if self.validation_only_track6_lifecycle_config is not None and not self.validation_only_track6_execution_mode:
+            raise ValueError("TRACK6_LIFECYCLE_MATRIX_REQUIRES_VALIDATION_ONLY_EXECUTION_MODE")
         if self.validation_only_track6_execution_mode and (not self.validation_only_synthetic or self.validation_only_track6_signal_mode or self.validation_only_synthetic_manifest is None):
             raise ValueError("TRACK6_SYNTHETIC_EXECUTION_REQUIRES_EXPLICIT_SYNTHETIC_MANIFEST")
         if self.validation_only_track6_signal_mode and not self.validation_only_synthetic:
@@ -189,8 +198,11 @@ class HighSpeedVirtualRuntimeReplayRunner:
         if self.validation_only_track6_execution_mode:
             from environments.high_speed.validation_only_track6_execution import Track6SyntheticExecutionGate
             self.track6_synthetic_execution_gate = Track6SyntheticExecutionGate(
-                dataset=self.dataset, manifest_path=self.validation_only_synthetic_manifest
+                dataset=self.dataset, manifest_path=self.validation_only_synthetic_manifest,
+                risk_profile_path=(self.validation_only_track6_risk_profile
+                                   or Track6SyntheticExecutionGate.__init__.__defaults__[1]),
             )
+            self.track6_synthetic_execution_gate.bind_run_id(self.run_id)
             self.initial_capital = float(self.track6_synthetic_execution_gate.evidence.configured_capital_krw)
         if synthetic_adapter is None:
             option_master = build_synthetic_option_master(self.dataset)
@@ -217,6 +229,7 @@ class HighSpeedVirtualRuntimeReplayRunner:
             validation_only_track6_signal_mode=self.validation_only_track6_signal_mode,
             validation_only_track6_execution_gate=self.track6_synthetic_execution_gate,
             validation_only_s8_runtime_adapter=self.s8_validation_runtime_adapter,
+            validation_only_track6_lifecycle_config=self.validation_only_track6_lifecycle_config,
         )
         # High-speed replay replaces the bootstrap loop; rebind the broker read model
         # to the bridge actually executing this replay instead of the detached bridge.

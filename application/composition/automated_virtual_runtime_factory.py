@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from pathlib import Path
 from decimal import Decimal
 
 from application.composition.automated_virtual_trading_loop import AutomatedVirtualTradingLoop
@@ -52,13 +53,16 @@ from contracts.risk_guard import RiskGuardStatusSource
 from core.strategy.standard_registry import STANDARD_STRATEGY_KEYS, build_standard_strategy_registry
 from environments.high_speed.validation_only_track6_gates import apply_track6_validation_gates
 from environments.high_speed.validation_only_track6_execution import Track6SyntheticFreshnessProvider
+from core.strategy.track6_order_lifecycle import Track6LifecycleConfig
+from environments.high_speed.track6_validation_state_store import Track6ValidationStateStore
 
 logger = logging.getLogger(__name__)
 
 
-def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=None, strategy_keys=None, track9_iv_history_path=None, run_id=None, historical_observation_option_source=None, risk_guard_status_source: RiskGuardStatusSource | None = None, synthetic_runtime_sources=None, track4_greeks_provider=None, market_calendar_hub=None, validation_only_track6_signal_mode: bool = False, validation_only_track6_execution_gate=None, validation_only_s8_runtime_adapter=None):
+def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=None, strategy_keys=None, track9_iv_history_path=None, run_id=None, historical_observation_option_source=None, risk_guard_status_source: RiskGuardStatusSource | None = None, synthetic_runtime_sources=None, track4_greeks_provider=None, market_calendar_hub=None, validation_only_track6_signal_mode: bool = False, validation_only_track6_execution_gate=None, validation_only_s8_runtime_adapter=None, validation_only_track6_lifecycle_config: Track6LifecycleConfig | None = None):
     """Attach all nine Standard strategies to the RuntimeController-owned VMS."""
     selected_keys = tuple(strategy_keys) if strategy_keys else STANDARD_STRATEGY_KEYS
+    run_id = run_id or getattr(getattr(bootstrap, "run_context", None), "run_id", "")
     registry = build_standard_strategy_registry()
     track6_validation_gate_evidence = None
     if validation_only_track6_execution_gate is not None:
@@ -95,6 +99,16 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
             registry.get("track8_macro_regime_monthly_strangle", "2.0"),
             synthetic_sources=synthetic_runtime_sources,
         )
+    if validation_only_track6_lifecycle_config is not None:
+        if synthetic_runtime_sources is None or validation_only_track6_execution_gate is None:
+            raise ValueError("TRACK6_SEQUENTIAL_LIFECYCLE_REQUIRES_VALIDATION_ONLY_SYNTHETIC_GATE")
+        strategy = registry.get("track6_daily_tail_insurance", "1.0")
+        state_store = Track6ValidationStateStore(
+            Path("reports/synth/q25_s6_runtime_state"), run_id=run_id,
+        )
+        strategy.configure_validation_lifecycle(
+            validation_only_track6_lifecycle_config, state_store=state_store, run_id=run_id,
+        )
     strategy_hub = StrategyHub(registry, selected_keys)
     expiry_source = KisOptionMasterExpirySource(bootstrap.bundle.option_master)
     track2_option_iv_source = historical_observation_option_source or KISTrack2OptionIVSource(bootstrap.bundle.option_master)
@@ -117,6 +131,52 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
             option_iv_source=track2_option_iv_source,
         )
     vssf_runtime = bootstrap.bundle.execution._authoritative_execute.__self__.vssf_runtime
+    if validation_only_track6_lifecycle_config is not None:
+        strategy = registry.get("track6_daily_tail_insurance", "1.0")
+        def track6_restart_reconciliation(data, lifecycle):
+            selected = next((item for item in data.ranked_candidates
+                             if item.rank == lifecycle.snapshot.selected_rank), None)
+            if selected is None:
+                return {}, {}, False
+            account_positions = getattr(vssf_runtime.account, "positions", {})
+            def qty(instrument_id):
+                value = account_positions.get(instrument_id, 0)
+                return int(getattr(value, "quantity", getattr(value, "qty", value)) or 0)
+            positions = {
+                "put": qty(selected.put_identity.instrument_id),
+                "call": qty(selected.call_identity.instrument_id),
+            }
+            expected = lifecycle.snapshot.working_client_order_id
+            if not expected:
+                return {}, positions, True
+            report = vssf_runtime.query_order(expected)
+            if report is None or str(getattr(report, "client_order_id", "")) != expected:
+                return {}, positions, False
+            return {expected: report}, positions, True
+        strategy.restart_reconciliation_provider = track6_restart_reconciliation
+        def track6_restore_group_budget(data, lifecycle):
+            snapshot = lifecycle.snapshot
+            if not any(snapshot.filled_quantity.values()):
+                return
+            selected = next((item for item in data.ranked_candidates
+                             if item.rank == snapshot.selected_rank), None)
+            if selected is None or not snapshot.group_id:
+                raise ValueError("TRACK6_RESTART_GROUP_BUDGET_RESTORE_EVIDENCE_MISSING")
+            premiums = {}
+            for leg, identity in (("put", selected.put_identity), ("call", selected.call_identity)):
+                quantity = int(snapshot.filled_quantity.get(leg, 0) or 0)
+                price = snapshot.average_fill_price.get(leg)
+                if quantity <= 0:
+                    continue
+                if price is None or snapshot.client_order_ids.get(leg) is None:
+                    raise ValueError("TRACK6_RESTART_GROUP_BUDGET_FILL_EVIDENCE_MISSING")
+                premiums[leg] = {
+                    "client_order_id": snapshot.client_order_ids[leg],
+                    "instrument_id": identity.instrument_id,
+                    "premium_krw": str(Decimal(str(price)) * Decimal(str(identity.contract_multiplier)) * quantity),
+                }
+            validation_only_track6_execution_gate.sync_group_reservation(snapshot.group_id, premiums)
+        strategy.restart_reconciliation_restore_provider = track6_restore_group_budget
     if track3_runtime_input_source is not None:
         track3_source = track3_runtime_input_source
     elif synthetic_runtime_sources is not None:
@@ -289,6 +349,36 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         except Exception as exc:
             # Keep the Virtual runtime available, but never fall back to a stale local master.
             logger.warning("VIRTUAL_FUTURES_IDENTITY_SOURCE_UNAVAILABLE: %s", exc)
+    def on_multi_leg_execution_result(plan, result):
+        strategy_hub.on_execution_result(plan.strategy_id, plan.purpose or "", result)
+        if (validation_only_s8_runtime_adapter is not None
+                and plan.strategy_id == "track8_macro_regime_monthly_strangle"
+                and bool(getattr(result, "position_flat", False))):
+            validation_only_s8_runtime_adapter.release_all_groups()
+        if (validation_only_track6_execution_gate is not None
+                and validation_only_track6_lifecycle_config is not None
+                and plan.strategy_id == "track6_daily_tail_insurance"):
+            lifecycle = getattr(strategy, "lifecycle", None)
+            if (bool(getattr(result, "position_flat", False))
+                    and int(getattr(result, "pending_legs", 0) or 0) == 0):
+                validation_only_track6_execution_gate.release_group(plan.group_id)
+            elif lifecycle is not None and any(lifecycle.snapshot.filled_quantity.values()):
+                put_identity = getattr(strategy.state, "put_instrument_identity", None)
+                call_identity = getattr(strategy.state, "call_instrument_identity", None)
+                if put_identity is not None and call_identity is not None and lifecycle.snapshot.group_id:
+                    premiums = {}
+                    for leg, identity in (("put", put_identity), ("call", call_identity)):
+                        quantity = int(lifecycle.snapshot.filled_quantity.get(leg, 0) or 0)
+                        price = lifecycle.snapshot.average_fill_price.get(leg)
+                        if quantity > 0 and price is not None and lifecycle.snapshot.client_order_ids.get(leg):
+                            premiums[leg] = {
+                                "client_order_id": lifecycle.snapshot.client_order_ids[leg],
+                                "instrument_id": identity.instrument_id,
+                                "premium_krw": str(Decimal(str(price)) * Decimal(str(identity.contract_multiplier)) * quantity),
+                            }
+                    if premiums:
+                        validation_only_track6_execution_gate.sync_group_reservation(lifecycle.snapshot.group_id, premiums)
+
     multi_leg_bridge = VirtualMultiLegExecutionBridge(
         bundle=bootstrap.bundle,
         run_id=run_id,
@@ -296,14 +386,7 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         futures_identity_source=futures_identity_source,
         option_expiry_source=expiry_source,
         risk_guard_status_source=(risk_guard_status_source or synthetic_runtime_sources),
-        execution_result_callback=lambda plan, result: (
-            strategy_hub.on_execution_result(plan.strategy_id, plan.purpose or "", result),
-            validation_only_s8_runtime_adapter.release_all_groups()
-            if validation_only_s8_runtime_adapter is not None
-            and plan.strategy_id == "track8_macro_regime_monthly_strangle"
-            and bool(getattr(result, "position_flat", False))
-            else None,
-        ),
+        execution_result_callback=on_multi_leg_execution_result,
         freshness_verdict_provider=(
             Track6SyntheticFreshnessProvider(
                 option_master=bootstrap.bundle.option_master, market=bootstrap.bundle.market,
@@ -381,6 +464,8 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         risk_guard_status_source=(risk_guard_status_source if risk_guard_status_source is not None else synthetic_runtime_sources),
         track3_runtime_input_source=track3_source,
         track6_option_contract_source=Track6OptionContractSource(bootstrap.bundle.option_master),
+        track6_first_rank=(validation_only_track6_lifecycle_config.first_rank
+                           if validation_only_track6_lifecycle_config is not None else None),
         track7_option_contract_source=Track7OptionContractSource(bootstrap.bundle.option_master),
         track8_option_contract_source=Track8OptionContractSource(bootstrap.bundle.option_master),
         validation_only_s8_runtime_adapter=validation_only_s8_runtime_adapter,
@@ -545,11 +630,17 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
                 asset_type="OPTION",
                 **close_scope,
             )
-        if str(getattr(evaluation.result, "direction", "")) != "BUY_INSURANCE":
+        direction = str(getattr(evaluation.result, "direction", ""))
+        if direction not in {"BUY_INSURANCE", "BUY_INSURANCE_OPPOSITE"}:
             return None
-        return registry.get("track6_daily_tail_insurance", "1.0").build_execution_plan(
-            f"{run_id}-{canonical.signal_id}"
-        )
+        strategy = registry.get("track6_daily_tail_insurance", "1.0")
+        if strategy.sequential_lifecycle_enabled:
+            group_id = f"{run_id}-track6-{strategy.state.bought_date or evaluation.context.analytics.as_of.strftime('%Y%m%d')}"
+            return strategy.build_sequential_execution_plan(
+                group_id, now=evaluation.context.analytics.as_of,
+                client_order_id_factory=multi_leg_bridge._client_order_id,
+            )
+        return strategy.build_execution_plan(f"{run_id}-{canonical.signal_id}")
 
     def resolve_track7(evaluation, canonical):
         proposal = evaluation.result.execution_proposal
@@ -668,6 +759,15 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         strategy_id = str(getattr(evaluation.context, "strategy_id", "") or "")
         return execution_resolvers.resolve(strategy_id, evaluation, canonical)
 
+    def process_pending_multi_leg(tick=None):
+        strategy = registry.get("track6_daily_tail_insurance", "1.0")
+        if strategy.sequential_lifecycle_enabled and strategy.lifecycle is not None and tick is not None:
+            now = datetime.fromisoformat(str(tick.timestamp))
+            action = strategy.lifecycle_clock_action(now)
+            if action is not None and action.kind in {"CANCEL", "CANCEL_AND_RECONCILE"} and action.client_order_id:
+                multi_leg_bridge.cancel_pending_order(action.client_order_id)
+        return multi_leg_bridge.process_pending_quotes()
+
     loop = AutomatedVirtualTradingLoop(
         bundle=bootstrap.bundle,
         strategy_hub=strategy_hub,
@@ -677,7 +777,7 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         identity_provider=identity,
         multi_leg_plan_resolver=multi_leg_plan_resolver,
         multi_leg_executor=multi_leg_bridge.execute,
-        pending_multi_leg_processor=multi_leg_bridge.process_pending_quotes,
+        pending_multi_leg_processor=process_pending_multi_leg,
         risk_guard_status_source=(risk_guard_status_source or synthetic_runtime_sources),
         signal_observation_only=validation_only_track6_signal_mode,
     )

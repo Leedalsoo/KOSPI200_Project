@@ -1,0 +1,52 @@
+{
+  "artifacts": [
+    {
+      "compressed_bytes": 934958,
+      "compressed_path": "reports/synth/q25_a4_s6_trace_archive_v2/Q25_A4_S6_RANK6_R5_per_order_DETAILED_v2.trace.jsonl.gz",
+      "compressed_sha256": "cc06b759b7b09a69690f4659a5e93d5d2897c5ab0f9a50ba5e7a8934377ea99d",
+      "compression": "gzip-level-6-mtime-0",
+      "raw_bytes": 44553900,
+      "raw_path": "reports/synth/Q25_A4_S6_RANK6_R5_per_order_DETAILED_v2.trace.jsonl",
+      "raw_sha256": "07e5728ab90a3f94d40e79b09c5514c262e7432fe47e21706c45703f381e7539"
+    },
+    {
+      "compressed_bytes": 934973,
+      "compressed_path": "reports/synth/q25_a4_s6_trace_archive_v2/Q25_A4_S6_RANK6_R5_shared_elapsed_DETAILED_v2.trace.jsonl.gz",
+      "compressed_sha256": "76813ad449d159606f01f444cbe0656121a7534a6ef5fbee29efaed35013a92f",
+      "compression": "gzip-level-6-mtime-0",
+      "raw_bytes": 44770230,
+      "raw_path": "reports/synth/Q25_A4_S6_RANK6_R5_shared_elapsed_DETAILED_v2.trace.jsonl",
+      "raw_sha256": "6e4ac1d2c236e2efdfcd0eedaa472b0e835cd54dea96a4fe5d0c9d8fe0255665"
+    },
+    {
+      "compressed_bytes": 935370,
+      "compressed_path": "reports/synth/q25_a4_s6_trace_archive_v2/Q25_A4_S6_RANK6_R6_per_order_DETAILED_v2.trace.jsonl.gz",
+      "compressed_sha256": "3880a4080896b9ffc632ae1983e8ea178c6c32b8b4208d4c61e5df55d6711f3c",
+      "compression": "gzip-level-6-mtime-0",
+      "raw_bytes": 44553720,
+      "raw_path": "reports/synth/Q25_A4_S6_RANK6_R6_per_order_DETAILED_v2.trace.jsonl",
+      "raw_sha256": "c85ad70d7a2b0f6422c44d318d9d11fe7dc7a90f65203ba25b8c789cf5ad30d7"
+    },
+    {
+      "compressed_bytes": 935341,
+      "compressed_path": "reports/synth/q25_a4_s6_trace_archive_v2/Q25_A4_S6_RANK6_R6_shared_elapsed_DETAILED_v2.trace.jsonl.gz",
+      "compressed_sha256": "888d28243d963c27502e9aff57dc9a93818cd2ab3b5faa51ce36056229b2d3a5",
+      "compression": "gzip-level-6-mtime-0",
+      "raw_bytes": 44770050,
+      "raw_path": "reports/synth/Q25_A4_S6_RANK6_R6_shared_elapsed_DETAILED_v2.trace.jsonl",
+      "raw_sha256": "60902245c51c04aa0de0c29edea209ec6241ddeb4ba93435bb5ce150c590693d"
+    },
+    {
+      "compressed_bytes": 103434,
+      "compressed_path": "reports/synth/q25_a4_s6_trace_archive_v2/Q25_A4_S6_SEQUENTIAL_EXIT_DETAILED_20261106.trace.jsonl.gz",
+      "compressed_sha256": "9e0a5782eeb717223d4f0cb6d236d316c83aa1c4410e65bf389a2ab03ffb1b89",
+      "compression": "gzip-level-6-mtime-0",
+      "raw_bytes": 4680082,
+      "raw_path": "reports/synth/Q25_A4_S6_SEQUENTIAL_EXIT_DETAILED_20261106.trace.jsonl",
+      "raw_sha256": "66d96f65b5830a764da79ba588d979e6e4f48034fccbe2b36927a961ae456366"
+    }
+  ],
+  "authority": "VALIDATION_ONLY_SYNTHETIC_NON_AUTHORITATIVE",
+  "purpose": "Q25_A4_S6_DETAILED_TRACE_EVIDENCE",
+  "schema_version": 1
+}

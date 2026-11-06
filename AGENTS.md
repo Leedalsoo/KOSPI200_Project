@@ -492,3 +492,15 @@ Rules:
 - `다음`은 직전에 제안한 후보가 읽기 전용 또는 문서 작업인 경우에만 실행한다. 코드 수정·프로세스/스케줄 변경·삭제/이동·커밋/푸시 후보는 `승인 Qn`을 별도로 요구한다.
 - 모드 A/B는 읽기 전용이다. 새 문제는 실행하지 않고 큐에 등록한다. 승인된 작업도 범위 밖 변경, 다른 파일, 미추적 파일을 포함하지 않는다.
 - 실행 결과는 통합 점검 지시문에 지정된 Q&A 형식으로 기록하고, 재조회로 기록을 검증한다. Notion 기록이나 현재 증거를 실제로 확인하지 않았다면 완료로 보고하지 않는다.
+
+
+### 20.2 Q25 A4 상시 승인 (2026-11-06)
+
+- 이 절과 사용자 지시서 A4는 Q25 합성·validation-only·Virtual 검증 범위에 대한 상시 승인이다. 이 범위에서는 항목별 승인 문구, 승인 큐 번호 일치 및 사용자에게 다음 입력을 요구하는 절차를 적용하지 않는다. 큐 항목이 없으면 생성하고, 한 단위가 끝나면 다음 단위를 시작한다.
+- 허용 범위: `core/strategy/`, `application/`, `environments/`, 주문·계좌 API 호출부를 제외한 `infrastructure/`, `tests/`, `verification/`, `config/validation_only/`, `reports/synth/`의 전략·계약·Virtual Runtime·테스트·검증 스크립트 변경. `data/derived_scenario/`에는 새 경로만 추가하며 기존 데이터셋/manifest를 덮어쓰지 않는다.
+- validation-only 위험예산·수수료·승수·정산가격·달력은 명시적 비권위 프로파일로만 설정하고 manifest 및 SHA-256과 결합한다. 운영 설정과 authoritative 입력으로 승격하지 않는다. 합성 손익을 이용한 파라미터 최적화는 금지한다.
+- 테스트 통과 후 주제별 로컬 커밋을 수행한다. 푸시는 `cleanup/p2-quarantine-20261026` 브랜치에만 non-force 방식으로 허용하며, 단위 PASS 또는 범위가 명시된 PLUMBING_ONLY와 clean 검사를 통과한 경우에 한한다. `Project200`, `master`, 다른 브랜치 push/merge, force push 및 history rewrite는 금지한다.
+- Notion Q&A·과제 큐·Decision Log 및 대장을 갱신하고 결과를 재조회한다. Graphify 갱신은 허용한다.
+- 즉시 중단 조건: 실제 주문 오발/실계좌 변경 가능성, KIS/REAL_VTS/Live/주문·잔고·증거금 API 호출 필요, credential/secret 노출, authoritative 원본 손상·유실, 운영 RiskConfig/`.env`/권한/스케줄러/수집기 변경 필요, 장중 raw 열람 또는 수집기 조작, 동일 오류 2회 연속, 위험 체크 제거 또는 합성값을 권위 데이터로 표기해야 하는 경우.
+- 합성 대체 결과는 `PSB_PASS`/`PSB_FAIL`/`PSB_UNVERIFIED`/`PLUMBING_ONLY`/`BLOCKED_SAFETY`/`BLOCKED_TOOL`/`BLOCKED_SPEC`로 구분한다. 미확인 범위는 미확인으로 기록하며 단순 `PASS`로 표시하지 않는다.
+- 이 상시 승인은 S3/S4 실행, SQLite settlement 운영 활성화, 운영 설정 변경, KIS/Live/REAL_VTS/실계좌 연동 또는 주문을 승인하지 않는다.
