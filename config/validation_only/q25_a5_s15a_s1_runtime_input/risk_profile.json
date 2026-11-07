@@ -1,0 +1,27 @@
+{
+  "allow_kis_api": false,
+  "allow_live_orders": false,
+  "allow_real_account": false,
+  "contract_identity_authority": "NONE",
+  "dataset_sha256": "05b16ad7aded564becf24b0c317f48756578e0c86b8b03568735c7eb19c16dcf",
+  "execution_enabled": false,
+  "expiry_is_authoritative": false,
+  "limits": {
+    "dte_gate_test_value": 10.0,
+    "max_open_short_contracts": 10,
+    "max_pending_short_contracts": 10,
+    "quantity_per_crossing": 1
+  },
+  "notes": [
+    "Signal-generation test profile only; not an account risk approval.",
+    "DTE value and initial reference are explicit scenario inputs, not U22/U23 policy decisions.",
+    "No option contract identity, expiry, multiplier, quote, order, or fill is supplied."
+  ],
+  "operational_config_mutated": false,
+  "production_runtime_eligible": false,
+  "profile_id": "Q25_A5_S15A_S1_SIGNAL_ONLY",
+  "runtime_eligible": false,
+  "schema": "q25-s1-validation-signal-risk-profile-v1",
+  "signal_generation_only": true,
+  "validation_only": true
+}
