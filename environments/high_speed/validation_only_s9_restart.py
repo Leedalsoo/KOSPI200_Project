@@ -8,8 +8,14 @@ from typing import Any
 from contracts.position_provenance import PositionLotProvenance, PositionRole
 from contracts.track9_fee_ledger import Track9FeeRecord
 from contracts.types import OptionInstrumentIdentity
+from core.oms.position_group import (
+    LegStatus, PositionGroup, PositionGroupLeg, PositionGroupLegPnL, PositionGroupSnapshot,
+)
+from environments.virtual.authoritative_vssf.canonical import (
+    CanonicalAssetType, CanonicalExecutionReport, CanonicalOptionType, CanonicalOrderSide,
+)
 
-SCHEMA = 's9-validation-only-virtual-restart-v1'
+SCHEMA = 's9-validation-only-virtual-restart-v2'
 
 
 def _lot_to_json(lot: PositionLotProvenance) -> dict[str, Any]:
@@ -33,6 +39,114 @@ def _lot_to_json(lot: PositionLotProvenance) -> dict[str, Any]:
     }
 
 
+def _enum_value(value: Any) -> Any:
+    return value.value if hasattr(value, "value") else value
+
+
+def _group_to_json(group: PositionGroup) -> dict[str, Any]:
+    return {
+        "group_id": group.group_id,
+        "strategy_id": group.strategy_id,
+        "direction": group.direction,
+        "legs": [
+            {
+                "leg_id": leg.leg_id, "group_id": leg.group_id,
+                "instrument_id": leg.instrument_id, "side": leg.side,
+                "quantity": leg.quantity, "contract_multiplier": str(leg.contract_multiplier),
+                "identity_source": leg.identity_source, "status": str(_enum_value(leg.status)),
+            }
+            for leg in group.legs
+        ],
+    }
+
+
+def _group_snapshot_to_json(snapshot: PositionGroupSnapshot) -> dict[str, Any]:
+    return {
+        "group_id": snapshot.group_id, "strategy_id": snapshot.strategy_id,
+        "complete": snapshot.complete,
+        "legs": [
+            {
+                "leg_id": leg.leg_id, "group_id": leg.group_id,
+                "instrument_id": leg.instrument_id, "quantity": leg.quantity,
+                "contract_multiplier": str(leg.contract_multiplier),
+                "identity_source": leg.identity_source, "avg_price": leg.avg_price,
+                "current_price": leg.current_price, "unrealized_pnl": leg.unrealized_pnl,
+                "run_id": leg.run_id, "client_order_id": leg.client_order_id,
+                "execution_id": leg.execution_id, "execution_ids": list(leg.execution_ids),
+            }
+            for leg in snapshot.legs
+        ],
+        "realized_pnl": snapshot.realized_pnl,
+        "unrealized_pnl": snapshot.unrealized_pnl,
+        "total_pnl": snapshot.total_pnl,
+    }
+
+
+def _execution_report_to_json(report: CanonicalExecutionReport) -> dict[str, Any]:
+    return {
+        "exec_id": report.exec_id, "client_order_id": report.client_order_id,
+        "track_id": report.track_id, "asset_type": str(_enum_value(report.asset_type)),
+        "side": str(_enum_value(report.side)), "executed_qty": report.executed_qty,
+        "executed_price": report.executed_price, "fee": report.fee,
+        "slippage": report.slippage, "timestamp": report.timestamp,
+        "symbol": report.symbol,
+        "option_type": str(_enum_value(report.option_type)) if report.option_type is not None else None,
+        "strike": report.strike, "expiry": report.expiry,
+        "strategy_id": report.strategy_id, "group_id": report.group_id,
+        "leg_id": report.leg_id, "instrument_id": report.instrument_id,
+        "contract_multiplier": report.contract_multiplier,
+        "identity_source": report.identity_source,
+    }
+
+
+def _execution_report_from_json(row: dict[str, Any]) -> CanonicalExecutionReport:
+    return CanonicalExecutionReport(
+        exec_id=str(row["exec_id"]), client_order_id=str(row["client_order_id"]),
+        track_id=str(row["track_id"]), asset_type=CanonicalAssetType(str(row["asset_type"])),
+        side=CanonicalOrderSide(str(row["side"])), executed_qty=int(row["executed_qty"]),
+        executed_price=float(row["executed_price"]), fee=float(row["fee"]),
+        slippage=float(row["slippage"]), timestamp=str(row["timestamp"]),
+        symbol=str(row["symbol"]),
+        option_type=CanonicalOptionType(str(row["option_type"])) if row.get("option_type") else None,
+        strike=float(row.get("strike", 0.0)), expiry=str(row.get("expiry", "")),
+        strategy_id=str(row.get("strategy_id", "")), group_id=str(row.get("group_id", "")),
+        leg_id=str(row.get("leg_id", "")), instrument_id=str(row.get("instrument_id", "")),
+        contract_multiplier=(float(row["contract_multiplier"]) if row.get("contract_multiplier") is not None else None),
+        identity_source=str(row.get("identity_source", "")),
+    )
+
+
+def _restore_group(row: dict[str, Any]) -> PositionGroup:
+    return PositionGroup(
+        group_id=str(row["group_id"]), strategy_id=str(row["strategy_id"]),
+        direction=str(row["direction"]),
+        legs=tuple(PositionGroupLeg(
+            leg_id=str(leg["leg_id"]), group_id=str(leg["group_id"]),
+            instrument_id=str(leg["instrument_id"]), side=str(leg["side"]),
+            quantity=int(leg["quantity"]), contract_multiplier=Decimal(str(leg["contract_multiplier"])),
+            identity_source=str(leg["identity_source"]), status=LegStatus(str(leg["status"])),
+        ) for leg in row["legs"]),
+    )
+
+
+def _restore_group_snapshot(row: dict[str, Any]) -> PositionGroupSnapshot:
+    return PositionGroupSnapshot(
+        group_id=str(row["group_id"]), strategy_id=str(row["strategy_id"]),
+        complete=bool(row["complete"]),
+        legs=tuple(PositionGroupLegPnL(
+            leg_id=str(leg["leg_id"]), group_id=str(leg["group_id"]),
+            instrument_id=str(leg["instrument_id"]), quantity=int(leg["quantity"]),
+            contract_multiplier=Decimal(str(leg["contract_multiplier"])),
+            identity_source=str(leg["identity_source"]), avg_price=float(leg["avg_price"]),
+            current_price=float(leg["current_price"]), unrealized_pnl=float(leg["unrealized_pnl"]),
+            run_id=str(leg["run_id"]), client_order_id=str(leg["client_order_id"]),
+            execution_id=str(leg["execution_id"]), execution_ids=tuple(str(x) for x in leg.get("execution_ids", [])),
+        ) for leg in row["legs"]),
+        realized_pnl=float(row["realized_pnl"]),
+        unrealized_pnl=float(row["unrealized_pnl"]), total_pnl=float(row["total_pnl"]),
+    )
+
+
 def write_restart_snapshot(path: str | Path, *, run_id: str, adapter: Any,
                            runtime_snapshot: dict[str, Any], process_id: int) -> dict[str, Any]:
     lots = tuple(runtime_snapshot.get('open_lots', ()))
@@ -51,6 +165,9 @@ def write_restart_snapshot(path: str | Path, *, run_id: str, adapter: Any,
         'risk_profile_sha256': adapter.evidence.risk_profile_sha256,
         'strategy_state': runtime_snapshot.get('strategy_state'),
         'open_lots': [_lot_to_json(x) for x in lots],
+        'position_groups': [_group_to_json(x) for x in runtime_snapshot.get('position_groups', {}).values()],
+        'position_group_snapshots': [_group_snapshot_to_json(x) for x in runtime_snapshot.get('position_group_snapshots', {}).values()],
+        'execution_reports': [_execution_report_to_json(x) for x in runtime_snapshot.get('execution_reports', ())],
         'account': {
             'positions': positions,
             'balance': str(runtime_snapshot['account_balance']),
@@ -104,6 +221,16 @@ def restore_restart_snapshot(path: str | Path, *, run_id: str, adapter: Any,
     lots = payload.get('open_lots')
     if not isinstance(account, dict) or not isinstance(lots, list) or len(lots) != 2:
         raise ValueError('S9_RESTART_SNAPSHOT_ACCOUNT_OR_LOTS_INVALID')
+
+    groups = payload.get('position_groups')
+    execution_reports = payload.get('execution_reports')
+    if not isinstance(groups, list) or not groups or not isinstance(execution_reports, list) or len(execution_reports) < 2:
+        raise ValueError('S9_RESTART_SNAPSHOT_GROUP_OR_EXECUTION_HISTORY_MISSING')
+    for row in groups:
+        replay_bridge.position_groups.register(_restore_group(row))
+    for row in payload.get('position_group_snapshots', []):
+        replay_bridge.position_groups.update_snapshot(_restore_group_snapshot(row))
+    vssf_runtime.execution_engine.reports = [_execution_report_from_json(row) for row in execution_reports]
 
     # Restore execution-created provenance lots into a fresh VirtualPositionLotStore.
     for row in lots:
@@ -161,6 +288,30 @@ def restore_restart_snapshot(path: str | Path, *, run_id: str, adapter: Any,
             or any(x.run_id != run_id or x.strategy_id != 'track9_event_overnight_insurance'
                    or x.side != 'BUY' or x.remaining_quantity <= 0 for x in open_lots)):
         raise ValueError('S9_RESTART_RESTORED_POSITION_PAIR_INVALID')
+    restored_groups = replay_bridge.position_groups.all()
+    if len(restored_groups) != 1:
+        raise ValueError('S9_RESTART_RESTORED_POSITION_GROUP_COUNT_INVALID')
+    restored_group = next(iter(restored_groups.values()))
+    if restored_group.strategy_id != 'track9_event_overnight_insurance':
+        raise ValueError('S9_RESTART_RESTORED_POSITION_GROUP_STRATEGY_MISMATCH')
+    group_legs = {leg.instrument_id: leg for leg in restored_group.legs}
+    if len(group_legs) != 2 or {leg.leg_id for leg in restored_group.legs} != {'put', 'call'}:
+        raise ValueError('S9_RESTART_RESTORED_POSITION_GROUP_PAIR_INVALID')
+    restored_reports = {report.exec_id: report for report in vssf_runtime.execution_engine.reports}
+    if len(restored_reports) != 2:
+        raise ValueError('S9_RESTART_RESTORED_EXECUTION_HISTORY_COUNT_INVALID')
+    for lot in open_lots:
+        group_leg = group_legs.get(lot.instrument_id)
+        if (group_leg is None or group_leg.status != LegStatus.FILLED
+                or group_leg.quantity != lot.opened_quantity
+                or group_leg.side != lot.side or group_leg.leg_id != lot.leg_id):
+            raise ValueError('S9_RESTART_RESTORED_POSITION_GROUP_LOT_MISMATCH')
+        execution = restored_reports.get(lot.execution_id)
+        if (execution is None or execution.client_order_id != lot.client_order_id
+                or execution.group_id != lot.group_id or execution.leg_id != lot.leg_id
+                or execution.instrument_id != lot.instrument_id
+                or execution.executed_qty != lot.opened_quantity):
+            raise ValueError('S9_RESTART_RESTORED_EXECUTION_LOT_MISMATCH')
     lot_qty = {x.instrument_id: sum(y.remaining_quantity for y in open_lots if y.instrument_id == x.instrument_id)
                for x in open_lots}
     for instrument_id, quantity in lot_qty.items():
@@ -172,5 +323,9 @@ def restore_restart_snapshot(path: str | Path, *, run_id: str, adapter: Any,
         'restored_open_lots': len(open_lots), 'restored_account_positions': len(positions),
         'restored_fee_records': len(payload.get('fee_records', [])),
         'restored_risk_audits': len(payload.get('risk_audit_records', [])),
+        'restored_position_groups': len(groups),
+        'restored_group_snapshots': len(payload.get('position_group_snapshots', [])),
+        'restored_execution_reports': len(vssf_runtime.execution_engine.reports),
+        'restored_ledger_transactions': len(vssf_runtime.account.ledger_engine.transactions),
         'execution_sequence': vssf_runtime.execution_engine._seq,
     }

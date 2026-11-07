@@ -1,0 +1,263 @@
+{
+  "account": {
+    "balance": "10000000.0",
+    "free_margin": "8940000.00",
+    "ledger_transactions": [
+      {
+        "exec_id": "EXEC-000001"
+      },
+      {
+        "exec_id": "EXEC-000002"
+      }
+    ],
+    "positions": {
+      "SYNTHETIC_CONTRACT:S9-20261112-CALL-500": {
+        "avg_price": 5.4,
+        "contract_multiplier": 100000.0,
+        "mark_price": 5.3,
+        "qty": 1,
+        "side": "BUY"
+      },
+      "SYNTHETIC_CONTRACT:S9-20261112-PUT-500": {
+        "avg_price": 5.0,
+        "contract_multiplier": 100000.0,
+        "mark_price": 4.9,
+        "qty": 1,
+        "side": "BUY"
+      }
+    },
+    "realized_pnl": "0.0",
+    "unrealized_pnl": "-20000.00",
+    "used_margin": "1040000.00"
+  },
+  "captured_process_id": 6204,
+  "contract_profile_sha256": "d7c7cb9be3383d033bdef10c27102f06946dc30b314fe2e92615658522b7f1bd",
+  "dataset_sha256": "e6947156a17886615b901b03ce59c7c89f662e2b1b39410463ac1179e16b944b",
+  "execution_reports": [
+    {
+      "asset_type": "OPTION",
+      "client_order_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108-SIG-2-track9_event_overnight_insurance-1-put-f19acfed3894",
+      "contract_multiplier": 100000.0,
+      "exec_id": "EXEC-000001",
+      "executed_price": 5.0,
+      "executed_qty": 1,
+      "expiry": "20261112",
+      "fee": 0.0,
+      "group_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108-SIG-2-track9_event_overnight_insurance-1",
+      "identity_source": "SYNTHETIC:DERIVED_SCENARIO",
+      "instrument_id": "SYNTHETIC_CONTRACT:S9-20261112-PUT-500",
+      "leg_id": "put",
+      "option_type": "PUT",
+      "side": "BUY",
+      "slippage": 0.0,
+      "strategy_id": "track9_event_overnight_insurance",
+      "strike": 500.0,
+      "symbol": "SYNTHETIC_CONTRACT:S9-20261112-PUT-500",
+      "timestamp": "2026-11-06T15:00:00+09:00",
+      "track_id": "track9_event_overnight_insurance"
+    },
+    {
+      "asset_type": "OPTION",
+      "client_order_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108-SIG-2-track9_event_overnight_insurance-1-call-daca03d31258",
+      "contract_multiplier": 100000.0,
+      "exec_id": "EXEC-000002",
+      "executed_price": 5.4,
+      "executed_qty": 1,
+      "expiry": "20261112",
+      "fee": 0.0,
+      "group_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108-SIG-2-track9_event_overnight_insurance-1",
+      "identity_source": "SYNTHETIC:DERIVED_SCENARIO",
+      "instrument_id": "SYNTHETIC_CONTRACT:S9-20261112-CALL-500",
+      "leg_id": "call",
+      "option_type": "CALL",
+      "side": "BUY",
+      "slippage": 0.0,
+      "strategy_id": "track9_event_overnight_insurance",
+      "strike": 500.0,
+      "symbol": "SYNTHETIC_CONTRACT:S9-20261112-CALL-500",
+      "timestamp": "2026-11-06T15:00:00+09:00",
+      "track_id": "track9_event_overnight_insurance"
+    }
+  ],
+  "execution_sequence": 2,
+  "fee_records": [
+    {
+      "client_order_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108-SIG-2-track9_event_overnight_insurance-1-put-f19acfed3894",
+      "executed_at": "2026-11-06T15:00:00+09:00",
+      "executed_price": "5.0",
+      "executed_quantity": 1,
+      "execution_id": "EXEC-000001",
+      "fee_amount": "0.0",
+      "group_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108-SIG-2-track9_event_overnight_insurance-1",
+      "instrument_id": "SYNTHETIC_CONTRACT:S9-20261112-PUT-500",
+      "leg_id": "put",
+      "run_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108",
+      "source": "VSSF:CanonicalExecutionReport.fee",
+      "strategy_id": "track9_event_overnight_insurance"
+    },
+    {
+      "client_order_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108-SIG-2-track9_event_overnight_insurance-1-call-daca03d31258",
+      "executed_at": "2026-11-06T15:00:00+09:00",
+      "executed_price": "5.4",
+      "executed_quantity": 1,
+      "execution_id": "EXEC-000002",
+      "fee_amount": "0.0",
+      "group_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108-SIG-2-track9_event_overnight_insurance-1",
+      "instrument_id": "SYNTHETIC_CONTRACT:S9-20261112-CALL-500",
+      "leg_id": "call",
+      "run_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108",
+      "source": "VSSF:CanonicalExecutionReport.fee",
+      "strategy_id": "track9_event_overnight_insurance"
+    }
+  ],
+  "manifest_sha256": "a901ff355a3117a46448f3e75beefd973a454d0097f70960cc484702d410a047",
+  "open_lots": [
+    {
+      "client_order_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108-SIG-2-track9_event_overnight_insurance-1-call-daca03d31258",
+      "contract_multiplier": "100000",
+      "execution_id": "EXEC-000002",
+      "execution_timestamp": "2026-11-06T15:00:00+09:00",
+      "group_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108-SIG-2-track9_event_overnight_insurance-1",
+      "identity_source": "SYNTHETIC:DERIVED_SCENARIO",
+      "instrument_id": "SYNTHETIC_CONTRACT:S9-20261112-CALL-500",
+      "instrument_identity": {
+        "contract_multiplier": "100000",
+        "expiry": "20261112",
+        "identity_source": "SYNTHETIC:DERIVED_SCENARIO",
+        "instrument_id": "SYNTHETIC_CONTRACT:S9-20261112-CALL-500",
+        "option_type": "CALL",
+        "strike": "500.0",
+        "symbol": "SYNTHETIC_CONTRACT:S9-20261112-CALL-500"
+      },
+      "leg_id": "call",
+      "opened_quantity": 1,
+      "position_role": "OVERNIGHT_INSURANCE",
+      "remaining_quantity": 1,
+      "run_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108",
+      "side": "BUY",
+      "strategy_id": "track9_event_overnight_insurance"
+    },
+    {
+      "client_order_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108-SIG-2-track9_event_overnight_insurance-1-put-f19acfed3894",
+      "contract_multiplier": "100000",
+      "execution_id": "EXEC-000001",
+      "execution_timestamp": "2026-11-06T15:00:00+09:00",
+      "group_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108-SIG-2-track9_event_overnight_insurance-1",
+      "identity_source": "SYNTHETIC:DERIVED_SCENARIO",
+      "instrument_id": "SYNTHETIC_CONTRACT:S9-20261112-PUT-500",
+      "instrument_identity": {
+        "contract_multiplier": "100000",
+        "expiry": "20261112",
+        "identity_source": "SYNTHETIC:DERIVED_SCENARIO",
+        "instrument_id": "SYNTHETIC_CONTRACT:S9-20261112-PUT-500",
+        "option_type": "PUT",
+        "strike": "500.0",
+        "symbol": "SYNTHETIC_CONTRACT:S9-20261112-PUT-500"
+      },
+      "leg_id": "put",
+      "opened_quantity": 1,
+      "position_role": "OVERNIGHT_INSURANCE",
+      "remaining_quantity": 1,
+      "run_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108",
+      "side": "BUY",
+      "strategy_id": "track9_event_overnight_insurance"
+    }
+  ],
+  "position_group_snapshots": [
+    {
+      "complete": true,
+      "group_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108-SIG-2-track9_event_overnight_insurance-1",
+      "legs": [
+        {
+          "avg_price": 5.0,
+          "client_order_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108-SIG-2-track9_event_overnight_insurance-1-put-f19acfed3894",
+          "contract_multiplier": "100000",
+          "current_price": 4.9,
+          "execution_id": "EXEC-000001",
+          "execution_ids": [
+            "EXEC-000001"
+          ],
+          "group_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108-SIG-2-track9_event_overnight_insurance-1",
+          "identity_source": "SYNTHETIC:DERIVED_SCENARIO",
+          "instrument_id": "SYNTHETIC_CONTRACT:S9-20261112-PUT-500",
+          "leg_id": "put",
+          "quantity": 1,
+          "run_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108",
+          "unrealized_pnl": -10000.0
+        },
+        {
+          "avg_price": 5.4,
+          "client_order_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108-SIG-2-track9_event_overnight_insurance-1-call-daca03d31258",
+          "contract_multiplier": "100000",
+          "current_price": 5.3,
+          "execution_id": "EXEC-000002",
+          "execution_ids": [
+            "EXEC-000002"
+          ],
+          "group_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108-SIG-2-track9_event_overnight_insurance-1",
+          "identity_source": "SYNTHETIC:DERIVED_SCENARIO",
+          "instrument_id": "SYNTHETIC_CONTRACT:S9-20261112-CALL-500",
+          "leg_id": "call",
+          "quantity": 1,
+          "run_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108",
+          "unrealized_pnl": -10000.0
+        }
+      ],
+      "realized_pnl": 0.0,
+      "strategy_id": "track9_event_overnight_insurance",
+      "total_pnl": -20000.0,
+      "unrealized_pnl": -20000.0
+    }
+  ],
+  "position_groups": [
+    {
+      "direction": "MULTI_LEG",
+      "group_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108-SIG-2-track9_event_overnight_insurance-1",
+      "legs": [
+        {
+          "contract_multiplier": "100000",
+          "group_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108-SIG-2-track9_event_overnight_insurance-1",
+          "identity_source": "SYNTHETIC:DERIVED_SCENARIO",
+          "instrument_id": "SYNTHETIC_CONTRACT:S9-20261112-PUT-500",
+          "leg_id": "put",
+          "quantity": 1,
+          "side": "BUY",
+          "status": "FILLED"
+        },
+        {
+          "contract_multiplier": "100000",
+          "group_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108-SIG-2-track9_event_overnight_insurance-1",
+          "identity_source": "SYNTHETIC:DERIVED_SCENARIO",
+          "instrument_id": "SYNTHETIC_CONTRACT:S9-20261112-CALL-500",
+          "leg_id": "call",
+          "quantity": 1,
+          "side": "BUY",
+          "status": "FILLED"
+        }
+      ],
+      "strategy_id": "track9_event_overnight_insurance"
+    }
+  ],
+  "provenance": "SYNTHETIC",
+  "risk_audit_records": [
+    {
+      "dataset_sha256": "e6947156a17886615b901b03ce59c7c89f662e2b1b39410463ac1179e16b944b",
+      "gross_premium_krw": "1040000.0",
+      "group_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108-SIG-2-track9_event_overnight_insurance-1",
+      "manifest_sha256": "a901ff355a3117a46448f3e75beefd973a454d0097f70960cc484702d410a047",
+      "max_gross_premium_krw": 5000000,
+      "max_loss_krw": 5000000,
+      "purpose": "OVERNIGHT_INSURANCE",
+      "risk_profile_sha256": "cea09c560c3fd24ee3cb008a4191a3d6768f2d15c5e279269fa16184323379bf",
+      "run_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108",
+      "scenario_id": "S9_INDEPENDENT_ATM_OVERNIGHT_STOP_LOSS_001",
+      "status": "ALLOW_VIRTUAL_ONLY"
+    }
+  ],
+  "risk_profile_sha256": "cea09c560c3fd24ee3cb008a4191a3d6768f2d15c5e279269fa16184323379bf",
+  "run_id": "S9-STOP-LOSS-PROCESS-RESTART-20261108",
+  "scenario_id": "S9_INDEPENDENT_ATM_OVERNIGHT_STOP_LOSS_001",
+  "schema": "s9-validation-only-virtual-restart-v2",
+  "strategy_state": "OVERNIGHT_INSURANCE_ACTIVE",
+  "validation_only": true
+}

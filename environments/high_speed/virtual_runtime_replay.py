@@ -506,6 +506,12 @@ class HighSpeedVirtualRuntimeReplayRunner:
             self.s9_runtime_snapshot = {
                 "open_lots": tuple(replay_bridge.position_lot_store.open_lots()),
                 "position_groups": replay_bridge.position_groups.all(),
+                "position_group_snapshots": {
+                    key: replay_bridge.position_groups.snapshot(key)
+                    for key in replay_bridge.position_groups.all()
+                    if replay_bridge.position_groups.snapshot(key) is not None
+                },
+                "execution_reports": tuple(vssf_runtime.execution_engine.reports),
                 "fee_records": tuple(replay_bridge.fee_ledger.snapshot(run_id=self.run_id)),
                 "risk_audit_records": tuple(self.s9_validation_runtime_adapter.risk_audit_records),
                 "strategy_state": getattr(getattr(self.s9_strategy, "state", None), "state", None),
