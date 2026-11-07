@@ -1,0 +1,54 @@
+{
+  "report_id": "Q25_A5_S14_S1_STRATEGY_UNIT_20261107",
+  "result": "PSB_UNVERIFIED",
+  "scope": "S14 Strategy 1 core short-accumulation rule implementation and focused unit regression only",
+  "branch": "cleanup/p2-quarantine-20261026",
+  "base_head": "a6d3f8db8a5447eefdecacdb1427c5a71f091072",
+  "remote_tracking_head": "1e2bbcabac8691186204b0478a7c2474c4bd4867",
+  "changed_files": [
+    "core/strategy/track1_tail_defense.py",
+    "tests/core/test_track1_spec_alignment.py"
+  ],
+  "implemented": [
+    "U28 upward crossings derive PUT strike from previous reference point minus 7.5pt, then advance reference by 2.5pt",
+    "U28 downward crossings derive CALL strike from previous reference point plus 7.5pt, then advance reference by 2.5pt",
+    "short exposure cap counts open plus pending worst-case quantity and limits total to 10",
+    "runtime config, risk limits, verified reference, verified exposure snapshot and verified DTE basis are required before short proposals",
+    "DTE4 or inside blocks new short entries; grouped terminal close is not implemented",
+    "legacy mini-futures hedge and volatility-derived fence execution removed from the Strategy 1 evaluation path"
+  ],
+  "focused_tests": {
+    "command": "py -m pytest tests/core/test_track1_spec_alignment.py tests/application/composition/test_s1_s9_freshness_admission_coverage.py -q",
+    "passed": 24,
+    "failed": 0
+  },
+  "compile": "py -m py_compile core/strategy/track1_tail_defense.py tests/core/test_track1_spec_alignment.py — PASS",
+  "diff_check": "git diff --check — PASS (pre-existing LF/CRLF warnings only)",
+  "not_implemented_or_unverified": [
+    "Track1RuntimeInputProvider does not yet supply verified monthly reference point, exposure snapshot or DTE basis; production runtime therefore remains fail-closed",
+    "automated_virtual_runtime_factory.resolve_track1 still does not route OPTION proposals; grouped option identity/plan/execution is not integrated",
+    "U19 hedge trigger remains unresolved; no option hedge signal generated",
+    "U22 DTE semantics and U25 DTE4 close recovery remain unresolved; no grouped all-leg close implemented",
+    "U23 monthly start reference and base strangle timing remain blocked",
+    "natural StrategyHub signal to Virtual Broker fill to Position/PnL E2E not run",
+    "FAST/DETAILED replay equivalence not run"
+  ],
+  "safety": {
+    "kis_api": false,
+    "real_vts_api": false,
+    "live_api": false,
+    "account_api": false,
+    "orders": false,
+    "operating_config_changed": false,
+    "env_changed": false,
+    "collector_or_scheduler_changed": false,
+    "synthetic_input_promoted_to_authoritative": false
+  },
+  "git": {
+    "staged_only_changed_files": true,
+    "commit_created": false,
+    "push": false,
+    "existing_dirty_and_untracked_preserved": true,
+    "original_workspace_was_4_commits_behind_remote": true
+  }
+}
