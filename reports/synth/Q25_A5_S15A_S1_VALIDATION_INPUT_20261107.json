@@ -1,0 +1,84 @@
+{
+  "dataset": {
+    "dataset_id": "Q25_A5_S15A_S1_SIGNAL_INPUT_20261107",
+    "event_count": 8,
+    "manifest_path": "config/validation_only/q25_a5_s15a_s1_runtime_input/manifest.json",
+    "manifest_sha256": "dfea365d27d4051465413e44b4b73a3e2e38c88ca7af0b28cd2d73d310239864",
+    "path": "data/derived_scenario/q25_a5_s15a_s1_runtime_input/events.jsonl",
+    "risk_profile_path": "config/validation_only/q25_a5_s15a_s1_runtime_input/risk_profile.json",
+    "risk_profile_sha256": "f73caf9b1a0c8b476d906fcb3d2307502bec408568d1c15da8ce936fd17e248d",
+    "scenarios": [
+      "S1_S15A_U28_UP",
+      "S1_S15A_U28_DOWN"
+    ],
+    "sha256": "05b16ad7aded564becf24b0c317f48756578e0c86b8b03568735c7eb19c16dcf"
+  },
+  "date": "2026-11-07",
+  "explicit_boundaries": {
+    "allow_kis_api": false,
+    "allow_live_orders": false,
+    "allow_real_account": false,
+    "contract_identity_authority": "NONE",
+    "dte_value_semantics": "Scenario gate input 10.0 only; does not resolve U22 DTE/expiry semantics.",
+    "execution_enabled": false,
+    "expiry_is_authoritative": false,
+    "production_runtime_eligible": false,
+    "quotes_orders_fills": false,
+    "reference_semantics": "Scenario initial reference 100.0 only; does not resolve U23 monthly reference policy.",
+    "validation_only": true
+  },
+  "files_created": [
+    "verification/generate_q25_a5_s15a_s1_runtime_input.py",
+    "environments/high_speed/validation_only_track1_input.py",
+    "tests/application/composition/test_s1_validation_only_runtime_input.py",
+    "data/derived_scenario/q25_a5_s15a_s1_runtime_input/events.jsonl",
+    "config/validation_only/q25_a5_s15a_s1_runtime_input/manifest.json",
+    "config/validation_only/q25_a5_s15a_s1_runtime_input/risk_profile.json"
+  ],
+  "graphify": {
+    "communities": 345,
+    "graph_edges": 20186,
+    "graph_nodes": 7148,
+    "topology": "No code-graph topology changes detected after update",
+    "update": "PASS_INCREMENTAL_CODE_UPDATE",
+    "warnings": [
+      "application/composition/virtual_composition_root.py partially extracted due syntax error at line 54",
+      "80 code files yielded no AST symbols"
+    ]
+  },
+  "known_blockers": [
+    "Standard registry manifest declares TRACK1_TAIL_DEFENSE code_version 1.1.0 while S14 strategy code is 1.2.0; build_standard_strategy_registry() raises STRATEGY_CODE_VERSION_MISMATCH. S15A used an isolated StrategyRegistry with the real Track1TailDefense implementation; standard runtime composition is not yet proven.",
+    "S1 OPTION resolver and manifest-bound synthetic Option Master contract selection are not implemented.",
+    "Decision/RiskGate/OMS/Virtual Broker/Execution/Position/PnL were not run.",
+    "FAST/DETAILED equivalence was not run."
+  ],
+  "safety": "No KIS/REAL_VTS/Live/account/order APIs, no .env/operational config/collector/scheduler changes. Existing S13 dataset remains unchanged.",
+  "schema": "q25-a5-stage-report-v1",
+  "scope": "Manifest-bound DERIVED_SCENARIO input -> registered Track1TailDefense through StrategyHub -> natural S1 short signal generation. No order/execution lifecycle.",
+  "signal_results": {
+    "downward_call_signals": 3,
+    "events_processed": 8,
+    "expected_strikes_down_call": [
+      107.5,
+      105.0,
+      102.5
+    ],
+    "expected_strikes_up_put": [
+      92.5,
+      95.0,
+      97.5
+    ],
+    "signals_generated": 6,
+    "strategy_hub_failures": 0,
+    "upward_put_signals": 3
+  },
+  "stage": "S15a",
+  "title": "Strategy 1 S15 remediation: validation-only Runtime Input adapter and natural StrategyHub signal generation",
+  "validation": {
+    "git_diff_check": "PASS",
+    "py_compile": "PASS",
+    "pytest_command": "py -m pytest tests/application/composition/test_s1_validation_only_runtime_input.py tests/core/test_track1_spec_alignment.py tests/application/composition/test_s1_s9_freshness_admission_coverage.py -q",
+    "pytest_result": "30 passed, 0 failed"
+  },
+  "verdict": "PSB_PASS_SIGNAL_GENERATION_ONLY"
+}

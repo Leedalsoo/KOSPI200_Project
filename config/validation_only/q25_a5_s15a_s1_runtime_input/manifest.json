@@ -1,0 +1,32 @@
+{
+  "allow_kis_api": false,
+  "allow_live_orders": false,
+  "allow_real_account": false,
+  "contract_identity_authority": "NONE",
+  "dataset_id": "Q25_A5_S15A_S1_SIGNAL_INPUT_20261107",
+  "dataset_path": "data/derived_scenario/q25_a5_s15a_s1_runtime_input/events.jsonl",
+  "dataset_sha256": "05b16ad7aded564becf24b0c317f48756578e0c86b8b03568735c7eb19c16dcf",
+  "event_count": 8,
+  "execution_enabled": false,
+  "expiry_is_authoritative": false,
+  "notes": [
+    "This dataset is for natural StrategyHub signal generation only.",
+    "Reference point and DTE are scenario inputs, not monthly-reference or expiry policy.",
+    "No contract identity, exact expiry, multiplier, option quote, order, or fill is provided."
+  ],
+  "production_runtime_eligible": false,
+  "provenance": "DERIVED_SCENARIO",
+  "risk_profile_path": "config/validation_only/q25_a5_s15a_s1_runtime_input/risk_profile.json",
+  "risk_profile_sha256": "f73caf9b1a0c8b476d906fcb3d2307502bec408568d1c15da8ce936fd17e248d",
+  "rules_version": "q25-a5-s15a-s1-signal-input-v1",
+  "runtime_eligible": false,
+  "scenario_ids": [
+    "S1_S15A_U28_UP",
+    "S1_S15A_U28_DOWN"
+  ],
+  "schema": "q25-s1-validation-input-manifest-v1",
+  "signal_generation_only": true,
+  "strategy_id": "TRACK1_TAIL_DEFENSE",
+  "synthetic": true,
+  "validation_only": true
+}
