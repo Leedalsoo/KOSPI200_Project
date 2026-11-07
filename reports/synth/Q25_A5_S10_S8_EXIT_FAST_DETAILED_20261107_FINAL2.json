@@ -1,0 +1,4807 @@
+{
+  "created_at_kst": "2026-11-07T14:13:20.747592+09:00",
+  "fee_policy": {
+    "actual_account_fee_claim": false,
+    "status": "NOT_INCLUDED",
+    "virtual_fill_fee_krw": 0
+  },
+  "limitations": [
+    "S8 v0.3 remains a draft/unapproved specification; 50% stop, 2x/10% trailing and expiry 15:10 are exercised only as validation-only scenario assumptions.",
+    "The synthetic last_price is the mark source for this validation run; production mark source/cadence/freshness remains unresolved.",
+    "S09 entry ask reference values are not used as cost basis; exit thresholds use actual Virtual execution fill prices.",
+    "STOP/TRAILING close only the triggered leg; the opposite leg remains open and independently managed.",
+    "EXPIRY closes both remaining legs at 15:10 KST through Virtual Broker; no cash settlement is run in S10.",
+    "No fees are applied in these S09 scenario risk profiles.",
+    "S8-U16 remains partially resolved; S8-U20 is blocked by a code/policy mismatch; U19/U21/U22 remain open. No operational default was changed.",
+    "No.1169 leaves retry interval and attempt count UNSET; current code's retry_count >= 3 is an unapproved legacy default and must not be promoted as a confirmed rule.",
+    "No KIS API, REAL_VTS, Live, real account, real order, or production risk configuration was used."
+  ],
+  "mark_policy": {
+    "production_authority": false,
+    "scope": "S8 validation-only manifest-bound quote mark",
+    "source_field": "DERIVED_SCENARIO tick.last_price"
+  },
+  "next_stage": "S11 — S8 PLUMBING_ONLY-to-natural-signal promotion mapping, eligible-case re-run and verdict; separate stage approval required.",
+  "policy_matrix": [
+    {
+      "id": "S8-U16",
+      "question": "Entry window 3 days and 15:00 cutoff; holidays/short sessions",
+      "status": "PARTIALLY_RESOLVED",
+      "validation_basis": "No.1169 sets a 3-trading-day retry window and third-day 15:00 KST cutoff; holiday/short-session boundary remains unresolved."
+    },
+    {
+      "id": "S8-U17",
+      "question": "DTE entry gate 15 or 10 trading days",
+      "status": "RESOLVED_BY_NO1169",
+      "validation_basis": "DTE >= 10 trading days; the earlier DTE >= 15 gate is superseded."
+    },
+    {
+      "id": "S8-U18",
+      "question": "Minimum budget 200,000 KRW gate",
+      "status": "RESOLVED_BY_NO1169",
+      "validation_basis": "The old 200,000 KRW minimum-budget gate is retired."
+    },
+    {
+      "id": "S8-U19",
+      "question": "Which strike rank is attempted first, 5 or 6",
+      "status": "OPEN",
+      "validation_basis": "No explicit first-rank choice is included in S09; operational setting remains unset/fail-closed."
+    },
+    {
+      "code_observation": "core/strategy/track8_macro_regime_monthly_strangle.py hard-codes retry_count >= 3; requires a separate approved policy/code reconciliation before retry-path promotion.",
+      "id": "S8-U20",
+      "question": "Opposite-leg timeout and retry/single-leg exposure policy",
+      "status": "BLOCKED_POLICY_CODE_MISMATCH",
+      "validation_basis": "No.1169 confirms the 10-minute no-fill timer and 3-trading-day retry window, but leaves retry interval and attempt count UNSET. Current Track8 code still contains retry_count >= 3; this legacy code default is not an approved policy and the retry path was not exercised in S10."
+    },
+    {
+      "id": "S8-U21",
+      "question": "Authoritative active/base volatility source, window, cadence and freshness",
+      "status": "OPEN",
+      "validation_basis": "No authoritative source/window/freshness contract is promoted by this synthetic exit validation."
+    },
+    {
+      "id": "S8-U22",
+      "question": "Per-leg maximum premium and strategy/account maximum-loss/margin limits",
+      "status": "OPEN",
+      "validation_basis": "S09's 2,300,000 KRW cap is a validation-only scenario limit, not an approved operational risk limit."
+    }
+  ],
+  "policy_readiness": "BLOCKED_OPEN_OR_UNAPPROVED_ENTRY_POLICIES",
+  "production_runtime_eligible": false,
+  "provenance": "DERIVED_SCENARIO",
+  "report_id": "Q25_A5_S10_S8_EXIT_FAST_DETAILED_20261107",
+  "runtime_eligible": false,
+  "safety": {
+    "existing_s09_dataset_overwritten": false,
+    "kis_api_called": false,
+    "live_used": false,
+    "operational_risk_config_changed": false,
+    "real_account_used": false,
+    "real_order_api_called": false,
+    "real_vts_used": false
+  },
+  "scenario_count": 3,
+  "scenario_results": [
+    {
+      "detailed": {
+        "dataset_sha256": "11ee3a05ad5240ae9e9635f62e3a7c0da821ac9418f44bda3be21c9a00280344",
+        "execution_events": [
+          {
+            "group_complete": true,
+            "plan_legs": [
+              {
+                "leg_id": "call",
+                "option_type": "CALL",
+                "quantity": 1,
+                "side": "BUY",
+                "strike": "515.0"
+              }
+            ],
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_ENTRY_CALL",
+            "reports": [
+              {
+                "execution_id": "EXEC-000001",
+                "execution_price": "1.05",
+                "filled_quantity": 1,
+                "leg_id": "call",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          },
+          {
+            "group_complete": true,
+            "plan_legs": [
+              {
+                "leg_id": "put",
+                "option_type": "PUT",
+                "quantity": 1,
+                "side": "BUY",
+                "strike": "485.0"
+              }
+            ],
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_ENTRY_PUT",
+            "reports": [
+              {
+                "execution_id": "EXEC-000002",
+                "execution_price": "1.05",
+                "filled_quantity": 1,
+                "leg_id": "put",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          },
+          {
+            "group_complete": true,
+            "plan_legs": [
+              {
+                "leg_id": "close-54f213f023b2",
+                "option_type": "CALL",
+                "quantity": 1,
+                "side": "SELL",
+                "strike": "515.0"
+              }
+            ],
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_CLOSE_CALL",
+            "reports": [
+              {
+                "execution_id": "EXEC-000003",
+                "execution_price": "0.38",
+                "filled_quantity": 1,
+                "leg_id": "close-54f213f023b2",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          }
+        ],
+        "exit_evaluations": [
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "1.0",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:00:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "1.0",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:00:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "0.4",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [
+              "CALL_LEG_50PCT_ENTRY_FILL_STOP"
+            ],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": true,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:10:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "0.4",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": false,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:10:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "0.4",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": false,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:10:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "0.4",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": false,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:10:00+09:00"
+          }
+        ],
+        "exit_signals": [
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "reason": "CALL_LEG_50PCT_ENTRY_FILL_STOP",
+            "timestamp": "2026-11-05T09:10:00+09:00"
+          }
+        ],
+        "final_runtime_snapshot": {
+          "fee_records": [
+            {
+              "client_order_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-call-48f0fb0f30c1",
+              "executed_at": "2026-11-05T09:00:00+09:00",
+              "executed_price": "1.05",
+              "executed_quantity": 1,
+              "execution_id": "EXEC-000001",
+              "fee_amount": "0.0",
+              "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:CALL:515",
+              "leg_id": "call",
+              "run_id": "Q25-A5-S10-STOP-20261107",
+              "source": "VSSF:CanonicalExecutionReport.fee",
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            },
+            {
+              "client_order_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-put-9e9d0a9a41a3",
+              "executed_at": "2026-11-05T09:00:00+09:00",
+              "executed_price": "1.05",
+              "executed_quantity": 1,
+              "execution_id": "EXEC-000002",
+              "fee_amount": "0.0",
+              "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:PUT:485",
+              "leg_id": "put",
+              "run_id": "Q25-A5-S10-STOP-20261107",
+              "source": "VSSF:CanonicalExecutionReport.fee",
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            },
+            {
+              "client_order_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-close-54f213f023b2-20900398a7ae",
+              "executed_at": "2026-11-05T09:10:00+09:00",
+              "executed_price": "0.38",
+              "executed_quantity": 1,
+              "execution_id": "EXEC-000003",
+              "fee_amount": "0.0",
+              "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:CALL:515",
+              "leg_id": "close-54f213f023b2",
+              "run_id": "Q25-A5-S10-STOP-20261107",
+              "source": "VSSF:CanonicalExecutionReport.fee",
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            }
+          ],
+          "group_snapshots": {
+            "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1": {
+              "complete": true,
+              "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "legs": [
+                {
+                  "avg_price": 1.05,
+                  "client_order_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-call-48f0fb0f30c1",
+                  "contract_multiplier": "250000.0",
+                  "current_price": 0.38,
+                  "execution_id": "EXEC-000001",
+                  "execution_ids": [
+                    "EXEC-000001"
+                  ],
+                  "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:CALL:515",
+                  "leg_id": "call",
+                  "quantity": 0,
+                  "run_id": "Q25-A5-S10-STOP-20261107",
+                  "unrealized_pnl": 0.0
+                },
+                {
+                  "avg_price": 1.05,
+                  "client_order_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-put-9e9d0a9a41a3",
+                  "contract_multiplier": "250000.0",
+                  "current_price": 1.0,
+                  "execution_id": "EXEC-000002",
+                  "execution_ids": [
+                    "EXEC-000002"
+                  ],
+                  "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:PUT:485",
+                  "leg_id": "put",
+                  "quantity": 1,
+                  "run_id": "Q25-A5-S10-STOP-20261107",
+                  "unrealized_pnl": -12500.0
+                }
+              ],
+              "realized_pnl": -167500.0,
+              "strategy_id": "track8_macro_regime_monthly_strangle",
+              "total_pnl": -180000.0,
+              "unrealized_pnl": -12500.0
+            }
+          },
+          "open_lots": [
+            {
+              "client_order_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-put-9e9d0a9a41a3",
+              "contract_multiplier": "250000.0",
+              "execution_id": "EXEC-000002",
+              "execution_timestamp": "2026-11-05T09:00:00+09:00",
+              "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "identity_source": "OPTION_MASTER",
+              "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:PUT:485",
+              "instrument_identity": {
+                "contract_multiplier": "250000.0",
+                "expiry": "20261119",
+                "identity_source": "OPTION_MASTER",
+                "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:PUT:485",
+                "option_type": "PUT",
+                "strike": "485.0",
+                "symbol": "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:PUT:485"
+              },
+              "leg_id": "put",
+              "opened_quantity": 1,
+              "position_role": "NONE",
+              "remaining_quantity": 1,
+              "run_id": "Q25-A5-S10-STOP-20261107",
+              "side": "BUY",
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            }
+          ],
+          "position_groups": {
+            "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1": {
+              "direction": "MULTI_LEG",
+              "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "legs": [
+                {
+                  "contract_multiplier": "250000.0",
+                  "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:CALL:515",
+                  "leg_id": "call",
+                  "quantity": 1,
+                  "side": "BUY",
+                  "status": "FILLED"
+                },
+                {
+                  "contract_multiplier": "250000.0",
+                  "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:PUT:485",
+                  "leg_id": "put",
+                  "quantity": 1,
+                  "side": "BUY",
+                  "status": "FILLED"
+                }
+              ],
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            }
+          }
+        },
+        "manifest_sha256": "3a4f7eef3bebf00a76a3f21eeed1180ee38f271070841386999969a140699860",
+        "mode": "detailed",
+        "report": {
+          "approved": 3,
+          "events": 8,
+          "execution_ids": [
+            "EXEC-000001",
+            "EXEC-000002",
+            "EXEC-000003"
+          ],
+          "filled": 3,
+          "net_pnl_krw": -180000.0,
+          "realized_pnl_krw": -167500.0,
+          "rejected": 0,
+          "routed": 3,
+          "run_id": "Q25-A5-S10-STOP-20261107",
+          "signals": 3,
+          "strategy_status": {
+            "approved": 3,
+            "decision_rejected": 0,
+            "execution_signals": 3,
+            "filled_quantity": 3,
+            "non_execution_signals": 0,
+            "reaction_signals": 3,
+            "risk_rejected": 0,
+            "routed": 3,
+            "runtime_failures": 0,
+            "strategy_id": "track8_macro_regime_monthly_strangle",
+            "unavailable": 0
+          },
+          "unrealized_pnl_krw": -12500.0
+        },
+        "risk_audit": [
+          {
+            "computed_concurrent_exposure_krw": "262500.000",
+            "computed_gross_premium_krw": "262500.000",
+            "computed_max_loss_krw": "262500.000",
+            "dataset_sha256": "11ee3a05ad5240ae9e9635f62e3a7c0da821ac9418f44bda3be21c9a00280344",
+            "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+            "leg_id": "call",
+            "manifest_sha256": "3a4f7eef3bebf00a76a3f21eeed1180ee38f271070841386999969a140699860",
+            "operational_reference_overage_krw": "12500.000",
+            "run_id": "Q25-A5-S10-STOP-20261107",
+            "scenario_id": "Q25_A5_S09_S8_STOP_20261107",
+            "status": "ALLOW",
+            "validation_budget_overage_krw": "0"
+          },
+          {
+            "computed_concurrent_exposure_krw": "525000.000",
+            "computed_gross_premium_krw": "525000.000",
+            "computed_max_loss_krw": "525000.000",
+            "dataset_sha256": "11ee3a05ad5240ae9e9635f62e3a7c0da821ac9418f44bda3be21c9a00280344",
+            "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+            "leg_id": "put",
+            "manifest_sha256": "3a4f7eef3bebf00a76a3f21eeed1180ee38f271070841386999969a140699860",
+            "operational_reference_overage_krw": "275000.000",
+            "run_id": "Q25-A5-S10-STOP-20261107",
+            "scenario_id": "Q25_A5_S09_S8_STOP_20261107",
+            "status": "ALLOW",
+            "validation_budget_overage_krw": "0"
+          }
+        ],
+        "risk_profile_sha256": "2ea6ef7309aca74c97a002efe99a9720e989ecd0b24adbcb7d87325f1c09da82",
+        "scenario": "stop",
+        "scenario_id": "Q25_A5_S09_S8_STOP_20261107",
+        "strategy_callbacks": [
+          {
+            "after": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": true,
+              "entry_stage": "PUT_READY",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": false,
+              "put_entry_fill_price": null,
+              "put_open": false,
+              "put_peak_mark": "0",
+              "put_strike": "485.0"
+            },
+            "before": {
+              "call_entry_fill_price": null,
+              "call_open": false,
+              "call_peak_mark": "0",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": true,
+              "entry_stage": "CALL_PENDING",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": false,
+              "put_entry_fill_price": null,
+              "put_open": false,
+              "put_peak_mark": "0",
+              "put_strike": "485.0"
+            },
+            "group_complete": true,
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_ENTRY_CALL",
+            "reports": [
+              {
+                "execution_id": "EXEC-000001",
+                "filled_quantity": 1,
+                "leg_id": "call",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          },
+          {
+            "after": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "before": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": true,
+              "entry_stage": "PUT_PENDING",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": false,
+              "put_entry_fill_price": null,
+              "put_open": false,
+              "put_peak_mark": "0",
+              "put_strike": "485.0"
+            },
+            "group_complete": true,
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_ENTRY_PUT",
+            "reports": [
+              {
+                "execution_id": "EXEC-000002",
+                "filled_quantity": 1,
+                "leg_id": "put",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          },
+          {
+            "after": {
+              "call_entry_fill_price": "1.05",
+              "call_open": false,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "before": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": true,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "group_complete": true,
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_CLOSE_CALL",
+            "reports": [
+              {
+                "execution_id": "EXEC-000003",
+                "filled_quantity": 1,
+                "leg_id": "close-54f213f023b2",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          }
+        ],
+        "trace": {
+          "execution_observer": {
+            "execution_reports_observed": 3,
+            "fill_records_status": "CANONICAL_FILLS_OBSERVED",
+            "fills_observed": 3,
+            "order_commands_observed": 3,
+            "order_records_status": "OBSERVED_READ_ONLY",
+            "status": "CONNECTED",
+            "trace_write_errors": []
+          },
+          "path": "reports/synth/Q25_A5_S10_S8_STOP_DETAILED_TRACE_20261107_FINAL2.jsonl",
+          "sha256": "46e71e9a10ae85bff406c0f68ab2e01f7be460f8da911dced63c3bb60749c275",
+          "status": "CONNECTED"
+        }
+      },
+      "fast": {
+        "dataset_sha256": "11ee3a05ad5240ae9e9635f62e3a7c0da821ac9418f44bda3be21c9a00280344",
+        "execution_events": [
+          {
+            "group_complete": true,
+            "plan_legs": [
+              {
+                "leg_id": "call",
+                "option_type": "CALL",
+                "quantity": 1,
+                "side": "BUY",
+                "strike": "515.0"
+              }
+            ],
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_ENTRY_CALL",
+            "reports": [
+              {
+                "execution_id": "EXEC-000001",
+                "execution_price": "1.05",
+                "filled_quantity": 1,
+                "leg_id": "call",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          },
+          {
+            "group_complete": true,
+            "plan_legs": [
+              {
+                "leg_id": "put",
+                "option_type": "PUT",
+                "quantity": 1,
+                "side": "BUY",
+                "strike": "485.0"
+              }
+            ],
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_ENTRY_PUT",
+            "reports": [
+              {
+                "execution_id": "EXEC-000002",
+                "execution_price": "1.05",
+                "filled_quantity": 1,
+                "leg_id": "put",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          },
+          {
+            "group_complete": true,
+            "plan_legs": [
+              {
+                "leg_id": "close-54f213f023b2",
+                "option_type": "CALL",
+                "quantity": 1,
+                "side": "SELL",
+                "strike": "515.0"
+              }
+            ],
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_CLOSE_CALL",
+            "reports": [
+              {
+                "execution_id": "EXEC-000003",
+                "execution_price": "0.38",
+                "filled_quantity": 1,
+                "leg_id": "close-54f213f023b2",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          }
+        ],
+        "exit_evaluations": [
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "1.0",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:00:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "1.0",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:00:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "0.4",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [
+              "CALL_LEG_50PCT_ENTRY_FILL_STOP"
+            ],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": true,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:10:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "0.4",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": false,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:10:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "0.4",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": false,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:10:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "0.4",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": false,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:10:00+09:00"
+          }
+        ],
+        "exit_signals": [
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "reason": "CALL_LEG_50PCT_ENTRY_FILL_STOP",
+            "timestamp": "2026-11-05T09:10:00+09:00"
+          }
+        ],
+        "final_runtime_snapshot": {
+          "fee_records": [
+            {
+              "client_order_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-call-48f0fb0f30c1",
+              "executed_at": "2026-11-05T09:00:00+09:00",
+              "executed_price": "1.05",
+              "executed_quantity": 1,
+              "execution_id": "EXEC-000001",
+              "fee_amount": "0.0",
+              "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:CALL:515",
+              "leg_id": "call",
+              "run_id": "Q25-A5-S10-STOP-20261107",
+              "source": "VSSF:CanonicalExecutionReport.fee",
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            },
+            {
+              "client_order_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-put-9e9d0a9a41a3",
+              "executed_at": "2026-11-05T09:00:00+09:00",
+              "executed_price": "1.05",
+              "executed_quantity": 1,
+              "execution_id": "EXEC-000002",
+              "fee_amount": "0.0",
+              "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:PUT:485",
+              "leg_id": "put",
+              "run_id": "Q25-A5-S10-STOP-20261107",
+              "source": "VSSF:CanonicalExecutionReport.fee",
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            },
+            {
+              "client_order_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-close-54f213f023b2-20900398a7ae",
+              "executed_at": "2026-11-05T09:10:00+09:00",
+              "executed_price": "0.38",
+              "executed_quantity": 1,
+              "execution_id": "EXEC-000003",
+              "fee_amount": "0.0",
+              "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:CALL:515",
+              "leg_id": "close-54f213f023b2",
+              "run_id": "Q25-A5-S10-STOP-20261107",
+              "source": "VSSF:CanonicalExecutionReport.fee",
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            }
+          ],
+          "group_snapshots": {
+            "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1": {
+              "complete": true,
+              "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "legs": [
+                {
+                  "avg_price": 1.05,
+                  "client_order_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-call-48f0fb0f30c1",
+                  "contract_multiplier": "250000.0",
+                  "current_price": 0.38,
+                  "execution_id": "EXEC-000001",
+                  "execution_ids": [
+                    "EXEC-000001"
+                  ],
+                  "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:CALL:515",
+                  "leg_id": "call",
+                  "quantity": 0,
+                  "run_id": "Q25-A5-S10-STOP-20261107",
+                  "unrealized_pnl": 0.0
+                },
+                {
+                  "avg_price": 1.05,
+                  "client_order_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-put-9e9d0a9a41a3",
+                  "contract_multiplier": "250000.0",
+                  "current_price": 1.0,
+                  "execution_id": "EXEC-000002",
+                  "execution_ids": [
+                    "EXEC-000002"
+                  ],
+                  "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:PUT:485",
+                  "leg_id": "put",
+                  "quantity": 1,
+                  "run_id": "Q25-A5-S10-STOP-20261107",
+                  "unrealized_pnl": -12500.0
+                }
+              ],
+              "realized_pnl": -167500.0,
+              "strategy_id": "track8_macro_regime_monthly_strangle",
+              "total_pnl": -180000.0,
+              "unrealized_pnl": -12500.0
+            }
+          },
+          "open_lots": [
+            {
+              "client_order_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-put-9e9d0a9a41a3",
+              "contract_multiplier": "250000.0",
+              "execution_id": "EXEC-000002",
+              "execution_timestamp": "2026-11-05T09:00:00+09:00",
+              "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "identity_source": "OPTION_MASTER",
+              "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:PUT:485",
+              "instrument_identity": {
+                "contract_multiplier": "250000.0",
+                "expiry": "20261119",
+                "identity_source": "OPTION_MASTER",
+                "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:PUT:485",
+                "option_type": "PUT",
+                "strike": "485.0",
+                "symbol": "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:PUT:485"
+              },
+              "leg_id": "put",
+              "opened_quantity": 1,
+              "position_role": "NONE",
+              "remaining_quantity": 1,
+              "run_id": "Q25-A5-S10-STOP-20261107",
+              "side": "BUY",
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            }
+          ],
+          "position_groups": {
+            "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1": {
+              "direction": "MULTI_LEG",
+              "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "legs": [
+                {
+                  "contract_multiplier": "250000.0",
+                  "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:CALL:515",
+                  "leg_id": "call",
+                  "quantity": 1,
+                  "side": "BUY",
+                  "status": "FILLED"
+                },
+                {
+                  "contract_multiplier": "250000.0",
+                  "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:PUT:485",
+                  "leg_id": "put",
+                  "quantity": 1,
+                  "side": "BUY",
+                  "status": "FILLED"
+                }
+              ],
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            }
+          }
+        },
+        "manifest_sha256": "3a4f7eef3bebf00a76a3f21eeed1180ee38f271070841386999969a140699860",
+        "mode": "fast",
+        "report": {
+          "approved": 3,
+          "events": 8,
+          "execution_ids": [
+            "EXEC-000001",
+            "EXEC-000002",
+            "EXEC-000003"
+          ],
+          "filled": 3,
+          "net_pnl_krw": -180000.0,
+          "realized_pnl_krw": -167500.0,
+          "rejected": 0,
+          "routed": 3,
+          "run_id": "Q25-A5-S10-STOP-20261107",
+          "signals": 3,
+          "strategy_status": {
+            "approved": 3,
+            "decision_rejected": 0,
+            "execution_signals": 3,
+            "filled_quantity": 3,
+            "non_execution_signals": 0,
+            "reaction_signals": 3,
+            "risk_rejected": 0,
+            "routed": 3,
+            "runtime_failures": 0,
+            "strategy_id": "track8_macro_regime_monthly_strangle",
+            "unavailable": 0
+          },
+          "unrealized_pnl_krw": -12500.0
+        },
+        "risk_audit": [
+          {
+            "computed_concurrent_exposure_krw": "262500.000",
+            "computed_gross_premium_krw": "262500.000",
+            "computed_max_loss_krw": "262500.000",
+            "dataset_sha256": "11ee3a05ad5240ae9e9635f62e3a7c0da821ac9418f44bda3be21c9a00280344",
+            "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+            "leg_id": "call",
+            "manifest_sha256": "3a4f7eef3bebf00a76a3f21eeed1180ee38f271070841386999969a140699860",
+            "operational_reference_overage_krw": "12500.000",
+            "run_id": "Q25-A5-S10-STOP-20261107",
+            "scenario_id": "Q25_A5_S09_S8_STOP_20261107",
+            "status": "ALLOW",
+            "validation_budget_overage_krw": "0"
+          },
+          {
+            "computed_concurrent_exposure_krw": "525000.000",
+            "computed_gross_premium_krw": "525000.000",
+            "computed_max_loss_krw": "525000.000",
+            "dataset_sha256": "11ee3a05ad5240ae9e9635f62e3a7c0da821ac9418f44bda3be21c9a00280344",
+            "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+            "leg_id": "put",
+            "manifest_sha256": "3a4f7eef3bebf00a76a3f21eeed1180ee38f271070841386999969a140699860",
+            "operational_reference_overage_krw": "275000.000",
+            "run_id": "Q25-A5-S10-STOP-20261107",
+            "scenario_id": "Q25_A5_S09_S8_STOP_20261107",
+            "status": "ALLOW",
+            "validation_budget_overage_krw": "0"
+          }
+        ],
+        "risk_profile_sha256": "2ea6ef7309aca74c97a002efe99a9720e989ecd0b24adbcb7d87325f1c09da82",
+        "scenario": "stop",
+        "scenario_id": "Q25_A5_S09_S8_STOP_20261107",
+        "strategy_callbacks": [
+          {
+            "after": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": true,
+              "entry_stage": "PUT_READY",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": false,
+              "put_entry_fill_price": null,
+              "put_open": false,
+              "put_peak_mark": "0",
+              "put_strike": "485.0"
+            },
+            "before": {
+              "call_entry_fill_price": null,
+              "call_open": false,
+              "call_peak_mark": "0",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": true,
+              "entry_stage": "CALL_PENDING",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": false,
+              "put_entry_fill_price": null,
+              "put_open": false,
+              "put_peak_mark": "0",
+              "put_strike": "485.0"
+            },
+            "group_complete": true,
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_ENTRY_CALL",
+            "reports": [
+              {
+                "execution_id": "EXEC-000001",
+                "filled_quantity": 1,
+                "leg_id": "call",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          },
+          {
+            "after": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "before": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": true,
+              "entry_stage": "PUT_PENDING",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": false,
+              "put_entry_fill_price": null,
+              "put_open": false,
+              "put_peak_mark": "0",
+              "put_strike": "485.0"
+            },
+            "group_complete": true,
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_ENTRY_PUT",
+            "reports": [
+              {
+                "execution_id": "EXEC-000002",
+                "filled_quantity": 1,
+                "leg_id": "put",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          },
+          {
+            "after": {
+              "call_entry_fill_price": "1.05",
+              "call_open": false,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "before": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": true,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "group_complete": true,
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_CLOSE_CALL",
+            "reports": [
+              {
+                "execution_id": "EXEC-000003",
+                "filled_quantity": 1,
+                "leg_id": "close-54f213f023b2",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          }
+        ],
+        "trace": {
+          "execution_observer": {
+            "status": "DISABLED_FAST_MODE"
+          },
+          "path": null,
+          "sha256": null,
+          "status": "DISABLED_FAST_MODE"
+        }
+      },
+      "scenario": "stop",
+      "verification": {
+        "close_filled_reports": 1,
+        "close_purpose": "MONTHLY_STRANGLE_CLOSE_CALL",
+        "expected_exit_reason": "CALL_LEG_50PCT_ENTRY_FILL_STOP",
+        "expected_fills": 3,
+        "expected_open_lots": 1,
+        "fast_detailed_semantic_equivalence": true,
+        "fee_records": [
+          {
+            "client_order_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-call-48f0fb0f30c1",
+            "executed_at": "2026-11-05T09:00:00+09:00",
+            "executed_price": "1.05",
+            "executed_quantity": 1,
+            "execution_id": "EXEC-000001",
+            "fee_amount": "0.0",
+            "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:CALL:515",
+            "leg_id": "call",
+            "run_id": "Q25-A5-S10-STOP-20261107",
+            "source": "VSSF:CanonicalExecutionReport.fee",
+            "strategy_id": "track8_macro_regime_monthly_strangle"
+          },
+          {
+            "client_order_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-put-9e9d0a9a41a3",
+            "executed_at": "2026-11-05T09:00:00+09:00",
+            "executed_price": "1.05",
+            "executed_quantity": 1,
+            "execution_id": "EXEC-000002",
+            "fee_amount": "0.0",
+            "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:PUT:485",
+            "leg_id": "put",
+            "run_id": "Q25-A5-S10-STOP-20261107",
+            "source": "VSSF:CanonicalExecutionReport.fee",
+            "strategy_id": "track8_macro_regime_monthly_strangle"
+          },
+          {
+            "client_order_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-close-54f213f023b2-20900398a7ae",
+            "executed_at": "2026-11-05T09:10:00+09:00",
+            "executed_price": "0.38",
+            "executed_quantity": 1,
+            "execution_id": "EXEC-000003",
+            "fee_amount": "0.0",
+            "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:CALL:515",
+            "leg_id": "close-54f213f023b2",
+            "run_id": "Q25-A5-S10-STOP-20261107",
+            "source": "VSSF:CanonicalExecutionReport.fee",
+            "strategy_id": "track8_macro_regime_monthly_strangle"
+          }
+        ],
+        "final_strategy_state": {
+          "call_entry_fill_price": "1.05",
+          "call_open": false,
+          "call_peak_mark": "1.05",
+          "call_strike": "515.0",
+          "entry_block_reason": null,
+          "entry_pending": false,
+          "entry_stage": "COMPLETE",
+          "exit_pending": false,
+          "expiry": "20261119",
+          "is_active": true,
+          "put_entry_fill_price": "1.05",
+          "put_open": true,
+          "put_peak_mark": "1.05",
+          "put_strike": "485.0"
+        },
+        "net_pnl_krw": -180000.0,
+        "observed_exit_reasons": [
+          "CALL_LEG_50PCT_ENTRY_FILL_STOP"
+        ],
+        "observed_fills": 3,
+        "observed_open_lots": 1,
+        "position_group_snapshots": {
+          "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1": {
+            "complete": true,
+            "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+            "legs": [
+              {
+                "avg_price": 1.05,
+                "client_order_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-call-48f0fb0f30c1",
+                "contract_multiplier": "250000.0",
+                "current_price": 0.38,
+                "execution_id": "EXEC-000001",
+                "execution_ids": [
+                  "EXEC-000001"
+                ],
+                "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                "identity_source": "OPTION_MASTER",
+                "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:CALL:515",
+                "leg_id": "call",
+                "quantity": 0,
+                "run_id": "Q25-A5-S10-STOP-20261107",
+                "unrealized_pnl": 0.0
+              },
+              {
+                "avg_price": 1.05,
+                "client_order_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-put-9e9d0a9a41a3",
+                "contract_multiplier": "250000.0",
+                "current_price": 1.0,
+                "execution_id": "EXEC-000002",
+                "execution_ids": [
+                  "EXEC-000002"
+                ],
+                "group_id": "Q25-A5-S10-STOP-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                "identity_source": "OPTION_MASTER",
+                "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:PUT:485",
+                "leg_id": "put",
+                "quantity": 1,
+                "run_id": "Q25-A5-S10-STOP-20261107",
+                "unrealized_pnl": -12500.0
+              }
+            ],
+            "realized_pnl": -167500.0,
+            "strategy_id": "track8_macro_regime_monthly_strangle",
+            "total_pnl": -180000.0,
+            "unrealized_pnl": -12500.0
+          }
+        },
+        "realized_pnl_krw": -167500.0,
+        "rejected": 0,
+        "scenario": "stop",
+        "status": "PASS",
+        "strategy_state_matches": true,
+        "unrealized_pnl_krw": -12500.0
+      }
+    },
+    {
+      "detailed": {
+        "dataset_sha256": "1d0db3c2152c3ec607ee1716e0735eb003c5e987c1b0700cd5f8d4a1d202b18e",
+        "execution_events": [
+          {
+            "group_complete": true,
+            "plan_legs": [
+              {
+                "leg_id": "call",
+                "option_type": "CALL",
+                "quantity": 1,
+                "side": "BUY",
+                "strike": "515.0"
+              }
+            ],
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_ENTRY_CALL",
+            "reports": [
+              {
+                "execution_id": "EXEC-000001",
+                "execution_price": "0.95",
+                "filled_quantity": 1,
+                "leg_id": "call",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          },
+          {
+            "group_complete": true,
+            "plan_legs": [
+              {
+                "leg_id": "put",
+                "option_type": "PUT",
+                "quantity": 1,
+                "side": "BUY",
+                "strike": "485.0"
+              }
+            ],
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_ENTRY_PUT",
+            "reports": [
+              {
+                "execution_id": "EXEC-000002",
+                "execution_price": "1.05",
+                "filled_quantity": 1,
+                "leg_id": "put",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          },
+          {
+            "group_complete": true,
+            "plan_legs": [
+              {
+                "leg_id": "close-4cc4036cfc54",
+                "option_type": "CALL",
+                "quantity": 1,
+                "side": "SELL",
+                "strike": "515.0"
+              }
+            ],
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_CLOSE_CALL",
+            "reports": [
+              {
+                "execution_id": "EXEC-000003",
+                "execution_price": "2.09",
+                "filled_quantity": 1,
+                "leg_id": "close-4cc4036cfc54",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          }
+        ],
+        "exit_evaluations": [
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "0.9",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "0.95",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:00:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "0.9",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "0.95",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:00:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "2.2",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "2.2",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:10:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "2.2",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "2.2",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:10:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "2.2",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "2.2",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:10:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "2.2",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "2.2",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:10:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "2.5",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "2.5",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:20:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "2.5",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "2.5",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:20:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "2.5",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "2.5",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:20:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "2.5",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "2.5",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:20:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "2.2",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [
+              "CALL_LEG_2X_ARMED_10PCT_DRAWDOWN"
+            ],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "2.5",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": true,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:30:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "2.2",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": false,
+              "call_peak_mark": "2.5",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:30:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "2.2",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": false,
+              "call_peak_mark": "2.5",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:30:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "2.2",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": false,
+              "call_peak_mark": "2.5",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:30:00+09:00"
+          }
+        ],
+        "exit_signals": [
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "reason": "CALL_LEG_2X_ARMED_10PCT_DRAWDOWN",
+            "timestamp": "2026-11-05T09:30:00+09:00"
+          }
+        ],
+        "final_runtime_snapshot": {
+          "fee_records": [
+            {
+              "client_order_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-call-aa51b8c56fcf",
+              "executed_at": "2026-11-05T09:00:00+09:00",
+              "executed_price": "0.95",
+              "executed_quantity": 1,
+              "execution_id": "EXEC-000001",
+              "fee_amount": "0.0",
+              "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:TRAILING:20261119:CALL:515",
+              "leg_id": "call",
+              "run_id": "Q25-A5-S10-TRAILING-20261107",
+              "source": "VSSF:CanonicalExecutionReport.fee",
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            },
+            {
+              "client_order_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-put-bd22d7720217",
+              "executed_at": "2026-11-05T09:00:00+09:00",
+              "executed_price": "1.05",
+              "executed_quantity": 1,
+              "execution_id": "EXEC-000002",
+              "fee_amount": "0.0",
+              "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:TRAILING:20261119:PUT:485",
+              "leg_id": "put",
+              "run_id": "Q25-A5-S10-TRAILING-20261107",
+              "source": "VSSF:CanonicalExecutionReport.fee",
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            },
+            {
+              "client_order_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-close-4cc4036cfc54-78425e58fcb6",
+              "executed_at": "2026-11-05T09:30:00+09:00",
+              "executed_price": "2.09",
+              "executed_quantity": 1,
+              "execution_id": "EXEC-000003",
+              "fee_amount": "0.0",
+              "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:TRAILING:20261119:CALL:515",
+              "leg_id": "close-4cc4036cfc54",
+              "run_id": "Q25-A5-S10-TRAILING-20261107",
+              "source": "VSSF:CanonicalExecutionReport.fee",
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            }
+          ],
+          "group_snapshots": {
+            "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1": {
+              "complete": true,
+              "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "legs": [
+                {
+                  "avg_price": 0.95,
+                  "client_order_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-call-aa51b8c56fcf",
+                  "contract_multiplier": "250000.0",
+                  "current_price": 2.09,
+                  "execution_id": "EXEC-000001",
+                  "execution_ids": [
+                    "EXEC-000001"
+                  ],
+                  "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:TRAILING:20261119:CALL:515",
+                  "leg_id": "call",
+                  "quantity": 0,
+                  "run_id": "Q25-A5-S10-TRAILING-20261107",
+                  "unrealized_pnl": 0.0
+                },
+                {
+                  "avg_price": 1.05,
+                  "client_order_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-put-bd22d7720217",
+                  "contract_multiplier": "250000.0",
+                  "current_price": 1.0,
+                  "execution_id": "EXEC-000002",
+                  "execution_ids": [
+                    "EXEC-000002"
+                  ],
+                  "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:TRAILING:20261119:PUT:485",
+                  "leg_id": "put",
+                  "quantity": 1,
+                  "run_id": "Q25-A5-S10-TRAILING-20261107",
+                  "unrealized_pnl": -12500.0
+                }
+              ],
+              "realized_pnl": 285000.0,
+              "strategy_id": "track8_macro_regime_monthly_strangle",
+              "total_pnl": 272500.0,
+              "unrealized_pnl": -12500.0
+            }
+          },
+          "open_lots": [
+            {
+              "client_order_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-put-bd22d7720217",
+              "contract_multiplier": "250000.0",
+              "execution_id": "EXEC-000002",
+              "execution_timestamp": "2026-11-05T09:00:00+09:00",
+              "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "identity_source": "OPTION_MASTER",
+              "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:TRAILING:20261119:PUT:485",
+              "instrument_identity": {
+                "contract_multiplier": "250000.0",
+                "expiry": "20261119",
+                "identity_source": "OPTION_MASTER",
+                "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:TRAILING:20261119:PUT:485",
+                "option_type": "PUT",
+                "strike": "485.0",
+                "symbol": "SYNTHETIC_CONTRACT:S8A5S09:TRAILING:20261119:PUT:485"
+              },
+              "leg_id": "put",
+              "opened_quantity": 1,
+              "position_role": "NONE",
+              "remaining_quantity": 1,
+              "run_id": "Q25-A5-S10-TRAILING-20261107",
+              "side": "BUY",
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            }
+          ],
+          "position_groups": {
+            "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1": {
+              "direction": "MULTI_LEG",
+              "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "legs": [
+                {
+                  "contract_multiplier": "250000.0",
+                  "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:TRAILING:20261119:CALL:515",
+                  "leg_id": "call",
+                  "quantity": 1,
+                  "side": "BUY",
+                  "status": "FILLED"
+                },
+                {
+                  "contract_multiplier": "250000.0",
+                  "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:TRAILING:20261119:PUT:485",
+                  "leg_id": "put",
+                  "quantity": 1,
+                  "side": "BUY",
+                  "status": "FILLED"
+                }
+              ],
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            }
+          }
+        },
+        "manifest_sha256": "75061b0bbe1c4270883099ea7ce52d92685e57170e3a4e094a7a243adfd5c229",
+        "mode": "detailed",
+        "report": {
+          "approved": 3,
+          "events": 16,
+          "execution_ids": [
+            "EXEC-000001",
+            "EXEC-000002",
+            "EXEC-000003"
+          ],
+          "filled": 3,
+          "net_pnl_krw": 272500.0,
+          "realized_pnl_krw": 285000.0,
+          "rejected": 0,
+          "routed": 3,
+          "run_id": "Q25-A5-S10-TRAILING-20261107",
+          "signals": 3,
+          "strategy_status": {
+            "approved": 3,
+            "decision_rejected": 0,
+            "execution_signals": 3,
+            "filled_quantity": 3,
+            "non_execution_signals": 0,
+            "reaction_signals": 3,
+            "risk_rejected": 0,
+            "routed": 3,
+            "runtime_failures": 0,
+            "strategy_id": "track8_macro_regime_monthly_strangle",
+            "unavailable": 0
+          },
+          "unrealized_pnl_krw": -12500.0
+        },
+        "risk_audit": [
+          {
+            "computed_concurrent_exposure_krw": "237500.000",
+            "computed_gross_premium_krw": "237500.000",
+            "computed_max_loss_krw": "237500.000",
+            "dataset_sha256": "1d0db3c2152c3ec607ee1716e0735eb003c5e987c1b0700cd5f8d4a1d202b18e",
+            "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+            "leg_id": "call",
+            "manifest_sha256": "75061b0bbe1c4270883099ea7ce52d92685e57170e3a4e094a7a243adfd5c229",
+            "operational_reference_overage_krw": "0",
+            "run_id": "Q25-A5-S10-TRAILING-20261107",
+            "scenario_id": "Q25_A5_S09_S8_TRAILING_20261107",
+            "status": "ALLOW",
+            "validation_budget_overage_krw": "0"
+          },
+          {
+            "computed_concurrent_exposure_krw": "500000.000",
+            "computed_gross_premium_krw": "500000.000",
+            "computed_max_loss_krw": "500000.000",
+            "dataset_sha256": "1d0db3c2152c3ec607ee1716e0735eb003c5e987c1b0700cd5f8d4a1d202b18e",
+            "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+            "leg_id": "put",
+            "manifest_sha256": "75061b0bbe1c4270883099ea7ce52d92685e57170e3a4e094a7a243adfd5c229",
+            "operational_reference_overage_krw": "250000.000",
+            "run_id": "Q25-A5-S10-TRAILING-20261107",
+            "scenario_id": "Q25_A5_S09_S8_TRAILING_20261107",
+            "status": "ALLOW",
+            "validation_budget_overage_krw": "0"
+          }
+        ],
+        "risk_profile_sha256": "e03611d035da5f6462d583935c9f3524881fcaaa3ab1565c3424a8413cd23ff5",
+        "scenario": "trailing",
+        "scenario_id": "Q25_A5_S09_S8_TRAILING_20261107",
+        "strategy_callbacks": [
+          {
+            "after": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "0.95",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": true,
+              "entry_stage": "PUT_READY",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": false,
+              "put_entry_fill_price": null,
+              "put_open": false,
+              "put_peak_mark": "0",
+              "put_strike": "485.0"
+            },
+            "before": {
+              "call_entry_fill_price": null,
+              "call_open": false,
+              "call_peak_mark": "0",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": true,
+              "entry_stage": "CALL_PENDING",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": false,
+              "put_entry_fill_price": null,
+              "put_open": false,
+              "put_peak_mark": "0",
+              "put_strike": "485.0"
+            },
+            "group_complete": true,
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_ENTRY_CALL",
+            "reports": [
+              {
+                "execution_id": "EXEC-000001",
+                "filled_quantity": 1,
+                "leg_id": "call",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          },
+          {
+            "after": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "0.95",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "before": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "0.95",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": true,
+              "entry_stage": "PUT_PENDING",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": false,
+              "put_entry_fill_price": null,
+              "put_open": false,
+              "put_peak_mark": "0",
+              "put_strike": "485.0"
+            },
+            "group_complete": true,
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_ENTRY_PUT",
+            "reports": [
+              {
+                "execution_id": "EXEC-000002",
+                "filled_quantity": 1,
+                "leg_id": "put",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          },
+          {
+            "after": {
+              "call_entry_fill_price": "0.95",
+              "call_open": false,
+              "call_peak_mark": "2.5",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "before": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "2.5",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": true,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "group_complete": true,
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_CLOSE_CALL",
+            "reports": [
+              {
+                "execution_id": "EXEC-000003",
+                "filled_quantity": 1,
+                "leg_id": "close-4cc4036cfc54",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          }
+        ],
+        "trace": {
+          "execution_observer": {
+            "execution_reports_observed": 3,
+            "fill_records_status": "CANONICAL_FILLS_OBSERVED",
+            "fills_observed": 3,
+            "order_commands_observed": 3,
+            "order_records_status": "OBSERVED_READ_ONLY",
+            "status": "CONNECTED",
+            "trace_write_errors": []
+          },
+          "path": "reports/synth/Q25_A5_S10_S8_TRAILING_DETAILED_TRACE_20261107_FINAL2.jsonl",
+          "sha256": "61aeb5f423a14db22509583d10a18e80747b3034012fa9fca1fd76033a531e2a",
+          "status": "CONNECTED"
+        }
+      },
+      "fast": {
+        "dataset_sha256": "1d0db3c2152c3ec607ee1716e0735eb003c5e987c1b0700cd5f8d4a1d202b18e",
+        "execution_events": [
+          {
+            "group_complete": true,
+            "plan_legs": [
+              {
+                "leg_id": "call",
+                "option_type": "CALL",
+                "quantity": 1,
+                "side": "BUY",
+                "strike": "515.0"
+              }
+            ],
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_ENTRY_CALL",
+            "reports": [
+              {
+                "execution_id": "EXEC-000001",
+                "execution_price": "0.95",
+                "filled_quantity": 1,
+                "leg_id": "call",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          },
+          {
+            "group_complete": true,
+            "plan_legs": [
+              {
+                "leg_id": "put",
+                "option_type": "PUT",
+                "quantity": 1,
+                "side": "BUY",
+                "strike": "485.0"
+              }
+            ],
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_ENTRY_PUT",
+            "reports": [
+              {
+                "execution_id": "EXEC-000002",
+                "execution_price": "1.05",
+                "filled_quantity": 1,
+                "leg_id": "put",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          },
+          {
+            "group_complete": true,
+            "plan_legs": [
+              {
+                "leg_id": "close-4cc4036cfc54",
+                "option_type": "CALL",
+                "quantity": 1,
+                "side": "SELL",
+                "strike": "515.0"
+              }
+            ],
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_CLOSE_CALL",
+            "reports": [
+              {
+                "execution_id": "EXEC-000003",
+                "execution_price": "2.09",
+                "filled_quantity": 1,
+                "leg_id": "close-4cc4036cfc54",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          }
+        ],
+        "exit_evaluations": [
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "0.9",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "0.95",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:00:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "0.9",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "0.95",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:00:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "2.2",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "2.2",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:10:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "2.2",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "2.2",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:10:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "2.2",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "2.2",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:10:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "2.2",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "2.2",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:10:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "2.5",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "2.5",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:20:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "2.5",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "2.5",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:20:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "2.5",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "2.5",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:20:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "2.5",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "2.5",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:20:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "2.2",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [
+              "CALL_LEG_2X_ARMED_10PCT_DRAWDOWN"
+            ],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "2.5",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": true,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:30:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "2.2",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": false,
+              "call_peak_mark": "2.5",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:30:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "2.2",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": false,
+              "call_peak_mark": "2.5",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:30:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "2.2",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "0.95",
+              "call_open": false,
+              "call_peak_mark": "2.5",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:30:00+09:00"
+          }
+        ],
+        "exit_signals": [
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "reason": "CALL_LEG_2X_ARMED_10PCT_DRAWDOWN",
+            "timestamp": "2026-11-05T09:30:00+09:00"
+          }
+        ],
+        "final_runtime_snapshot": {
+          "fee_records": [
+            {
+              "client_order_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-call-aa51b8c56fcf",
+              "executed_at": "2026-11-05T09:00:00+09:00",
+              "executed_price": "0.95",
+              "executed_quantity": 1,
+              "execution_id": "EXEC-000001",
+              "fee_amount": "0.0",
+              "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:TRAILING:20261119:CALL:515",
+              "leg_id": "call",
+              "run_id": "Q25-A5-S10-TRAILING-20261107",
+              "source": "VSSF:CanonicalExecutionReport.fee",
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            },
+            {
+              "client_order_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-put-bd22d7720217",
+              "executed_at": "2026-11-05T09:00:00+09:00",
+              "executed_price": "1.05",
+              "executed_quantity": 1,
+              "execution_id": "EXEC-000002",
+              "fee_amount": "0.0",
+              "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:TRAILING:20261119:PUT:485",
+              "leg_id": "put",
+              "run_id": "Q25-A5-S10-TRAILING-20261107",
+              "source": "VSSF:CanonicalExecutionReport.fee",
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            },
+            {
+              "client_order_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-close-4cc4036cfc54-78425e58fcb6",
+              "executed_at": "2026-11-05T09:30:00+09:00",
+              "executed_price": "2.09",
+              "executed_quantity": 1,
+              "execution_id": "EXEC-000003",
+              "fee_amount": "0.0",
+              "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:TRAILING:20261119:CALL:515",
+              "leg_id": "close-4cc4036cfc54",
+              "run_id": "Q25-A5-S10-TRAILING-20261107",
+              "source": "VSSF:CanonicalExecutionReport.fee",
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            }
+          ],
+          "group_snapshots": {
+            "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1": {
+              "complete": true,
+              "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "legs": [
+                {
+                  "avg_price": 0.95,
+                  "client_order_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-call-aa51b8c56fcf",
+                  "contract_multiplier": "250000.0",
+                  "current_price": 2.09,
+                  "execution_id": "EXEC-000001",
+                  "execution_ids": [
+                    "EXEC-000001"
+                  ],
+                  "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:TRAILING:20261119:CALL:515",
+                  "leg_id": "call",
+                  "quantity": 0,
+                  "run_id": "Q25-A5-S10-TRAILING-20261107",
+                  "unrealized_pnl": 0.0
+                },
+                {
+                  "avg_price": 1.05,
+                  "client_order_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-put-bd22d7720217",
+                  "contract_multiplier": "250000.0",
+                  "current_price": 1.0,
+                  "execution_id": "EXEC-000002",
+                  "execution_ids": [
+                    "EXEC-000002"
+                  ],
+                  "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:TRAILING:20261119:PUT:485",
+                  "leg_id": "put",
+                  "quantity": 1,
+                  "run_id": "Q25-A5-S10-TRAILING-20261107",
+                  "unrealized_pnl": -12500.0
+                }
+              ],
+              "realized_pnl": 285000.0,
+              "strategy_id": "track8_macro_regime_monthly_strangle",
+              "total_pnl": 272500.0,
+              "unrealized_pnl": -12500.0
+            }
+          },
+          "open_lots": [
+            {
+              "client_order_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-put-bd22d7720217",
+              "contract_multiplier": "250000.0",
+              "execution_id": "EXEC-000002",
+              "execution_timestamp": "2026-11-05T09:00:00+09:00",
+              "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "identity_source": "OPTION_MASTER",
+              "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:TRAILING:20261119:PUT:485",
+              "instrument_identity": {
+                "contract_multiplier": "250000.0",
+                "expiry": "20261119",
+                "identity_source": "OPTION_MASTER",
+                "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:TRAILING:20261119:PUT:485",
+                "option_type": "PUT",
+                "strike": "485.0",
+                "symbol": "SYNTHETIC_CONTRACT:S8A5S09:TRAILING:20261119:PUT:485"
+              },
+              "leg_id": "put",
+              "opened_quantity": 1,
+              "position_role": "NONE",
+              "remaining_quantity": 1,
+              "run_id": "Q25-A5-S10-TRAILING-20261107",
+              "side": "BUY",
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            }
+          ],
+          "position_groups": {
+            "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1": {
+              "direction": "MULTI_LEG",
+              "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "legs": [
+                {
+                  "contract_multiplier": "250000.0",
+                  "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:TRAILING:20261119:CALL:515",
+                  "leg_id": "call",
+                  "quantity": 1,
+                  "side": "BUY",
+                  "status": "FILLED"
+                },
+                {
+                  "contract_multiplier": "250000.0",
+                  "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:TRAILING:20261119:PUT:485",
+                  "leg_id": "put",
+                  "quantity": 1,
+                  "side": "BUY",
+                  "status": "FILLED"
+                }
+              ],
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            }
+          }
+        },
+        "manifest_sha256": "75061b0bbe1c4270883099ea7ce52d92685e57170e3a4e094a7a243adfd5c229",
+        "mode": "fast",
+        "report": {
+          "approved": 3,
+          "events": 16,
+          "execution_ids": [
+            "EXEC-000001",
+            "EXEC-000002",
+            "EXEC-000003"
+          ],
+          "filled": 3,
+          "net_pnl_krw": 272500.0,
+          "realized_pnl_krw": 285000.0,
+          "rejected": 0,
+          "routed": 3,
+          "run_id": "Q25-A5-S10-TRAILING-20261107",
+          "signals": 3,
+          "strategy_status": {
+            "approved": 3,
+            "decision_rejected": 0,
+            "execution_signals": 3,
+            "filled_quantity": 3,
+            "non_execution_signals": 0,
+            "reaction_signals": 3,
+            "risk_rejected": 0,
+            "routed": 3,
+            "runtime_failures": 0,
+            "strategy_id": "track8_macro_regime_monthly_strangle",
+            "unavailable": 0
+          },
+          "unrealized_pnl_krw": -12500.0
+        },
+        "risk_audit": [
+          {
+            "computed_concurrent_exposure_krw": "237500.000",
+            "computed_gross_premium_krw": "237500.000",
+            "computed_max_loss_krw": "237500.000",
+            "dataset_sha256": "1d0db3c2152c3ec607ee1716e0735eb003c5e987c1b0700cd5f8d4a1d202b18e",
+            "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+            "leg_id": "call",
+            "manifest_sha256": "75061b0bbe1c4270883099ea7ce52d92685e57170e3a4e094a7a243adfd5c229",
+            "operational_reference_overage_krw": "0",
+            "run_id": "Q25-A5-S10-TRAILING-20261107",
+            "scenario_id": "Q25_A5_S09_S8_TRAILING_20261107",
+            "status": "ALLOW",
+            "validation_budget_overage_krw": "0"
+          },
+          {
+            "computed_concurrent_exposure_krw": "500000.000",
+            "computed_gross_premium_krw": "500000.000",
+            "computed_max_loss_krw": "500000.000",
+            "dataset_sha256": "1d0db3c2152c3ec607ee1716e0735eb003c5e987c1b0700cd5f8d4a1d202b18e",
+            "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+            "leg_id": "put",
+            "manifest_sha256": "75061b0bbe1c4270883099ea7ce52d92685e57170e3a4e094a7a243adfd5c229",
+            "operational_reference_overage_krw": "250000.000",
+            "run_id": "Q25-A5-S10-TRAILING-20261107",
+            "scenario_id": "Q25_A5_S09_S8_TRAILING_20261107",
+            "status": "ALLOW",
+            "validation_budget_overage_krw": "0"
+          }
+        ],
+        "risk_profile_sha256": "e03611d035da5f6462d583935c9f3524881fcaaa3ab1565c3424a8413cd23ff5",
+        "scenario": "trailing",
+        "scenario_id": "Q25_A5_S09_S8_TRAILING_20261107",
+        "strategy_callbacks": [
+          {
+            "after": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "0.95",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": true,
+              "entry_stage": "PUT_READY",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": false,
+              "put_entry_fill_price": null,
+              "put_open": false,
+              "put_peak_mark": "0",
+              "put_strike": "485.0"
+            },
+            "before": {
+              "call_entry_fill_price": null,
+              "call_open": false,
+              "call_peak_mark": "0",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": true,
+              "entry_stage": "CALL_PENDING",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": false,
+              "put_entry_fill_price": null,
+              "put_open": false,
+              "put_peak_mark": "0",
+              "put_strike": "485.0"
+            },
+            "group_complete": true,
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_ENTRY_CALL",
+            "reports": [
+              {
+                "execution_id": "EXEC-000001",
+                "filled_quantity": 1,
+                "leg_id": "call",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          },
+          {
+            "after": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "0.95",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "before": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "0.95",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": true,
+              "entry_stage": "PUT_PENDING",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": false,
+              "put_entry_fill_price": null,
+              "put_open": false,
+              "put_peak_mark": "0",
+              "put_strike": "485.0"
+            },
+            "group_complete": true,
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_ENTRY_PUT",
+            "reports": [
+              {
+                "execution_id": "EXEC-000002",
+                "filled_quantity": 1,
+                "leg_id": "put",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          },
+          {
+            "after": {
+              "call_entry_fill_price": "0.95",
+              "call_open": false,
+              "call_peak_mark": "2.5",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "before": {
+              "call_entry_fill_price": "0.95",
+              "call_open": true,
+              "call_peak_mark": "2.5",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": true,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "group_complete": true,
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_CLOSE_CALL",
+            "reports": [
+              {
+                "execution_id": "EXEC-000003",
+                "filled_quantity": 1,
+                "leg_id": "close-4cc4036cfc54",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          }
+        ],
+        "trace": {
+          "execution_observer": {
+            "status": "DISABLED_FAST_MODE"
+          },
+          "path": null,
+          "sha256": null,
+          "status": "DISABLED_FAST_MODE"
+        }
+      },
+      "scenario": "trailing",
+      "verification": {
+        "close_filled_reports": 1,
+        "close_purpose": "MONTHLY_STRANGLE_CLOSE_CALL",
+        "expected_exit_reason": "CALL_LEG_2X_ARMED_10PCT_DRAWDOWN",
+        "expected_fills": 3,
+        "expected_open_lots": 1,
+        "fast_detailed_semantic_equivalence": true,
+        "fee_records": [
+          {
+            "client_order_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-call-aa51b8c56fcf",
+            "executed_at": "2026-11-05T09:00:00+09:00",
+            "executed_price": "0.95",
+            "executed_quantity": 1,
+            "execution_id": "EXEC-000001",
+            "fee_amount": "0.0",
+            "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:TRAILING:20261119:CALL:515",
+            "leg_id": "call",
+            "run_id": "Q25-A5-S10-TRAILING-20261107",
+            "source": "VSSF:CanonicalExecutionReport.fee",
+            "strategy_id": "track8_macro_regime_monthly_strangle"
+          },
+          {
+            "client_order_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-put-bd22d7720217",
+            "executed_at": "2026-11-05T09:00:00+09:00",
+            "executed_price": "1.05",
+            "executed_quantity": 1,
+            "execution_id": "EXEC-000002",
+            "fee_amount": "0.0",
+            "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:TRAILING:20261119:PUT:485",
+            "leg_id": "put",
+            "run_id": "Q25-A5-S10-TRAILING-20261107",
+            "source": "VSSF:CanonicalExecutionReport.fee",
+            "strategy_id": "track8_macro_regime_monthly_strangle"
+          },
+          {
+            "client_order_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-close-4cc4036cfc54-78425e58fcb6",
+            "executed_at": "2026-11-05T09:30:00+09:00",
+            "executed_price": "2.09",
+            "executed_quantity": 1,
+            "execution_id": "EXEC-000003",
+            "fee_amount": "0.0",
+            "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:TRAILING:20261119:CALL:515",
+            "leg_id": "close-4cc4036cfc54",
+            "run_id": "Q25-A5-S10-TRAILING-20261107",
+            "source": "VSSF:CanonicalExecutionReport.fee",
+            "strategy_id": "track8_macro_regime_monthly_strangle"
+          }
+        ],
+        "final_strategy_state": {
+          "call_entry_fill_price": "0.95",
+          "call_open": false,
+          "call_peak_mark": "2.5",
+          "call_strike": "515.0",
+          "entry_block_reason": null,
+          "entry_pending": false,
+          "entry_stage": "COMPLETE",
+          "exit_pending": false,
+          "expiry": "20261119",
+          "is_active": true,
+          "put_entry_fill_price": "1.05",
+          "put_open": true,
+          "put_peak_mark": "1.05",
+          "put_strike": "485.0"
+        },
+        "net_pnl_krw": 272500.0,
+        "observed_exit_reasons": [
+          "CALL_LEG_2X_ARMED_10PCT_DRAWDOWN"
+        ],
+        "observed_fills": 3,
+        "observed_open_lots": 1,
+        "position_group_snapshots": {
+          "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1": {
+            "complete": true,
+            "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+            "legs": [
+              {
+                "avg_price": 0.95,
+                "client_order_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-call-aa51b8c56fcf",
+                "contract_multiplier": "250000.0",
+                "current_price": 2.09,
+                "execution_id": "EXEC-000001",
+                "execution_ids": [
+                  "EXEC-000001"
+                ],
+                "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                "identity_source": "OPTION_MASTER",
+                "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:TRAILING:20261119:CALL:515",
+                "leg_id": "call",
+                "quantity": 0,
+                "run_id": "Q25-A5-S10-TRAILING-20261107",
+                "unrealized_pnl": 0.0
+              },
+              {
+                "avg_price": 1.05,
+                "client_order_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-put-bd22d7720217",
+                "contract_multiplier": "250000.0",
+                "current_price": 1.0,
+                "execution_id": "EXEC-000002",
+                "execution_ids": [
+                  "EXEC-000002"
+                ],
+                "group_id": "Q25-A5-S10-TRAILING-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                "identity_source": "OPTION_MASTER",
+                "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:TRAILING:20261119:PUT:485",
+                "leg_id": "put",
+                "quantity": 1,
+                "run_id": "Q25-A5-S10-TRAILING-20261107",
+                "unrealized_pnl": -12500.0
+              }
+            ],
+            "realized_pnl": 285000.0,
+            "strategy_id": "track8_macro_regime_monthly_strangle",
+            "total_pnl": 272500.0,
+            "unrealized_pnl": -12500.0
+          }
+        },
+        "realized_pnl_krw": 285000.0,
+        "rejected": 0,
+        "scenario": "trailing",
+        "status": "PASS",
+        "strategy_state_matches": true,
+        "unrealized_pnl_krw": -12500.0
+      }
+    },
+    {
+      "detailed": {
+        "dataset_sha256": "364703d97737417954d02e2e4c9da7bfc43b6786b830b3a52003092d99550acf",
+        "execution_events": [
+          {
+            "group_complete": true,
+            "plan_legs": [
+              {
+                "leg_id": "call",
+                "option_type": "CALL",
+                "quantity": 1,
+                "side": "BUY",
+                "strike": "515.0"
+              }
+            ],
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_ENTRY_CALL",
+            "reports": [
+              {
+                "execution_id": "EXEC-000001",
+                "execution_price": "1.05",
+                "filled_quantity": 1,
+                "leg_id": "call",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          },
+          {
+            "group_complete": true,
+            "plan_legs": [
+              {
+                "leg_id": "put",
+                "option_type": "PUT",
+                "quantity": 1,
+                "side": "BUY",
+                "strike": "485.0"
+              }
+            ],
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_ENTRY_PUT",
+            "reports": [
+              {
+                "execution_id": "EXEC-000002",
+                "execution_price": "1.05",
+                "filled_quantity": 1,
+                "leg_id": "put",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          },
+          {
+            "group_complete": true,
+            "plan_legs": [
+              {
+                "leg_id": "close-c069d2b9a8f2",
+                "option_type": "CALL",
+                "quantity": 1,
+                "side": "SELL",
+                "strike": "515.0"
+              },
+              {
+                "leg_id": "close-64716a735b98",
+                "option_type": "PUT",
+                "quantity": 1,
+                "side": "SELL",
+                "strike": "485.0"
+              }
+            ],
+            "position_flat": true,
+            "purpose": "MONTHLY_STRANGLE_CLOSE",
+            "reports": [
+              {
+                "execution_id": "EXEC-000003",
+                "execution_price": "1.05",
+                "filled_quantity": 1,
+                "leg_id": "close-c069d2b9a8f2",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              },
+              {
+                "execution_id": "EXEC-000004",
+                "execution_price": "1.05",
+                "filled_quantity": 1,
+                "leg_id": "close-64716a735b98",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          }
+        ],
+        "exit_evaluations": [
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "1.0",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:00:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "1.0",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:00:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "1.0",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:10:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "1.0",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:10:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "1.0",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:10:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "1.0",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:10:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "1.1",
+              "options.track8_put_mark_price": "1.1"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.1",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.1",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-19T15:09:59+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "1.1",
+              "options.track8_put_mark_price": "1.1"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.1",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.1",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-19T15:09:59+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "1.1",
+              "options.track8_put_mark_price": "1.1"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.1",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.1",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-19T15:09:59+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "1.1",
+              "options.track8_put_mark_price": "1.1"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.1",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.1",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-19T15:09:59+09:00"
+          },
+          {
+            "kind": "EXPIRY_CUTOFF",
+            "signals": [
+              "MONTHLY_EXPIRY_15:10_FORCE_CLOSE"
+            ],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.1",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": true,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.1",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-19T15:10:00+09:00"
+          }
+        ],
+        "exit_signals": [
+          {
+            "kind": "EXPIRY_CUTOFF",
+            "reason": "MONTHLY_EXPIRY_15:10_FORCE_CLOSE",
+            "timestamp": "2026-11-19T15:10:00+09:00"
+          }
+        ],
+        "final_runtime_snapshot": {
+          "fee_records": [
+            {
+              "client_order_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-call-6578a41f41eb",
+              "executed_at": "2026-11-05T09:00:00+09:00",
+              "executed_price": "1.05",
+              "executed_quantity": 1,
+              "execution_id": "EXEC-000001",
+              "fee_amount": "0.0",
+              "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:EXPIRY:20261119:CALL:515",
+              "leg_id": "call",
+              "run_id": "Q25-A5-S10-EXPIRY-20261107",
+              "source": "VSSF:CanonicalExecutionReport.fee",
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            },
+            {
+              "client_order_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-put-44965059eb19",
+              "executed_at": "2026-11-05T09:00:00+09:00",
+              "executed_price": "1.05",
+              "executed_quantity": 1,
+              "execution_id": "EXEC-000002",
+              "fee_amount": "0.0",
+              "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:EXPIRY:20261119:PUT:485",
+              "leg_id": "put",
+              "run_id": "Q25-A5-S10-EXPIRY-20261107",
+              "source": "VSSF:CanonicalExecutionReport.fee",
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            },
+            {
+              "client_order_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-close-c069d2b9a8f2-2a0ea6719adf",
+              "executed_at": "2026-11-19T15:10:00+09:00",
+              "executed_price": "1.05",
+              "executed_quantity": 1,
+              "execution_id": "EXEC-000003",
+              "fee_amount": "0.0",
+              "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:EXPIRY:20261119:CALL:515",
+              "leg_id": "close-c069d2b9a8f2",
+              "run_id": "Q25-A5-S10-EXPIRY-20261107",
+              "source": "VSSF:CanonicalExecutionReport.fee",
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            },
+            {
+              "client_order_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-close-64716a735b98-6f677f9e9b54",
+              "executed_at": "2026-11-19T15:10:00+09:00",
+              "executed_price": "1.05",
+              "executed_quantity": 1,
+              "execution_id": "EXEC-000004",
+              "fee_amount": "0.0",
+              "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:EXPIRY:20261119:PUT:485",
+              "leg_id": "close-64716a735b98",
+              "run_id": "Q25-A5-S10-EXPIRY-20261107",
+              "source": "VSSF:CanonicalExecutionReport.fee",
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            }
+          ],
+          "group_snapshots": {
+            "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1": {
+              "complete": true,
+              "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "legs": [
+                {
+                  "avg_price": 1.05,
+                  "client_order_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-call-6578a41f41eb",
+                  "contract_multiplier": "250000.0",
+                  "current_price": 1.05,
+                  "execution_id": "EXEC-000001",
+                  "execution_ids": [
+                    "EXEC-000001"
+                  ],
+                  "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:EXPIRY:20261119:CALL:515",
+                  "leg_id": "call",
+                  "quantity": 0,
+                  "run_id": "Q25-A5-S10-EXPIRY-20261107",
+                  "unrealized_pnl": 0.0
+                },
+                {
+                  "avg_price": 1.05,
+                  "client_order_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-put-44965059eb19",
+                  "contract_multiplier": "250000.0",
+                  "current_price": 1.05,
+                  "execution_id": "EXEC-000002",
+                  "execution_ids": [
+                    "EXEC-000002"
+                  ],
+                  "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:EXPIRY:20261119:PUT:485",
+                  "leg_id": "put",
+                  "quantity": 0,
+                  "run_id": "Q25-A5-S10-EXPIRY-20261107",
+                  "unrealized_pnl": 0.0
+                }
+              ],
+              "realized_pnl": 0.0,
+              "strategy_id": "track8_macro_regime_monthly_strangle",
+              "total_pnl": 0.0,
+              "unrealized_pnl": 0.0
+            }
+          },
+          "open_lots": [],
+          "position_groups": {
+            "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1": {
+              "direction": "MULTI_LEG",
+              "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "legs": [
+                {
+                  "contract_multiplier": "250000.0",
+                  "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:EXPIRY:20261119:CALL:515",
+                  "leg_id": "call",
+                  "quantity": 1,
+                  "side": "BUY",
+                  "status": "FILLED"
+                },
+                {
+                  "contract_multiplier": "250000.0",
+                  "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:EXPIRY:20261119:PUT:485",
+                  "leg_id": "put",
+                  "quantity": 1,
+                  "side": "BUY",
+                  "status": "FILLED"
+                }
+              ],
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            }
+          }
+        },
+        "manifest_sha256": "fcc902b16251193c428556ef98950caa7c917e7d5c1759b6eab13281d721b975",
+        "mode": "detailed",
+        "report": {
+          "approved": 3,
+          "events": 16,
+          "execution_ids": [
+            "EXEC-000001",
+            "EXEC-000002",
+            "EXEC-000003",
+            "EXEC-000004"
+          ],
+          "filled": 4,
+          "net_pnl_krw": 0.0,
+          "realized_pnl_krw": 0.0,
+          "rejected": 0,
+          "routed": 4,
+          "run_id": "Q25-A5-S10-EXPIRY-20261107",
+          "signals": 3,
+          "strategy_status": {
+            "approved": 3,
+            "decision_rejected": 0,
+            "execution_signals": 3,
+            "filled_quantity": 4,
+            "non_execution_signals": 0,
+            "reaction_signals": 3,
+            "risk_rejected": 0,
+            "routed": 4,
+            "runtime_failures": 0,
+            "strategy_id": "track8_macro_regime_monthly_strangle",
+            "unavailable": 0
+          },
+          "unrealized_pnl_krw": 0.0
+        },
+        "risk_audit": [
+          {
+            "computed_concurrent_exposure_krw": "262500.000",
+            "computed_gross_premium_krw": "262500.000",
+            "computed_max_loss_krw": "262500.000",
+            "dataset_sha256": "364703d97737417954d02e2e4c9da7bfc43b6786b830b3a52003092d99550acf",
+            "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+            "leg_id": "call",
+            "manifest_sha256": "fcc902b16251193c428556ef98950caa7c917e7d5c1759b6eab13281d721b975",
+            "operational_reference_overage_krw": "12500.000",
+            "run_id": "Q25-A5-S10-EXPIRY-20261107",
+            "scenario_id": "Q25_A5_S09_S8_EXPIRY_20261107",
+            "status": "ALLOW",
+            "validation_budget_overage_krw": "0"
+          },
+          {
+            "computed_concurrent_exposure_krw": "525000.000",
+            "computed_gross_premium_krw": "525000.000",
+            "computed_max_loss_krw": "525000.000",
+            "dataset_sha256": "364703d97737417954d02e2e4c9da7bfc43b6786b830b3a52003092d99550acf",
+            "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+            "leg_id": "put",
+            "manifest_sha256": "fcc902b16251193c428556ef98950caa7c917e7d5c1759b6eab13281d721b975",
+            "operational_reference_overage_krw": "275000.000",
+            "run_id": "Q25-A5-S10-EXPIRY-20261107",
+            "scenario_id": "Q25_A5_S09_S8_EXPIRY_20261107",
+            "status": "ALLOW",
+            "validation_budget_overage_krw": "0"
+          }
+        ],
+        "risk_profile_sha256": "dc2e9c820f9ed4757dbf6e112ca335c9366f54502151e4347faf2a1da9a83ac4",
+        "scenario": "expiry",
+        "scenario_id": "Q25_A5_S09_S8_EXPIRY_20261107",
+        "strategy_callbacks": [
+          {
+            "after": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": true,
+              "entry_stage": "PUT_READY",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": false,
+              "put_entry_fill_price": null,
+              "put_open": false,
+              "put_peak_mark": "0",
+              "put_strike": "485.0"
+            },
+            "before": {
+              "call_entry_fill_price": null,
+              "call_open": false,
+              "call_peak_mark": "0",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": true,
+              "entry_stage": "CALL_PENDING",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": false,
+              "put_entry_fill_price": null,
+              "put_open": false,
+              "put_peak_mark": "0",
+              "put_strike": "485.0"
+            },
+            "group_complete": true,
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_ENTRY_CALL",
+            "reports": [
+              {
+                "execution_id": "EXEC-000001",
+                "filled_quantity": 1,
+                "leg_id": "call",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          },
+          {
+            "after": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "before": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": true,
+              "entry_stage": "PUT_PENDING",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": false,
+              "put_entry_fill_price": null,
+              "put_open": false,
+              "put_peak_mark": "0",
+              "put_strike": "485.0"
+            },
+            "group_complete": true,
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_ENTRY_PUT",
+            "reports": [
+              {
+                "execution_id": "EXEC-000002",
+                "filled_quantity": 1,
+                "leg_id": "put",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          },
+          {
+            "after": {
+              "call_entry_fill_price": null,
+              "call_open": false,
+              "call_peak_mark": "0",
+              "call_strike": "0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "IDLE",
+              "exit_pending": false,
+              "expiry": null,
+              "is_active": false,
+              "put_entry_fill_price": null,
+              "put_open": false,
+              "put_peak_mark": "0",
+              "put_strike": "0"
+            },
+            "before": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.1",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": true,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.1",
+              "put_strike": "485.0"
+            },
+            "group_complete": true,
+            "position_flat": true,
+            "purpose": "MONTHLY_STRANGLE_CLOSE",
+            "reports": [
+              {
+                "execution_id": "EXEC-000003",
+                "filled_quantity": 1,
+                "leg_id": "close-c069d2b9a8f2",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              },
+              {
+                "execution_id": "EXEC-000004",
+                "filled_quantity": 1,
+                "leg_id": "close-64716a735b98",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          }
+        ],
+        "trace": {
+          "execution_observer": {
+            "execution_reports_observed": 4,
+            "fill_records_status": "CANONICAL_FILLS_OBSERVED",
+            "fills_observed": 4,
+            "order_commands_observed": 4,
+            "order_records_status": "OBSERVED_READ_ONLY",
+            "status": "CONNECTED",
+            "trace_write_errors": []
+          },
+          "path": "reports/synth/Q25_A5_S10_S8_EXPIRY_DETAILED_TRACE_20261107_FINAL2.jsonl",
+          "sha256": "a06fe1f912731e4ead7611acb95718ab406938a10c307389221ff0eadf28bc98",
+          "status": "CONNECTED"
+        }
+      },
+      "fast": {
+        "dataset_sha256": "364703d97737417954d02e2e4c9da7bfc43b6786b830b3a52003092d99550acf",
+        "execution_events": [
+          {
+            "group_complete": true,
+            "plan_legs": [
+              {
+                "leg_id": "call",
+                "option_type": "CALL",
+                "quantity": 1,
+                "side": "BUY",
+                "strike": "515.0"
+              }
+            ],
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_ENTRY_CALL",
+            "reports": [
+              {
+                "execution_id": "EXEC-000001",
+                "execution_price": "1.05",
+                "filled_quantity": 1,
+                "leg_id": "call",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          },
+          {
+            "group_complete": true,
+            "plan_legs": [
+              {
+                "leg_id": "put",
+                "option_type": "PUT",
+                "quantity": 1,
+                "side": "BUY",
+                "strike": "485.0"
+              }
+            ],
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_ENTRY_PUT",
+            "reports": [
+              {
+                "execution_id": "EXEC-000002",
+                "execution_price": "1.05",
+                "filled_quantity": 1,
+                "leg_id": "put",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          },
+          {
+            "group_complete": true,
+            "plan_legs": [
+              {
+                "leg_id": "close-c069d2b9a8f2",
+                "option_type": "CALL",
+                "quantity": 1,
+                "side": "SELL",
+                "strike": "515.0"
+              },
+              {
+                "leg_id": "close-64716a735b98",
+                "option_type": "PUT",
+                "quantity": 1,
+                "side": "SELL",
+                "strike": "485.0"
+              }
+            ],
+            "position_flat": true,
+            "purpose": "MONTHLY_STRANGLE_CLOSE",
+            "reports": [
+              {
+                "execution_id": "EXEC-000003",
+                "execution_price": "1.05",
+                "filled_quantity": 1,
+                "leg_id": "close-c069d2b9a8f2",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              },
+              {
+                "execution_id": "EXEC-000004",
+                "execution_price": "1.05",
+                "filled_quantity": 1,
+                "leg_id": "close-64716a735b98",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          }
+        ],
+        "exit_evaluations": [
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "1.0",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:00:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "1.0",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:00:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "1.0",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:10:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "1.0",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:10:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "1.0",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:10:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "1.0",
+              "options.track8_put_mark_price": "1.0"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-05T09:10:00+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "1.1",
+              "options.track8_put_mark_price": "1.1"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.1",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.1",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-19T15:09:59+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "1.1",
+              "options.track8_put_mark_price": "1.1"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.1",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.1",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-19T15:09:59+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "1.1",
+              "options.track8_put_mark_price": "1.1"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.1",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.1",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-19T15:09:59+09:00"
+          },
+          {
+            "kind": "PER_LEG_STOP_OR_TRAILING",
+            "marks": {
+              "options.track8_call_mark_price": "1.1",
+              "options.track8_put_mark_price": "1.1"
+            },
+            "signals": [],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.1",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.1",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-19T15:09:59+09:00"
+          },
+          {
+            "kind": "EXPIRY_CUTOFF",
+            "signals": [
+              "MONTHLY_EXPIRY_15:10_FORCE_CLOSE"
+            ],
+            "state_after_evaluation": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.1",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": true,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.1",
+              "put_strike": "485.0"
+            },
+            "timestamp": "2026-11-19T15:10:00+09:00"
+          }
+        ],
+        "exit_signals": [
+          {
+            "kind": "EXPIRY_CUTOFF",
+            "reason": "MONTHLY_EXPIRY_15:10_FORCE_CLOSE",
+            "timestamp": "2026-11-19T15:10:00+09:00"
+          }
+        ],
+        "final_runtime_snapshot": {
+          "fee_records": [
+            {
+              "client_order_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-call-6578a41f41eb",
+              "executed_at": "2026-11-05T09:00:00+09:00",
+              "executed_price": "1.05",
+              "executed_quantity": 1,
+              "execution_id": "EXEC-000001",
+              "fee_amount": "0.0",
+              "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:EXPIRY:20261119:CALL:515",
+              "leg_id": "call",
+              "run_id": "Q25-A5-S10-EXPIRY-20261107",
+              "source": "VSSF:CanonicalExecutionReport.fee",
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            },
+            {
+              "client_order_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-put-44965059eb19",
+              "executed_at": "2026-11-05T09:00:00+09:00",
+              "executed_price": "1.05",
+              "executed_quantity": 1,
+              "execution_id": "EXEC-000002",
+              "fee_amount": "0.0",
+              "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:EXPIRY:20261119:PUT:485",
+              "leg_id": "put",
+              "run_id": "Q25-A5-S10-EXPIRY-20261107",
+              "source": "VSSF:CanonicalExecutionReport.fee",
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            },
+            {
+              "client_order_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-close-c069d2b9a8f2-2a0ea6719adf",
+              "executed_at": "2026-11-19T15:10:00+09:00",
+              "executed_price": "1.05",
+              "executed_quantity": 1,
+              "execution_id": "EXEC-000003",
+              "fee_amount": "0.0",
+              "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:EXPIRY:20261119:CALL:515",
+              "leg_id": "close-c069d2b9a8f2",
+              "run_id": "Q25-A5-S10-EXPIRY-20261107",
+              "source": "VSSF:CanonicalExecutionReport.fee",
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            },
+            {
+              "client_order_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-close-64716a735b98-6f677f9e9b54",
+              "executed_at": "2026-11-19T15:10:00+09:00",
+              "executed_price": "1.05",
+              "executed_quantity": 1,
+              "execution_id": "EXEC-000004",
+              "fee_amount": "0.0",
+              "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:EXPIRY:20261119:PUT:485",
+              "leg_id": "close-64716a735b98",
+              "run_id": "Q25-A5-S10-EXPIRY-20261107",
+              "source": "VSSF:CanonicalExecutionReport.fee",
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            }
+          ],
+          "group_snapshots": {
+            "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1": {
+              "complete": true,
+              "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "legs": [
+                {
+                  "avg_price": 1.05,
+                  "client_order_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-call-6578a41f41eb",
+                  "contract_multiplier": "250000.0",
+                  "current_price": 1.05,
+                  "execution_id": "EXEC-000001",
+                  "execution_ids": [
+                    "EXEC-000001"
+                  ],
+                  "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:EXPIRY:20261119:CALL:515",
+                  "leg_id": "call",
+                  "quantity": 0,
+                  "run_id": "Q25-A5-S10-EXPIRY-20261107",
+                  "unrealized_pnl": 0.0
+                },
+                {
+                  "avg_price": 1.05,
+                  "client_order_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-put-44965059eb19",
+                  "contract_multiplier": "250000.0",
+                  "current_price": 1.05,
+                  "execution_id": "EXEC-000002",
+                  "execution_ids": [
+                    "EXEC-000002"
+                  ],
+                  "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:EXPIRY:20261119:PUT:485",
+                  "leg_id": "put",
+                  "quantity": 0,
+                  "run_id": "Q25-A5-S10-EXPIRY-20261107",
+                  "unrealized_pnl": 0.0
+                }
+              ],
+              "realized_pnl": 0.0,
+              "strategy_id": "track8_macro_regime_monthly_strangle",
+              "total_pnl": 0.0,
+              "unrealized_pnl": 0.0
+            }
+          },
+          "open_lots": [],
+          "position_groups": {
+            "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1": {
+              "direction": "MULTI_LEG",
+              "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+              "legs": [
+                {
+                  "contract_multiplier": "250000.0",
+                  "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:EXPIRY:20261119:CALL:515",
+                  "leg_id": "call",
+                  "quantity": 1,
+                  "side": "BUY",
+                  "status": "FILLED"
+                },
+                {
+                  "contract_multiplier": "250000.0",
+                  "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                  "identity_source": "OPTION_MASTER",
+                  "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:EXPIRY:20261119:PUT:485",
+                  "leg_id": "put",
+                  "quantity": 1,
+                  "side": "BUY",
+                  "status": "FILLED"
+                }
+              ],
+              "strategy_id": "track8_macro_regime_monthly_strangle"
+            }
+          }
+        },
+        "manifest_sha256": "fcc902b16251193c428556ef98950caa7c917e7d5c1759b6eab13281d721b975",
+        "mode": "fast",
+        "report": {
+          "approved": 3,
+          "events": 16,
+          "execution_ids": [
+            "EXEC-000001",
+            "EXEC-000002",
+            "EXEC-000003",
+            "EXEC-000004"
+          ],
+          "filled": 4,
+          "net_pnl_krw": 0.0,
+          "realized_pnl_krw": 0.0,
+          "rejected": 0,
+          "routed": 4,
+          "run_id": "Q25-A5-S10-EXPIRY-20261107",
+          "signals": 3,
+          "strategy_status": {
+            "approved": 3,
+            "decision_rejected": 0,
+            "execution_signals": 3,
+            "filled_quantity": 4,
+            "non_execution_signals": 0,
+            "reaction_signals": 3,
+            "risk_rejected": 0,
+            "routed": 4,
+            "runtime_failures": 0,
+            "strategy_id": "track8_macro_regime_monthly_strangle",
+            "unavailable": 0
+          },
+          "unrealized_pnl_krw": 0.0
+        },
+        "risk_audit": [
+          {
+            "computed_concurrent_exposure_krw": "262500.000",
+            "computed_gross_premium_krw": "262500.000",
+            "computed_max_loss_krw": "262500.000",
+            "dataset_sha256": "364703d97737417954d02e2e4c9da7bfc43b6786b830b3a52003092d99550acf",
+            "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+            "leg_id": "call",
+            "manifest_sha256": "fcc902b16251193c428556ef98950caa7c917e7d5c1759b6eab13281d721b975",
+            "operational_reference_overage_krw": "12500.000",
+            "run_id": "Q25-A5-S10-EXPIRY-20261107",
+            "scenario_id": "Q25_A5_S09_S8_EXPIRY_20261107",
+            "status": "ALLOW",
+            "validation_budget_overage_krw": "0"
+          },
+          {
+            "computed_concurrent_exposure_krw": "525000.000",
+            "computed_gross_premium_krw": "525000.000",
+            "computed_max_loss_krw": "525000.000",
+            "dataset_sha256": "364703d97737417954d02e2e4c9da7bfc43b6786b830b3a52003092d99550acf",
+            "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+            "leg_id": "put",
+            "manifest_sha256": "fcc902b16251193c428556ef98950caa7c917e7d5c1759b6eab13281d721b975",
+            "operational_reference_overage_krw": "275000.000",
+            "run_id": "Q25-A5-S10-EXPIRY-20261107",
+            "scenario_id": "Q25_A5_S09_S8_EXPIRY_20261107",
+            "status": "ALLOW",
+            "validation_budget_overage_krw": "0"
+          }
+        ],
+        "risk_profile_sha256": "dc2e9c820f9ed4757dbf6e112ca335c9366f54502151e4347faf2a1da9a83ac4",
+        "scenario": "expiry",
+        "scenario_id": "Q25_A5_S09_S8_EXPIRY_20261107",
+        "strategy_callbacks": [
+          {
+            "after": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": true,
+              "entry_stage": "PUT_READY",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": false,
+              "put_entry_fill_price": null,
+              "put_open": false,
+              "put_peak_mark": "0",
+              "put_strike": "485.0"
+            },
+            "before": {
+              "call_entry_fill_price": null,
+              "call_open": false,
+              "call_peak_mark": "0",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": true,
+              "entry_stage": "CALL_PENDING",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": false,
+              "put_entry_fill_price": null,
+              "put_open": false,
+              "put_peak_mark": "0",
+              "put_strike": "485.0"
+            },
+            "group_complete": true,
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_ENTRY_CALL",
+            "reports": [
+              {
+                "execution_id": "EXEC-000001",
+                "filled_quantity": 1,
+                "leg_id": "call",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          },
+          {
+            "after": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.05",
+              "put_strike": "485.0"
+            },
+            "before": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.05",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": true,
+              "entry_stage": "PUT_PENDING",
+              "exit_pending": false,
+              "expiry": "20261119",
+              "is_active": false,
+              "put_entry_fill_price": null,
+              "put_open": false,
+              "put_peak_mark": "0",
+              "put_strike": "485.0"
+            },
+            "group_complete": true,
+            "position_flat": false,
+            "purpose": "MONTHLY_STRANGLE_ENTRY_PUT",
+            "reports": [
+              {
+                "execution_id": "EXEC-000002",
+                "filled_quantity": 1,
+                "leg_id": "put",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          },
+          {
+            "after": {
+              "call_entry_fill_price": null,
+              "call_open": false,
+              "call_peak_mark": "0",
+              "call_strike": "0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "IDLE",
+              "exit_pending": false,
+              "expiry": null,
+              "is_active": false,
+              "put_entry_fill_price": null,
+              "put_open": false,
+              "put_peak_mark": "0",
+              "put_strike": "0"
+            },
+            "before": {
+              "call_entry_fill_price": "1.05",
+              "call_open": true,
+              "call_peak_mark": "1.1",
+              "call_strike": "515.0",
+              "entry_block_reason": null,
+              "entry_pending": false,
+              "entry_stage": "COMPLETE",
+              "exit_pending": true,
+              "expiry": "20261119",
+              "is_active": true,
+              "put_entry_fill_price": "1.05",
+              "put_open": true,
+              "put_peak_mark": "1.1",
+              "put_strike": "485.0"
+            },
+            "group_complete": true,
+            "position_flat": true,
+            "purpose": "MONTHLY_STRANGLE_CLOSE",
+            "reports": [
+              {
+                "execution_id": "EXEC-000003",
+                "filled_quantity": 1,
+                "leg_id": "close-c069d2b9a8f2",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              },
+              {
+                "execution_id": "EXEC-000004",
+                "filled_quantity": 1,
+                "leg_id": "close-64716a735b98",
+                "rejected_reason": null,
+                "remaining_quantity": 0,
+                "status": "FILLED"
+              }
+            ]
+          }
+        ],
+        "trace": {
+          "execution_observer": {
+            "status": "DISABLED_FAST_MODE"
+          },
+          "path": null,
+          "sha256": null,
+          "status": "DISABLED_FAST_MODE"
+        }
+      },
+      "scenario": "expiry",
+      "verification": {
+        "close_filled_reports": 2,
+        "close_purpose": "MONTHLY_STRANGLE_CLOSE",
+        "expected_exit_reason": "MONTHLY_EXPIRY_15:10_FORCE_CLOSE",
+        "expected_fills": 4,
+        "expected_open_lots": 0,
+        "fast_detailed_semantic_equivalence": true,
+        "fee_records": [
+          {
+            "client_order_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-call-6578a41f41eb",
+            "executed_at": "2026-11-05T09:00:00+09:00",
+            "executed_price": "1.05",
+            "executed_quantity": 1,
+            "execution_id": "EXEC-000001",
+            "fee_amount": "0.0",
+            "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:EXPIRY:20261119:CALL:515",
+            "leg_id": "call",
+            "run_id": "Q25-A5-S10-EXPIRY-20261107",
+            "source": "VSSF:CanonicalExecutionReport.fee",
+            "strategy_id": "track8_macro_regime_monthly_strangle"
+          },
+          {
+            "client_order_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-put-44965059eb19",
+            "executed_at": "2026-11-05T09:00:00+09:00",
+            "executed_price": "1.05",
+            "executed_quantity": 1,
+            "execution_id": "EXEC-000002",
+            "fee_amount": "0.0",
+            "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:EXPIRY:20261119:PUT:485",
+            "leg_id": "put",
+            "run_id": "Q25-A5-S10-EXPIRY-20261107",
+            "source": "VSSF:CanonicalExecutionReport.fee",
+            "strategy_id": "track8_macro_regime_monthly_strangle"
+          },
+          {
+            "client_order_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-close-c069d2b9a8f2-2a0ea6719adf",
+            "executed_at": "2026-11-19T15:10:00+09:00",
+            "executed_price": "1.05",
+            "executed_quantity": 1,
+            "execution_id": "EXEC-000003",
+            "fee_amount": "0.0",
+            "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:EXPIRY:20261119:CALL:515",
+            "leg_id": "close-c069d2b9a8f2",
+            "run_id": "Q25-A5-S10-EXPIRY-20261107",
+            "source": "VSSF:CanonicalExecutionReport.fee",
+            "strategy_id": "track8_macro_regime_monthly_strangle"
+          },
+          {
+            "client_order_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-close-64716a735b98-6f677f9e9b54",
+            "executed_at": "2026-11-19T15:10:00+09:00",
+            "executed_price": "1.05",
+            "executed_quantity": 1,
+            "execution_id": "EXEC-000004",
+            "fee_amount": "0.0",
+            "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:EXPIRY:20261119:PUT:485",
+            "leg_id": "close-64716a735b98",
+            "run_id": "Q25-A5-S10-EXPIRY-20261107",
+            "source": "VSSF:CanonicalExecutionReport.fee",
+            "strategy_id": "track8_macro_regime_monthly_strangle"
+          }
+        ],
+        "final_strategy_state": {
+          "call_entry_fill_price": null,
+          "call_open": false,
+          "call_peak_mark": "0",
+          "call_strike": "0",
+          "entry_block_reason": null,
+          "entry_pending": false,
+          "entry_stage": "IDLE",
+          "exit_pending": false,
+          "expiry": null,
+          "is_active": false,
+          "put_entry_fill_price": null,
+          "put_open": false,
+          "put_peak_mark": "0",
+          "put_strike": "0"
+        },
+        "net_pnl_krw": 0.0,
+        "observed_exit_reasons": [
+          "MONTHLY_EXPIRY_15:10_FORCE_CLOSE"
+        ],
+        "observed_fills": 4,
+        "observed_open_lots": 0,
+        "position_group_snapshots": {
+          "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1": {
+            "complete": true,
+            "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+            "legs": [
+              {
+                "avg_price": 1.05,
+                "client_order_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-call-6578a41f41eb",
+                "contract_multiplier": "250000.0",
+                "current_price": 1.05,
+                "execution_id": "EXEC-000001",
+                "execution_ids": [
+                  "EXEC-000001"
+                ],
+                "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                "identity_source": "OPTION_MASTER",
+                "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:EXPIRY:20261119:CALL:515",
+                "leg_id": "call",
+                "quantity": 0,
+                "run_id": "Q25-A5-S10-EXPIRY-20261107",
+                "unrealized_pnl": 0.0
+              },
+              {
+                "avg_price": 1.05,
+                "client_order_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1-put-44965059eb19",
+                "contract_multiplier": "250000.0",
+                "current_price": 1.05,
+                "execution_id": "EXEC-000002",
+                "execution_ids": [
+                  "EXEC-000002"
+                ],
+                "group_id": "Q25-A5-S10-EXPIRY-20261107-SIG-1-track8_macro_regime_monthly_strangle-1",
+                "identity_source": "OPTION_MASTER",
+                "instrument_id": "SYNTHETIC_CONTRACT:S8A5S09:EXPIRY:20261119:PUT:485",
+                "leg_id": "put",
+                "quantity": 0,
+                "run_id": "Q25-A5-S10-EXPIRY-20261107",
+                "unrealized_pnl": 0.0
+              }
+            ],
+            "realized_pnl": 0.0,
+            "strategy_id": "track8_macro_regime_monthly_strangle",
+            "total_pnl": 0.0,
+            "unrealized_pnl": 0.0
+          }
+        },
+        "realized_pnl_krw": 0.0,
+        "rejected": 0,
+        "scenario": "expiry",
+        "status": "PASS",
+        "strategy_state_matches": true,
+        "unrealized_pnl_krw": 0.0
+      }
+    }
+  ],
+  "stage": "S10",
+  "status": "PSB_PASS_VALIDATION_ONLY_SYNTHETIC",
+  "validation_only": true
+}

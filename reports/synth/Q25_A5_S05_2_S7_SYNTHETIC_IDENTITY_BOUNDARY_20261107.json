@@ -1,0 +1,65 @@
+{
+  "authoritative_identity": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+  "blockers": [
+    "Synthetic IDs are generated labels, not externally owned Standard instrument_id values.",
+    "The local KIS master/expiry evidence is historical and does not establish authoritative November 9/12 mappings for these scenario strikes.",
+    "KIS shrn_iscd and stnd_iscd cannot be promoted to Standard instrument_id under the identity owner matrix.",
+    "The V2 scenario multiplier is synthetic and not an authoritative contract-master multiplier for these expiry groups.",
+    "Expiry values are scenario metadata, not authoritative exchange/KIS expiry records."
+  ],
+  "changes": {
+    "authoritative_mapping_created": false,
+    "dataset_or_manifest_modified": false,
+    "identity_owner_matrix_modified": false,
+    "runtime_gate_enabled": false
+  },
+  "dataset_sha256": "052d660e792adbda6b8fed7afce95cc54a1db007b70abfec3c0b736a6126da13",
+  "expiry_authority": "SYNTHETIC_ONLY_NON_AUTHORITATIVE",
+  "groups": {
+    "S7_MON_20261109": {
+      "entry_date": "2026-11-02",
+      "expiry": "20261109",
+      "legs": [
+        "CALL",
+        "PUT"
+      ],
+      "product_series": "MONDAY_WEEKLY",
+      "rows": 108
+    },
+    "S7_THU_20261112": {
+      "entry_date": "2026-11-05",
+      "expiry": "20261112",
+      "legs": [
+        "CALL",
+        "PUT"
+      ],
+      "product_series": "THURSDAY_WEEKLY",
+      "rows": 108
+    }
+  },
+  "internal_consistency": "PASS",
+  "kis_api_called": false,
+  "live_order_or_real_account_used": false,
+  "manifest_sha256": "ffbcf16c55d1cf75840ffc7cf0c5c536782655d5cd5436b888e97c02e643efaa",
+  "multiplier_per_identity": 250000,
+  "observations_per_identity": [
+    54,
+    54,
+    54,
+    54
+  ],
+  "production_runtime_eligible": false,
+  "profile_sha256": "3091cfefa0bb0587e80171978f885b0fc74f18495b3de4861791b9a1a5fc1d57",
+  "report_id": "Q25_A5_S05_2_S7_SYNTHETIC_IDENTITY_BOUNDARY_20261107",
+  "rows": 216,
+  "scenario_contract_key_mapping": "NOT_CREATED: no authoritative shrn_iscd registry mapping for the 20261109/20261112 scenario contracts",
+  "scope": "S7 synthetic identity consistency and authority-boundary audit only",
+  "synthetic_identity_components": [
+    "scenario-local prefix",
+    "synthetic expiry",
+    "CALL/PUT",
+    "strike"
+  ],
+  "synthetic_identity_count": 4,
+  "verdict": "PSB_UNVERIFIED"
+}

@@ -1,0 +1,288 @@
+{
+  "comparison_flag_count": 11,
+  "comparison_flags": {
+    "detailed_capture_matches_persisted_trace": true,
+    "fast_detailed_event_semantics_equal": true,
+    "input_manifest_files_63_unchanged": true,
+    "same_ack": true,
+    "same_command": true,
+    "same_final_state": true,
+    "same_incremental_fill_reports": true,
+    "same_oms_state_sequence": true,
+    "three_fill_events": true,
+    "trace_sequence_contiguous": true,
+    "trace_write_errors_zero": true
+  },
+  "comparison_flags_true": 11,
+  "dataset": "p5_run_20261026_trend_up_seed20261026",
+  "detailed": {
+    "ack": {
+      "accepted": true,
+      "broker_code": null,
+      "broker_order_id": "Q25-TEST-BROKER-001",
+      "client_order_id": "Q25-PARTIAL-ORDER-001",
+      "message": null
+    },
+    "command": {
+      "asset_type": "OPTION",
+      "broker_symbol": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+      "client_order_id": "Q25-PARTIAL-ORDER-001",
+      "group_id": null,
+      "instrument_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+      "instrument_identity": null,
+      "leg_id": null,
+      "order_purpose": "VALIDATION_ONLY_MULTI_STAGE_PARTIAL_FILL",
+      "order_type": "LIMIT",
+      "position_role": "NONE",
+      "quantity": 5,
+      "requested_price": "14.75",
+      "session_id": null,
+      "side": "BUY",
+      "strategy_id": "TRACK1_TAIL_DEFENSE",
+      "tag_id": "VALIDATION_ONLY_PARTIAL_FILL_FIXTURE",
+      "track_id": "TRACK1_TAIL_DEFENSE"
+    },
+    "final_state": {
+      "average_execution_price": "14.81000000000000000000000000",
+      "broker_order_id": "Q25-TEST-BROKER-001",
+      "client_order_id": "Q25-PARTIAL-ORDER-001",
+      "filled_quantity": 5,
+      "order_quantity": 5,
+      "status": "FILLED"
+    },
+    "mode": "detailed",
+    "reports": [
+      {
+        "average_execution_price": "14.75",
+        "cumulative_quantity": 1,
+        "execution_id": "Q25-PARTIAL-EXEC-001",
+        "execution_price": "14.75",
+        "incremental_quantity": 1,
+        "remaining_quantity": 4,
+        "status": "PARTIALLY_FILLED",
+        "timestamp": "2026-10-08T08:50:00+09:00"
+      },
+      {
+        "average_execution_price": "14.78333333333333333333333333",
+        "cumulative_quantity": 3,
+        "execution_id": "Q25-PARTIAL-EXEC-002",
+        "execution_price": "14.80",
+        "incremental_quantity": 2,
+        "remaining_quantity": 2,
+        "status": "PARTIALLY_FILLED",
+        "timestamp": "2026-10-08T08:55:00+09:00"
+      },
+      {
+        "average_execution_price": "14.81000000000000000000000000",
+        "cumulative_quantity": 5,
+        "execution_id": "Q25-PARTIAL-EXEC-003",
+        "execution_price": "14.85",
+        "incremental_quantity": 2,
+        "remaining_quantity": 0,
+        "status": "FILLED",
+        "timestamp": "2026-10-08T09:00:00+09:00"
+      }
+    ],
+    "states": [
+      {
+        "average_execution_price": null,
+        "broker_order_id": "Q25-TEST-BROKER-001",
+        "client_order_id": "Q25-PARTIAL-ORDER-001",
+        "filled_quantity": 0,
+        "order_quantity": 5,
+        "status": "ACKED"
+      },
+      {
+        "average_execution_price": "14.75",
+        "broker_order_id": "Q25-TEST-BROKER-001",
+        "client_order_id": "Q25-PARTIAL-ORDER-001",
+        "filled_quantity": 1,
+        "order_quantity": 5,
+        "status": "PARTIALLY_FILLED"
+      },
+      {
+        "average_execution_price": "14.78333333333333333333333333",
+        "broker_order_id": "Q25-TEST-BROKER-001",
+        "client_order_id": "Q25-PARTIAL-ORDER-001",
+        "filled_quantity": 3,
+        "order_quantity": 5,
+        "status": "PARTIALLY_FILLED"
+      },
+      {
+        "average_execution_price": "14.81000000000000000000000000",
+        "broker_order_id": "Q25-TEST-BROKER-001",
+        "client_order_id": "Q25-PARTIAL-ORDER-001",
+        "filled_quantity": 5,
+        "order_quantity": 5,
+        "status": "FILLED"
+      }
+    ],
+    "trace_status": "CONNECTED",
+    "trace_write_errors": []
+  },
+  "fast": {
+    "ack": {
+      "accepted": true,
+      "broker_code": null,
+      "broker_order_id": "Q25-TEST-BROKER-001",
+      "client_order_id": "Q25-PARTIAL-ORDER-001",
+      "message": null
+    },
+    "command": {
+      "asset_type": "OPTION",
+      "broker_symbol": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+      "client_order_id": "Q25-PARTIAL-ORDER-001",
+      "group_id": null,
+      "instrument_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+      "instrument_identity": null,
+      "leg_id": null,
+      "order_purpose": "VALIDATION_ONLY_MULTI_STAGE_PARTIAL_FILL",
+      "order_type": "LIMIT",
+      "position_role": "NONE",
+      "quantity": 5,
+      "requested_price": "14.75",
+      "session_id": null,
+      "side": "BUY",
+      "strategy_id": "TRACK1_TAIL_DEFENSE",
+      "tag_id": "VALIDATION_ONLY_PARTIAL_FILL_FIXTURE",
+      "track_id": "TRACK1_TAIL_DEFENSE"
+    },
+    "final_state": {
+      "average_execution_price": "14.81000000000000000000000000",
+      "broker_order_id": "Q25-TEST-BROKER-001",
+      "client_order_id": "Q25-PARTIAL-ORDER-001",
+      "filled_quantity": 5,
+      "order_quantity": 5,
+      "status": "FILLED"
+    },
+    "mode": "fast",
+    "reports": [
+      {
+        "average_execution_price": "14.75",
+        "cumulative_quantity": 1,
+        "execution_id": "Q25-PARTIAL-EXEC-001",
+        "execution_price": "14.75",
+        "incremental_quantity": 1,
+        "remaining_quantity": 4,
+        "status": "PARTIALLY_FILLED",
+        "timestamp": "2026-10-08T08:50:00+09:00"
+      },
+      {
+        "average_execution_price": "14.78333333333333333333333333",
+        "cumulative_quantity": 3,
+        "execution_id": "Q25-PARTIAL-EXEC-002",
+        "execution_price": "14.80",
+        "incremental_quantity": 2,
+        "remaining_quantity": 2,
+        "status": "PARTIALLY_FILLED",
+        "timestamp": "2026-10-08T08:55:00+09:00"
+      },
+      {
+        "average_execution_price": "14.81000000000000000000000000",
+        "cumulative_quantity": 5,
+        "execution_id": "Q25-PARTIAL-EXEC-003",
+        "execution_price": "14.85",
+        "incremental_quantity": 2,
+        "remaining_quantity": 0,
+        "status": "FILLED",
+        "timestamp": "2026-10-08T09:00:00+09:00"
+      }
+    ],
+    "states": [
+      {
+        "average_execution_price": null,
+        "broker_order_id": "Q25-TEST-BROKER-001",
+        "client_order_id": "Q25-PARTIAL-ORDER-001",
+        "filled_quantity": 0,
+        "order_quantity": 5,
+        "status": "ACKED"
+      },
+      {
+        "average_execution_price": "14.75",
+        "broker_order_id": "Q25-TEST-BROKER-001",
+        "client_order_id": "Q25-PARTIAL-ORDER-001",
+        "filled_quantity": 1,
+        "order_quantity": 5,
+        "status": "PARTIALLY_FILLED"
+      },
+      {
+        "average_execution_price": "14.78333333333333333333333333",
+        "broker_order_id": "Q25-TEST-BROKER-001",
+        "client_order_id": "Q25-PARTIAL-ORDER-001",
+        "filled_quantity": 3,
+        "order_quantity": 5,
+        "status": "PARTIALLY_FILLED"
+      },
+      {
+        "average_execution_price": "14.81000000000000000000000000",
+        "broker_order_id": "Q25-TEST-BROKER-001",
+        "client_order_id": "Q25-PARTIAL-ORDER-001",
+        "filled_quantity": 5,
+        "order_quantity": 5,
+        "status": "FILLED"
+      }
+    ],
+    "trace_status": "DISABLED_FAST_MODE",
+    "trace_write_errors": []
+  },
+  "fill_fixture": {
+    "expected_average_execution_price": "14.81",
+    "incremental_quantities": [
+      1,
+      2,
+      2
+    ],
+    "order_quantity": 5,
+    "prices": [
+      "14.75",
+      "14.80",
+      "14.85"
+    ],
+    "stages": 3
+  },
+  "input_files_before_after_match": 63,
+  "input_files_checked": 63,
+  "input_unchanged": true,
+  "limitations": [
+    "Signal and freshness are not exercised; this is a deterministic validation-only fixture.",
+    "The synthetic source event has BLOCKED_IDENTITY_OWNER_UNRESOLVED; no production identity is claimed.",
+    "Partial fill stages are test-only reports, not observed broker events.",
+    "No position store/PnL, cancel/replace, late-fill race, multi-order or full 53,550-event dataset equivalence was tested."
+  ],
+  "manifest_sha256": "47d6746bfd7abfea9d52016434ca06f097ca117e6724f96c522b58eb8e5590f5",
+  "production_runtime_eligible": false,
+  "provenance": "DERIVED_SCENARIO",
+  "run_id": "Q25-A1-3-VALIDATION-ONLY-MULTI-STAGE-PARTIAL-FILL-FAST-DETAILED-20261029",
+  "scope": "validation-only multi-stage partial-fill fast/detailed equivalence; actual OrderStateMachine plus deterministic test-only execution reports and ReplayTraceController; not full Virtual runtime",
+  "seed": 20261026,
+  "source_event": {
+    "event_id": "cad3f58855eb6b9653f49ed3eaf78d8f8cc0e9c03ef49cafab1e74b169438673",
+    "identity_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+    "path": "20261008.jsonl",
+    "synthetic_contract_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+    "timestamp": "2026-10-08T08:45:00+09:00"
+  },
+  "status": "PASS",
+  "synthetic": true,
+  "trace": {
+    "bytes": 7412,
+    "event_types": [
+      "order_command",
+      "order_ack",
+      "oms_state_transition",
+      "execution_report",
+      "fill",
+      "oms_state_transition",
+      "execution_report",
+      "fill",
+      "oms_state_transition",
+      "execution_report",
+      "fill",
+      "oms_state_transition"
+    ],
+    "path": "reports\\synth\\Q25_A1_3_PARTIAL_FILL_EQUIV_V2_DETAILED_20261029.jsonl",
+    "records": 12,
+    "sha256": "a1c51f0121d61f6a0bc29287f81c9f86e18035d8f4834f3c8497b2a2f37566c4"
+  },
+  "validation_only": true
+}

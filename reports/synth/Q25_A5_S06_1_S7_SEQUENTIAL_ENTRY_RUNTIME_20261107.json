@@ -1,0 +1,759 @@
+{
+  "all_group_expiries": [
+    "20261109",
+    "20261112"
+  ],
+  "approved": 8,
+  "assertions": {
+    "account_flat": true,
+    "all_eight_fills": true,
+    "all_group_legs_flat_after_close": true,
+    "all_groups_closed": true,
+    "concurrent_open_lots": true,
+    "each_group_has_both_entry_legs": true,
+    "group_pnl_reconciles_with_account": true,
+    "group_pnl_snapshots": true,
+    "risk_audit_four_sequential_legs": true,
+    "risk_reservation_retained_until_group_flat": true,
+    "risk_reservations_released": true,
+    "runtime_failures_zero": true,
+    "sequential_group_id_reused": true,
+    "sequential_put_call_order": true,
+    "two_expiry_groups": true
+  },
+  "automatic_retry_enabled": false,
+  "close_event_count": 4,
+  "concurrent_open_lot_snapshots": [
+    {
+      "distinct_expiries": [
+        "20261109"
+      ],
+      "distinct_groups": [
+        "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1"
+      ],
+      "entry_group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+      "entry_time": "2026-11-02T10:00:00+09:00",
+      "open_lot_count": 1,
+      "open_lots": [
+        {
+          "execution_id": "EXEC-000001",
+          "expiry": "20261109",
+          "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261109:PUT:487.5",
+          "option_type": "PUT",
+          "remaining_quantity": 1
+        }
+      ]
+    },
+    {
+      "distinct_expiries": [
+        "20261109"
+      ],
+      "distinct_groups": [
+        "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1"
+      ],
+      "entry_group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+      "entry_time": "2026-11-02T10:00:00+09:00",
+      "open_lot_count": 2,
+      "open_lots": [
+        {
+          "execution_id": "EXEC-000002",
+          "expiry": "20261109",
+          "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261109:CALL:512.5",
+          "option_type": "CALL",
+          "remaining_quantity": 1
+        },
+        {
+          "execution_id": "EXEC-000001",
+          "expiry": "20261109",
+          "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261109:PUT:487.5",
+          "option_type": "PUT",
+          "remaining_quantity": 1
+        }
+      ]
+    },
+    {
+      "distinct_expiries": [
+        "20261109",
+        "20261112"
+      ],
+      "distinct_groups": [
+        "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+        "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1"
+      ],
+      "entry_group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+      "entry_time": "2026-11-05T08:45:00+09:00",
+      "open_lot_count": 3,
+      "open_lots": [
+        {
+          "execution_id": "EXEC-000002",
+          "expiry": "20261109",
+          "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261109:CALL:512.5",
+          "option_type": "CALL",
+          "remaining_quantity": 1
+        },
+        {
+          "execution_id": "EXEC-000001",
+          "expiry": "20261109",
+          "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261109:PUT:487.5",
+          "option_type": "PUT",
+          "remaining_quantity": 1
+        },
+        {
+          "execution_id": "EXEC-000003",
+          "expiry": "20261112",
+          "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261112:PUT:487.5",
+          "option_type": "PUT",
+          "remaining_quantity": 1
+        }
+      ]
+    },
+    {
+      "distinct_expiries": [
+        "20261109",
+        "20261112"
+      ],
+      "distinct_groups": [
+        "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+        "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1"
+      ],
+      "entry_group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+      "entry_time": "2026-11-05T08:45:00+09:00",
+      "open_lot_count": 4,
+      "open_lots": [
+        {
+          "execution_id": "EXEC-000002",
+          "expiry": "20261109",
+          "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261109:CALL:512.5",
+          "option_type": "CALL",
+          "remaining_quantity": 1
+        },
+        {
+          "execution_id": "EXEC-000001",
+          "expiry": "20261109",
+          "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261109:PUT:487.5",
+          "option_type": "PUT",
+          "remaining_quantity": 1
+        },
+        {
+          "execution_id": "EXEC-000004",
+          "expiry": "20261112",
+          "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261112:CALL:512.5",
+          "option_type": "CALL",
+          "remaining_quantity": 1
+        },
+        {
+          "execution_id": "EXEC-000003",
+          "expiry": "20261112",
+          "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261112:PUT:487.5",
+          "option_type": "PUT",
+          "remaining_quantity": 1
+        }
+      ]
+    }
+  ],
+  "concurrent_two_expiry_groups_proven": true,
+  "dataset_path": "data/derived_scenario/q25_s05_3_s7_concurrent",
+  "dataset_sha256": "7c3fb9ea162b727c686fe49381728b2a5932237fff5e1447a3061b5ab064dea6",
+  "entry_group_ids": [
+    "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+    "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1"
+  ],
+  "events": 216,
+  "execution_ids": [
+    "EXEC-000001",
+    "EXEC-000002",
+    "EXEC-000003",
+    "EXEC-000004",
+    "EXEC-000005",
+    "EXEC-000006",
+    "EXEC-000007",
+    "EXEC-000008"
+  ],
+  "execution_observer_summary": {
+    "execution_reports_observed": 8,
+    "fill_records_status": "CANONICAL_FILLS_OBSERVED",
+    "fills_observed": 8,
+    "order_commands_observed": 8,
+    "order_records_status": "OBSERVED_READ_ONLY",
+    "status": "CONNECTED",
+    "trace_write_errors": []
+  },
+  "execution_records": [
+    {
+      "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+      "planned_legs": [
+        {
+          "leg_id": "put",
+          "option_type": "PUT",
+          "quantity": 1,
+          "side": "BUY",
+          "strike": "487.5"
+        }
+      ],
+      "position_flat": false,
+      "purpose": "WEEKLY_INSURANCE_ENTRY_PUT",
+      "reports": [
+        {
+          "execution_id": "EXEC-000001",
+          "execution_price": "1.26",
+          "execution_timestamp": "2026-11-02T10:00:00+09:00",
+          "fee": "0.0",
+          "filled_quantity": 1,
+          "leg_id": "put",
+          "rejected_reason": null,
+          "status": "FILLED"
+        }
+      ]
+    },
+    {
+      "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+      "planned_legs": [
+        {
+          "leg_id": "call",
+          "option_type": "CALL",
+          "quantity": 1,
+          "side": "BUY",
+          "strike": "512.5"
+        }
+      ],
+      "position_flat": false,
+      "purpose": "WEEKLY_INSURANCE_ENTRY_CALL",
+      "reports": [
+        {
+          "execution_id": "EXEC-000002",
+          "execution_price": "1.16",
+          "execution_timestamp": "2026-11-02T10:00:00+09:00",
+          "fee": "0.0",
+          "filled_quantity": 1,
+          "leg_id": "call",
+          "rejected_reason": null,
+          "status": "FILLED"
+        }
+      ]
+    },
+    {
+      "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+      "planned_legs": [
+        {
+          "leg_id": "put",
+          "option_type": "PUT",
+          "quantity": 1,
+          "side": "BUY",
+          "strike": "487.5"
+        }
+      ],
+      "position_flat": false,
+      "purpose": "WEEKLY_INSURANCE_ENTRY_PUT",
+      "reports": [
+        {
+          "execution_id": "EXEC-000003",
+          "execution_price": "2.42",
+          "execution_timestamp": "2026-11-05T08:45:00+09:00",
+          "fee": "0.0",
+          "filled_quantity": 1,
+          "leg_id": "put",
+          "rejected_reason": null,
+          "status": "FILLED"
+        }
+      ]
+    },
+    {
+      "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+      "planned_legs": [
+        {
+          "leg_id": "call",
+          "option_type": "CALL",
+          "quantity": 1,
+          "side": "BUY",
+          "strike": "512.5"
+        }
+      ],
+      "position_flat": false,
+      "purpose": "WEEKLY_INSURANCE_ENTRY_CALL",
+      "reports": [
+        {
+          "execution_id": "EXEC-000004",
+          "execution_price": "2.2",
+          "execution_timestamp": "2026-11-05T08:45:00+09:00",
+          "fee": "0.0",
+          "filled_quantity": 1,
+          "leg_id": "call",
+          "rejected_reason": null,
+          "status": "FILLED"
+        }
+      ]
+    },
+    {
+      "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+      "planned_legs": [
+        {
+          "leg_id": "close-8a793c865298",
+          "option_type": "PUT",
+          "quantity": 1,
+          "side": "SELL",
+          "strike": "487.5"
+        }
+      ],
+      "position_flat": false,
+      "purpose": "WEEKLY_INSURANCE_CLOSE_PUT",
+      "reports": [
+        {
+          "execution_id": "EXEC-000005",
+          "execution_price": "0.52",
+          "execution_timestamp": "2026-11-06T08:45:00+09:00",
+          "fee": "0.0",
+          "filled_quantity": 1,
+          "leg_id": "close-8a793c865298",
+          "rejected_reason": null,
+          "status": "FILLED"
+        }
+      ]
+    },
+    {
+      "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+      "planned_legs": [
+        {
+          "leg_id": "close-87739e218105",
+          "option_type": "CALL",
+          "quantity": 1,
+          "side": "SELL",
+          "strike": "512.5"
+        }
+      ],
+      "position_flat": true,
+      "purpose": "WEEKLY_INSURANCE_CLOSE_CALL",
+      "reports": [
+        {
+          "execution_id": "EXEC-000006",
+          "execution_price": "0.48",
+          "execution_timestamp": "2026-11-06T08:45:00+09:00",
+          "fee": "0.0",
+          "filled_quantity": 1,
+          "leg_id": "close-87739e218105",
+          "rejected_reason": null,
+          "status": "FILLED"
+        }
+      ]
+    },
+    {
+      "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+      "planned_legs": [
+        {
+          "leg_id": "close-2d8cde319f90",
+          "option_type": "PUT",
+          "quantity": 1,
+          "side": "SELL",
+          "strike": "487.5"
+        }
+      ],
+      "position_flat": false,
+      "purpose": "WEEKLY_INSURANCE_CLOSE_PUT",
+      "reports": [
+        {
+          "execution_id": "EXEC-000007",
+          "execution_price": "0.52",
+          "execution_timestamp": "2026-11-06T08:45:00+09:00",
+          "fee": "0.0",
+          "filled_quantity": 1,
+          "leg_id": "close-2d8cde319f90",
+          "rejected_reason": null,
+          "status": "FILLED"
+        }
+      ]
+    },
+    {
+      "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+      "planned_legs": [
+        {
+          "leg_id": "close-52013fa1137b",
+          "option_type": "CALL",
+          "quantity": 1,
+          "side": "SELL",
+          "strike": "512.5"
+        }
+      ],
+      "position_flat": true,
+      "purpose": "WEEKLY_INSURANCE_CLOSE_CALL",
+      "reports": [
+        {
+          "execution_id": "EXEC-000008",
+          "execution_price": "0.48",
+          "execution_timestamp": "2026-11-06T08:45:00+09:00",
+          "fee": "0.0",
+          "filled_quantity": 1,
+          "leg_id": "close-52013fa1137b",
+          "rejected_reason": null,
+          "status": "FILLED"
+        }
+      ]
+    }
+  ],
+  "exhausted": true,
+  "fee_inclusive_pnl_verified": false,
+  "fee_model_status": "SYNTHETIC_ZERO_FEE; KIS_FEE_SCHEDULE_NOT_MODELED",
+  "fees_total_krw": "0.0",
+  "filled": 8,
+  "group_expiries": {
+    "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1": [
+      "20261112"
+    ],
+    "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1": [
+      "20261109"
+    ]
+  },
+  "group_pnl": {
+    "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1": {
+      "expiry": [
+        "20261112"
+      ],
+      "legs": [
+        {
+          "avg_price": 2.42,
+          "client_order_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1-put-c3fcef1a061d",
+          "contract_multiplier": "250000.0",
+          "current_price": 0.52,
+          "execution_id": "EXEC-000003",
+          "execution_ids": [
+            "EXEC-000003"
+          ],
+          "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+          "identity_source": "OPTION_MASTER",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261112:PUT:487.5",
+          "leg_id": "put",
+          "quantity": 0,
+          "run_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107",
+          "unrealized_pnl": 0.0
+        },
+        {
+          "avg_price": 2.2,
+          "client_order_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1-call-b177c352feaf",
+          "contract_multiplier": "250000.0",
+          "current_price": 0.48,
+          "execution_id": "EXEC-000004",
+          "execution_ids": [
+            "EXEC-000004"
+          ],
+          "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+          "identity_source": "OPTION_MASTER",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261112:CALL:512.5",
+          "leg_id": "call",
+          "quantity": 0,
+          "run_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107",
+          "unrealized_pnl": 0.0
+        }
+      ],
+      "realized_pnl": -905000.0000000001,
+      "total_pnl": -905000.0000000001,
+      "unrealized_pnl": 0.0
+    },
+    "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1": {
+      "expiry": [
+        "20261109"
+      ],
+      "legs": [
+        {
+          "avg_price": 1.26,
+          "client_order_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1-put-5aed71087bf7",
+          "contract_multiplier": "250000.0",
+          "current_price": 0.52,
+          "execution_id": "EXEC-000001",
+          "execution_ids": [
+            "EXEC-000001"
+          ],
+          "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+          "identity_source": "OPTION_MASTER",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261109:PUT:487.5",
+          "leg_id": "put",
+          "quantity": 0,
+          "run_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107",
+          "unrealized_pnl": 0.0
+        },
+        {
+          "avg_price": 1.16,
+          "client_order_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1-call-3fb635eb98c1",
+          "contract_multiplier": "250000.0",
+          "current_price": 0.48,
+          "execution_id": "EXEC-000002",
+          "execution_ids": [
+            "EXEC-000002"
+          ],
+          "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+          "identity_source": "OPTION_MASTER",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261109:CALL:512.5",
+          "leg_id": "call",
+          "quantity": 0,
+          "run_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107",
+          "unrealized_pnl": 0.0
+        }
+      ],
+      "realized_pnl": -354999.99999999994,
+      "total_pnl": -354999.99999999994,
+      "unrealized_pnl": 0.0
+    }
+  },
+  "group_pnl_reconciles_with_account": true,
+  "group_pnl_reconciliation_delta": 0.0,
+  "group_pnl_reconciliation_status": "PASS",
+  "group_pnl_snapshot_sum": -1260000.0,
+  "kis_api_called": false,
+  "live_orders_or_real_account_used": false,
+  "lot_history_count": 4,
+  "manifest_sha256": "9bd038eb4e41992a218bcf07d7abc54603d2cc8e7b737c454399c48d81b9b4d9",
+  "multi_leg_decisions": 8,
+  "net_pnl": -1260000.0,
+  "nonzero_account_positions": {},
+  "operational_risk_config_modified": false,
+  "pnl_basis": "GROSS_SYNTHETIC_VSSF_ACCOUNT_PNL_BEFORE_KIS_FEE_SCHEDULE",
+  "pnl_status": "VSSF_ACCOUNT_PNL_CONNECTED",
+  "position_group_snapshots": {
+    "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1": {
+      "complete": true,
+      "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+      "legs": [
+        {
+          "avg_price": 2.42,
+          "client_order_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1-put-c3fcef1a061d",
+          "contract_multiplier": "250000.0",
+          "current_price": 0.52,
+          "execution_id": "EXEC-000003",
+          "execution_ids": [
+            "EXEC-000003"
+          ],
+          "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+          "identity_source": "OPTION_MASTER",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261112:PUT:487.5",
+          "leg_id": "put",
+          "quantity": 0,
+          "run_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107",
+          "unrealized_pnl": 0.0
+        },
+        {
+          "avg_price": 2.2,
+          "client_order_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1-call-b177c352feaf",
+          "contract_multiplier": "250000.0",
+          "current_price": 0.48,
+          "execution_id": "EXEC-000004",
+          "execution_ids": [
+            "EXEC-000004"
+          ],
+          "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+          "identity_source": "OPTION_MASTER",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261112:CALL:512.5",
+          "leg_id": "call",
+          "quantity": 0,
+          "run_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107",
+          "unrealized_pnl": 0.0
+        }
+      ],
+      "realized_pnl": -905000.0000000001,
+      "strategy_id": "track7_volatility_skew_weekly_insurance",
+      "total_pnl": -905000.0000000001,
+      "unrealized_pnl": 0.0
+    },
+    "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1": {
+      "complete": true,
+      "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+      "legs": [
+        {
+          "avg_price": 1.26,
+          "client_order_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1-put-5aed71087bf7",
+          "contract_multiplier": "250000.0",
+          "current_price": 0.52,
+          "execution_id": "EXEC-000001",
+          "execution_ids": [
+            "EXEC-000001"
+          ],
+          "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+          "identity_source": "OPTION_MASTER",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261109:PUT:487.5",
+          "leg_id": "put",
+          "quantity": 0,
+          "run_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107",
+          "unrealized_pnl": 0.0
+        },
+        {
+          "avg_price": 1.16,
+          "client_order_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1-call-3fb635eb98c1",
+          "contract_multiplier": "250000.0",
+          "current_price": 0.48,
+          "execution_id": "EXEC-000002",
+          "execution_ids": [
+            "EXEC-000002"
+          ],
+          "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+          "identity_source": "OPTION_MASTER",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261109:CALL:512.5",
+          "leg_id": "call",
+          "quantity": 0,
+          "run_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107",
+          "unrealized_pnl": 0.0
+        }
+      ],
+      "realized_pnl": -354999.99999999994,
+      "strategy_id": "track7_volatility_skew_weekly_insurance",
+      "total_pnl": -354999.99999999994,
+      "unrealized_pnl": 0.0
+    }
+  },
+  "production_runtime_eligible": false,
+  "realized_pnl": -1260000.0,
+  "rejected": 0,
+  "remaining_open_lot_count": 0,
+  "remaining_open_lots": [],
+  "report_id": "Q25_A5_S06_1_S7_SEQUENTIAL_ENTRY_RUNTIME_20261107",
+  "risk_audit_records": [
+    {
+      "computed_concurrent_exposure_krw": "315000.000",
+      "computed_gross_premium_krw": "315000.000",
+      "computed_max_loss_krw": "315000.000",
+      "dataset_sha256": "7c3fb9ea162b727c686fe49381728b2a5932237fff5e1447a3061b5ab064dea6",
+      "entry_leg": "put",
+      "expiry": "20261109",
+      "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+      "manifest_sha256": "9bd038eb4e41992a218bcf07d7abc54603d2cc8e7b737c454399c48d81b9b4d9",
+      "operational_reference_overage_krw": "65000.000",
+      "run_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107",
+      "scenario_id": "Q25_STRATEGY7_WEEKLY_LIFECYCLE_V2",
+      "status": "ALLOW",
+      "validation_budget_overage_krw": "0"
+    },
+    {
+      "computed_concurrent_exposure_krw": "605000.000",
+      "computed_gross_premium_krw": "605000.000",
+      "computed_max_loss_krw": "605000.000",
+      "dataset_sha256": "7c3fb9ea162b727c686fe49381728b2a5932237fff5e1447a3061b5ab064dea6",
+      "entry_leg": "call",
+      "expiry": "20261109",
+      "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+      "manifest_sha256": "9bd038eb4e41992a218bcf07d7abc54603d2cc8e7b737c454399c48d81b9b4d9",
+      "operational_reference_overage_krw": "355000.000",
+      "run_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107",
+      "scenario_id": "Q25_STRATEGY7_WEEKLY_LIFECYCLE_V2",
+      "status": "ALLOW",
+      "validation_budget_overage_krw": "0"
+    },
+    {
+      "computed_concurrent_exposure_krw": "1210000.000",
+      "computed_gross_premium_krw": "605000.000",
+      "computed_max_loss_krw": "605000.000",
+      "dataset_sha256": "7c3fb9ea162b727c686fe49381728b2a5932237fff5e1447a3061b5ab064dea6",
+      "entry_leg": "put",
+      "expiry": "20261112",
+      "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+      "manifest_sha256": "9bd038eb4e41992a218bcf07d7abc54603d2cc8e7b737c454399c48d81b9b4d9",
+      "operational_reference_overage_krw": "355000.000",
+      "run_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107",
+      "scenario_id": "Q25_STRATEGY7_WEEKLY_LIFECYCLE_V2",
+      "status": "ALLOW",
+      "validation_budget_overage_krw": "0"
+    },
+    {
+      "computed_concurrent_exposure_krw": "1760000.000",
+      "computed_gross_premium_krw": "1155000.000",
+      "computed_max_loss_krw": "1155000.000",
+      "dataset_sha256": "7c3fb9ea162b727c686fe49381728b2a5932237fff5e1447a3061b5ab064dea6",
+      "entry_leg": "call",
+      "expiry": "20261112",
+      "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+      "manifest_sha256": "9bd038eb4e41992a218bcf07d7abc54603d2cc8e7b737c454399c48d81b9b4d9",
+      "operational_reference_overage_krw": "905000.000",
+      "run_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107",
+      "scenario_id": "Q25_STRATEGY7_WEEKLY_LIFECYCLE_V2",
+      "status": "ALLOW",
+      "validation_budget_overage_krw": "0"
+    }
+  ],
+  "risk_profile_sha256": "327f511b3f32f73aee9b3ac5bdf3f00614e8d1b3376233543b4b0e03ba1c8552",
+  "risk_reservation_retained_until_group_flat": true,
+  "risk_reservations_after_execution": [
+    {
+      "current_group_reserved": true,
+      "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+      "purpose": "WEEKLY_INSURANCE_ENTRY_PUT",
+      "reserved_groups_after_execution": [
+        "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1"
+      ]
+    },
+    {
+      "current_group_reserved": true,
+      "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+      "purpose": "WEEKLY_INSURANCE_ENTRY_CALL",
+      "reserved_groups_after_execution": [
+        "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1"
+      ]
+    },
+    {
+      "current_group_reserved": true,
+      "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+      "purpose": "WEEKLY_INSURANCE_ENTRY_PUT",
+      "reserved_groups_after_execution": [
+        "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+        "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1"
+      ]
+    },
+    {
+      "current_group_reserved": true,
+      "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+      "purpose": "WEEKLY_INSURANCE_ENTRY_CALL",
+      "reserved_groups_after_execution": [
+        "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+        "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1"
+      ]
+    },
+    {
+      "current_group_reserved": true,
+      "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+      "purpose": "WEEKLY_INSURANCE_CLOSE_PUT",
+      "reserved_groups_after_execution": [
+        "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+        "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1"
+      ]
+    },
+    {
+      "current_group_reserved": false,
+      "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+      "purpose": "WEEKLY_INSURANCE_CLOSE_CALL",
+      "reserved_groups_after_execution": [
+        "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1"
+      ]
+    },
+    {
+      "current_group_reserved": true,
+      "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+      "purpose": "WEEKLY_INSURANCE_CLOSE_PUT",
+      "reserved_groups_after_execution": [
+        "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1"
+      ]
+    },
+    {
+      "current_group_reserved": false,
+      "group_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+      "purpose": "WEEKLY_INSURANCE_CLOSE_CALL",
+      "reserved_groups_after_execution": []
+    }
+  ],
+  "risk_reservations_released": true,
+  "routed": 8,
+  "run_id": "Q25-A5-S06-1-S7-SEQUENTIAL-ENTRY-R2-20261107",
+  "runtime_eligible": false,
+  "runtime_failures": 0,
+  "sequential_group_id_reused": true,
+  "sequential_put_call_order": true,
+  "signals": 8,
+  "stage_verdict": "PSB_UNVERIFIED_U16_U17_TIMEOUT_CANCEL_POLICY",
+  "timeout_cancel_policy_status": "BLOCKED_SPEC_U16_U17",
+  "trace_path": "reports/synth/Q25_A5_S06_1_S7_SEQUENTIAL_ENTRY_TRACE_R2_20261107.jsonl",
+  "unrealized_pnl": 0.0,
+  "validation_only": true,
+  "verdict": "PSB_PASS_NORMAL_PATH_ONLY"
+}

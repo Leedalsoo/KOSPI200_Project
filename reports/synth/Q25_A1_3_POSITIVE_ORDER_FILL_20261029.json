@@ -1,0 +1,62 @@
+{
+  "status": "PASS",
+  "scope": "one-event validation-only test fixture; not strategy profitability or production E2E",
+  "run_id": "Q25-A1-3-POSITIVE-ORDER-FILL-20261029",
+  "dataset": "p5_run_20261026_trend_up_seed20261026",
+  "manifest_sha256": "47d6746bfd7abfea9d52016434ca06f097ca117e6724f96c522b58eb8e5590f5",
+  "manifest_provenance": "DERIVED_SCENARIO",
+  "validation_only": true,
+  "production_runtime_eligible": false,
+  "seed": 20261026,
+  "event_timestamp": "2026-10-08T08:45:00+09:00",
+  "synthetic_instrument_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+  "production_standard_instrument_id": null,
+  "runtime_counts": {
+    "signals": 1,
+    "approved": 1,
+    "routed": 1,
+    "filled": 1,
+    "rejected": 0,
+    "execution_ids": [
+      "EXEC-000001"
+    ]
+  },
+  "observer": {
+    "status": "CONNECTED",
+    "order_commands_observed": 1,
+    "execution_reports_observed": 1,
+    "fills_observed": 1,
+    "trace_write_errors": [],
+    "order_records_status": "OBSERVED_READ_ONLY",
+    "fill_records_status": "CANONICAL_FILLS_OBSERVED"
+  },
+  "trace_event_counts": {
+    "replay_started": 1,
+    "order_command": 1,
+    "execution_report": 1,
+    "fill": 1,
+    "market_event": 1,
+    "replay_finished": 1
+  },
+  "trace_sha256": "827ba717580b0b2845f550d36e15f5ddbe00324fd1a3118ba6fb1cd106ac0515",
+  "trace_bytes": 3664,
+  "input_files_checked": 63,
+  "input_files_unchanged": true,
+  "input_hashes_before_after_equal": true,
+  "position_symbols": [
+    "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37"
+  ],
+  "positions": {
+    "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37": {
+      "qty": 1,
+      "avg_price": 14.75
+    }
+  },
+  "trace_path": "reports\\synth\\Q25_A1_3_POSITIVE_ORDER_FILL_TRACE_20261029.jsonl",
+  "summary_path": "reports\\synth\\Q25_A1_3_POSITIVE_ORDER_FILL_20261029.json",
+  "limitations": [
+    "FreshnessVerdict is explicitly test-fixture-only; this does not validate production freshness wiring.",
+    "One event only; does not establish full-dataset or fast-vs-detailed semantic equivalence.",
+    "Synthetic contract identity is not production-eligible."
+  ]
+}

@@ -1,0 +1,203 @@
+{
+  "assertions": {
+    "natural_strategy_call_fill_wins_before_1500_cancel": true,
+    "natural_strategy_call_submitted_before_1500_and_cancelled_at_cutoff": true
+  },
+  "cancel_at_1500": {
+    "approved": 4,
+    "call_final_orders": [
+      {
+        "client_order_id": "Q25-A5-S06-3-S7-U17-NATURAL-20261107-CANCEL_AT_1500-SIG-146-track7_volatility_skew_weekly_insurance-1-call-b95d4ab95b15",
+        "execution_id": null,
+        "execution_timestamp": "2026-11-05T15:00:00+09:00",
+        "filled_quantity": 0,
+        "lifecycle_reason": "15:00_CUTOFF",
+        "remaining_quantity": 1,
+        "status": "CANCELLED"
+      }
+    ],
+    "call_submissions": [
+      {
+        "group_id": "Q25-A5-S06-3-S7-U17-NATURAL-20261107-CANCEL_AT_1500-SIG-146-track7_volatility_skew_weekly_insurance-1",
+        "pending_legs": 1,
+        "purpose": "WEEKLY_INSURANCE_ENTRY_CALL",
+        "reports": [
+          {
+            "client_order_id": "Q25-A5-S06-3-S7-U17-NATURAL-20261107-CANCEL_AT_1500-SIG-146-track7_volatility_skew_weekly_insurance-1-call-b95d4ab95b15",
+            "execution_id": null,
+            "execution_timestamp": "2026-11-05T14:59:30+09:00",
+            "filled_quantity": 0,
+            "lifecycle_reason": null,
+            "remaining_quantity": 1,
+            "status": "NEW",
+            "submitted_at": "2026-11-05T14:59:30+09:00"
+          }
+        ],
+        "requested_price": "0.01"
+      }
+    ],
+    "cancel_reconciliations": [
+      {
+        "client_order_id": "Q25-A5-S06-3-S7-U17-NATURAL-20261107-CANCEL_AT_1500-SIG-146-track7_volatility_skew_weekly_insurance-1-call-b95d4ab95b15",
+        "pending_legs": 0,
+        "reason": "15:00_CUTOFF",
+        "reports": [
+          {
+            "execution_id": null,
+            "execution_timestamp": "2026-11-05T15:00:00+09:00",
+            "filled_quantity": 0,
+            "lifecycle_reason": "15:00_CUTOFF",
+            "remaining_quantity": 1,
+            "status": "CANCELLED"
+          }
+        ]
+      }
+    ],
+    "case": "cancel_at_1500",
+    "dataset_sha256": "c0ce99fa29d6c72f8ca294c9c680a5ae28da5417f897351bf52334c7d81cedd2",
+    "event_limit": 77,
+    "events": 77,
+    "exhausted": false,
+    "filled": 2,
+    "lifecycle_actions": [
+      {
+        "client_order_id": "Q25-A5-S06-3-S7-U17-NATURAL-20261107-CANCEL_AT_1500-SIG-146-track7_volatility_skew_weekly_insurance-1-call-b95d4ab95b15",
+        "expiry": "20261112",
+        "kind": "CANCEL_AND_RECONCILE",
+        "now": "2026-11-05T15:00:00+09:00",
+        "reason": "15:00_CUTOFF"
+      }
+    ],
+    "manifest_sha256": "3569f68b8ed7c59e55367f1803f6aa767f79af17133bb638066694e7d122fb07",
+    "natural_strategy_signal_count": 4,
+    "open_lots": [
+      {
+        "execution_id": "EXEC-000002",
+        "group_id": "Q25-A5-S06-3-S7-U17-NATURAL-20261107-CANCEL_AT_1500-SIG-146-track7_volatility_skew_weekly_insurance-1",
+        "option_type": "PUT",
+        "quantity": 1
+      }
+    ],
+    "pending_bridge_orders": 0,
+    "race_fill": false,
+    "race_quote_injections": [],
+    "rejected": 0,
+    "risk_profile_sha256": "139dbb20709cadaf08e63efea40588cd2134defc047fc32a7373d437076901fd",
+    "routed": 4,
+    "runtime_failures": 0,
+    "signals": 4,
+    "strategy_state": {
+      "call_open": false,
+      "call_submitted_at": "2026-11-05T14:59:30+09:00",
+      "entry_block_reason": "TRACK7_CALL_ENTRY_NOT_FULLY_FILLED:CANCELLED",
+      "entry_cancel_reason": "15:00_CUTOFF",
+      "entry_pending": true,
+      "entry_stage": "BLOCKED_U17",
+      "insurance_active": false,
+      "put_entry_filled_at": "2026-11-05T14:59:30+09:00",
+      "put_open": true
+    },
+    "trace_path": "reports/synth/Q25_A5_S06_3_S7_U17_CANCEL_AT_1500_TRACE_20261107.jsonl",
+    "validation_timeout_policy_seconds": "600"
+  },
+  "fill_before_cancel_race": {
+    "approved": 4,
+    "call_final_orders": [
+      {
+        "client_order_id": "Q25-A5-S06-3-S7-U17-NATURAL-20261107-FILL_BEFORE_1500_CANCEL-SIG-146-track7_volatility_skew_weekly_insurance-1-call-607d679f78f8",
+        "execution_id": "EXEC-000003",
+        "execution_timestamp": "2026-11-05T14:59:45+09:00",
+        "filled_quantity": 1,
+        "lifecycle_reason": null,
+        "remaining_quantity": 0,
+        "status": "FILLED"
+      }
+    ],
+    "call_submissions": [
+      {
+        "group_id": "Q25-A5-S06-3-S7-U17-NATURAL-20261107-FILL_BEFORE_1500_CANCEL-SIG-146-track7_volatility_skew_weekly_insurance-1",
+        "pending_legs": 1,
+        "purpose": "WEEKLY_INSURANCE_ENTRY_CALL",
+        "reports": [
+          {
+            "client_order_id": "Q25-A5-S06-3-S7-U17-NATURAL-20261107-FILL_BEFORE_1500_CANCEL-SIG-146-track7_volatility_skew_weekly_insurance-1-call-607d679f78f8",
+            "execution_id": null,
+            "execution_timestamp": "2026-11-05T14:59:30+09:00",
+            "filled_quantity": 0,
+            "lifecycle_reason": null,
+            "remaining_quantity": 1,
+            "status": "NEW",
+            "submitted_at": "2026-11-05T14:59:30+09:00"
+          }
+        ],
+        "requested_price": "0.01"
+      }
+    ],
+    "cancel_reconciliations": [],
+    "case": "fill_before_1500_cancel",
+    "dataset_sha256": "335e13f68f2bec1e5c88a12af8acb41d19b9bb618a3a52f6abf8646d0c3e150e",
+    "event_limit": 77,
+    "events": 77,
+    "exhausted": false,
+    "filled": 3,
+    "lifecycle_actions": [],
+    "manifest_sha256": "dd445900d34d7626aa154ccf5172f78724a3c5b2280832dc6af687452fcab0a4",
+    "natural_strategy_signal_count": 4,
+    "open_lots": [
+      {
+        "execution_id": "EXEC-000003",
+        "group_id": "Q25-A5-S06-3-S7-U17-NATURAL-20261107-FILL_BEFORE_1500_CANCEL-SIG-146-track7_volatility_skew_weekly_insurance-1",
+        "option_type": "CALL",
+        "quantity": 1
+      },
+      {
+        "execution_id": "EXEC-000002",
+        "group_id": "Q25-A5-S06-3-S7-U17-NATURAL-20261107-FILL_BEFORE_1500_CANCEL-SIG-146-track7_volatility_skew_weekly_insurance-1",
+        "option_type": "PUT",
+        "quantity": 1
+      }
+    ],
+    "pending_bridge_orders": 0,
+    "race_fill": true,
+    "race_quote_injections": [
+      {
+        "ask": 0.01,
+        "bid": 0.005,
+        "injection_reason": "VALIDATION_ONLY_MARKET_QUOTE_TO_WIN_CANCEL_RACE",
+        "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261112:CALL:512.5",
+        "timestamp": "2026-11-05T14:59:45+09:00"
+      }
+    ],
+    "rejected": 0,
+    "risk_profile_sha256": "5e732c25545715baf55f095d2c92b90562d29807b9155d5e871037e89ef05942",
+    "routed": 4,
+    "runtime_failures": 0,
+    "signals": 4,
+    "strategy_state": {
+      "call_open": true,
+      "call_submitted_at": null,
+      "entry_block_reason": null,
+      "entry_cancel_reason": null,
+      "entry_pending": false,
+      "entry_stage": "COMPLETE",
+      "insurance_active": true,
+      "put_entry_filled_at": "2026-11-05T14:59:30+09:00",
+      "put_open": true
+    },
+    "trace_path": "reports/synth/Q25_A5_S06_3_S7_U17_FILL_BEFORE_1500_CANCEL_TRACE_20261107.jsonl",
+    "validation_timeout_policy_seconds": "600"
+  },
+  "kis_api_called": false,
+  "live_orders_or_real_account_used": false,
+  "natural_strategy_signal_used": true,
+  "operational_risk_config_modified": false,
+  "production_runtime_eligible": false,
+  "report_id": "Q25_A5_S06_3_S7_U17_NATURAL_SIGNAL_RUNTIME_E2E_20261107",
+  "runtime_eligible": false,
+  "stage_verdict": "PSB_PASS_U16_U17_VALIDATION_ONLY",
+  "validation_only": true,
+  "validation_only_order_price_control": "CALL BUY requested_price=0.01 is applied only in the validation runner after StrategyHub emitted the natural CALL signal, to maintain a pending order until the cutoff/race event.",
+  "validation_only_order_timeout_policy": "600 seconds, so the broker's separate timeout occurs after the 15:00 cutoff and cannot pre-empt the S7 cutoff cancellation.",
+  "validation_only_race_quote": "The race case injects a synthetic CALL quote at 14:59:45 KST to make the pending CALL fill before the 15:00 lifecycle check.",
+  "verdict": "PSB_PASS_U17_NATURAL_SIGNAL_VALIDATION_ONLY"
+}

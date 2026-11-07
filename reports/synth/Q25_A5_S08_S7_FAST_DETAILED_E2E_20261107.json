@@ -1,0 +1,183 @@
+{
+  "assertions": {
+    "all_positions_flat": true,
+    "both_modes_exhausted_216_events": true,
+    "detailed_trace_and_observer_valid": true,
+    "each_group_has_two_legs_and_is_flat": true,
+    "fast_and_detailed_semantics_equal": true,
+    "group_realized_pnl_matches_account": true,
+    "monday_and_thursday_expiry_groups": true,
+    "natural_strategy_signals_and_full_execution": true,
+    "risk_reservations_released": true,
+    "runtime_failures_zero": true,
+    "same_dataset_manifest_and_risk_profile_hashes": true,
+    "validation_only_no_kis_or_live_orders": true
+  },
+  "dataset_path": "data/derived_scenario/q25_s05_3_s7_concurrent",
+  "detailed": {
+    "approved": 8,
+    "events": 216,
+    "execution_ids": [
+      "EXEC-000001",
+      "EXEC-000002",
+      "EXEC-000003",
+      "EXEC-000004",
+      "EXEC-000005",
+      "EXEC-000006",
+      "EXEC-000007",
+      "EXEC-000008"
+    ],
+    "filled": 8,
+    "mode": "detailed",
+    "net_pnl_krw": -1260000.0,
+    "observer": {
+      "execution_reports_observed": 8,
+      "fill_records_status": "CANONICAL_FILLS_OBSERVED",
+      "fills_observed": 8,
+      "order_commands_observed": 8,
+      "order_records_status": "OBSERVED_READ_ONLY",
+      "status": "CONNECTED",
+      "trace_write_errors": []
+    },
+    "realized_pnl_krw": -1260000.0,
+    "rejected": 0,
+    "routed": 8,
+    "signals": 8,
+    "trace": {
+      "market_events": 216,
+      "path": "reports/synth/Q25_A5_S08_S7_DETAILED_TRACE_20261107.jsonl",
+      "records": 242,
+      "sha256": "4c550be853d58b47662ff65d0e61bd8bf457a1367619c7996397a64a52561ee4"
+    },
+    "unrealized_pnl_krw": 0.0
+  },
+  "expiry_group_reconciliation": {
+    "account_realized_pnl_krw": -1260000.0,
+    "delta_krw": 0.0,
+    "group_realized_pnl_sum_krw": -1260000.0,
+    "groups": [
+      {
+        "all_legs_flat": true,
+        "expiry": [
+          "20261112"
+        ],
+        "group_id": "Q25-A5-S06-3-S7-NORMAL-PATH-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+        "leg_count": 2,
+        "realized_pnl_krw": -905000.0000000001,
+        "total_pnl_krw": -905000.0000000001,
+        "unrealized_pnl_krw": 0.0
+      },
+      {
+        "all_legs_flat": true,
+        "expiry": [
+          "20261109"
+        ],
+        "group_id": "Q25-A5-S06-3-S7-NORMAL-PATH-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+        "leg_count": 2,
+        "realized_pnl_krw": -354999.99999999994,
+        "total_pnl_krw": -354999.99999999994,
+        "unrealized_pnl_krw": 0.0
+      }
+    ],
+    "positions_flat": true,
+    "status": "PASS"
+  },
+  "fast": {
+    "approved": 8,
+    "events": 216,
+    "execution_ids": [
+      "EXEC-000001",
+      "EXEC-000002",
+      "EXEC-000003",
+      "EXEC-000004",
+      "EXEC-000005",
+      "EXEC-000006",
+      "EXEC-000007",
+      "EXEC-000008"
+    ],
+    "filled": 8,
+    "mode": "fast",
+    "net_pnl_krw": -1260000.0,
+    "realized_pnl_krw": -1260000.0,
+    "rejected": 0,
+    "routed": 8,
+    "signals": 8,
+    "unrealized_pnl_krw": 0.0
+  },
+  "fast_detailed_equivalence": {
+    "input_hash_equal": true,
+    "semantic_equal": true,
+    "semantic_fields_compared": [
+      "dataset_sha256",
+      "manifest_sha256",
+      "risk_profile_sha256",
+      "events",
+      "exhausted",
+      "signals",
+      "approved",
+      "routed",
+      "filled",
+      "rejected",
+      "multi_leg_decisions",
+      "execution_ids",
+      "entry_group_ids",
+      "group_expiries",
+      "all_group_expiries",
+      "concurrent_open_lot_snapshots",
+      "concurrent_two_expiry_groups_proven",
+      "sequential_put_call_order",
+      "sequential_group_id_reused",
+      "execution_records",
+      "position_group_snapshots",
+      "group_pnl",
+      "lot_history_count",
+      "close_event_count",
+      "remaining_open_lot_count",
+      "remaining_open_lots",
+      "nonzero_account_positions",
+      "risk_audit_records",
+      "risk_reservations_after_execution",
+      "risk_reservation_retained_until_group_flat",
+      "risk_reservations_released",
+      "group_pnl_snapshot_sum",
+      "group_pnl_reconciliation_delta",
+      "group_pnl_reconciles_with_account",
+      "runtime_failures",
+      "realized_pnl",
+      "unrealized_pnl",
+      "net_pnl",
+      "pnl_status",
+      "fees_total_krw",
+      "fee_model_status",
+      "fee_inclusive_pnl_verified",
+      "pnl_basis"
+    ],
+    "status": "PASS"
+  },
+  "input_hashes": {
+    "dataset_sha256": "7c3fb9ea162b727c686fe49381728b2a5932237fff5e1447a3061b5ab064dea6",
+    "manifest_sha256": "9bd038eb4e41992a218bcf07d7abc54603d2cc8e7b737c454399c48d81b9b4d9",
+    "risk_profile_sha256": "327f511b3f32f73aee9b3ac5bdf3f00614e8d1b3376233543b4b0e03ba1c8552"
+  },
+  "intermediate_reports": [
+    "reports/synth/Q25_A5_S08_S7_FAST_INTERMEDIATE_20261107.json",
+    "reports/synth/Q25_A5_S08_S7_DETAILED_INTERMEDIATE_20261107.json"
+  ],
+  "kis_api_called": false,
+  "limitations": [
+    "DERIVED_SCENARIO synthetic quotes, account, expiry, and calendar; not REAL_VTS or Live evidence.",
+    "Synthetic contract identity owner remains unresolved; expiry_is_authoritative=false.",
+    "Synthetic zero fees; KIS fee schedule not modeled and fee-inclusive PnL is unverified.",
+    "This verdict is validation-only and does not authorize production runtime or orders."
+  ],
+  "live_orders_or_real_account_used": false,
+  "operational_risk_config_modified": false,
+  "production_runtime_eligible": false,
+  "report_id": "Q25_A5_S08_S7_FAST_DETAILED_E2E_20261107",
+  "run_id": "Q25-A5-S06-3-S7-NORMAL-PATH-20261107",
+  "runtime_eligible": false,
+  "scope": "VALIDATION_ONLY_DERIVED_SCENARIO_VIRTUAL_STRATEGY7",
+  "stage_verdict": "PSB_PASS_S7_NATURAL_SIGNAL_FAST_DETAILED_POSITION_PNL_VALIDATION_ONLY",
+  "validation_only": true,
+  "verdict": "PSB_PASS"
+}

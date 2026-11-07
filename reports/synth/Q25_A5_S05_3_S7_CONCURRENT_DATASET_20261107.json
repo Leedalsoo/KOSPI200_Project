@@ -1,0 +1,23 @@
+{
+  "chronological_order": true,
+  "dataset_path": "data/derived_scenario/q25_s05_3_s7_concurrent/20261103.jsonl",
+  "dataset_sha256": "7c3fb9ea162b727c686fe49381728b2a5932237fff5e1447a3061b5ab064dea6",
+  "group_leg_coverage": "MON_CALL_PUT_AND_THU_CALL_PUT_AT_EACH_TIMESTAMP",
+  "groups_per_timestamp": 2,
+  "kis_api_called": false,
+  "live_orders_or_real_account_used": false,
+  "manifest_path": "data/derived_scenario/q25_s05_3_s7_concurrent/manifest.json",
+  "manifest_sha256": "9bd038eb4e41992a218bcf07d7abc54603d2cc8e7b737c454399c48d81b9b4d9",
+  "operational_risk_config_modified": false,
+  "original_dataset_modified": false,
+  "production_runtime_eligible": false,
+  "report_id": "Q25_A5_S05_3_S7_CONCURRENT_DATASET_20261107",
+  "risk_profile_path": "config/validation_only/q25_s05_3_s7_concurrent/risk_profile.json",
+  "risk_profile_sha256": "327f511b3f32f73aee9b3ac5bdf3f00614e8d1b3376233543b4b0e03ba1c8552",
+  "rows": 216,
+  "rows_per_timestamp": 4,
+  "runtime_eligible": false,
+  "source_dataset_sha256": "052d660e792adbda6b8fed7afce95cc54a1db007b70abfec3c0b736a6126da13",
+  "unique_timestamps": 54,
+  "verdict": "DATASET_READY_VALIDATION_ONLY"
+}

@@ -1,0 +1,461 @@
+{
+  "comparison_flag_count": 12,
+  "comparison_flags": {
+    "detailed_capture_matches_persisted_trace": true,
+    "fast_detailed_event_semantics_equal": true,
+    "late_report_not_counted_as_fill_event": true,
+    "manifest_63_inputs_unchanged": true,
+    "same_applied_state_transitions": true,
+    "same_execution_cancel_and_late_reports": true,
+    "same_final_oms_state": true,
+    "same_order_commands": true,
+    "same_pending_order_ids": true,
+    "same_rejected_late_fill_decision": true,
+    "trace_sequence_contiguous": true,
+    "trace_write_errors_zero": true
+  },
+  "comparison_flags_true": 12,
+  "correctness_boundary": "Equivalence PASS only establishes both modes match current FSM behavior. Whether a late report represents a fill executed before cancellation acknowledgement and must be reconciled into positions is NOT PROVEN; current FSM rejects it and no position-store reconciliation was exercised.",
+  "dataset": "p5_run_20261026_trend_up_seed20261026",
+  "detailed": {
+    "commands": [
+      {
+        "asset_type": "OPTION",
+        "broker_symbol": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+        "client_order_id": "Q25-LATE-FILL-OLD-001",
+        "group_id": "Q25-LATE-FILL-RACE-GROUP",
+        "instrument_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+        "instrument_identity": null,
+        "leg_id": null,
+        "order_purpose": "VALIDATION_ONLY_LATE_FILL_RACE",
+        "order_type": "LIMIT",
+        "position_role": "NONE",
+        "quantity": 3,
+        "requested_price": "14.75",
+        "session_id": null,
+        "side": "BUY",
+        "strategy_id": "TRACK1_TAIL_DEFENSE",
+        "tag_id": "VALIDATION_ONLY_LATE_FILL_RACE_FIXTURE",
+        "track_id": "TRACK1_TAIL_DEFENSE"
+      }
+    ],
+    "final_state": {
+      "average_execution_price": "14.75",
+      "broker_order_id": "Q25-TEST-BROKER-LATE-001",
+      "client_order_id": "Q25-LATE-FILL-OLD-001",
+      "filled_quantity": 1,
+      "order_quantity": 3,
+      "status": "CANCELLED"
+    },
+    "mode": "detailed",
+    "pending_ids": [],
+    "rejections": [
+      {
+        "accepted": false,
+        "client_order_id": "Q25-LATE-FILL-OLD-001",
+        "error_code": "EXECUTION_BEFORE_ACK",
+        "execution_id": "Q25-LATE-FILL-EXEC-LATE-002",
+        "state_after": {
+          "average_execution_price": "14.75",
+          "broker_order_id": "Q25-TEST-BROKER-LATE-001",
+          "client_order_id": "Q25-LATE-FILL-OLD-001",
+          "filled_quantity": 1,
+          "order_quantity": 3,
+          "status": "CANCELLED"
+        }
+      }
+    ],
+    "reports": [
+      {
+        "kind": "accepted_partial_fill",
+        "report": {
+          "broker_order_id": "Q25-TEST-BROKER-LATE-001",
+          "client_order_id": "Q25-LATE-FILL-OLD-001",
+          "execution_id": "Q25-LATE-FILL-EXEC-001",
+          "execution_price": "14.75",
+          "execution_timestamp": "2026-10-08T08:50:00+09:00",
+          "fee": "0.01",
+          "filled_quantity": 1,
+          "group_id": "Q25-LATE-FILL-RACE-GROUP",
+          "leg_id": "Q25-LATE-FILL-LEG",
+          "rejected_reason": null,
+          "remaining_quantity": 2,
+          "source_freshness": null,
+          "status": "PARTIALLY_FILLED"
+        },
+        "state_after": {
+          "average_execution_price": "14.75",
+          "broker_order_id": "Q25-TEST-BROKER-LATE-001",
+          "client_order_id": "Q25-LATE-FILL-OLD-001",
+          "filled_quantity": 1,
+          "order_quantity": 3,
+          "status": "PARTIALLY_FILLED"
+        }
+      },
+      {
+        "kind": "cancel_acknowledged",
+        "report": {
+          "broker_order_id": "Q25-TEST-BROKER-LATE-001",
+          "client_order_id": "Q25-LATE-FILL-OLD-001",
+          "execution_id": "Q25-LATE-FILL-CANCEL-001",
+          "execution_price": null,
+          "execution_timestamp": "2026-10-08T08:55:00+09:00",
+          "fee": null,
+          "filled_quantity": 0,
+          "group_id": "Q25-LATE-FILL-RACE-GROUP",
+          "leg_id": "Q25-LATE-FILL-LEG",
+          "rejected_reason": null,
+          "remaining_quantity": 2,
+          "source_freshness": null,
+          "status": "CANCELLED"
+        },
+        "state_after": {
+          "average_execution_price": "14.75",
+          "broker_order_id": "Q25-TEST-BROKER-LATE-001",
+          "client_order_id": "Q25-LATE-FILL-OLD-001",
+          "filled_quantity": 1,
+          "order_quantity": 3,
+          "status": "CANCELLED"
+        }
+      },
+      {
+        "accepted_by_current_fsm": false,
+        "error_code": "EXECUTION_BEFORE_ACK",
+        "kind": "late_fill_report_after_cancel_ack",
+        "report": {
+          "broker_order_id": "Q25-TEST-BROKER-LATE-001",
+          "client_order_id": "Q25-LATE-FILL-OLD-001",
+          "execution_id": "Q25-LATE-FILL-EXEC-LATE-002",
+          "execution_price": "14.80",
+          "execution_timestamp": "2026-10-08T08:54:00+09:00",
+          "fee": "0.01",
+          "filled_quantity": 1,
+          "group_id": "Q25-LATE-FILL-RACE-GROUP",
+          "leg_id": "Q25-LATE-FILL-LEG",
+          "rejected_reason": null,
+          "remaining_quantity": 1,
+          "source_freshness": null,
+          "status": "PARTIALLY_FILLED"
+        },
+        "state_after": {
+          "average_execution_price": "14.75",
+          "broker_order_id": "Q25-TEST-BROKER-LATE-001",
+          "client_order_id": "Q25-LATE-FILL-OLD-001",
+          "filled_quantity": 1,
+          "order_quantity": 3,
+          "status": "CANCELLED"
+        }
+      }
+    ],
+    "trace_status": "CONNECTED",
+    "trace_write_errors": [],
+    "transitions": [
+      {
+        "after": {
+          "average_execution_price": null,
+          "broker_order_id": "Q25-TEST-BROKER-LATE-001",
+          "client_order_id": "Q25-LATE-FILL-OLD-001",
+          "filled_quantity": 0,
+          "order_quantity": 3,
+          "status": "ACKED"
+        },
+        "before": {
+          "average_execution_price": null,
+          "broker_order_id": null,
+          "client_order_id": "Q25-LATE-FILL-OLD-001",
+          "filled_quantity": 0,
+          "order_quantity": 3,
+          "status": "SUBMITTED"
+        },
+        "client_order_id": "Q25-LATE-FILL-OLD-001"
+      },
+      {
+        "after": {
+          "average_execution_price": "14.75",
+          "broker_order_id": "Q25-TEST-BROKER-LATE-001",
+          "client_order_id": "Q25-LATE-FILL-OLD-001",
+          "filled_quantity": 1,
+          "order_quantity": 3,
+          "status": "PARTIALLY_FILLED"
+        },
+        "before": {
+          "average_execution_price": null,
+          "broker_order_id": "Q25-TEST-BROKER-LATE-001",
+          "client_order_id": "Q25-LATE-FILL-OLD-001",
+          "filled_quantity": 0,
+          "order_quantity": 3,
+          "status": "ACKED"
+        },
+        "client_order_id": "Q25-LATE-FILL-OLD-001"
+      },
+      {
+        "after": {
+          "average_execution_price": "14.75",
+          "broker_order_id": "Q25-TEST-BROKER-LATE-001",
+          "client_order_id": "Q25-LATE-FILL-OLD-001",
+          "filled_quantity": 1,
+          "order_quantity": 3,
+          "status": "CANCELLED"
+        },
+        "before": {
+          "average_execution_price": "14.75",
+          "broker_order_id": "Q25-TEST-BROKER-LATE-001",
+          "client_order_id": "Q25-LATE-FILL-OLD-001",
+          "filled_quantity": 1,
+          "order_quantity": 3,
+          "status": "PARTIALLY_FILLED"
+        },
+        "client_order_id": "Q25-LATE-FILL-OLD-001"
+      }
+    ]
+  },
+  "fast": {
+    "commands": [
+      {
+        "asset_type": "OPTION",
+        "broker_symbol": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+        "client_order_id": "Q25-LATE-FILL-OLD-001",
+        "group_id": "Q25-LATE-FILL-RACE-GROUP",
+        "instrument_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+        "instrument_identity": null,
+        "leg_id": null,
+        "order_purpose": "VALIDATION_ONLY_LATE_FILL_RACE",
+        "order_type": "LIMIT",
+        "position_role": "NONE",
+        "quantity": 3,
+        "requested_price": "14.75",
+        "session_id": null,
+        "side": "BUY",
+        "strategy_id": "TRACK1_TAIL_DEFENSE",
+        "tag_id": "VALIDATION_ONLY_LATE_FILL_RACE_FIXTURE",
+        "track_id": "TRACK1_TAIL_DEFENSE"
+      }
+    ],
+    "final_state": {
+      "average_execution_price": "14.75",
+      "broker_order_id": "Q25-TEST-BROKER-LATE-001",
+      "client_order_id": "Q25-LATE-FILL-OLD-001",
+      "filled_quantity": 1,
+      "order_quantity": 3,
+      "status": "CANCELLED"
+    },
+    "mode": "fast",
+    "pending_ids": [],
+    "rejections": [
+      {
+        "accepted": false,
+        "client_order_id": "Q25-LATE-FILL-OLD-001",
+        "error_code": "EXECUTION_BEFORE_ACK",
+        "execution_id": "Q25-LATE-FILL-EXEC-LATE-002",
+        "state_after": {
+          "average_execution_price": "14.75",
+          "broker_order_id": "Q25-TEST-BROKER-LATE-001",
+          "client_order_id": "Q25-LATE-FILL-OLD-001",
+          "filled_quantity": 1,
+          "order_quantity": 3,
+          "status": "CANCELLED"
+        }
+      }
+    ],
+    "reports": [
+      {
+        "kind": "accepted_partial_fill",
+        "report": {
+          "broker_order_id": "Q25-TEST-BROKER-LATE-001",
+          "client_order_id": "Q25-LATE-FILL-OLD-001",
+          "execution_id": "Q25-LATE-FILL-EXEC-001",
+          "execution_price": "14.75",
+          "execution_timestamp": "2026-10-08T08:50:00+09:00",
+          "fee": "0.01",
+          "filled_quantity": 1,
+          "group_id": "Q25-LATE-FILL-RACE-GROUP",
+          "leg_id": "Q25-LATE-FILL-LEG",
+          "rejected_reason": null,
+          "remaining_quantity": 2,
+          "source_freshness": null,
+          "status": "PARTIALLY_FILLED"
+        },
+        "state_after": {
+          "average_execution_price": "14.75",
+          "broker_order_id": "Q25-TEST-BROKER-LATE-001",
+          "client_order_id": "Q25-LATE-FILL-OLD-001",
+          "filled_quantity": 1,
+          "order_quantity": 3,
+          "status": "PARTIALLY_FILLED"
+        }
+      },
+      {
+        "kind": "cancel_acknowledged",
+        "report": {
+          "broker_order_id": "Q25-TEST-BROKER-LATE-001",
+          "client_order_id": "Q25-LATE-FILL-OLD-001",
+          "execution_id": "Q25-LATE-FILL-CANCEL-001",
+          "execution_price": null,
+          "execution_timestamp": "2026-10-08T08:55:00+09:00",
+          "fee": null,
+          "filled_quantity": 0,
+          "group_id": "Q25-LATE-FILL-RACE-GROUP",
+          "leg_id": "Q25-LATE-FILL-LEG",
+          "rejected_reason": null,
+          "remaining_quantity": 2,
+          "source_freshness": null,
+          "status": "CANCELLED"
+        },
+        "state_after": {
+          "average_execution_price": "14.75",
+          "broker_order_id": "Q25-TEST-BROKER-LATE-001",
+          "client_order_id": "Q25-LATE-FILL-OLD-001",
+          "filled_quantity": 1,
+          "order_quantity": 3,
+          "status": "CANCELLED"
+        }
+      },
+      {
+        "accepted_by_current_fsm": false,
+        "error_code": "EXECUTION_BEFORE_ACK",
+        "kind": "late_fill_report_after_cancel_ack",
+        "report": {
+          "broker_order_id": "Q25-TEST-BROKER-LATE-001",
+          "client_order_id": "Q25-LATE-FILL-OLD-001",
+          "execution_id": "Q25-LATE-FILL-EXEC-LATE-002",
+          "execution_price": "14.80",
+          "execution_timestamp": "2026-10-08T08:54:00+09:00",
+          "fee": "0.01",
+          "filled_quantity": 1,
+          "group_id": "Q25-LATE-FILL-RACE-GROUP",
+          "leg_id": "Q25-LATE-FILL-LEG",
+          "rejected_reason": null,
+          "remaining_quantity": 1,
+          "source_freshness": null,
+          "status": "PARTIALLY_FILLED"
+        },
+        "state_after": {
+          "average_execution_price": "14.75",
+          "broker_order_id": "Q25-TEST-BROKER-LATE-001",
+          "client_order_id": "Q25-LATE-FILL-OLD-001",
+          "filled_quantity": 1,
+          "order_quantity": 3,
+          "status": "CANCELLED"
+        }
+      }
+    ],
+    "trace_status": "DISABLED_FAST_MODE",
+    "trace_write_errors": [],
+    "transitions": [
+      {
+        "after": {
+          "average_execution_price": null,
+          "broker_order_id": "Q25-TEST-BROKER-LATE-001",
+          "client_order_id": "Q25-LATE-FILL-OLD-001",
+          "filled_quantity": 0,
+          "order_quantity": 3,
+          "status": "ACKED"
+        },
+        "before": {
+          "average_execution_price": null,
+          "broker_order_id": null,
+          "client_order_id": "Q25-LATE-FILL-OLD-001",
+          "filled_quantity": 0,
+          "order_quantity": 3,
+          "status": "SUBMITTED"
+        },
+        "client_order_id": "Q25-LATE-FILL-OLD-001"
+      },
+      {
+        "after": {
+          "average_execution_price": "14.75",
+          "broker_order_id": "Q25-TEST-BROKER-LATE-001",
+          "client_order_id": "Q25-LATE-FILL-OLD-001",
+          "filled_quantity": 1,
+          "order_quantity": 3,
+          "status": "PARTIALLY_FILLED"
+        },
+        "before": {
+          "average_execution_price": null,
+          "broker_order_id": "Q25-TEST-BROKER-LATE-001",
+          "client_order_id": "Q25-LATE-FILL-OLD-001",
+          "filled_quantity": 0,
+          "order_quantity": 3,
+          "status": "ACKED"
+        },
+        "client_order_id": "Q25-LATE-FILL-OLD-001"
+      },
+      {
+        "after": {
+          "average_execution_price": "14.75",
+          "broker_order_id": "Q25-TEST-BROKER-LATE-001",
+          "client_order_id": "Q25-LATE-FILL-OLD-001",
+          "filled_quantity": 1,
+          "order_quantity": 3,
+          "status": "CANCELLED"
+        },
+        "before": {
+          "average_execution_price": "14.75",
+          "broker_order_id": "Q25-TEST-BROKER-LATE-001",
+          "client_order_id": "Q25-LATE-FILL-OLD-001",
+          "filled_quantity": 1,
+          "order_quantity": 3,
+          "status": "PARTIALLY_FILLED"
+        },
+        "client_order_id": "Q25-LATE-FILL-OLD-001"
+      }
+    ]
+  },
+  "input_files_before_after_match": 63,
+  "input_files_checked": 63,
+  "input_unchanged": true,
+  "limitations": [
+    "Deterministic test-only reports; no real broker or KIS API contacted.",
+    "No production runtime, broker order/fill correlation recovery, position store, PnL, or account reconciliation path tested.",
+    "Source event identity is fixture-only and BLOCKED_IDENTITY_OWNER_UNRESOLVED; no authoritative contract identity is claimed.",
+    "One late report after cancel acknowledgement only; duplicate reports, report permutations, restart recovery, concurrent multiple orders, and full 53,550-event dataset equivalence not tested."
+  ],
+  "manifest_sha256": "47d6746bfd7abfea9d52016434ca06f097ca117e6724f96c522b58eb8e5590f5",
+  "production_runtime_eligible": false,
+  "provenance": "DERIVED_SCENARIO",
+  "run_id": "Q25-A1-3-VALIDATION-ONLY-LATE-FILL-RACE-FAST-DETAILED-20261029",
+  "scenario": {
+    "accepted_fill_events": 1,
+    "cancel_acknowledged_after_partial_fill": true,
+    "current_fsm_error_code": "EXECUTION_BEFORE_ACK",
+    "current_fsm_late_report_result": "rejected",
+    "final_filled_quantity": 1,
+    "final_order_status": "CANCELLED",
+    "first_partial_fill": 1,
+    "late_report_arrival_after_cancel_minutes": 12,
+    "late_report_execution_timestamp_minutes_after_start": 9,
+    "late_report_incremental_quantity": 1,
+    "order_quantity": 3,
+    "pending_order_ids": []
+  },
+  "scope": "validation-only fast/detailed equivalence for a deterministic late ExecutionReport received after cancel acknowledgement; actual OrderStateMachine and ReplayTraceController used, test-only reports only",
+  "seed": 20261026,
+  "source_event": {
+    "event_id": "cad3f58855eb6b9653f49ed3eaf78d8f8cc0e9c03ef49cafab1e74b169438673",
+    "identity_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+    "path": "20261008.jsonl",
+    "synthetic_contract_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+    "timestamp": "2026-10-08T08:45:00+09:00"
+  },
+  "status": "PASS",
+  "synthetic": true,
+  "trace": {
+    "bytes": 6268,
+    "event_types": [
+      "order_command",
+      "order_ack",
+      "oms_state_transition",
+      "execution_report",
+      "fill",
+      "oms_state_transition",
+      "cancel_report",
+      "oms_state_transition",
+      "execution_report",
+      "oms_transition_rejected"
+    ],
+    "path": "reports\\synth\\Q25_A1_3_LATE_FILL_RACE_EQUIV_V1_DETAILED_20261029.jsonl",
+    "records": 10,
+    "sha256": "e8b3e3719760e0c85c5b402256fc49ac3fec3c28e0d07ccbe29d3508802adc89"
+  },
+  "validation_only": true
+}

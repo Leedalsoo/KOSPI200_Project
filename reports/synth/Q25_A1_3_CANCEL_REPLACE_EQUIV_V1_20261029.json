@@ -1,0 +1,565 @@
+{
+  "comparison_flag_count": 11,
+  "comparison_flags": {
+    "detailed_capture_matches_persisted_trace": true,
+    "fast_detailed_event_semantics_equal": true,
+    "input_manifest_files_63_unchanged": true,
+    "one_cancel_event": true,
+    "same_execution_and_cancel_reports": true,
+    "same_final_states": true,
+    "same_order_commands": true,
+    "same_state_transition_timeline": true,
+    "trace_sequence_contiguous": true,
+    "trace_write_errors_zero": true,
+    "two_fill_events": true
+  },
+  "comparison_flags_true": 11,
+  "dataset": "p5_run_20261026_trend_up_seed20261026",
+  "detailed": {
+    "commands": [
+      {
+        "asset_type": "OPTION",
+        "broker_symbol": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+        "client_order_id": "Q25-CANCEL-OLD-001",
+        "group_id": "Q25-CANCEL-REPLACE-GROUP",
+        "instrument_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+        "instrument_identity": null,
+        "leg_id": null,
+        "order_purpose": "VALIDATION_ONLY_CANCEL_REPLACE",
+        "order_type": "LIMIT",
+        "position_role": "NONE",
+        "quantity": 3,
+        "requested_price": "14.75",
+        "session_id": null,
+        "side": "BUY",
+        "strategy_id": "TRACK1_TAIL_DEFENSE",
+        "tag_id": "VALIDATION_ONLY_CANCEL_REPLACE_FIXTURE",
+        "track_id": "TRACK1_TAIL_DEFENSE"
+      },
+      {
+        "asset_type": "OPTION",
+        "broker_symbol": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+        "client_order_id": "Q25-CANCEL-NEW-001",
+        "group_id": "Q25-CANCEL-REPLACE-GROUP",
+        "instrument_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+        "instrument_identity": null,
+        "leg_id": null,
+        "order_purpose": "VALIDATION_ONLY_CANCEL_REPLACEMENT",
+        "order_type": "LIMIT",
+        "position_role": "NONE",
+        "quantity": 2,
+        "requested_price": "14.80",
+        "session_id": null,
+        "side": "BUY",
+        "strategy_id": "TRACK1_TAIL_DEFENSE",
+        "tag_id": "VALIDATION_ONLY_REPLACEMENT_FIXTURE",
+        "track_id": "TRACK1_TAIL_DEFENSE"
+      }
+    ],
+    "final_states": {
+      "old": {
+        "average_execution_price": "14.75",
+        "broker_order_id": "Q25-TEST-BROKER-OLD",
+        "client_order_id": "Q25-CANCEL-OLD-001",
+        "filled_quantity": 1,
+        "order_quantity": 3,
+        "status": "CANCELLED"
+      },
+      "replacement": {
+        "average_execution_price": "14.80",
+        "broker_order_id": "Q25-TEST-BROKER-NEW",
+        "client_order_id": "Q25-CANCEL-NEW-001",
+        "filled_quantity": 2,
+        "order_quantity": 2,
+        "status": "FILLED"
+      }
+    },
+    "mode": "detailed",
+    "reports": [
+      {
+        "kind": "fill",
+        "report": {
+          "broker_order_id": "Q25-TEST-BROKER-OLD",
+          "client_order_id": "Q25-CANCEL-OLD-001",
+          "execution_id": "Q25-CANCEL-OLD-EXEC-001",
+          "execution_price": "14.75",
+          "execution_timestamp": "2026-10-08T08:50:00+09:00",
+          "fee": "0.01",
+          "filled_quantity": 1,
+          "group_id": "Q25-CANCEL-REPLACE-GROUP",
+          "leg_id": "Q25-CANCEL-OLD-LEG",
+          "rejected_reason": null,
+          "remaining_quantity": 2,
+          "source_freshness": null,
+          "status": "PARTIALLY_FILLED"
+        },
+        "state_after": {
+          "average_execution_price": "14.75",
+          "broker_order_id": "Q25-TEST-BROKER-OLD",
+          "client_order_id": "Q25-CANCEL-OLD-001",
+          "filled_quantity": 1,
+          "order_quantity": 3,
+          "status": "PARTIALLY_FILLED"
+        }
+      },
+      {
+        "kind": "cancel",
+        "report": {
+          "broker_order_id": "Q25-TEST-BROKER-OLD",
+          "client_order_id": "Q25-CANCEL-OLD-001",
+          "execution_id": "Q25-CANCEL-OLD-CANCEL-001",
+          "execution_price": null,
+          "execution_timestamp": "2026-10-08T08:55:00+09:00",
+          "fee": null,
+          "filled_quantity": 0,
+          "group_id": "Q25-CANCEL-REPLACE-GROUP",
+          "leg_id": "Q25-CANCEL-OLD-LEG",
+          "rejected_reason": null,
+          "remaining_quantity": 2,
+          "source_freshness": null,
+          "status": "CANCELLED"
+        },
+        "state_after": {
+          "average_execution_price": "14.75",
+          "broker_order_id": "Q25-TEST-BROKER-OLD",
+          "client_order_id": "Q25-CANCEL-OLD-001",
+          "filled_quantity": 1,
+          "order_quantity": 3,
+          "status": "CANCELLED"
+        }
+      },
+      {
+        "kind": "fill",
+        "report": {
+          "broker_order_id": "Q25-TEST-BROKER-NEW",
+          "client_order_id": "Q25-CANCEL-NEW-001",
+          "execution_id": "Q25-CANCEL-NEW-EXEC-001",
+          "execution_price": "14.80",
+          "execution_timestamp": "2026-10-08T09:00:00+09:00",
+          "fee": "0.02",
+          "filled_quantity": 2,
+          "group_id": "Q25-CANCEL-REPLACE-GROUP",
+          "leg_id": "Q25-CANCEL-NEW-LEG",
+          "rejected_reason": null,
+          "remaining_quantity": 0,
+          "source_freshness": null,
+          "status": "FILLED"
+        },
+        "state_after": {
+          "average_execution_price": "14.80",
+          "broker_order_id": "Q25-TEST-BROKER-NEW",
+          "client_order_id": "Q25-CANCEL-NEW-001",
+          "filled_quantity": 2,
+          "order_quantity": 2,
+          "status": "FILLED"
+        }
+      }
+    ],
+    "timeline": [
+      {
+        "after": {
+          "average_execution_price": null,
+          "broker_order_id": "Q25-TEST-BROKER-OLD",
+          "client_order_id": "Q25-CANCEL-OLD-001",
+          "filled_quantity": 0,
+          "order_quantity": 3,
+          "status": "ACKED"
+        },
+        "before": {
+          "average_execution_price": null,
+          "broker_order_id": null,
+          "client_order_id": "Q25-CANCEL-OLD-001",
+          "filled_quantity": 0,
+          "order_quantity": 3,
+          "status": "SUBMITTED"
+        },
+        "client_order_id": "Q25-CANCEL-OLD-001",
+        "event": "oms_state_transition"
+      },
+      {
+        "after": {
+          "average_execution_price": "14.75",
+          "broker_order_id": "Q25-TEST-BROKER-OLD",
+          "client_order_id": "Q25-CANCEL-OLD-001",
+          "filled_quantity": 1,
+          "order_quantity": 3,
+          "status": "PARTIALLY_FILLED"
+        },
+        "before": {
+          "average_execution_price": null,
+          "broker_order_id": "Q25-TEST-BROKER-OLD",
+          "client_order_id": "Q25-CANCEL-OLD-001",
+          "filled_quantity": 0,
+          "order_quantity": 3,
+          "status": "ACKED"
+        },
+        "client_order_id": "Q25-CANCEL-OLD-001",
+        "event": "oms_state_transition"
+      },
+      {
+        "after": {
+          "average_execution_price": "14.75",
+          "broker_order_id": "Q25-TEST-BROKER-OLD",
+          "client_order_id": "Q25-CANCEL-OLD-001",
+          "filled_quantity": 1,
+          "order_quantity": 3,
+          "status": "CANCELLED"
+        },
+        "before": {
+          "average_execution_price": "14.75",
+          "broker_order_id": "Q25-TEST-BROKER-OLD",
+          "client_order_id": "Q25-CANCEL-OLD-001",
+          "filled_quantity": 1,
+          "order_quantity": 3,
+          "status": "PARTIALLY_FILLED"
+        },
+        "client_order_id": "Q25-CANCEL-OLD-001",
+        "event": "oms_state_transition"
+      },
+      {
+        "after": {
+          "average_execution_price": null,
+          "broker_order_id": "Q25-TEST-BROKER-NEW",
+          "client_order_id": "Q25-CANCEL-NEW-001",
+          "filled_quantity": 0,
+          "order_quantity": 2,
+          "status": "ACKED"
+        },
+        "before": {
+          "average_execution_price": null,
+          "broker_order_id": null,
+          "client_order_id": "Q25-CANCEL-NEW-001",
+          "filled_quantity": 0,
+          "order_quantity": 2,
+          "status": "SUBMITTED"
+        },
+        "client_order_id": "Q25-CANCEL-NEW-001",
+        "event": "oms_state_transition"
+      },
+      {
+        "after": {
+          "average_execution_price": "14.80",
+          "broker_order_id": "Q25-TEST-BROKER-NEW",
+          "client_order_id": "Q25-CANCEL-NEW-001",
+          "filled_quantity": 2,
+          "order_quantity": 2,
+          "status": "FILLED"
+        },
+        "before": {
+          "average_execution_price": null,
+          "broker_order_id": "Q25-TEST-BROKER-NEW",
+          "client_order_id": "Q25-CANCEL-NEW-001",
+          "filled_quantity": 0,
+          "order_quantity": 2,
+          "status": "ACKED"
+        },
+        "client_order_id": "Q25-CANCEL-NEW-001",
+        "event": "oms_state_transition"
+      }
+    ],
+    "trace_status": "CONNECTED",
+    "trace_write_errors": []
+  },
+  "fast": {
+    "commands": [
+      {
+        "asset_type": "OPTION",
+        "broker_symbol": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+        "client_order_id": "Q25-CANCEL-OLD-001",
+        "group_id": "Q25-CANCEL-REPLACE-GROUP",
+        "instrument_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+        "instrument_identity": null,
+        "leg_id": null,
+        "order_purpose": "VALIDATION_ONLY_CANCEL_REPLACE",
+        "order_type": "LIMIT",
+        "position_role": "NONE",
+        "quantity": 3,
+        "requested_price": "14.75",
+        "session_id": null,
+        "side": "BUY",
+        "strategy_id": "TRACK1_TAIL_DEFENSE",
+        "tag_id": "VALIDATION_ONLY_CANCEL_REPLACE_FIXTURE",
+        "track_id": "TRACK1_TAIL_DEFENSE"
+      },
+      {
+        "asset_type": "OPTION",
+        "broker_symbol": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+        "client_order_id": "Q25-CANCEL-NEW-001",
+        "group_id": "Q25-CANCEL-REPLACE-GROUP",
+        "instrument_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+        "instrument_identity": null,
+        "leg_id": null,
+        "order_purpose": "VALIDATION_ONLY_CANCEL_REPLACEMENT",
+        "order_type": "LIMIT",
+        "position_role": "NONE",
+        "quantity": 2,
+        "requested_price": "14.80",
+        "session_id": null,
+        "side": "BUY",
+        "strategy_id": "TRACK1_TAIL_DEFENSE",
+        "tag_id": "VALIDATION_ONLY_REPLACEMENT_FIXTURE",
+        "track_id": "TRACK1_TAIL_DEFENSE"
+      }
+    ],
+    "final_states": {
+      "old": {
+        "average_execution_price": "14.75",
+        "broker_order_id": "Q25-TEST-BROKER-OLD",
+        "client_order_id": "Q25-CANCEL-OLD-001",
+        "filled_quantity": 1,
+        "order_quantity": 3,
+        "status": "CANCELLED"
+      },
+      "replacement": {
+        "average_execution_price": "14.80",
+        "broker_order_id": "Q25-TEST-BROKER-NEW",
+        "client_order_id": "Q25-CANCEL-NEW-001",
+        "filled_quantity": 2,
+        "order_quantity": 2,
+        "status": "FILLED"
+      }
+    },
+    "mode": "fast",
+    "reports": [
+      {
+        "kind": "fill",
+        "report": {
+          "broker_order_id": "Q25-TEST-BROKER-OLD",
+          "client_order_id": "Q25-CANCEL-OLD-001",
+          "execution_id": "Q25-CANCEL-OLD-EXEC-001",
+          "execution_price": "14.75",
+          "execution_timestamp": "2026-10-08T08:50:00+09:00",
+          "fee": "0.01",
+          "filled_quantity": 1,
+          "group_id": "Q25-CANCEL-REPLACE-GROUP",
+          "leg_id": "Q25-CANCEL-OLD-LEG",
+          "rejected_reason": null,
+          "remaining_quantity": 2,
+          "source_freshness": null,
+          "status": "PARTIALLY_FILLED"
+        },
+        "state_after": {
+          "average_execution_price": "14.75",
+          "broker_order_id": "Q25-TEST-BROKER-OLD",
+          "client_order_id": "Q25-CANCEL-OLD-001",
+          "filled_quantity": 1,
+          "order_quantity": 3,
+          "status": "PARTIALLY_FILLED"
+        }
+      },
+      {
+        "kind": "cancel",
+        "report": {
+          "broker_order_id": "Q25-TEST-BROKER-OLD",
+          "client_order_id": "Q25-CANCEL-OLD-001",
+          "execution_id": "Q25-CANCEL-OLD-CANCEL-001",
+          "execution_price": null,
+          "execution_timestamp": "2026-10-08T08:55:00+09:00",
+          "fee": null,
+          "filled_quantity": 0,
+          "group_id": "Q25-CANCEL-REPLACE-GROUP",
+          "leg_id": "Q25-CANCEL-OLD-LEG",
+          "rejected_reason": null,
+          "remaining_quantity": 2,
+          "source_freshness": null,
+          "status": "CANCELLED"
+        },
+        "state_after": {
+          "average_execution_price": "14.75",
+          "broker_order_id": "Q25-TEST-BROKER-OLD",
+          "client_order_id": "Q25-CANCEL-OLD-001",
+          "filled_quantity": 1,
+          "order_quantity": 3,
+          "status": "CANCELLED"
+        }
+      },
+      {
+        "kind": "fill",
+        "report": {
+          "broker_order_id": "Q25-TEST-BROKER-NEW",
+          "client_order_id": "Q25-CANCEL-NEW-001",
+          "execution_id": "Q25-CANCEL-NEW-EXEC-001",
+          "execution_price": "14.80",
+          "execution_timestamp": "2026-10-08T09:00:00+09:00",
+          "fee": "0.02",
+          "filled_quantity": 2,
+          "group_id": "Q25-CANCEL-REPLACE-GROUP",
+          "leg_id": "Q25-CANCEL-NEW-LEG",
+          "rejected_reason": null,
+          "remaining_quantity": 0,
+          "source_freshness": null,
+          "status": "FILLED"
+        },
+        "state_after": {
+          "average_execution_price": "14.80",
+          "broker_order_id": "Q25-TEST-BROKER-NEW",
+          "client_order_id": "Q25-CANCEL-NEW-001",
+          "filled_quantity": 2,
+          "order_quantity": 2,
+          "status": "FILLED"
+        }
+      }
+    ],
+    "timeline": [
+      {
+        "after": {
+          "average_execution_price": null,
+          "broker_order_id": "Q25-TEST-BROKER-OLD",
+          "client_order_id": "Q25-CANCEL-OLD-001",
+          "filled_quantity": 0,
+          "order_quantity": 3,
+          "status": "ACKED"
+        },
+        "before": {
+          "average_execution_price": null,
+          "broker_order_id": null,
+          "client_order_id": "Q25-CANCEL-OLD-001",
+          "filled_quantity": 0,
+          "order_quantity": 3,
+          "status": "SUBMITTED"
+        },
+        "client_order_id": "Q25-CANCEL-OLD-001",
+        "event": "oms_state_transition"
+      },
+      {
+        "after": {
+          "average_execution_price": "14.75",
+          "broker_order_id": "Q25-TEST-BROKER-OLD",
+          "client_order_id": "Q25-CANCEL-OLD-001",
+          "filled_quantity": 1,
+          "order_quantity": 3,
+          "status": "PARTIALLY_FILLED"
+        },
+        "before": {
+          "average_execution_price": null,
+          "broker_order_id": "Q25-TEST-BROKER-OLD",
+          "client_order_id": "Q25-CANCEL-OLD-001",
+          "filled_quantity": 0,
+          "order_quantity": 3,
+          "status": "ACKED"
+        },
+        "client_order_id": "Q25-CANCEL-OLD-001",
+        "event": "oms_state_transition"
+      },
+      {
+        "after": {
+          "average_execution_price": "14.75",
+          "broker_order_id": "Q25-TEST-BROKER-OLD",
+          "client_order_id": "Q25-CANCEL-OLD-001",
+          "filled_quantity": 1,
+          "order_quantity": 3,
+          "status": "CANCELLED"
+        },
+        "before": {
+          "average_execution_price": "14.75",
+          "broker_order_id": "Q25-TEST-BROKER-OLD",
+          "client_order_id": "Q25-CANCEL-OLD-001",
+          "filled_quantity": 1,
+          "order_quantity": 3,
+          "status": "PARTIALLY_FILLED"
+        },
+        "client_order_id": "Q25-CANCEL-OLD-001",
+        "event": "oms_state_transition"
+      },
+      {
+        "after": {
+          "average_execution_price": null,
+          "broker_order_id": "Q25-TEST-BROKER-NEW",
+          "client_order_id": "Q25-CANCEL-NEW-001",
+          "filled_quantity": 0,
+          "order_quantity": 2,
+          "status": "ACKED"
+        },
+        "before": {
+          "average_execution_price": null,
+          "broker_order_id": null,
+          "client_order_id": "Q25-CANCEL-NEW-001",
+          "filled_quantity": 0,
+          "order_quantity": 2,
+          "status": "SUBMITTED"
+        },
+        "client_order_id": "Q25-CANCEL-NEW-001",
+        "event": "oms_state_transition"
+      },
+      {
+        "after": {
+          "average_execution_price": "14.80",
+          "broker_order_id": "Q25-TEST-BROKER-NEW",
+          "client_order_id": "Q25-CANCEL-NEW-001",
+          "filled_quantity": 2,
+          "order_quantity": 2,
+          "status": "FILLED"
+        },
+        "before": {
+          "average_execution_price": null,
+          "broker_order_id": "Q25-TEST-BROKER-NEW",
+          "client_order_id": "Q25-CANCEL-NEW-001",
+          "filled_quantity": 0,
+          "order_quantity": 2,
+          "status": "ACKED"
+        },
+        "client_order_id": "Q25-CANCEL-NEW-001",
+        "event": "oms_state_transition"
+      }
+    ],
+    "trace_status": "DISABLED_FAST_MODE",
+    "trace_write_errors": []
+  },
+  "input_files_before_after_match": 63,
+  "input_files_checked": 63,
+  "input_unchanged": true,
+  "limitations": [
+    "Test-only reports; no real broker cancel/replace acknowledgement or observed execution.",
+    "Current OrderStateMachine supports apply_cancel but no native amend/replace method; replacement is modeled as a distinct order after cancellation.",
+    "No late-fill race, multi-order concurrency, position store/PnL, full Virtual runtime, production call path or full-dataset equivalence was tested.",
+    "Source event identity is BLOCKED_IDENTITY_OWNER_UNRESOLVED; fixture identity only."
+  ],
+  "manifest_sha256": "47d6746bfd7abfea9d52016434ca06f097ca117e6724f96c522b58eb8e5590f5",
+  "production_runtime_eligible": false,
+  "provenance": "DERIVED_SCENARIO",
+  "run_id": "Q25-A1-3-VALIDATION-ONLY-CANCEL-REPLACE-FAST-DETAILED-20261029",
+  "scenario": {
+    "cancelled_old_order_filled_quantity": 1,
+    "old_order_partial_fill": 1,
+    "old_order_quantity": 3,
+    "old_order_status": "CANCELLED",
+    "replacement_filled_quantity": 2,
+    "replacement_final_status": "FILLED",
+    "replacement_quantity": 2,
+    "replacement_requested_price": "14.80"
+  },
+  "scope": "validation-only cancel after partial fill + separate replacement order fast/detailed equivalence using actual OrderStateMachine and deterministic test-only reports; no native amend API or production replacement orchestrator claimed",
+  "seed": 20261026,
+  "source_event": {
+    "event_id": "cad3f58855eb6b9653f49ed3eaf78d8f8cc0e9c03ef49cafab1e74b169438673",
+    "identity_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+    "path": "20261008.jsonl",
+    "synthetic_contract_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+    "timestamp": "2026-10-08T08:45:00+09:00"
+  },
+  "status": "PASS",
+  "synthetic": true,
+  "trace": {
+    "bytes": 8613,
+    "event_types": [
+      "order_command",
+      "order_ack",
+      "oms_state_transition",
+      "execution_report",
+      "fill",
+      "oms_state_transition",
+      "cancel_report",
+      "oms_state_transition",
+      "order_command",
+      "order_ack",
+      "oms_state_transition",
+      "execution_report",
+      "fill",
+      "oms_state_transition"
+    ],
+    "path": "reports\\synth\\Q25_A1_3_CANCEL_REPLACE_EQUIV_V1_DETAILED_20261029.jsonl",
+    "records": 14,
+    "sha256": "eb50093009a66e8c487a790aa49201ab88643d225d618ab7f2052c8c00b897e9"
+  },
+  "validation_only": true
+}

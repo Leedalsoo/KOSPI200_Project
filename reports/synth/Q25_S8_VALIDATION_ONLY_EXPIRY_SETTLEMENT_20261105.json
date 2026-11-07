@@ -1,0 +1,284 @@
+{
+  "expiry_settlement": [
+    {
+      "dataset_sha256": "6667d0d0a7b700ceaa927289ad1bce6454342c8577af1ee0d3b6dc65aecdc48a",
+      "entry_lots": [
+        {
+          "contract_multiplier": "250000.0",
+          "entry_execution_id": "EXEC-000001",
+          "entry_price": "1.16",
+          "instrument_id": "SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:CALL:515",
+          "leg_id": "call",
+          "quantity": 1,
+          "side": "BUY"
+        },
+        {
+          "contract_multiplier": "250000.0",
+          "entry_execution_id": "EXEC-000002",
+          "entry_price": "1.26",
+          "instrument_id": "SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:PUT:485",
+          "leg_id": "put",
+          "quantity": 1,
+          "side": "BUY"
+        }
+      ],
+      "final_account": {
+        "balance_krw": "249988000.0",
+        "positions": {},
+        "realized_pnl_krw": "-605000.0",
+        "unrealized_pnl_krw": "0"
+      },
+      "final_group_snapshot": {
+        "leg_quantities": [
+          0,
+          0
+        ],
+        "realized_pnl_krw": "-605000.0",
+        "total_pnl_krw": "-605000.0",
+        "unrealized_pnl_krw": "0.0"
+      },
+      "manifest_sha256": "a1eaeea94643db7aa7cb80ffc34627b348ee16aebec6dbe2b93dffb9192ae08a",
+      "natural_replay": {
+        "approved": 2,
+        "events": 216,
+        "filled": 2,
+        "rejected": 0,
+        "routed": 2,
+        "signals": 2
+      },
+      "profile_sha256": "5be9bc21fdd649c3a7cdbc74b77bf0b4586fb6350df3fb4ff955684128320546",
+      "risk_profile_sha256": "9ee3ec0ee755e55a010d7678fe9b4e05c6ac3b57ff6523ca668403d5066c4b1a",
+      "run_id": "Q25-S8-EXPIRY-VALIDATION-NORMAL-20261105",
+      "scenario": "NORMAL",
+      "settlement": {
+        "account_positions_remaining": 0,
+        "account_realized_pnl_delta_krw": "-605000.0",
+        "account_unrealized_pnl_after_krw": "0",
+        "authority": "NON_AUTHORITATIVE_SYNTHETIC",
+        "commission_basis": "VALIDATION_BENCHMARK_NOT_ACTUAL_BROKER_FEE",
+        "commission_per_contract_per_side_krw": "3000",
+        "contract_multiplier": "250000",
+        "currency": "KRW",
+        "entry_commission_krw": "6000",
+        "expiry": "20261119",
+        "expiry_commission_krw": "6000",
+        "flat_state_reconciliation": "PASS",
+        "gross_realized_pnl_krw": "-605000",
+        "group_id": "Q25-S8-EXPIRY-VALIDATION-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+        "group_leg_quantities_after": [
+          0,
+          0
+        ],
+        "group_realized_pnl_after_krw": "-605000.0",
+        "group_unrealized_pnl_after_krw": "0.0",
+        "net_realized_pnl_krw": "-617000",
+        "position_lots_remaining": 0,
+        "production_authority": "NOT_GRANTED",
+        "profile_id": "Q25_S8_EXPIRY_BENCHMARK_V1",
+        "profile_sha256": "5be9bc21fdd649c3a7cdbc74b77bf0b4586fb6350df3fb4ff955684128320546",
+        "realized_pnl_reconciliation": "PASS",
+        "scenario_id": "Q25_S8_MONTHLY_V3_NORMAL",
+        "settled_lots": [
+          {
+            "entry_commission_krw": "3000",
+            "entry_premium_cashflow_krw": "-290000",
+            "entry_price": "1.16",
+            "expiry_commission_krw": "3000",
+            "gross_realized_pnl_krw": "-290000",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:CALL:515",
+            "intrinsic_value_points": "0",
+            "leg_id": "call",
+            "option_type": "CALL",
+            "quantity": 1,
+            "settlement_execution_id": "Q25-S8-EXPIRY-VALIDATION-NORMAL-20261105:Q25-S8-EXPIRY-VALIDATION-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1:20261119:call:EXEC-000001",
+            "side": "BUY",
+            "signed_cash_payoff_krw": "0",
+            "strike": "515.0"
+          },
+          {
+            "entry_commission_krw": "3000",
+            "entry_premium_cashflow_krw": "-315000",
+            "entry_price": "1.26",
+            "expiry_commission_krw": "3000",
+            "gross_realized_pnl_krw": "-315000",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:PUT:485",
+            "intrinsic_value_points": "0",
+            "leg_id": "put",
+            "option_type": "PUT",
+            "quantity": 1,
+            "settlement_execution_id": "Q25-S8-EXPIRY-VALIDATION-NORMAL-20261105:Q25-S8-EXPIRY-VALIDATION-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1:20261119:put:EXEC-000002",
+            "side": "BUY",
+            "signed_cash_payoff_krw": "0",
+            "strike": "485.0"
+          }
+        ],
+        "settlement_date": "20261119",
+        "settlement_id": "Q25-S8-EXPIRY-VALIDATION-NORMAL-20261105:Q25-S8-EXPIRY-VALIDATION-NORMAL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1:20261119",
+        "settlement_source": "SYNTHETIC_SCENARIO_EXPIRY_FIXTURE",
+        "settlement_source_sha256": "8818d2b07ce2de1f35cb7c11e2e4d5a1397989b61735bbdbf8ea7fcc0a6e0024",
+        "status": "SETTLED_VALIDATION_ONLY",
+        "total_commission_krw": "12000",
+        "underlying_settlement_price": "505"
+      }
+    },
+    {
+      "dataset_sha256": "fda113074213919b2037cbaf8c3076406f4efe92d5d2b45ae6b935f37df84050",
+      "entry_lots": [
+        {
+          "contract_multiplier": "250000.0",
+          "entry_execution_id": "EXEC-000001",
+          "entry_price": "1.56",
+          "instrument_id": "SYNTHETIC_CONTRACT:S8V3:HIGH_VOL:20261119:CALL:515",
+          "leg_id": "call",
+          "quantity": 1,
+          "side": "BUY"
+        },
+        {
+          "contract_multiplier": "250000.0",
+          "entry_execution_id": "EXEC-000002",
+          "entry_price": "1.7",
+          "instrument_id": "SYNTHETIC_CONTRACT:S8V3:HIGH_VOL:20261119:PUT:485",
+          "leg_id": "put",
+          "quantity": 1,
+          "side": "BUY"
+        }
+      ],
+      "final_account": {
+        "balance_krw": "249988000.0",
+        "positions": {},
+        "realized_pnl_krw": "-815000.0",
+        "unrealized_pnl_krw": "0"
+      },
+      "final_group_snapshot": {
+        "leg_quantities": [
+          0,
+          0
+        ],
+        "realized_pnl_krw": "-815000.0",
+        "total_pnl_krw": "-815000.0",
+        "unrealized_pnl_krw": "0.0"
+      },
+      "manifest_sha256": "01f204506929a2db2a55c209c247b98353918fc5bd053f64bfd7ed049564ce01",
+      "natural_replay": {
+        "approved": 2,
+        "events": 216,
+        "filled": 2,
+        "rejected": 0,
+        "routed": 2,
+        "signals": 2
+      },
+      "profile_sha256": "5be9bc21fdd649c3a7cdbc74b77bf0b4586fb6350df3fb4ff955684128320546",
+      "risk_profile_sha256": "ca5292a17c45d1317849f4b62e1b9dafae3c7cfa7ae935c68dbde16e1e1deb25",
+      "run_id": "Q25-S8-EXPIRY-VALIDATION-HIGH_VOL-20261105",
+      "scenario": "HIGH_VOL",
+      "settlement": {
+        "account_positions_remaining": 0,
+        "account_realized_pnl_delta_krw": "-815000.0",
+        "account_unrealized_pnl_after_krw": "0",
+        "authority": "NON_AUTHORITATIVE_SYNTHETIC",
+        "commission_basis": "VALIDATION_BENCHMARK_NOT_ACTUAL_BROKER_FEE",
+        "commission_per_contract_per_side_krw": "3000",
+        "contract_multiplier": "250000",
+        "currency": "KRW",
+        "entry_commission_krw": "6000",
+        "expiry": "20261119",
+        "expiry_commission_krw": "6000",
+        "flat_state_reconciliation": "PASS",
+        "gross_realized_pnl_krw": "-815000",
+        "group_id": "Q25-S8-EXPIRY-VALIDATION-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1",
+        "group_leg_quantities_after": [
+          0,
+          0
+        ],
+        "group_realized_pnl_after_krw": "-815000.0",
+        "group_unrealized_pnl_after_krw": "0.0",
+        "net_realized_pnl_krw": "-827000",
+        "position_lots_remaining": 0,
+        "production_authority": "NOT_GRANTED",
+        "profile_id": "Q25_S8_EXPIRY_BENCHMARK_V1",
+        "profile_sha256": "5be9bc21fdd649c3a7cdbc74b77bf0b4586fb6350df3fb4ff955684128320546",
+        "realized_pnl_reconciliation": "PASS",
+        "scenario_id": "Q25_S8_MONTHLY_V3_HIGH_VOL",
+        "settled_lots": [
+          {
+            "entry_commission_krw": "3000",
+            "entry_premium_cashflow_krw": "-390000",
+            "entry_price": "1.56",
+            "expiry_commission_krw": "3000",
+            "gross_realized_pnl_krw": "-390000",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8V3:HIGH_VOL:20261119:CALL:515",
+            "intrinsic_value_points": "0",
+            "leg_id": "call",
+            "option_type": "CALL",
+            "quantity": 1,
+            "settlement_execution_id": "Q25-S8-EXPIRY-VALIDATION-HIGH_VOL-20261105:Q25-S8-EXPIRY-VALIDATION-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1:20261119:call:EXEC-000001",
+            "side": "BUY",
+            "signed_cash_payoff_krw": "0",
+            "strike": "515.0"
+          },
+          {
+            "entry_commission_krw": "3000",
+            "entry_premium_cashflow_krw": "-425000",
+            "entry_price": "1.7",
+            "expiry_commission_krw": "3000",
+            "gross_realized_pnl_krw": "-425000",
+            "instrument_id": "SYNTHETIC_CONTRACT:S8V3:HIGH_VOL:20261119:PUT:485",
+            "intrinsic_value_points": "0",
+            "leg_id": "put",
+            "option_type": "PUT",
+            "quantity": 1,
+            "settlement_execution_id": "Q25-S8-EXPIRY-VALIDATION-HIGH_VOL-20261105:Q25-S8-EXPIRY-VALIDATION-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1:20261119:put:EXEC-000002",
+            "side": "BUY",
+            "signed_cash_payoff_krw": "0",
+            "strike": "485.0"
+          }
+        ],
+        "settlement_date": "20261119",
+        "settlement_id": "Q25-S8-EXPIRY-VALIDATION-HIGH_VOL-20261105:Q25-S8-EXPIRY-VALIDATION-HIGH_VOL-20261105-SIG-2-track8_macro_regime_monthly_strangle-1:20261119",
+        "settlement_source": "SYNTHETIC_SCENARIO_EXPIRY_FIXTURE",
+        "settlement_source_sha256": "c6f501af1c032041b41181f708f95a6d23406f7faa3de66989918e06db58c4a3",
+        "status": "SETTLED_VALIDATION_ONLY",
+        "total_commission_krw": "12000",
+        "underlying_settlement_price": "495"
+      }
+    }
+  ],
+  "limitations": [
+    "Synthetic expiry prices are test fixtures, not exchange final settlement prices.",
+    "The 250000 multiplier is a standard-option validation benchmark, not a KIS identity field assertion.",
+    "3000 KRW per contract per side is a validation fee benchmark, not an actual broker fee schedule.",
+    "No KIS API, REAL_VTS, Live or real-account API was called."
+  ],
+  "production_authority": "NOT_GRANTED",
+  "profile": {
+    "allow_kis_api": false,
+    "allow_live_orders": false,
+    "allow_real_account": false,
+    "commission_basis": "Validation benchmark copied from core/analytics/execution_cost.py fee_per_leg=3000. Not an actual brokerage/account fee schedule.",
+    "commission_per_contract_per_side_krw": "3000",
+    "contract_multiplier": "250000",
+    "contract_multiplier_basis": "Project standard KOSPI200 option benchmark; core/option/option_master.py and SyntheticOptionContractMaster. Not a KIS master field assertion.",
+    "currency": "KRW",
+    "instrument_family": "STANDARD",
+    "notes": [
+      "This profile is permitted only for SYNTHETIC/DERIVED_SCENARIO validation-only Virtual runs.",
+      "The synthetic expiry settlement price is a test fixture, not an exchange-published final settlement price.",
+      "The multiplier and commission are explicit test assumptions; they do not authorize production or live accounting.",
+      "Actual KIS/firm fees, contract specifications and official expiry settlement data must replace these values when a real-account integration is explicitly enabled."
+    ],
+    "production_runtime_eligible": false,
+    "profile_id": "Q25_S8_EXPIRY_BENCHMARK_V1",
+    "provenance": "SYNTHETIC_VALIDATION_BENCHMARK",
+    "rounding": "ROUND_HALF_UP_TO_WON",
+    "runtime_eligible": false,
+    "schema_version": "q25-s8-validation-only-expiry-profile-v1",
+    "settlement_price_by_scenario": {
+      "Q25_S8_MONTHLY_V3_HIGH_VOL": "495",
+      "Q25_S8_MONTHLY_V3_NORMAL": "505"
+    },
+    "settlement_price_source": "SYNTHETIC_SCENARIO_EXPIRY_FIXTURE",
+    "validation_only": true
+  },
+  "result_status": "PASS_VALIDATION_ONLY",
+  "scope": "VALIDATION_ONLY_DERIVED_SCENARIO_VIRTUAL_S8"
+}

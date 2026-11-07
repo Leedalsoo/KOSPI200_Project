@@ -1,0 +1,78 @@
+{
+  "authority_boundary": {
+    "allow_kis_api": false,
+    "allow_live_orders": false,
+    "allow_real_account": false,
+    "contract_identity_authority": "SYNTHETIC_ONLY",
+    "expiry_is_authoritative": false,
+    "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+    "production_runtime_eligible": false,
+    "runtime_eligible": false,
+    "validation_only": true
+  },
+  "budget_derivation": {
+    "headroom_ratio": "1.25",
+    "method": "ceil(max_concurrent_synthetic_premium * 1.25 / 100000) * 100000",
+    "rounding_unit_krw": 100000,
+    "source": "existing Q25 synthetic dataset generator convention; not an operational risk approval"
+  },
+  "changes": {
+    "created": [
+      "config/validation_only/q25_s05_1_s7_v2/risk_profile.json",
+      "config/validation_only/q25_s05_1_s7_v2/risk_profile.json.sha256",
+      "verification/verify_q25_s05_1_s7_validation_risk_basis_20261107.py",
+      "reports/synth/Q25_A5_S05_1_S7_VALIDATION_RISK_BASIS_20261107.json"
+    ],
+    "existing_dataset_or_manifest_modified": false,
+    "kis_or_live_api_called": false,
+    "operational_risk_config_modified": false,
+    "strategy_runtime_flags_enabled": false
+  },
+  "dataset_path": "data/derived_scenario/q25_strategy7_8_v2/strategy7_weekly/20261103.jsonl",
+  "dataset_sha256": "052d660e792adbda6b8fed7afce95cc54a1db007b70abfec3c0b736a6126da13",
+  "fees": {
+    "included_in_premium_cap": false,
+    "source_status": "NOT_PRESENT_IN_S7_V2_DATASET",
+    "treatment": "separate fee accounting required; do not claim fee-inclusive max loss"
+  },
+  "group_gross_premium_krw": {
+    "S7_MON_20261109": 1312500,
+    "S7_THU_20261112": 1312500
+  },
+  "manifest_path": "data/derived_scenario/q25_strategy7_8_v2/strategy7_weekly/manifest.json",
+  "manifest_sha256": "ffbcf16c55d1cf75840ffc7cf0c5c536782655d5cd5436b888e97c02e643efaa",
+  "max_concurrent_gross_premium_krw": 2625000,
+  "max_group_gross_premium_krw": 1312500,
+  "operational_reference": {
+    "activation_mode": "DISABLED_UNTIL_RUNTIME_INTEGRATION",
+    "active_enforcement": false,
+    "config_mutated": false,
+    "gross_premium_reference_krw": 250000
+  },
+  "profile_path": "config/validation_only/q25_s05_1_s7_v2/risk_profile.json",
+  "profile_sha256": "3091cfefa0bb0587e80171978f885b0fc74f18495b3de4861791b9a1a5fc1d57",
+  "profile_sha256_sidecar": "config/validation_only/q25_s05_1_s7_v2/risk_profile.json.sha256",
+  "remaining_blockers": [
+    "Synthetic contract identity owner remains unresolved; expiry and multiplier are non-authoritative.",
+    "Fee schedule is absent; the premium-only maximum-loss basis is not fee-inclusive.",
+    "This profile is not wired to the Strategy 7 Runtime readiness/risk gate; runtime_config_verified and risk_limits_available remain fail-closed.",
+    "The 3,300,000 KRW cap is a scenario-derived validation budget, not a user-approved or operational trading limit."
+  ],
+  "report_id": "Q25_A5_S05_1_S7_VALIDATION_RISK_BASIS_20261107",
+  "risk_calculation": {
+    "computed_concurrent_exposure_krw": 2625000,
+    "computed_gross_premium_krw": 2625000,
+    "computed_max_loss_krw": 2625000,
+    "reference_baseline_overage_krw": 2375000,
+    "validation_budget_overage_krw": 0,
+    "verdict": "VALIDATION_ONLY_ALLOW"
+  },
+  "row_count": 216,
+  "rows_by_group": {
+    "S7_MON_20261109": 108,
+    "S7_THU_20261112": 108
+  },
+  "scope": "S05-1 validation-only synthetic risk-input and budget basis; no Runtime enablement",
+  "validation_budget_cap_krw": 3300000,
+  "verdict": "PSB_UNVERIFIED"
+}

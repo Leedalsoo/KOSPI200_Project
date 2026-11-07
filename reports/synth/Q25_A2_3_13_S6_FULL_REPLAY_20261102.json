@@ -1,0 +1,65 @@
+{
+  "report_id": "Q25_A2_3_13_S6_FULL_REPLAY_20261102",
+  "created_at": "2026-11-02",
+  "status": "PSB_PASS",
+  "status_scope": "Q25 A2-3-13 validation-only config/risk-limit gate validation and natural Strategy 6 signal observation",
+  "overall_a1_3_status": "BLOCKED_REMAINS_UNVERIFIED",
+  "conclusion": "FULL_REPLAY_COMPLETED_NATURAL_STRATEGY6_SIGNAL_OBSERVED",
+  "run": {
+    "run_id": "Q25-A2-3-13-S6-FULL-20261102",
+    "replay_runner": "HighSpeedVirtualRuntimeReplayRunner",
+    "strategy_key_requested": [
+      "track6_daily_tail_insurance",
+      "1.0"
+    ],
+    "validation_only_synthetic": true,
+    "validation_only_track6_signal_mode": true,
+    "events": 37056,
+    "exhausted": true,
+    "elapsed_seconds": 102.11182300001383,
+    "total_signals": 1,
+    "strategy6_signal_count_from_strategy_status": 1,
+    "strategy6_execution_signals": 1,
+    "strategy6_reaction_signals": 1,
+    "strategy6_non_execution_signals": 0,
+    "approved": 0,
+    "routed": 0,
+    "filled": 0,
+    "rejected": 0,
+    "execution_ids": [],
+    "strategy6_unavailable": 0,
+    "strategy6_runtime_failures": 0
+  },
+  "dataset": {
+    "path": "data/derived_scenario/q25_a2_1_strategy6/20261102.jsonl",
+    "sha256": "ace58f804fd811d6bc73cbeba3837ee7bea80a67b15b6c7d7342ffb997833b80",
+    "rows": 37056,
+    "manifest_path": "reports/synth/Q25_A2_1_S6_SYN_EVT_MANIFEST_20261102.json",
+    "manifest_sha256": "813744ebad7e2f5c3e21ecf62b6be35a126215f6569c705a102ac7fa7d33ee32",
+    "provenance": "DERIVED_SCENARIO",
+    "synthetic_only": true,
+    "production_runtime_eligible": false,
+    "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED"
+  },
+  "validation": {
+    "python_compile_exit_code": 0,
+    "focused_pytest": "10 passed",
+    "focused_pytest_exit_code": 0,
+    "diff_check_exit_code": 0,
+    "natural_signal_source": "Actual StrategyHub/Strategy 6 code in standard automated runtime loop, replayed through StandardRuntimeInputProvider composition path",
+    "execution_safety": "SIGNAL_OBSERVATION_ONLY",
+    "risk_engine_order_admission_and_execution_not_exercised": true,
+    "operational_risk_config_activated": false,
+    "kis_api_calls": 0,
+    "live_orders": 0,
+    "dataset_modified": false,
+    "commits_or_pushes": false
+  },
+  "known_limitations": [
+    "PSB_PASS applies only to this validation-only gate/natural-signal scope; it does not certify actual RiskEngine admission, OMS, order, fill, position or PnL lifecycle.",
+    "A1-3 remains blocked because fast/detailed equivalence and the full risk/execution lifecycle are not verified by this signal-only run.",
+    "The replay report's strategy_signal_counts aggregate remained empty because the signal-observation path intentionally bypasses arbitration; the per-strategy status counter recorded one Strategy 6 execution signal.",
+    "The initial replay attempt stopped at the dataset's intended one-sided quote (bid=0). The validation replay quote guard was adjusted to preserve zero-bid/positive-ask quotes while still rejecting negative or non-finite prices; the full replay then completed."
+  ],
+  "source_run_report_sha256": "29394aa965e96aec03ea9bcbdbe964de0bcc38a4a5a134590f55cafa1ef14a82"
+}

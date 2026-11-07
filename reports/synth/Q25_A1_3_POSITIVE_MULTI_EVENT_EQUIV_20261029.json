@@ -1,0 +1,320 @@
+{
+  "status": "FAIL_OR_BLOCKED",
+  "scope": "three-event validation-only positive fixture; event ordering and order/fill state-transition fast/detailed equivalence",
+  "run_id": "Q25-A1-3-POSITIVE-MULTI-EVENT-EQUIVALENCE-20261029",
+  "dataset": "p5_run_20261026_trend_up_seed20261026",
+  "seed": 20261026,
+  "provenance": "DERIVED_SCENARIO",
+  "validation_only": true,
+  "production_runtime_eligible": false,
+  "manifest_sha256": "47d6746bfd7abfea9d52016434ca06f097ca117e6724f96c522b58eb8e5590f5",
+  "input_files_checked": 63,
+  "event_timestamps": [
+    "2026-10-08T08:45:00+09:00",
+    "2026-10-08T08:50:00+09:00",
+    "2026-10-08T08:55:00+09:00"
+  ],
+  "synthetic_instrument_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+  "fast": {
+    "mode": "fast",
+    "event_timestamps": [
+      "2026-10-08T08:45:00+09:00",
+      "2026-10-08T08:50:00+09:00",
+      "2026-10-08T08:55:00+09:00"
+    ],
+    "instrument_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+    "event_snapshots": [
+      {
+        "event_index": 0,
+        "timestamp": "2026-10-08T08:45:00+09:00",
+        "instrument_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+        "runtime_counts": {
+          "signals": 1,
+          "approved": 1,
+          "routed": 1,
+          "filled": 1,
+          "rejected": 0,
+          "execution_ids": [
+            "EXEC-000001"
+          ]
+        },
+        "observer_cumulative": {
+          "status": "CONNECTED",
+          "order_commands_observed": 1,
+          "execution_reports_observed": 1,
+          "fills_observed": 1,
+          "trace_write_errors": [],
+          "order_records_status": "OBSERVED_READ_ONLY",
+          "fill_records_status": "CANONICAL_FILLS_OBSERVED"
+        },
+        "positions_before": {},
+        "positions_after": {
+          "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37": {
+            "qty": 1,
+            "avg_price": 14.75
+          }
+        },
+        "strategy_evaluation_count": 1
+      },
+      {
+        "event_index": 1,
+        "timestamp": "2026-10-08T08:50:00+09:00",
+        "instrument_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+        "runtime_counts": {
+          "signals": 0,
+          "approved": 0,
+          "routed": 0,
+          "filled": 0,
+          "rejected": 0,
+          "execution_ids": []
+        },
+        "observer_cumulative": {
+          "status": "CONNECTED",
+          "order_commands_observed": 1,
+          "execution_reports_observed": 1,
+          "fills_observed": 1,
+          "trace_write_errors": [],
+          "order_records_status": "OBSERVED_READ_ONLY",
+          "fill_records_status": "CANONICAL_FILLS_OBSERVED"
+        },
+        "positions_before": {
+          "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37": {
+            "qty": 1,
+            "avg_price": 14.75
+          }
+        },
+        "positions_after": {
+          "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37": {
+            "qty": 1,
+            "avg_price": 14.75
+          }
+        },
+        "strategy_evaluation_count": 2
+      },
+      {
+        "event_index": 2,
+        "timestamp": "2026-10-08T08:55:00+09:00",
+        "instrument_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+        "runtime_counts": {
+          "signals": 0,
+          "approved": 0,
+          "routed": 0,
+          "filled": 0,
+          "rejected": 0,
+          "execution_ids": []
+        },
+        "observer_cumulative": {
+          "status": "CONNECTED",
+          "order_commands_observed": 1,
+          "execution_reports_observed": 1,
+          "fills_observed": 1,
+          "trace_write_errors": [],
+          "order_records_status": "OBSERVED_READ_ONLY",
+          "fill_records_status": "CANONICAL_FILLS_OBSERVED"
+        },
+        "positions_before": {
+          "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37": {
+            "qty": 1,
+            "avg_price": 14.75
+          }
+        },
+        "positions_after": {
+          "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37": {
+            "qty": 1,
+            "avg_price": 14.75
+          }
+        },
+        "strategy_evaluation_count": 3
+      }
+    ],
+    "observer": {
+      "status": "CONNECTED",
+      "order_commands_observed": 1,
+      "execution_reports_observed": 1,
+      "fills_observed": 1,
+      "trace_write_errors": [],
+      "order_records_status": "OBSERVED_READ_ONLY",
+      "fill_records_status": "CANONICAL_FILLS_OBSERVED"
+    },
+    "positions": {
+      "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37": {
+        "qty": 1,
+        "avg_price": 14.75
+      }
+    },
+    "input_files_unchanged": true,
+    "trace_status": "DISABLED_FAST_MODE",
+    "trace_write_errors": [],
+    "strategy_evaluations": 3
+  },
+  "detailed": {
+    "mode": "detailed",
+    "event_timestamps": [
+      "2026-10-08T08:45:00+09:00",
+      "2026-10-08T08:50:00+09:00",
+      "2026-10-08T08:55:00+09:00"
+    ],
+    "instrument_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+    "event_snapshots": [
+      {
+        "event_index": 0,
+        "timestamp": "2026-10-08T08:45:00+09:00",
+        "instrument_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+        "runtime_counts": {
+          "signals": 1,
+          "approved": 1,
+          "routed": 1,
+          "filled": 1,
+          "rejected": 0,
+          "execution_ids": [
+            "EXEC-000001"
+          ]
+        },
+        "observer_cumulative": {
+          "status": "CONNECTED",
+          "order_commands_observed": 1,
+          "execution_reports_observed": 1,
+          "fills_observed": 1,
+          "trace_write_errors": [],
+          "order_records_status": "OBSERVED_READ_ONLY",
+          "fill_records_status": "CANONICAL_FILLS_OBSERVED"
+        },
+        "positions_before": {},
+        "positions_after": {
+          "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37": {
+            "qty": 1,
+            "avg_price": 14.75
+          }
+        },
+        "strategy_evaluation_count": 1
+      },
+      {
+        "event_index": 1,
+        "timestamp": "2026-10-08T08:50:00+09:00",
+        "instrument_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+        "runtime_counts": {
+          "signals": 0,
+          "approved": 0,
+          "routed": 0,
+          "filled": 0,
+          "rejected": 0,
+          "execution_ids": []
+        },
+        "observer_cumulative": {
+          "status": "CONNECTED",
+          "order_commands_observed": 1,
+          "execution_reports_observed": 1,
+          "fills_observed": 1,
+          "trace_write_errors": [],
+          "order_records_status": "OBSERVED_READ_ONLY",
+          "fill_records_status": "CANONICAL_FILLS_OBSERVED"
+        },
+        "positions_before": {
+          "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37": {
+            "qty": 1,
+            "avg_price": 14.75
+          }
+        },
+        "positions_after": {
+          "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37": {
+            "qty": 1,
+            "avg_price": 14.75
+          }
+        },
+        "strategy_evaluation_count": 2
+      },
+      {
+        "event_index": 2,
+        "timestamp": "2026-10-08T08:55:00+09:00",
+        "instrument_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+        "runtime_counts": {
+          "signals": 0,
+          "approved": 0,
+          "routed": 0,
+          "filled": 0,
+          "rejected": 0,
+          "execution_ids": []
+        },
+        "observer_cumulative": {
+          "status": "CONNECTED",
+          "order_commands_observed": 1,
+          "execution_reports_observed": 1,
+          "fills_observed": 1,
+          "trace_write_errors": [],
+          "order_records_status": "OBSERVED_READ_ONLY",
+          "fill_records_status": "CANONICAL_FILLS_OBSERVED"
+        },
+        "positions_before": {
+          "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37": {
+            "qty": 1,
+            "avg_price": 14.75
+          }
+        },
+        "positions_after": {
+          "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37": {
+            "qty": 1,
+            "avg_price": 14.75
+          }
+        },
+        "strategy_evaluation_count": 3
+      }
+    ],
+    "observer": {
+      "status": "CONNECTED",
+      "order_commands_observed": 1,
+      "execution_reports_observed": 1,
+      "fills_observed": 1,
+      "trace_write_errors": [],
+      "order_records_status": "OBSERVED_READ_ONLY",
+      "fill_records_status": "CANONICAL_FILLS_OBSERVED"
+    },
+    "positions": {
+      "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37": {
+        "qty": 1,
+        "avg_price": 14.75
+      }
+    },
+    "input_files_unchanged": true,
+    "trace_status": "CONNECTED",
+    "trace_write_errors": [],
+    "strategy_evaluations": 3
+  },
+  "comparison": {
+    "same_run_id": true,
+    "same_event_timestamps_and_order": true,
+    "same_synthetic_instrument": true,
+    "event_snapshots_equal": true,
+    "complete_timeline_equal_fast_detailed": false,
+    "detailed_capture_matches_persisted_trace": true,
+    "order_report_fill_event_order_valid": true,
+    "market_event_sequence_order_valid": true,
+    "state_transition_observed_and_stable": true,
+    "positive_order_and_fill_observed": true,
+    "final_positions_equal": true,
+    "input_files_unchanged": true,
+    "observer_and_trace_healthy": true,
+    "detailed_trace_sequence_valid": true,
+    "detailed_trace_record_count": 8,
+    "detailed_trace_event_types": [
+      "replay_started",
+      "order_command",
+      "execution_report",
+      "fill",
+      "market_event",
+      "market_event",
+      "market_event",
+      "replay_finished"
+    ]
+  },
+  "trace_path": "reports\\synth\\Q25_A1_3_POSITIVE_MULTI_EVENT_EQUIV_DETAILED_20261029.jsonl",
+  "trace_sha256": "cbe52ee78b2a0d0f0bccf4d4746d140780df58ac44b4eab2e694f2c45111ebb5",
+  "trace_bytes": 5869,
+  "summary_path": "reports\\synth\\Q25_A1_3_POSITIVE_MULTI_EVENT_EQUIV_20261029.json",
+  "limitations": [
+    "Signal is supplied by a validation-only test fixture on the first event; later events deliberately produce no new signal.",
+    "FreshnessVerdict is test-fixture-only; production freshness wiring is not validated.",
+    "Synthetic contract identity is not production runtime eligible.",
+    "Fast-mode timeline capture is test-runner in-memory instrumentation; product fast trace remains disabled.",
+    "Three same-contract events do not prove partial-fill, cancellation, amendment, multi-order or full-dataset equivalence."
+  ]
+}

@@ -1,0 +1,1011 @@
+{
+  "all_group_expiries": [
+    "20261109",
+    "20261112"
+  ],
+  "approved": 8,
+  "assertions": {
+    "account_flat": true,
+    "all_eight_fills": true,
+    "all_group_legs_flat_after_close": true,
+    "all_groups_closed": true,
+    "concurrent_open_lots": true,
+    "each_group_has_both_entry_legs": true,
+    "group_pnl_reconciles_with_account": true,
+    "group_pnl_snapshots": true,
+    "risk_audit_four_sequential_legs": true,
+    "risk_reservation_retained_until_group_flat": true,
+    "risk_reservations_released": true,
+    "runtime_failures_zero": true,
+    "sequential_group_id_reused": true,
+    "sequential_put_call_order": true,
+    "two_expiry_groups": true
+  },
+  "brokerage_fee_raw_total_krw": "8653.54000000000",
+  "close_event_count": 4,
+  "concurrent_open_lot_snapshots": [
+    {
+      "distinct_expiries": [
+        "20261109"
+      ],
+      "distinct_groups": [
+        "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1"
+      ],
+      "entry_group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+      "entry_time": "2026-11-02T10:00:00+09:00",
+      "open_lot_count": 1,
+      "open_lots": [
+        {
+          "execution_id": "EXEC-000001",
+          "expiry": "20261109",
+          "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261109:PUT:487.5",
+          "option_type": "PUT",
+          "remaining_quantity": 1
+        }
+      ]
+    },
+    {
+      "distinct_expiries": [
+        "20261109"
+      ],
+      "distinct_groups": [
+        "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1"
+      ],
+      "entry_group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+      "entry_time": "2026-11-02T10:00:00+09:00",
+      "open_lot_count": 2,
+      "open_lots": [
+        {
+          "execution_id": "EXEC-000002",
+          "expiry": "20261109",
+          "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261109:CALL:512.5",
+          "option_type": "CALL",
+          "remaining_quantity": 1
+        },
+        {
+          "execution_id": "EXEC-000001",
+          "expiry": "20261109",
+          "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261109:PUT:487.5",
+          "option_type": "PUT",
+          "remaining_quantity": 1
+        }
+      ]
+    },
+    {
+      "distinct_expiries": [
+        "20261109",
+        "20261112"
+      ],
+      "distinct_groups": [
+        "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+        "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1"
+      ],
+      "entry_group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+      "entry_time": "2026-11-05T08:45:00+09:00",
+      "open_lot_count": 3,
+      "open_lots": [
+        {
+          "execution_id": "EXEC-000002",
+          "expiry": "20261109",
+          "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261109:CALL:512.5",
+          "option_type": "CALL",
+          "remaining_quantity": 1
+        },
+        {
+          "execution_id": "EXEC-000001",
+          "expiry": "20261109",
+          "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261109:PUT:487.5",
+          "option_type": "PUT",
+          "remaining_quantity": 1
+        },
+        {
+          "execution_id": "EXEC-000003",
+          "expiry": "20261112",
+          "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261112:PUT:487.5",
+          "option_type": "PUT",
+          "remaining_quantity": 1
+        }
+      ]
+    },
+    {
+      "distinct_expiries": [
+        "20261109",
+        "20261112"
+      ],
+      "distinct_groups": [
+        "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+        "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1"
+      ],
+      "entry_group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+      "entry_time": "2026-11-05T08:45:00+09:00",
+      "open_lot_count": 4,
+      "open_lots": [
+        {
+          "execution_id": "EXEC-000002",
+          "expiry": "20261109",
+          "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261109:CALL:512.5",
+          "option_type": "CALL",
+          "remaining_quantity": 1
+        },
+        {
+          "execution_id": "EXEC-000001",
+          "expiry": "20261109",
+          "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261109:PUT:487.5",
+          "option_type": "PUT",
+          "remaining_quantity": 1
+        },
+        {
+          "execution_id": "EXEC-000004",
+          "expiry": "20261112",
+          "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261112:CALL:512.5",
+          "option_type": "CALL",
+          "remaining_quantity": 1
+        },
+        {
+          "execution_id": "EXEC-000003",
+          "expiry": "20261112",
+          "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261112:PUT:487.5",
+          "option_type": "PUT",
+          "remaining_quantity": 1
+        }
+      ]
+    }
+  ],
+  "concurrent_two_expiry_groups_proven": true,
+  "dataset_path": "data/derived_scenario/q25_s08_s7_fee_authority",
+  "dataset_sha256": "4559a92e20ab2a46a4b9bb19e5f93e13a3e9bdce37fe1e736f307d8c43d7541c",
+  "entry_group_ids": [
+    "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+    "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1"
+  ],
+  "events": 216,
+  "exchange_fee_raw_total_krw": "285.98040000000",
+  "execution_ids": [
+    "EXEC-000001",
+    "EXEC-000002",
+    "EXEC-000003",
+    "EXEC-000004",
+    "EXEC-000005",
+    "EXEC-000006",
+    "EXEC-000007",
+    "EXEC-000008"
+  ],
+  "execution_observer_summary": {
+    "status": "DISABLED_FAST_MODE"
+  },
+  "execution_records": [
+    {
+      "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+      "planned_legs": [
+        {
+          "leg_id": "put",
+          "option_type": "PUT",
+          "quantity": 1,
+          "side": "BUY",
+          "strike": "487.5"
+        }
+      ],
+      "position_flat": false,
+      "purpose": "WEEKLY_INSURANCE_ENTRY_PUT",
+      "reports": [
+        {
+          "execution_id": "EXEC-000001",
+          "execution_price": "1.26",
+          "execution_timestamp": "2026-11-02T10:00:00+09:00",
+          "fee": "1246",
+          "fee_breakdown": {
+            "brokerage_fee_raw_krw": "1206.13500000000",
+            "exchange_fee_raw_krw": "39.86010000000",
+            "notional_krw": "315000.000",
+            "rounding": "ROUND_HALF_UP_PER_EXECUTION",
+            "tax_krw": 0,
+            "tier": "0_42_TO_BELOW_2_47_POINT",
+            "total_fee_krw": 1246,
+            "total_fee_raw_krw": "1245.99510000000"
+          },
+          "fee_model_id": "KIS_STANDARD_BRANCH_ONLINE_KOSPI200_OPTION_2025_10_27",
+          "filled_quantity": 1,
+          "leg_id": "put",
+          "rejected_reason": null,
+          "status": "FILLED"
+        }
+      ]
+    },
+    {
+      "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+      "planned_legs": [
+        {
+          "leg_id": "call",
+          "option_type": "CALL",
+          "quantity": 1,
+          "side": "BUY",
+          "strike": "512.5"
+        }
+      ],
+      "position_flat": false,
+      "purpose": "WEEKLY_INSURANCE_ENTRY_CALL",
+      "reports": [
+        {
+          "execution_id": "EXEC-000002",
+          "execution_price": "1.16",
+          "execution_timestamp": "2026-11-02T10:00:00+09:00",
+          "fee": "1147",
+          "fee_breakdown": {
+            "brokerage_fee_raw_krw": "1110.41000000000",
+            "exchange_fee_raw_krw": "36.69660000000",
+            "notional_krw": "290000.000",
+            "rounding": "ROUND_HALF_UP_PER_EXECUTION",
+            "tax_krw": 0,
+            "tier": "0_42_TO_BELOW_2_47_POINT",
+            "total_fee_krw": 1147,
+            "total_fee_raw_krw": "1147.10660000000"
+          },
+          "fee_model_id": "KIS_STANDARD_BRANCH_ONLINE_KOSPI200_OPTION_2025_10_27",
+          "filled_quantity": 1,
+          "leg_id": "call",
+          "rejected_reason": null,
+          "status": "FILLED"
+        }
+      ]
+    },
+    {
+      "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+      "planned_legs": [
+        {
+          "leg_id": "put",
+          "option_type": "PUT",
+          "quantity": 1,
+          "side": "BUY",
+          "strike": "487.5"
+        }
+      ],
+      "position_flat": false,
+      "purpose": "WEEKLY_INSURANCE_ENTRY_PUT",
+      "reports": [
+        {
+          "execution_id": "EXEC-000003",
+          "execution_price": "2.42",
+          "execution_timestamp": "2026-11-05T08:45:00+09:00",
+          "fee": "2393",
+          "fee_breakdown": {
+            "brokerage_fee_raw_krw": "2316.54500000000",
+            "exchange_fee_raw_krw": "76.55670000000",
+            "notional_krw": "605000.000",
+            "rounding": "ROUND_HALF_UP_PER_EXECUTION",
+            "tax_krw": 0,
+            "tier": "0_42_TO_BELOW_2_47_POINT",
+            "total_fee_krw": 2393,
+            "total_fee_raw_krw": "2393.10170000000"
+          },
+          "fee_model_id": "KIS_STANDARD_BRANCH_ONLINE_KOSPI200_OPTION_2025_10_27",
+          "filled_quantity": 1,
+          "leg_id": "put",
+          "rejected_reason": null,
+          "status": "FILLED"
+        }
+      ]
+    },
+    {
+      "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+      "planned_legs": [
+        {
+          "leg_id": "call",
+          "option_type": "CALL",
+          "quantity": 1,
+          "side": "BUY",
+          "strike": "512.5"
+        }
+      ],
+      "position_flat": false,
+      "purpose": "WEEKLY_INSURANCE_ENTRY_CALL",
+      "reports": [
+        {
+          "execution_id": "EXEC-000004",
+          "execution_price": "2.2",
+          "execution_timestamp": "2026-11-05T08:45:00+09:00",
+          "fee": "2176",
+          "fee_breakdown": {
+            "brokerage_fee_raw_krw": "2105.9500000000",
+            "exchange_fee_raw_krw": "69.5970000000",
+            "notional_krw": "550000.00",
+            "rounding": "ROUND_HALF_UP_PER_EXECUTION",
+            "tax_krw": 0,
+            "tier": "0_42_TO_BELOW_2_47_POINT",
+            "total_fee_krw": 2176,
+            "total_fee_raw_krw": "2175.5470000000"
+          },
+          "fee_model_id": "KIS_STANDARD_BRANCH_ONLINE_KOSPI200_OPTION_2025_10_27",
+          "filled_quantity": 1,
+          "leg_id": "call",
+          "rejected_reason": null,
+          "status": "FILLED"
+        }
+      ]
+    },
+    {
+      "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+      "planned_legs": [
+        {
+          "leg_id": "close-8a793c865298",
+          "option_type": "PUT",
+          "quantity": 1,
+          "side": "SELL",
+          "strike": "487.5"
+        }
+      ],
+      "position_flat": false,
+      "purpose": "WEEKLY_INSURANCE_CLOSE_PUT",
+      "reports": [
+        {
+          "execution_id": "EXEC-000005",
+          "execution_price": "0.52",
+          "execution_timestamp": "2026-11-06T08:45:00+09:00",
+          "fee": "514",
+          "fee_breakdown": {
+            "brokerage_fee_raw_krw": "497.77000000000",
+            "exchange_fee_raw_krw": "16.45020000000",
+            "notional_krw": "130000.000",
+            "rounding": "ROUND_HALF_UP_PER_EXECUTION",
+            "tax_krw": 0,
+            "tier": "0_42_TO_BELOW_2_47_POINT",
+            "total_fee_krw": 514,
+            "total_fee_raw_krw": "514.22020000000"
+          },
+          "fee_model_id": "KIS_STANDARD_BRANCH_ONLINE_KOSPI200_OPTION_2025_10_27",
+          "filled_quantity": 1,
+          "leg_id": "close-8a793c865298",
+          "rejected_reason": null,
+          "status": "FILLED"
+        }
+      ]
+    },
+    {
+      "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+      "planned_legs": [
+        {
+          "leg_id": "close-87739e218105",
+          "option_type": "CALL",
+          "quantity": 1,
+          "side": "SELL",
+          "strike": "512.5"
+        }
+      ],
+      "position_flat": true,
+      "purpose": "WEEKLY_INSURANCE_CLOSE_CALL",
+      "reports": [
+        {
+          "execution_id": "EXEC-000006",
+          "execution_price": "0.48",
+          "execution_timestamp": "2026-11-06T08:45:00+09:00",
+          "fee": "475",
+          "fee_breakdown": {
+            "brokerage_fee_raw_krw": "459.48000000000",
+            "exchange_fee_raw_krw": "15.18480000000",
+            "notional_krw": "120000.000",
+            "rounding": "ROUND_HALF_UP_PER_EXECUTION",
+            "tax_krw": 0,
+            "tier": "0_42_TO_BELOW_2_47_POINT",
+            "total_fee_krw": 475,
+            "total_fee_raw_krw": "474.66480000000"
+          },
+          "fee_model_id": "KIS_STANDARD_BRANCH_ONLINE_KOSPI200_OPTION_2025_10_27",
+          "filled_quantity": 1,
+          "leg_id": "close-87739e218105",
+          "rejected_reason": null,
+          "status": "FILLED"
+        }
+      ]
+    },
+    {
+      "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+      "planned_legs": [
+        {
+          "leg_id": "close-2d8cde319f90",
+          "option_type": "PUT",
+          "quantity": 1,
+          "side": "SELL",
+          "strike": "487.5"
+        }
+      ],
+      "position_flat": false,
+      "purpose": "WEEKLY_INSURANCE_CLOSE_PUT",
+      "reports": [
+        {
+          "execution_id": "EXEC-000007",
+          "execution_price": "0.52",
+          "execution_timestamp": "2026-11-06T08:45:00+09:00",
+          "fee": "514",
+          "fee_breakdown": {
+            "brokerage_fee_raw_krw": "497.77000000000",
+            "exchange_fee_raw_krw": "16.45020000000",
+            "notional_krw": "130000.000",
+            "rounding": "ROUND_HALF_UP_PER_EXECUTION",
+            "tax_krw": 0,
+            "tier": "0_42_TO_BELOW_2_47_POINT",
+            "total_fee_krw": 514,
+            "total_fee_raw_krw": "514.22020000000"
+          },
+          "fee_model_id": "KIS_STANDARD_BRANCH_ONLINE_KOSPI200_OPTION_2025_10_27",
+          "filled_quantity": 1,
+          "leg_id": "close-2d8cde319f90",
+          "rejected_reason": null,
+          "status": "FILLED"
+        }
+      ]
+    },
+    {
+      "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+      "planned_legs": [
+        {
+          "leg_id": "close-52013fa1137b",
+          "option_type": "CALL",
+          "quantity": 1,
+          "side": "SELL",
+          "strike": "512.5"
+        }
+      ],
+      "position_flat": true,
+      "purpose": "WEEKLY_INSURANCE_CLOSE_CALL",
+      "reports": [
+        {
+          "execution_id": "EXEC-000008",
+          "execution_price": "0.48",
+          "execution_timestamp": "2026-11-06T08:45:00+09:00",
+          "fee": "475",
+          "fee_breakdown": {
+            "brokerage_fee_raw_krw": "459.48000000000",
+            "exchange_fee_raw_krw": "15.18480000000",
+            "notional_krw": "120000.000",
+            "rounding": "ROUND_HALF_UP_PER_EXECUTION",
+            "tax_krw": 0,
+            "tier": "0_42_TO_BELOW_2_47_POINT",
+            "total_fee_krw": 475,
+            "total_fee_raw_krw": "474.66480000000"
+          },
+          "fee_model_id": "KIS_STANDARD_BRANCH_ONLINE_KOSPI200_OPTION_2025_10_27",
+          "filled_quantity": 1,
+          "leg_id": "close-52013fa1137b",
+          "rejected_reason": null,
+          "status": "FILLED"
+        }
+      ]
+    }
+  ],
+  "exhausted": true,
+  "fee_accounting": {
+    "account_scope": "REFERENCE_BENCHMARK_ONLY_NOT_USER_ACCOUNT_NEGOTIATED_RATE",
+    "brokerage_fee_raw_total_krw": "8653.54000000000",
+    "derivatives_transaction_tax_krw": 0,
+    "entry_fee_reserve_by_group_krw": {
+      "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1": 4569,
+      "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1": 2393
+    },
+    "exchange_fee_raw_total_krw": "285.98040000000",
+    "fee_rows": [
+      {
+        "brokerage_fee_raw_krw": "1206.13500000000",
+        "contract_multiplier_krw": 250000,
+        "exchange_fee_raw_krw": "39.86010000000",
+        "execution_id": "EXEC-000001",
+        "fee_tier": "0_42_TO_BELOW_2_47_POINT",
+        "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+        "notional_krw": "315000.000",
+        "option_type": "PUT",
+        "premium_points": "1.26",
+        "purpose": "WEEKLY_INSURANCE_ENTRY_PUT",
+        "quantity": 1,
+        "side": "BUY",
+        "total_fee_krw": 1246
+      },
+      {
+        "brokerage_fee_raw_krw": "1110.41000000000",
+        "contract_multiplier_krw": 250000,
+        "exchange_fee_raw_krw": "36.69660000000",
+        "execution_id": "EXEC-000002",
+        "fee_tier": "0_42_TO_BELOW_2_47_POINT",
+        "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+        "notional_krw": "290000.000",
+        "option_type": "CALL",
+        "premium_points": "1.16",
+        "purpose": "WEEKLY_INSURANCE_ENTRY_CALL",
+        "quantity": 1,
+        "side": "BUY",
+        "total_fee_krw": 1147
+      },
+      {
+        "brokerage_fee_raw_krw": "2316.54500000000",
+        "contract_multiplier_krw": 250000,
+        "exchange_fee_raw_krw": "76.55670000000",
+        "execution_id": "EXEC-000003",
+        "fee_tier": "0_42_TO_BELOW_2_47_POINT",
+        "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+        "notional_krw": "605000.000",
+        "option_type": "PUT",
+        "premium_points": "2.42",
+        "purpose": "WEEKLY_INSURANCE_ENTRY_PUT",
+        "quantity": 1,
+        "side": "BUY",
+        "total_fee_krw": 2393
+      },
+      {
+        "brokerage_fee_raw_krw": "2105.9500000000",
+        "contract_multiplier_krw": 250000,
+        "exchange_fee_raw_krw": "69.5970000000",
+        "execution_id": "EXEC-000004",
+        "fee_tier": "0_42_TO_BELOW_2_47_POINT",
+        "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+        "notional_krw": "550000.00",
+        "option_type": "CALL",
+        "premium_points": "2.2",
+        "purpose": "WEEKLY_INSURANCE_ENTRY_CALL",
+        "quantity": 1,
+        "side": "BUY",
+        "total_fee_krw": 2176
+      },
+      {
+        "brokerage_fee_raw_krw": "497.77000000000",
+        "contract_multiplier_krw": 250000,
+        "exchange_fee_raw_krw": "16.45020000000",
+        "execution_id": "EXEC-000005",
+        "fee_tier": "0_42_TO_BELOW_2_47_POINT",
+        "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+        "notional_krw": "130000.000",
+        "option_type": "PUT",
+        "premium_points": "0.52",
+        "purpose": "WEEKLY_INSURANCE_CLOSE_PUT",
+        "quantity": 1,
+        "side": "SELL",
+        "total_fee_krw": 514
+      },
+      {
+        "brokerage_fee_raw_krw": "459.48000000000",
+        "contract_multiplier_krw": 250000,
+        "exchange_fee_raw_krw": "15.18480000000",
+        "execution_id": "EXEC-000006",
+        "fee_tier": "0_42_TO_BELOW_2_47_POINT",
+        "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+        "notional_krw": "120000.000",
+        "option_type": "CALL",
+        "premium_points": "0.48",
+        "purpose": "WEEKLY_INSURANCE_CLOSE_CALL",
+        "quantity": 1,
+        "side": "SELL",
+        "total_fee_krw": 475
+      },
+      {
+        "brokerage_fee_raw_krw": "497.77000000000",
+        "contract_multiplier_krw": 250000,
+        "exchange_fee_raw_krw": "16.45020000000",
+        "execution_id": "EXEC-000007",
+        "fee_tier": "0_42_TO_BELOW_2_47_POINT",
+        "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+        "notional_krw": "130000.000",
+        "option_type": "PUT",
+        "premium_points": "0.52",
+        "purpose": "WEEKLY_INSURANCE_CLOSE_PUT",
+        "quantity": 1,
+        "side": "SELL",
+        "total_fee_krw": 514
+      },
+      {
+        "brokerage_fee_raw_krw": "459.48000000000",
+        "contract_multiplier_krw": 250000,
+        "exchange_fee_raw_krw": "15.18480000000",
+        "execution_id": "EXEC-000008",
+        "fee_tier": "0_42_TO_BELOW_2_47_POINT",
+        "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+        "notional_krw": "120000.000",
+        "option_type": "CALL",
+        "premium_points": "0.48",
+        "purpose": "WEEKLY_INSURANCE_CLOSE_CALL",
+        "quantity": 1,
+        "side": "SELL",
+        "total_fee_krw": 475
+      }
+    ],
+    "fees_by_group_krw": {
+      "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1": 5558,
+      "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1": 3382
+    },
+    "fills_charged": 8,
+    "gross_account_realized_pnl_krw": -1260000.0,
+    "group_to_account_delta_krw": 0.0,
+    "model_id": "KIS_STANDARD_BRANCH_ONLINE_KOSPI200_OPTION_2025_10_27",
+    "net_account_realized_pnl_krw": -1268940.0,
+    "net_group_realized_pnl_sum_krw": -1268940.0,
+    "rounding": "ROUND_HALF_UP_PER_EXECUTION",
+    "session": "DAY",
+    "source": "KIS public standard branch-account online fee schedule, 2025-10-27",
+    "source_url": "https://securities.koreainvestment.com/main/customer/guide/_static/TF04ae010000.jsp?tab=1",
+    "tax_source_url": "https://securities.koreainvestment.com/main/customer/guide/_static/TF04ae050000.shtm",
+    "total_fee_krw": 8940
+  },
+  "fee_inclusive_pnl_verified": true,
+  "fee_model_status": "SYNTHETIC_KIS_STANDARD_BRANCH_ONLINE_REFERENCE_APPLIED",
+  "fees_total_krw": "8940",
+  "filled": 8,
+  "gross_net_pnl_before_fees_krw": -1260000.0,
+  "gross_realized_pnl_before_fees_krw": -1260000.0,
+  "group_expiries": {
+    "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1": [
+      "20261112"
+    ],
+    "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1": [
+      "20261109"
+    ]
+  },
+  "group_pnl": {
+    "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1": {
+      "expiry": [
+        "20261112"
+      ],
+      "fees_total_krw": 5558,
+      "gross_realized_pnl_before_fees_krw": -905000.0000000001,
+      "legs": [
+        {
+          "avg_price": 2.42,
+          "client_order_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1-put-36f62ed9d64c",
+          "contract_multiplier": "250000.0",
+          "current_price": 0.52,
+          "execution_id": "EXEC-000003",
+          "execution_ids": [
+            "EXEC-000003"
+          ],
+          "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+          "identity_source": "OPTION_MASTER",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261112:PUT:487.5",
+          "leg_id": "put",
+          "quantity": 0,
+          "run_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107",
+          "unrealized_pnl": 0.0
+        },
+        {
+          "avg_price": 2.2,
+          "client_order_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1-call-25dcf8e356a4",
+          "contract_multiplier": "250000.0",
+          "current_price": 0.48,
+          "execution_id": "EXEC-000004",
+          "execution_ids": [
+            "EXEC-000004"
+          ],
+          "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+          "identity_source": "OPTION_MASTER",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261112:CALL:512.5",
+          "leg_id": "call",
+          "quantity": 0,
+          "run_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107",
+          "unrealized_pnl": 0.0
+        }
+      ],
+      "realized_pnl": -910558.0000000001,
+      "total_pnl": -910558.0000000001,
+      "unrealized_pnl": 0.0
+    },
+    "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1": {
+      "expiry": [
+        "20261109"
+      ],
+      "fees_total_krw": 3382,
+      "gross_realized_pnl_before_fees_krw": -354999.99999999994,
+      "legs": [
+        {
+          "avg_price": 1.26,
+          "client_order_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1-put-50af64553038",
+          "contract_multiplier": "250000.0",
+          "current_price": 0.52,
+          "execution_id": "EXEC-000001",
+          "execution_ids": [
+            "EXEC-000001"
+          ],
+          "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+          "identity_source": "OPTION_MASTER",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261109:PUT:487.5",
+          "leg_id": "put",
+          "quantity": 0,
+          "run_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107",
+          "unrealized_pnl": 0.0
+        },
+        {
+          "avg_price": 1.16,
+          "client_order_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1-call-7a1217049e41",
+          "contract_multiplier": "250000.0",
+          "current_price": 0.48,
+          "execution_id": "EXEC-000002",
+          "execution_ids": [
+            "EXEC-000002"
+          ],
+          "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+          "identity_source": "OPTION_MASTER",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261109:CALL:512.5",
+          "leg_id": "call",
+          "quantity": 0,
+          "run_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107",
+          "unrealized_pnl": 0.0
+        }
+      ],
+      "realized_pnl": -358381.99999999994,
+      "total_pnl": -358381.99999999994,
+      "unrealized_pnl": 0.0
+    }
+  },
+  "group_pnl_reconciles_with_account": true,
+  "group_pnl_reconciliation_delta": 0.0,
+  "group_pnl_reconciliation_status": "PASS",
+  "group_pnl_snapshot_sum": -1268940.0,
+  "kis_api_called": false,
+  "live_orders_or_real_account_used": false,
+  "lot_history_count": 4,
+  "manifest_sha256": "89f2f6001d38bc522dce3b0738cbbe31fd453a892c38cdcf930c62dc71d7e001",
+  "multi_leg_decisions": 8,
+  "net_pnl": -1268940.0,
+  "nonzero_account_positions": {},
+  "operational_risk_config_modified": false,
+  "pnl_basis": "NET_SYNTHETIC_VSSF_PNL_AFTER_REFERENCE_BROKER_AND_EXCHANGE_FEES",
+  "pnl_status": "VSSF_ACCOUNT_PNL_CONNECTED",
+  "position_group_snapshots": {
+    "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1": {
+      "complete": true,
+      "fees_total_krw": 5558,
+      "gross_realized_pnl_before_fees_krw": -905000.0000000001,
+      "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+      "legs": [
+        {
+          "avg_price": 2.42,
+          "client_order_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1-put-36f62ed9d64c",
+          "contract_multiplier": "250000.0",
+          "current_price": 0.52,
+          "execution_id": "EXEC-000003",
+          "execution_ids": [
+            "EXEC-000003"
+          ],
+          "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+          "identity_source": "OPTION_MASTER",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261112:PUT:487.5",
+          "leg_id": "put",
+          "quantity": 0,
+          "run_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107",
+          "unrealized_pnl": 0.0
+        },
+        {
+          "avg_price": 2.2,
+          "client_order_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1-call-25dcf8e356a4",
+          "contract_multiplier": "250000.0",
+          "current_price": 0.48,
+          "execution_id": "EXEC-000004",
+          "execution_ids": [
+            "EXEC-000004"
+          ],
+          "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+          "identity_source": "OPTION_MASTER",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261112:CALL:512.5",
+          "leg_id": "call",
+          "quantity": 0,
+          "run_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107",
+          "unrealized_pnl": 0.0
+        }
+      ],
+      "realized_pnl": -910558.0000000001,
+      "strategy_id": "track7_volatility_skew_weekly_insurance",
+      "total_pnl": -910558.0000000001,
+      "unrealized_pnl": 0.0
+    },
+    "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1": {
+      "complete": true,
+      "fees_total_krw": 3382,
+      "gross_realized_pnl_before_fees_krw": -354999.99999999994,
+      "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+      "legs": [
+        {
+          "avg_price": 1.26,
+          "client_order_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1-put-50af64553038",
+          "contract_multiplier": "250000.0",
+          "current_price": 0.52,
+          "execution_id": "EXEC-000001",
+          "execution_ids": [
+            "EXEC-000001"
+          ],
+          "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+          "identity_source": "OPTION_MASTER",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261109:PUT:487.5",
+          "leg_id": "put",
+          "quantity": 0,
+          "run_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107",
+          "unrealized_pnl": 0.0
+        },
+        {
+          "avg_price": 1.16,
+          "client_order_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1-call-7a1217049e41",
+          "contract_multiplier": "250000.0",
+          "current_price": 0.48,
+          "execution_id": "EXEC-000002",
+          "execution_ids": [
+            "EXEC-000002"
+          ],
+          "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+          "identity_source": "OPTION_MASTER",
+          "instrument_id": "SYNTHETIC_CONTRACT:strategy7_weekly:20261109:CALL:512.5",
+          "leg_id": "call",
+          "quantity": 0,
+          "run_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107",
+          "unrealized_pnl": 0.0
+        }
+      ],
+      "realized_pnl": -358381.99999999994,
+      "strategy_id": "track7_volatility_skew_weekly_insurance",
+      "total_pnl": -358381.99999999994,
+      "unrealized_pnl": 0.0
+    }
+  },
+  "production_runtime_eligible": false,
+  "realized_pnl": -1268940.0,
+  "rejected": 0,
+  "remaining_open_lot_count": 0,
+  "remaining_open_lots": [],
+  "report_id": "Q25_A5_S08_S7_FEE_NORMAL_PATH_RUNTIME_20261107",
+  "risk_audit_records": [
+    {
+      "computed_concurrent_exposure_including_entry_fees_krw": "316246.000",
+      "computed_concurrent_exposure_krw": "315000.000",
+      "computed_entry_fee_reserve_krw": "1246",
+      "computed_gross_premium_krw": "315000.000",
+      "computed_max_loss_krw": "316246.000",
+      "dataset_sha256": "4559a92e20ab2a46a4b9bb19e5f93e13a3e9bdce37fe1e736f307d8c43d7541c",
+      "entry_leg": "put",
+      "expiry": "20261109",
+      "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+      "manifest_sha256": "89f2f6001d38bc522dce3b0738cbbe31fd453a892c38cdcf930c62dc71d7e001",
+      "operational_reference_overage_krw": "65000.000",
+      "run_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107",
+      "scenario_id": "Q25_STRATEGY7_WEEKLY_LIFECYCLE_V2",
+      "status": "ALLOW",
+      "validation_budget_overage_including_entry_fees_krw": "0",
+      "validation_budget_overage_krw": "0"
+    },
+    {
+      "computed_concurrent_exposure_including_entry_fees_krw": "607393.000",
+      "computed_concurrent_exposure_krw": "605000.000",
+      "computed_entry_fee_reserve_krw": "2393",
+      "computed_gross_premium_krw": "605000.000",
+      "computed_max_loss_krw": "607393.000",
+      "dataset_sha256": "4559a92e20ab2a46a4b9bb19e5f93e13a3e9bdce37fe1e736f307d8c43d7541c",
+      "entry_leg": "call",
+      "expiry": "20261109",
+      "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+      "manifest_sha256": "89f2f6001d38bc522dce3b0738cbbe31fd453a892c38cdcf930c62dc71d7e001",
+      "operational_reference_overage_krw": "355000.000",
+      "run_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107",
+      "scenario_id": "Q25_STRATEGY7_WEEKLY_LIFECYCLE_V2",
+      "status": "ALLOW",
+      "validation_budget_overage_including_entry_fees_krw": "0",
+      "validation_budget_overage_krw": "0"
+    },
+    {
+      "computed_concurrent_exposure_including_entry_fees_krw": "1214786.000",
+      "computed_concurrent_exposure_krw": "1210000.000",
+      "computed_entry_fee_reserve_krw": "2393",
+      "computed_gross_premium_krw": "605000.000",
+      "computed_max_loss_krw": "607393.000",
+      "dataset_sha256": "4559a92e20ab2a46a4b9bb19e5f93e13a3e9bdce37fe1e736f307d8c43d7541c",
+      "entry_leg": "put",
+      "expiry": "20261112",
+      "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+      "manifest_sha256": "89f2f6001d38bc522dce3b0738cbbe31fd453a892c38cdcf930c62dc71d7e001",
+      "operational_reference_overage_krw": "355000.000",
+      "run_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107",
+      "scenario_id": "Q25_STRATEGY7_WEEKLY_LIFECYCLE_V2",
+      "status": "ALLOW",
+      "validation_budget_overage_including_entry_fees_krw": "0",
+      "validation_budget_overage_krw": "0"
+    },
+    {
+      "computed_concurrent_exposure_including_entry_fees_krw": "1766962.000",
+      "computed_concurrent_exposure_krw": "1760000.000",
+      "computed_entry_fee_reserve_krw": "4569",
+      "computed_gross_premium_krw": "1155000.000",
+      "computed_max_loss_krw": "1159569.000",
+      "dataset_sha256": "4559a92e20ab2a46a4b9bb19e5f93e13a3e9bdce37fe1e736f307d8c43d7541c",
+      "entry_leg": "call",
+      "expiry": "20261112",
+      "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+      "manifest_sha256": "89f2f6001d38bc522dce3b0738cbbe31fd453a892c38cdcf930c62dc71d7e001",
+      "operational_reference_overage_krw": "905000.000",
+      "run_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107",
+      "scenario_id": "Q25_STRATEGY7_WEEKLY_LIFECYCLE_V2",
+      "status": "ALLOW",
+      "validation_budget_overage_including_entry_fees_krw": "0",
+      "validation_budget_overage_krw": "0"
+    }
+  ],
+  "risk_profile_sha256": "3921efc24746a12300f0bfc530a96775b8df10bbd7379b53c1738ab9f8d9b342",
+  "risk_reservation_retained_until_group_flat": true,
+  "risk_reservations_after_execution": [
+    {
+      "current_group_reserved": true,
+      "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+      "purpose": "WEEKLY_INSURANCE_ENTRY_PUT",
+      "reserved_groups_after_execution": [
+        "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1"
+      ]
+    },
+    {
+      "current_group_reserved": true,
+      "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+      "purpose": "WEEKLY_INSURANCE_ENTRY_CALL",
+      "reserved_groups_after_execution": [
+        "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1"
+      ]
+    },
+    {
+      "current_group_reserved": true,
+      "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+      "purpose": "WEEKLY_INSURANCE_ENTRY_PUT",
+      "reserved_groups_after_execution": [
+        "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+        "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1"
+      ]
+    },
+    {
+      "current_group_reserved": true,
+      "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+      "purpose": "WEEKLY_INSURANCE_ENTRY_CALL",
+      "reserved_groups_after_execution": [
+        "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+        "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1"
+      ]
+    },
+    {
+      "current_group_reserved": true,
+      "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+      "purpose": "WEEKLY_INSURANCE_CLOSE_PUT",
+      "reserved_groups_after_execution": [
+        "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+        "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1"
+      ]
+    },
+    {
+      "current_group_reserved": false,
+      "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-8-track7_volatility_skew_weekly_insurance-1",
+      "purpose": "WEEKLY_INSURANCE_CLOSE_CALL",
+      "reserved_groups_after_execution": [
+        "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1"
+      ]
+    },
+    {
+      "current_group_reserved": true,
+      "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+      "purpose": "WEEKLY_INSURANCE_CLOSE_PUT",
+      "reserved_groups_after_execution": [
+        "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1"
+      ]
+    },
+    {
+      "current_group_reserved": false,
+      "group_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107-SIG-146-track7_volatility_skew_weekly_insurance-1",
+      "purpose": "WEEKLY_INSURANCE_CLOSE_CALL",
+      "reserved_groups_after_execution": []
+    }
+  ],
+  "risk_reservations_released": true,
+  "routed": 8,
+  "run_id": "Q25-A5-S08-S7-FEE-AUTHORITY-20261107",
+  "runtime_eligible": false,
+  "runtime_failures": 0,
+  "sequential_group_id_reused": true,
+  "sequential_put_call_order": true,
+  "signals": 8,
+  "stage_verdict": "PSB_PASS_U16_U17_VALIDATION_ONLY",
+  "trace_path": "reports/synth/.S7_FEE_FAST_TRACE_NOT_CREATED",
+  "unrealized_pnl": 0.0,
+  "validation_only": true,
+  "verdict": "PSB_PASS_NORMAL_PATH_ONLY"
+}

@@ -1,0 +1,64 @@
+{
+  "asset_and_budget_verdict": "PASS",
+  "created_at_utc": "2026-11-03T08:58:45.191184+00:00",
+  "live_or_kis_calls": false,
+  "operational_config_mutated": false,
+  "risk_checks_enabled": true,
+  "runtime_blockers": {
+    "strategy7": "Current Strategy 7 state is single-group; independent Monday/Thursday concurrent group lifecycle is not implemented.",
+    "strategy8": "Current Strategy 8 DTE_ENTRY/MIN_BUDGET are None and build_execution_plan raises TRACK8_SEQUENTIAL_ENTRY_POLICY_UNRESOLVED. No.1169 confirms DTE>=10 trading days and retires the 200,000 KRW minimum-budget gate, but the strategy code has not been changed in this approved scope."
+  },
+  "runtime_eligible": false,
+  "runtime_lifecycle_verdict": "UNVERIFIED_NOT_RUN",
+  "schema_version": "q25-synthetic-asset-validation-report-v1",
+  "strategies": {
+    "strategy7": {
+      "budget_verdict": "PASS",
+      "computed_max_loss_krw": 2625000,
+      "dataset_path": "data/derived_scenario/q25_strategy7_8/strategy7_weekly/20261103.jsonl",
+      "dataset_sha256": "c9374e5eafe4816dde3e9facb1e4f3636aa10f6941fce7c59c981ac31d9e8b4f",
+      "dataset_verdict": "PASS",
+      "group_peak_gross_premium_krw": {
+        "S7_MON_20261109": 1312500,
+        "S7_THU_20261112": 1312500
+      },
+      "groups": [
+        "S7_MON_20261109",
+        "S7_THU_20261112"
+      ],
+      "manifest_sha256": "3e252077028a98d7335b48ed5108773dda4343a66ec0ad251e32f3e7b8fd1cba",
+      "max_bid_ask_spread_ratio": "0.1034482758620689655172413793",
+      "operational_reference_limit_krw": 250000,
+      "operational_reference_overage_krw": 2375000,
+      "peak_concurrent_exposure_krw": 2625000,
+      "rows": 20,
+      "validation_budget_overage_krw": 0,
+      "validation_only_budget_krw": 3300000
+    },
+    "strategy8": {
+      "budget_verdict": "PASS",
+      "computed_max_loss_krw": 1772500,
+      "dataset_path": "data/derived_scenario/q25_strategy7_8/strategy8_monthly/20261103.jsonl",
+      "dataset_sha256": "dd2844cae1d42b69f77c41fd2464cac6a514238a6fd78a8517f19c8709457e9e",
+      "dataset_verdict": "PASS",
+      "group_peak_gross_premium_krw": {
+        "S8_MONTHLY_20261119_HIGH_VOL": 1772500,
+        "S8_MONTHLY_20261119_NORMAL": 1312500
+      },
+      "groups": [
+        "S8_MONTHLY_20261119_HIGH_VOL",
+        "S8_MONTHLY_20261119_NORMAL"
+      ],
+      "manifest_sha256": "5192f6f5214c24bea3ac19e107289bc48c91fa12feb6423046a60136438b1262",
+      "max_bid_ask_spread_ratio": "0.1034482758620689655172413793",
+      "operational_reference_limit_krw": 250000,
+      "operational_reference_overage_krw": 1522500,
+      "peak_concurrent_exposure_krw": 1772500,
+      "rows": 20,
+      "validation_budget_overage_krw": 0,
+      "validation_only_budget_krw": 2300000
+    }
+  },
+  "validation_only": true,
+  "validation_scope": "synthetic datasets and validation-only risk budgets; no Strategy Runtime execution"
+}

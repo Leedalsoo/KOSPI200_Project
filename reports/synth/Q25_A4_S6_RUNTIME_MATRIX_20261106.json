@@ -1,0 +1,1285 @@
+{
+  "authority": "VALIDATION_ONLY_SYNTHETIC_NON_AUTHORITATIVE",
+  "cases": [
+    {
+      "comparison_fields": [
+        "events",
+        "signals",
+        "approved",
+        "routed",
+        "filled",
+        "rejected",
+        "execution_ids",
+        "multi_leg_decisions",
+        "strategy_signal_counts",
+        "strategy_status",
+        "realized_pnl",
+        "unrealized_pnl",
+        "net_pnl"
+      ],
+      "detailed": {
+        "approved": 3,
+        "dataset": "q25_a2_1_strategy6",
+        "elapsed_seconds": 136.53357309987769,
+        "events": 37056,
+        "events_per_second": 271.4057733836103,
+        "execution_ids": [
+          "EXEC-000001",
+          "EXEC-000002",
+          "EXEC-000003",
+          "EXEC-000004"
+        ],
+        "execution_observer_summary": {
+          "execution_reports_observed": 4,
+          "fill_records_status": "CANONICAL_FILLS_OBSERVED",
+          "fills_observed": 4,
+          "order_commands_observed": 4,
+          "order_records_status": "OBSERVED_READ_ONLY",
+          "status": "CONNECTED",
+          "trace_write_errors": []
+        },
+        "exhausted": false,
+        "filled": 4,
+        "multi_leg_decisions": 3,
+        "net_pnl": -24999.999999999967,
+        "pnl_status": "VSSF_ACCOUNT_PNL_CONNECTED",
+        "realized_pnl": -24999.999999999967,
+        "rejected": 0,
+        "routed": 4,
+        "run_id": "Q25-A4-S6-R5-per_order-DETAILED-v3",
+        "signals": 3,
+        "strategy_signal_counts": [
+          [
+            "track6_daily_tail_insurance",
+            3
+          ]
+        ],
+        "strategy_status": [
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "TRACK1_TAIL_DEFENSE",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track2_asymmetric_trap",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track4_gamma_scalping",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track5_gap_divergence",
+            "unavailable": 0
+          },
+          {
+            "approved": 3,
+            "decision_rejected": 0,
+            "execution_signals": 3,
+            "filled_quantity": 4,
+            "non_execution_signals": 0,
+            "reaction_signals": 3,
+            "risk_rejected": 0,
+            "routed": 4,
+            "runtime_failures": 0,
+            "strategy_id": "track6_daily_tail_insurance",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track7_volatility_skew_weekly_insurance",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track8_macro_regime_monthly_strangle",
+            "unavailable": 0
+          }
+        ],
+        "trace_status": "CONNECTED",
+        "unrealized_pnl": 0.0
+      },
+      "fast": {
+        "approved": 3,
+        "dataset": "q25_a2_1_strategy6",
+        "elapsed_seconds": 120.11650440003723,
+        "events": 37056,
+        "events_per_second": 308.5004861329324,
+        "execution_ids": [
+          "EXEC-000001",
+          "EXEC-000002",
+          "EXEC-000003",
+          "EXEC-000004"
+        ],
+        "execution_observer_summary": {
+          "status": "DISABLED_FAST_MODE"
+        },
+        "exhausted": false,
+        "filled": 4,
+        "multi_leg_decisions": 3,
+        "net_pnl": -24999.999999999967,
+        "pnl_status": "VSSF_ACCOUNT_PNL_CONNECTED",
+        "realized_pnl": -24999.999999999967,
+        "rejected": 0,
+        "routed": 4,
+        "run_id": "Q25-A4-S6-R5-per_order-FAST-v3",
+        "signals": 3,
+        "strategy_signal_counts": [
+          [
+            "track6_daily_tail_insurance",
+            3
+          ]
+        ],
+        "strategy_status": [
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "TRACK1_TAIL_DEFENSE",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track2_asymmetric_trap",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track4_gamma_scalping",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track5_gap_divergence",
+            "unavailable": 0
+          },
+          {
+            "approved": 3,
+            "decision_rejected": 0,
+            "execution_signals": 3,
+            "filled_quantity": 4,
+            "non_execution_signals": 0,
+            "reaction_signals": 3,
+            "risk_rejected": 0,
+            "routed": 4,
+            "runtime_failures": 0,
+            "strategy_id": "track6_daily_tail_insurance",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track7_volatility_skew_weekly_insurance",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track8_macro_regime_monthly_strangle",
+            "unavailable": 0
+          }
+        ],
+        "trace_status": "DISABLED_FAST_MODE",
+        "unrealized_pnl": 0.0
+      },
+      "fast_detailed_equivalent": true,
+      "first_rank": 5,
+      "flat_confirmed": true,
+      "no_rejected_orders": true,
+      "no_runtime_failures": true,
+      "state": {
+        "DETAILED": {
+          "available_candidate_ranks": [
+            5
+          ],
+          "last_reason": null,
+          "open_quantity": {
+            "call": 0,
+            "put": 0
+          },
+          "record_sha256": "fc0b4f8568f87cc9a08bc3de6ac0c78a6bfc0fd8d52fb608ff1e6bca98d51f52",
+          "selected_rank": 5,
+          "sequence": 6,
+          "status": "FLAT_CONFIRMED"
+        },
+        "FAST": {
+          "available_candidate_ranks": [
+            5
+          ],
+          "last_reason": null,
+          "open_quantity": {
+            "call": 0,
+            "put": 0
+          },
+          "record_sha256": "c75ed754f9b8cf91b59d5d598f0af0cdb39ca6e23890b5732c7de7bf32f08a0b",
+          "selected_rank": 5,
+          "sequence": 6,
+          "status": "FLAT_CONFIRMED"
+        }
+      },
+      "timeout_split": "per_order",
+      "verdict": "PSB_PASS"
+    },
+    {
+      "comparison_fields": [
+        "events",
+        "signals",
+        "approved",
+        "routed",
+        "filled",
+        "rejected",
+        "execution_ids",
+        "multi_leg_decisions",
+        "strategy_signal_counts",
+        "strategy_status",
+        "realized_pnl",
+        "unrealized_pnl",
+        "net_pnl"
+      ],
+      "detailed": {
+        "approved": 3,
+        "dataset": "q25_a2_1_strategy6",
+        "elapsed_seconds": 136.4797465999145,
+        "events": 37056,
+        "events_per_second": 271.51281360910156,
+        "execution_ids": [
+          "EXEC-000001",
+          "EXEC-000002",
+          "EXEC-000003",
+          "EXEC-000004"
+        ],
+        "execution_observer_summary": {
+          "execution_reports_observed": 4,
+          "fill_records_status": "CANONICAL_FILLS_OBSERVED",
+          "fills_observed": 4,
+          "order_commands_observed": 4,
+          "order_records_status": "OBSERVED_READ_ONLY",
+          "status": "CONNECTED",
+          "trace_write_errors": []
+        },
+        "exhausted": false,
+        "filled": 4,
+        "multi_leg_decisions": 3,
+        "net_pnl": -24999.999999999967,
+        "pnl_status": "VSSF_ACCOUNT_PNL_CONNECTED",
+        "realized_pnl": -24999.999999999967,
+        "rejected": 0,
+        "routed": 4,
+        "run_id": "Q25-A4-S6-R5-shared_elapsed-DETAILED-v3",
+        "signals": 3,
+        "strategy_signal_counts": [
+          [
+            "track6_daily_tail_insurance",
+            3
+          ]
+        ],
+        "strategy_status": [
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "TRACK1_TAIL_DEFENSE",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track2_asymmetric_trap",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track4_gamma_scalping",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track5_gap_divergence",
+            "unavailable": 0
+          },
+          {
+            "approved": 3,
+            "decision_rejected": 0,
+            "execution_signals": 3,
+            "filled_quantity": 4,
+            "non_execution_signals": 0,
+            "reaction_signals": 3,
+            "risk_rejected": 0,
+            "routed": 4,
+            "runtime_failures": 0,
+            "strategy_id": "track6_daily_tail_insurance",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track7_volatility_skew_weekly_insurance",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track8_macro_regime_monthly_strangle",
+            "unavailable": 0
+          }
+        ],
+        "trace_status": "CONNECTED",
+        "unrealized_pnl": 0.0
+      },
+      "fast": {
+        "approved": 3,
+        "dataset": "q25_a2_1_strategy6",
+        "elapsed_seconds": 120.1310983998701,
+        "events": 37056,
+        "events_per_second": 308.4630082766318,
+        "execution_ids": [
+          "EXEC-000001",
+          "EXEC-000002",
+          "EXEC-000003",
+          "EXEC-000004"
+        ],
+        "execution_observer_summary": {
+          "status": "DISABLED_FAST_MODE"
+        },
+        "exhausted": false,
+        "filled": 4,
+        "multi_leg_decisions": 3,
+        "net_pnl": -24999.999999999967,
+        "pnl_status": "VSSF_ACCOUNT_PNL_CONNECTED",
+        "realized_pnl": -24999.999999999967,
+        "rejected": 0,
+        "routed": 4,
+        "run_id": "Q25-A4-S6-R5-shared_elapsed-FAST-v3",
+        "signals": 3,
+        "strategy_signal_counts": [
+          [
+            "track6_daily_tail_insurance",
+            3
+          ]
+        ],
+        "strategy_status": [
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "TRACK1_TAIL_DEFENSE",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track2_asymmetric_trap",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track4_gamma_scalping",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track5_gap_divergence",
+            "unavailable": 0
+          },
+          {
+            "approved": 3,
+            "decision_rejected": 0,
+            "execution_signals": 3,
+            "filled_quantity": 4,
+            "non_execution_signals": 0,
+            "reaction_signals": 3,
+            "risk_rejected": 0,
+            "routed": 4,
+            "runtime_failures": 0,
+            "strategy_id": "track6_daily_tail_insurance",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track7_volatility_skew_weekly_insurance",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track8_macro_regime_monthly_strangle",
+            "unavailable": 0
+          }
+        ],
+        "trace_status": "DISABLED_FAST_MODE",
+        "unrealized_pnl": 0.0
+      },
+      "fast_detailed_equivalent": true,
+      "first_rank": 5,
+      "flat_confirmed": true,
+      "no_rejected_orders": true,
+      "no_runtime_failures": true,
+      "state": {
+        "DETAILED": {
+          "available_candidate_ranks": [
+            5
+          ],
+          "last_reason": null,
+          "open_quantity": {
+            "call": 0,
+            "put": 0
+          },
+          "record_sha256": "2255b1047be5dc9384013b406c399f11d98283c61cfc50f23584fdbcc1bd3750",
+          "selected_rank": 5,
+          "sequence": 6,
+          "status": "FLAT_CONFIRMED"
+        },
+        "FAST": {
+          "available_candidate_ranks": [
+            5
+          ],
+          "last_reason": null,
+          "open_quantity": {
+            "call": 0,
+            "put": 0
+          },
+          "record_sha256": "cdc3a6e9608e950120db658bac9fbdb63306429052b670e4d1b89c102c144a4d",
+          "selected_rank": 5,
+          "sequence": 6,
+          "status": "FLAT_CONFIRMED"
+        }
+      },
+      "timeout_split": "shared_elapsed",
+      "verdict": "PSB_PASS"
+    },
+    {
+      "comparison_fields": [
+        "events",
+        "signals",
+        "approved",
+        "routed",
+        "filled",
+        "rejected",
+        "execution_ids",
+        "multi_leg_decisions",
+        "strategy_signal_counts",
+        "strategy_status",
+        "realized_pnl",
+        "unrealized_pnl",
+        "net_pnl"
+      ],
+      "detailed": {
+        "approved": 3,
+        "dataset": "q25_a2_1_strategy6",
+        "elapsed_seconds": 137.20272539998405,
+        "events": 37056,
+        "events_per_second": 270.08209852954064,
+        "execution_ids": [
+          "EXEC-000001",
+          "EXEC-000002",
+          "EXEC-000003",
+          "EXEC-000004"
+        ],
+        "execution_observer_summary": {
+          "execution_reports_observed": 4,
+          "fill_records_status": "CANONICAL_FILLS_OBSERVED",
+          "fills_observed": 4,
+          "order_commands_observed": 4,
+          "order_records_status": "OBSERVED_READ_ONLY",
+          "status": "CONNECTED",
+          "trace_write_errors": []
+        },
+        "exhausted": false,
+        "filled": 4,
+        "multi_leg_decisions": 3,
+        "net_pnl": -24999.999999999967,
+        "pnl_status": "VSSF_ACCOUNT_PNL_CONNECTED",
+        "realized_pnl": -24999.999999999967,
+        "rejected": 0,
+        "routed": 4,
+        "run_id": "Q25-A4-S6-R6-per_order-DETAILED-v3",
+        "signals": 3,
+        "strategy_signal_counts": [
+          [
+            "track6_daily_tail_insurance",
+            3
+          ]
+        ],
+        "strategy_status": [
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "TRACK1_TAIL_DEFENSE",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track2_asymmetric_trap",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track4_gamma_scalping",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track5_gap_divergence",
+            "unavailable": 0
+          },
+          {
+            "approved": 3,
+            "decision_rejected": 0,
+            "execution_signals": 3,
+            "filled_quantity": 4,
+            "non_execution_signals": 0,
+            "reaction_signals": 3,
+            "risk_rejected": 0,
+            "routed": 4,
+            "runtime_failures": 0,
+            "strategy_id": "track6_daily_tail_insurance",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track7_volatility_skew_weekly_insurance",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track8_macro_regime_monthly_strangle",
+            "unavailable": 0
+          }
+        ],
+        "trace_status": "CONNECTED",
+        "unrealized_pnl": 0.0
+      },
+      "fast": {
+        "approved": 3,
+        "dataset": "q25_a2_1_strategy6",
+        "elapsed_seconds": 120.10866539995186,
+        "events": 37056,
+        "events_per_second": 308.5206206946568,
+        "execution_ids": [
+          "EXEC-000001",
+          "EXEC-000002",
+          "EXEC-000003",
+          "EXEC-000004"
+        ],
+        "execution_observer_summary": {
+          "status": "DISABLED_FAST_MODE"
+        },
+        "exhausted": false,
+        "filled": 4,
+        "multi_leg_decisions": 3,
+        "net_pnl": -24999.999999999967,
+        "pnl_status": "VSSF_ACCOUNT_PNL_CONNECTED",
+        "realized_pnl": -24999.999999999967,
+        "rejected": 0,
+        "routed": 4,
+        "run_id": "Q25-A4-S6-R6-per_order-FAST-v3",
+        "signals": 3,
+        "strategy_signal_counts": [
+          [
+            "track6_daily_tail_insurance",
+            3
+          ]
+        ],
+        "strategy_status": [
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "TRACK1_TAIL_DEFENSE",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track2_asymmetric_trap",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track4_gamma_scalping",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track5_gap_divergence",
+            "unavailable": 0
+          },
+          {
+            "approved": 3,
+            "decision_rejected": 0,
+            "execution_signals": 3,
+            "filled_quantity": 4,
+            "non_execution_signals": 0,
+            "reaction_signals": 3,
+            "risk_rejected": 0,
+            "routed": 4,
+            "runtime_failures": 0,
+            "strategy_id": "track6_daily_tail_insurance",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track7_volatility_skew_weekly_insurance",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track8_macro_regime_monthly_strangle",
+            "unavailable": 0
+          }
+        ],
+        "trace_status": "DISABLED_FAST_MODE",
+        "unrealized_pnl": 0.0
+      },
+      "fast_detailed_equivalent": true,
+      "first_rank": 6,
+      "flat_confirmed": true,
+      "no_rejected_orders": true,
+      "no_runtime_failures": true,
+      "state": {
+        "DETAILED": {
+          "available_candidate_ranks": [
+            5
+          ],
+          "last_reason": null,
+          "open_quantity": {
+            "call": 0,
+            "put": 0
+          },
+          "record_sha256": "3046c06fc94a75dd0ebd952518f518b7b8a9a97ff8274ba398b74e61d47134d1",
+          "selected_rank": 5,
+          "sequence": 6,
+          "status": "FLAT_CONFIRMED"
+        },
+        "FAST": {
+          "available_candidate_ranks": [
+            5
+          ],
+          "last_reason": null,
+          "open_quantity": {
+            "call": 0,
+            "put": 0
+          },
+          "record_sha256": "209fbf6ac2aa03543808e444cec50413d5fd13f435285b6df8052caa66a5500e",
+          "selected_rank": 5,
+          "sequence": 6,
+          "status": "FLAT_CONFIRMED"
+        }
+      },
+      "timeout_split": "per_order",
+      "verdict": "PSB_PASS"
+    },
+    {
+      "comparison_fields": [
+        "events",
+        "signals",
+        "approved",
+        "routed",
+        "filled",
+        "rejected",
+        "execution_ids",
+        "multi_leg_decisions",
+        "strategy_signal_counts",
+        "strategy_status",
+        "realized_pnl",
+        "unrealized_pnl",
+        "net_pnl"
+      ],
+      "detailed": {
+        "approved": 3,
+        "dataset": "q25_a2_1_strategy6",
+        "elapsed_seconds": 136.60198669997044,
+        "events": 37056,
+        "events_per_second": 271.2698467657646,
+        "execution_ids": [
+          "EXEC-000001",
+          "EXEC-000002",
+          "EXEC-000003",
+          "EXEC-000004"
+        ],
+        "execution_observer_summary": {
+          "execution_reports_observed": 4,
+          "fill_records_status": "CANONICAL_FILLS_OBSERVED",
+          "fills_observed": 4,
+          "order_commands_observed": 4,
+          "order_records_status": "OBSERVED_READ_ONLY",
+          "status": "CONNECTED",
+          "trace_write_errors": []
+        },
+        "exhausted": false,
+        "filled": 4,
+        "multi_leg_decisions": 3,
+        "net_pnl": -24999.999999999967,
+        "pnl_status": "VSSF_ACCOUNT_PNL_CONNECTED",
+        "realized_pnl": -24999.999999999967,
+        "rejected": 0,
+        "routed": 4,
+        "run_id": "Q25-A4-S6-R6-shared_elapsed-DETAILED-v3",
+        "signals": 3,
+        "strategy_signal_counts": [
+          [
+            "track6_daily_tail_insurance",
+            3
+          ]
+        ],
+        "strategy_status": [
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "TRACK1_TAIL_DEFENSE",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track2_asymmetric_trap",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track4_gamma_scalping",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track5_gap_divergence",
+            "unavailable": 0
+          },
+          {
+            "approved": 3,
+            "decision_rejected": 0,
+            "execution_signals": 3,
+            "filled_quantity": 4,
+            "non_execution_signals": 0,
+            "reaction_signals": 3,
+            "risk_rejected": 0,
+            "routed": 4,
+            "runtime_failures": 0,
+            "strategy_id": "track6_daily_tail_insurance",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track7_volatility_skew_weekly_insurance",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track8_macro_regime_monthly_strangle",
+            "unavailable": 0
+          }
+        ],
+        "trace_status": "CONNECTED",
+        "unrealized_pnl": 0.0
+      },
+      "fast": {
+        "approved": 3,
+        "dataset": "q25_a2_1_strategy6",
+        "elapsed_seconds": 120.18589470000006,
+        "events": 37056,
+        "events_per_second": 308.32237087801934,
+        "execution_ids": [
+          "EXEC-000001",
+          "EXEC-000002",
+          "EXEC-000003",
+          "EXEC-000004"
+        ],
+        "execution_observer_summary": {
+          "status": "DISABLED_FAST_MODE"
+        },
+        "exhausted": false,
+        "filled": 4,
+        "multi_leg_decisions": 3,
+        "net_pnl": -24999.999999999967,
+        "pnl_status": "VSSF_ACCOUNT_PNL_CONNECTED",
+        "realized_pnl": -24999.999999999967,
+        "rejected": 0,
+        "routed": 4,
+        "run_id": "Q25-A4-S6-R6-shared_elapsed-FAST-v3",
+        "signals": 3,
+        "strategy_signal_counts": [
+          [
+            "track6_daily_tail_insurance",
+            3
+          ]
+        ],
+        "strategy_status": [
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "TRACK1_TAIL_DEFENSE",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track2_asymmetric_trap",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track4_gamma_scalping",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track5_gap_divergence",
+            "unavailable": 0
+          },
+          {
+            "approved": 3,
+            "decision_rejected": 0,
+            "execution_signals": 3,
+            "filled_quantity": 4,
+            "non_execution_signals": 0,
+            "reaction_signals": 3,
+            "risk_rejected": 0,
+            "routed": 4,
+            "runtime_failures": 0,
+            "strategy_id": "track6_daily_tail_insurance",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track7_volatility_skew_weekly_insurance",
+            "unavailable": 0
+          },
+          {
+            "approved": 0,
+            "decision_rejected": 0,
+            "execution_signals": 0,
+            "filled_quantity": 0,
+            "non_execution_signals": 0,
+            "reaction_signals": 0,
+            "risk_rejected": 0,
+            "routed": 0,
+            "runtime_failures": 0,
+            "strategy_id": "track8_macro_regime_monthly_strangle",
+            "unavailable": 0
+          }
+        ],
+        "trace_status": "DISABLED_FAST_MODE",
+        "unrealized_pnl": 0.0
+      },
+      "fast_detailed_equivalent": true,
+      "first_rank": 6,
+      "flat_confirmed": true,
+      "no_rejected_orders": true,
+      "no_runtime_failures": true,
+      "state": {
+        "DETAILED": {
+          "available_candidate_ranks": [
+            5
+          ],
+          "last_reason": null,
+          "open_quantity": {
+            "call": 0,
+            "put": 0
+          },
+          "record_sha256": "5b0bf73c8440192c58bc1815831fb094d39b6e631a27e5e26e267f9607f39954",
+          "selected_rank": 5,
+          "sequence": 6,
+          "status": "FLAT_CONFIRMED"
+        },
+        "FAST": {
+          "available_candidate_ranks": [
+            5
+          ],
+          "last_reason": null,
+          "open_quantity": {
+            "call": 0,
+            "put": 0
+          },
+          "record_sha256": "abcd394a7d3a60f9aa4edf94e6d1bbc1f028d3801fdd0f82609745e45a1d6d75",
+          "selected_rank": 5,
+          "sequence": 6,
+          "status": "FLAT_CONFIRMED"
+        }
+      },
+      "timeout_split": "shared_elapsed",
+      "verdict": "PSB_PASS"
+    }
+  ],
+  "dataset": "data\\derived_scenario\\q25_a2_1_strategy6",
+  "dataset_sha256": "ace58f804fd811d6bc73cbeba3837ee7bea80a67b15b6c7d7342ffb997833b80",
+  "fast_detailed_comparison_fields": [
+    "events",
+    "signals",
+    "approved",
+    "routed",
+    "filled",
+    "rejected",
+    "execution_ids",
+    "multi_leg_decisions",
+    "strategy_signal_counts",
+    "strategy_status",
+    "realized_pnl",
+    "unrealized_pnl",
+    "net_pnl"
+  ],
+  "manifest": "reports\\synth\\Q25_A3_2_S6_ORIGINAL_DATA_SYNTHETIC_CAL_MANIFEST_20261105.json",
+  "manifest_sha256": "764904454cc09ae623f8640232e7f8cb58f795eb7228dba07b347e93fa4c8920",
+  "matrix": "first_rank(5|6) x timeout_split(per_order|shared_elapsed)",
+  "max_events": 37056,
+  "risk_profile": "config\\validation_only\\q25_s6_v1\\risk_profile.json",
+  "risk_profile_sha256": "a2b35330cecf695b8eea1e6c6b5f6889c8bc2d0bb760a960e3fe85a5e8535fc3",
+  "schema_version": 1
+}

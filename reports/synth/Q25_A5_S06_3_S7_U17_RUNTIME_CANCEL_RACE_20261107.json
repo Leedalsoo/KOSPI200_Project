@@ -1,0 +1,86 @@
+{
+  "assertions": {
+    "15_00_cancel_and_final_cancelled_reconciled": true,
+    "15_00_cancel_race_final_filled_reconciled": true
+  },
+  "cancelled_at_cutoff": {
+    "account_positions": {
+      "SYNTHETIC_CONTRACT:strategy7_weekly:20261112:PUT:487.5": {
+        "avg_price": 1.26,
+        "mark_price": 1.26,
+        "qty": 1,
+        "side": "BUY"
+      }
+    },
+    "broker_final_lifecycle_reason": "15:00_CUTOFF",
+    "broker_final_status": "CANCELLED",
+    "call_initial_status": "NEW",
+    "call_open": false,
+    "client_order_id": "Q25-A5-S06-3-S7-U17-GROUP-call-e311d8850ca5",
+    "entry_pending": true,
+    "insurance_active": false,
+    "open_lots": [
+      {
+        "execution_id": "EXEC-000001",
+        "option_type": "PUT",
+        "quantity": 1
+      }
+    ],
+    "pending_bridge_orders": 0,
+    "put_initial_status": "FILLED",
+    "put_open": true,
+    "race_fill": false,
+    "strategy_block_reason": "TRACK7_CALL_ENTRY_NOT_FULLY_FILLED:CANCELLED",
+    "strategy_stage": "BLOCKED_U17"
+  },
+  "fill_won_cancel_race": {
+    "account_positions": {
+      "SYNTHETIC_CONTRACT:strategy7_weekly:20261112:CALL:512.5": {
+        "avg_price": 0.01,
+        "mark_price": 0.01,
+        "qty": 1,
+        "side": "BUY"
+      },
+      "SYNTHETIC_CONTRACT:strategy7_weekly:20261112:PUT:487.5": {
+        "avg_price": 1.26,
+        "mark_price": 1.26,
+        "qty": 1,
+        "side": "BUY"
+      }
+    },
+    "broker_final_lifecycle_reason": null,
+    "broker_final_status": "FILLED",
+    "call_initial_status": "NEW",
+    "call_open": true,
+    "client_order_id": "Q25-A5-S06-3-S7-U17-GROUP-call-e311d8850ca5",
+    "entry_pending": false,
+    "insurance_active": true,
+    "open_lots": [
+      {
+        "execution_id": "EXEC-000002",
+        "option_type": "CALL",
+        "quantity": 1
+      },
+      {
+        "execution_id": "EXEC-000001",
+        "option_type": "PUT",
+        "quantity": 1
+      }
+    ],
+    "pending_bridge_orders": 0,
+    "put_initial_status": "FILLED",
+    "put_open": true,
+    "race_fill": true,
+    "strategy_block_reason": null,
+    "strategy_stage": "COMPLETE"
+  },
+  "kis_api_called": false,
+  "live_orders_or_real_account_used": false,
+  "natural_strategy_signal_used": false,
+  "production_runtime_eligible": false,
+  "report_id": "Q25_A5_S06_3_S7_U17_RUNTIME_CANCEL_RACE_20261107",
+  "runtime_eligible": false,
+  "stage_verdict": "PSB_UNVERIFIED_NATURAL_U17_SIGNAL_E2E_PENDING",
+  "validation_only": true,
+  "verdict": "PLUMBING_ONLY_U17_RUNTIME_CANCEL_AND_FILL_RACE"
+}

@@ -1,0 +1,191 @@
+{
+  "status": "PASS",
+  "scope": "validation-only deterministic rejected-order transition; actual OMS FSM plus test-only adapter; fast/detailed trace equivalence",
+  "run_id": "Q25-A1-3-VALIDATION-ONLY-REJECT-FAST-DETAILED-20261029",
+  "dataset": "p5_run_20261026_trend_up_seed20261026",
+  "seed": 20261026,
+  "manifest_sha256": "47d6746bfd7abfea9d52016434ca06f097ca117e6724f96c522b58eb8e5590f5",
+  "provenance": "DERIVED_SCENARIO",
+  "synthetic": true,
+  "validation_only": true,
+  "production_runtime_eligible": false,
+  "input_files_checked": 63,
+  "fast": {
+    "mode": "fast",
+    "command": {
+      "client_order_id": "Q25-REJECT-ORDER-001",
+      "instrument_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+      "side": "BUY",
+      "quantity": 3,
+      "order_type": "LIMIT",
+      "broker_symbol": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+      "session_id": null,
+      "instrument_identity": null,
+      "asset_type": "OPTION",
+      "requested_price": "1.25",
+      "strategy_id": "TRACK1_TAIL_DEFENSE",
+      "order_purpose": "VALIDATION_ONLY_REJECTION",
+      "track_id": "TRACK1_TAIL_DEFENSE",
+      "tag_id": "VALIDATION_ONLY_REJECT_FIXTURE",
+      "group_id": null,
+      "leg_id": null,
+      "position_role": "NONE"
+    },
+    "response": {
+      "client_order_id": "Q25-REJECT-ORDER-001",
+      "accepted": false,
+      "broker_order_id": null,
+      "broker_code": "VALIDATION_ONLY_REJECT",
+      "message": "validation-only deterministic rejection fixture",
+      "raw_response": null
+    },
+    "execution_report": {
+      "client_order_id": "Q25-REJECT-ORDER-001",
+      "broker_order_id": null,
+      "execution_id": null,
+      "status": "REJECTED",
+      "filled_quantity": 0,
+      "remaining_quantity": 3,
+      "execution_price": null,
+      "execution_timestamp": "2026-10-08 08:45:00+09:00",
+      "fee": null,
+      "source_freshness": null,
+      "rejected_reason": "VALIDATION_ONLY_DETERMINISTIC_REJECTION",
+      "group_id": null,
+      "leg_id": null
+    },
+    "state_submitted": {
+      "client_order_id": "Q25-REJECT-ORDER-001",
+      "status": "SUBMITTED",
+      "broker_order_id": null,
+      "order_quantity": 3,
+      "filled_quantity": 0,
+      "average_execution_price": null
+    },
+    "state_rejected": {
+      "client_order_id": "Q25-REJECT-ORDER-001",
+      "status": "REJECTED",
+      "broker_order_id": null,
+      "order_quantity": 3,
+      "filled_quantity": 0,
+      "average_execution_price": null
+    },
+    "observer": {
+      "status": "CONNECTED",
+      "order_commands_observed": 1,
+      "execution_reports_observed": 1,
+      "fills_observed": 0,
+      "trace_write_errors": [],
+      "order_records_status": "OBSERVED_READ_ONLY",
+      "fill_records_status": "NO_CANONICAL_FILL_EVIDENCE"
+    },
+    "trace_status": "DISABLED_FAST_MODE",
+    "trace_write_errors": [],
+    "input_files_unchanged": true
+  },
+  "detailed": {
+    "mode": "detailed",
+    "command": {
+      "client_order_id": "Q25-REJECT-ORDER-001",
+      "instrument_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+      "side": "BUY",
+      "quantity": 3,
+      "order_type": "LIMIT",
+      "broker_symbol": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+      "session_id": null,
+      "instrument_identity": null,
+      "asset_type": "OPTION",
+      "requested_price": "1.25",
+      "strategy_id": "TRACK1_TAIL_DEFENSE",
+      "order_purpose": "VALIDATION_ONLY_REJECTION",
+      "track_id": "TRACK1_TAIL_DEFENSE",
+      "tag_id": "VALIDATION_ONLY_REJECT_FIXTURE",
+      "group_id": null,
+      "leg_id": null,
+      "position_role": "NONE"
+    },
+    "response": {
+      "client_order_id": "Q25-REJECT-ORDER-001",
+      "accepted": false,
+      "broker_order_id": null,
+      "broker_code": "VALIDATION_ONLY_REJECT",
+      "message": "validation-only deterministic rejection fixture",
+      "raw_response": null
+    },
+    "execution_report": {
+      "client_order_id": "Q25-REJECT-ORDER-001",
+      "broker_order_id": null,
+      "execution_id": null,
+      "status": "REJECTED",
+      "filled_quantity": 0,
+      "remaining_quantity": 3,
+      "execution_price": null,
+      "execution_timestamp": "2026-10-08 08:45:00+09:00",
+      "fee": null,
+      "source_freshness": null,
+      "rejected_reason": "VALIDATION_ONLY_DETERMINISTIC_REJECTION",
+      "group_id": null,
+      "leg_id": null
+    },
+    "state_submitted": {
+      "client_order_id": "Q25-REJECT-ORDER-001",
+      "status": "SUBMITTED",
+      "broker_order_id": null,
+      "order_quantity": 3,
+      "filled_quantity": 0,
+      "average_execution_price": null
+    },
+    "state_rejected": {
+      "client_order_id": "Q25-REJECT-ORDER-001",
+      "status": "REJECTED",
+      "broker_order_id": null,
+      "order_quantity": 3,
+      "filled_quantity": 0,
+      "average_execution_price": null
+    },
+    "observer": {
+      "status": "CONNECTED",
+      "order_commands_observed": 1,
+      "execution_reports_observed": 1,
+      "fills_observed": 0,
+      "trace_write_errors": [],
+      "order_records_status": "OBSERVED_READ_ONLY",
+      "fill_records_status": "NO_CANONICAL_FILL_EVIDENCE"
+    },
+    "trace_status": "CONNECTED",
+    "trace_write_errors": [],
+    "input_files_unchanged": true
+  },
+  "comparison": {
+    "same_run_id": true,
+    "same_order_command": true,
+    "same_rejection_response_and_report": true,
+    "same_state_transition": true,
+    "submitted_to_rejected": true,
+    "zero_fill_and_no_execution_identity": true,
+    "same_complete_timeline": true,
+    "detailed_capture_matches_persisted_trace": true,
+    "no_fill_event_emitted": true,
+    "one_command_and_one_rejection_report": true,
+    "observer_trace_healthy": true,
+    "detailed_trace_sequence_contiguous": true,
+    "input_files_unchanged": true
+  },
+  "trace_path": "reports\\synth\\Q25_A1_3_REJECT_TRANSITION_EQUIV_V3_DETAILED_20261029.jsonl",
+  "trace_sha256": "d74e4f3de99782c081e9b46a3c83ca5a06d7a966783104b39b1085d0f70a824c",
+  "trace_bytes": 2770,
+  "trace_records": 5,
+  "trace_event_types": [
+    "replay_started",
+    "order_command",
+    "execution_report",
+    "order_state_transition",
+    "replay_finished"
+  ],
+  "summary_path": "reports\\synth\\Q25_A1_3_REJECT_TRANSITION_EQUIV_V3_20261029.json",
+  "limitations": [
+    "This is an actual OrderStateMachine with a deterministic test-only adapter; not a full Virtual runtime or production broker integration.",
+    "The rejection and report are supplied by a validation-only fixture; no natural broker rejection, position store, P/L or production risk path is asserted.",
+    "Partial-fill, cancellation, replacement, late-fill race, multi-order and full-dataset equivalence are not covered."
+  ]
+}

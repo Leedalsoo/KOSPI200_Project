@@ -1,0 +1,490 @@
+{
+  "experiment": "R4_SYNTHETIC_FRESHNESS_THRESHOLD_SWEEP",
+  "status": "PASS_SYNTHETIC_CONTRACT_BOUNDARY_TEST_ONLY",
+  "timestamp": "2026-10-28",
+  "provenance": {
+    "synthetic": true,
+    "generator_version": "hand-authored-fixture-v1",
+    "seed": 20261028,
+    "runtime_or_production_policy_modified": false,
+    "real_data_accessed": false
+  },
+  "assumptions": {
+    "dataset_resolution_seconds": 300,
+    "candidate_thresholds_seconds": [
+      300,
+      600,
+      900,
+      1800
+    ],
+    "candidate_baseline_seconds": 600,
+    "max_future_skew_seconds": 0,
+    "reason": "600s is two synthetic 5-minute intervals; a sensitivity candidate only, not a market-calibrated threshold."
+  },
+  "limitations": [
+    "The cases are deterministic hand-authored synthetic timestamp offsets, not sampled REAL_VTS observations.",
+    "This validates the existing freshness contract's boundary semantics only.",
+    "It does not validate KIS source timestamp semantics, source capability, latency distribution, or production eligibility.",
+    "Do not copy any candidate into production configuration without separate evidence and approval."
+  ],
+  "failure_controls": {
+    "missing_evidence": "UNKNOWN",
+    "identity_mismatch": "IDENTITY_CONFLICT",
+    "capability_missing": "BLOCKED_SOURCE_CAPABILITY",
+    "source_semantics_missing": "UNKNOWN"
+  },
+  "sweeps": [
+    {
+      "max_age_seconds": 300,
+      "max_future_skew_seconds": 0,
+      "case_count": 19,
+      "status_counts": {
+        "FRESH": 7,
+        "STALE": 10,
+        "UNKNOWN": 2,
+        "IDENTITY_CONFLICT": 0,
+        "CAPABILITY_CONFLICT": 0,
+        "BLOCKED_SOURCE_CAPABILITY": 0
+      },
+      "boundary_equal": "FRESH",
+      "boundary_plus_1s": "STALE",
+      "future_plus_1s": "UNKNOWN",
+      "cases": [
+        {
+          "age_seconds": -3,
+          "status": "UNKNOWN",
+          "reason": "SOURCE_TIME_IN_FUTURE"
+        },
+        {
+          "age_seconds": -1,
+          "status": "UNKNOWN",
+          "reason": "SOURCE_TIME_IN_FUTURE"
+        },
+        {
+          "age_seconds": 0,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 1,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 30,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 59,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 60,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 299,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 300,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 301,
+          "status": "STALE",
+          "reason": "SOURCE_AGE_EXCEEDS_APPROVED_THRESHOLD"
+        },
+        {
+          "age_seconds": 599,
+          "status": "STALE",
+          "reason": "SOURCE_AGE_EXCEEDS_APPROVED_THRESHOLD"
+        },
+        {
+          "age_seconds": 600,
+          "status": "STALE",
+          "reason": "SOURCE_AGE_EXCEEDS_APPROVED_THRESHOLD"
+        },
+        {
+          "age_seconds": 601,
+          "status": "STALE",
+          "reason": "SOURCE_AGE_EXCEEDS_APPROVED_THRESHOLD"
+        },
+        {
+          "age_seconds": 899,
+          "status": "STALE",
+          "reason": "SOURCE_AGE_EXCEEDS_APPROVED_THRESHOLD"
+        },
+        {
+          "age_seconds": 900,
+          "status": "STALE",
+          "reason": "SOURCE_AGE_EXCEEDS_APPROVED_THRESHOLD"
+        },
+        {
+          "age_seconds": 901,
+          "status": "STALE",
+          "reason": "SOURCE_AGE_EXCEEDS_APPROVED_THRESHOLD"
+        },
+        {
+          "age_seconds": 1799,
+          "status": "STALE",
+          "reason": "SOURCE_AGE_EXCEEDS_APPROVED_THRESHOLD"
+        },
+        {
+          "age_seconds": 1800,
+          "status": "STALE",
+          "reason": "SOURCE_AGE_EXCEEDS_APPROVED_THRESHOLD"
+        },
+        {
+          "age_seconds": 1801,
+          "status": "STALE",
+          "reason": "SOURCE_AGE_EXCEEDS_APPROVED_THRESHOLD"
+        }
+      ]
+    },
+    {
+      "max_age_seconds": 600,
+      "max_future_skew_seconds": 0,
+      "case_count": 19,
+      "status_counts": {
+        "FRESH": 10,
+        "STALE": 7,
+        "UNKNOWN": 2,
+        "IDENTITY_CONFLICT": 0,
+        "CAPABILITY_CONFLICT": 0,
+        "BLOCKED_SOURCE_CAPABILITY": 0
+      },
+      "boundary_equal": "FRESH",
+      "boundary_plus_1s": "STALE",
+      "future_plus_1s": "UNKNOWN",
+      "cases": [
+        {
+          "age_seconds": -3,
+          "status": "UNKNOWN",
+          "reason": "SOURCE_TIME_IN_FUTURE"
+        },
+        {
+          "age_seconds": -1,
+          "status": "UNKNOWN",
+          "reason": "SOURCE_TIME_IN_FUTURE"
+        },
+        {
+          "age_seconds": 0,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 1,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 30,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 59,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 60,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 299,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 300,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 301,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 599,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 600,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 601,
+          "status": "STALE",
+          "reason": "SOURCE_AGE_EXCEEDS_APPROVED_THRESHOLD"
+        },
+        {
+          "age_seconds": 899,
+          "status": "STALE",
+          "reason": "SOURCE_AGE_EXCEEDS_APPROVED_THRESHOLD"
+        },
+        {
+          "age_seconds": 900,
+          "status": "STALE",
+          "reason": "SOURCE_AGE_EXCEEDS_APPROVED_THRESHOLD"
+        },
+        {
+          "age_seconds": 901,
+          "status": "STALE",
+          "reason": "SOURCE_AGE_EXCEEDS_APPROVED_THRESHOLD"
+        },
+        {
+          "age_seconds": 1799,
+          "status": "STALE",
+          "reason": "SOURCE_AGE_EXCEEDS_APPROVED_THRESHOLD"
+        },
+        {
+          "age_seconds": 1800,
+          "status": "STALE",
+          "reason": "SOURCE_AGE_EXCEEDS_APPROVED_THRESHOLD"
+        },
+        {
+          "age_seconds": 1801,
+          "status": "STALE",
+          "reason": "SOURCE_AGE_EXCEEDS_APPROVED_THRESHOLD"
+        }
+      ]
+    },
+    {
+      "max_age_seconds": 900,
+      "max_future_skew_seconds": 0,
+      "case_count": 19,
+      "status_counts": {
+        "FRESH": 13,
+        "STALE": 4,
+        "UNKNOWN": 2,
+        "IDENTITY_CONFLICT": 0,
+        "CAPABILITY_CONFLICT": 0,
+        "BLOCKED_SOURCE_CAPABILITY": 0
+      },
+      "boundary_equal": "FRESH",
+      "boundary_plus_1s": "STALE",
+      "future_plus_1s": "UNKNOWN",
+      "cases": [
+        {
+          "age_seconds": -3,
+          "status": "UNKNOWN",
+          "reason": "SOURCE_TIME_IN_FUTURE"
+        },
+        {
+          "age_seconds": -1,
+          "status": "UNKNOWN",
+          "reason": "SOURCE_TIME_IN_FUTURE"
+        },
+        {
+          "age_seconds": 0,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 1,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 30,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 59,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 60,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 299,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 300,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 301,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 599,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 600,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 601,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 899,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 900,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 901,
+          "status": "STALE",
+          "reason": "SOURCE_AGE_EXCEEDS_APPROVED_THRESHOLD"
+        },
+        {
+          "age_seconds": 1799,
+          "status": "STALE",
+          "reason": "SOURCE_AGE_EXCEEDS_APPROVED_THRESHOLD"
+        },
+        {
+          "age_seconds": 1800,
+          "status": "STALE",
+          "reason": "SOURCE_AGE_EXCEEDS_APPROVED_THRESHOLD"
+        },
+        {
+          "age_seconds": 1801,
+          "status": "STALE",
+          "reason": "SOURCE_AGE_EXCEEDS_APPROVED_THRESHOLD"
+        }
+      ]
+    },
+    {
+      "max_age_seconds": 1800,
+      "max_future_skew_seconds": 0,
+      "case_count": 19,
+      "status_counts": {
+        "FRESH": 16,
+        "STALE": 1,
+        "UNKNOWN": 2,
+        "IDENTITY_CONFLICT": 0,
+        "CAPABILITY_CONFLICT": 0,
+        "BLOCKED_SOURCE_CAPABILITY": 0
+      },
+      "boundary_equal": "FRESH",
+      "boundary_plus_1s": "STALE",
+      "future_plus_1s": "UNKNOWN",
+      "cases": [
+        {
+          "age_seconds": -3,
+          "status": "UNKNOWN",
+          "reason": "SOURCE_TIME_IN_FUTURE"
+        },
+        {
+          "age_seconds": -1,
+          "status": "UNKNOWN",
+          "reason": "SOURCE_TIME_IN_FUTURE"
+        },
+        {
+          "age_seconds": 0,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 1,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 30,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 59,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 60,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 299,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 300,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 301,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 599,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 600,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 601,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 899,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 900,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 901,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 1799,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 1800,
+          "status": "FRESH",
+          "reason": "SOURCE_TIME_WITHIN_APPROVED_POLICY"
+        },
+        {
+          "age_seconds": 1801,
+          "status": "STALE",
+          "reason": "SOURCE_AGE_EXCEEDS_APPROVED_THRESHOLD"
+        }
+      ]
+    }
+  ]
+}

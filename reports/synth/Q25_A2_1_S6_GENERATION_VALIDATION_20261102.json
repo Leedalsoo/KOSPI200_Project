@@ -1,0 +1,49 @@
+{
+  "schema_version": "q25-a2-1-s6-generation-validation-v1",
+  "status": "PLUMBING_ONLY",
+  "dataset_path": "data\\derived_scenario\\q25_a2_1_strategy6\\20261102.jsonl",
+  "dataset_sha256": "ace58f804fd811d6bc73cbeba3837ee7bea80a67b15b6c7d7342ffb997833b80",
+  "dataset_bytes": 67369559,
+  "manifest_path": "reports\\synth\\Q25_A2_1_S6_SYN_EVT_MANIFEST_20261102.json",
+  "manifest_sha256": "813744ebad7e2f5c3e21ecf62b6be35a126215f6569c705a102ac7fa7d33ee32",
+  "rows": 37056,
+  "scenario_count": 8,
+  "scenario_ids": [
+    "volatility_1_3x",
+    "before_11_cutoff",
+    "strike_5_to_6",
+    "wait_unfilled_10m",
+    "one_sided_then_opposite_quote",
+    "premium_2x_drawdown_10pct",
+    "force_exit_1510",
+    "no_retry_after_exit"
+  ],
+  "provenance": "DERIVED_SCENARIO",
+  "production_runtime_eligible": false,
+  "validation_only": true,
+  "replay_runner": "environments.high_speed.replay_runner",
+  "replay_runner_scope": "JSONL parse, provenance/schema guard, canonical tick construction only; no StrategyHub/Risk/OMS/Position/PnL path",
+  "replay": {
+    "dataset": "q25_a2_1_strategy6",
+    "events": 37056,
+    "first_timestamp": "2026-11-02T08:45:00+09:00",
+    "last_timestamp": "2026-11-02T15:10:00+09:00",
+    "elapsed_seconds": 1.174326,
+    "events_per_second": 31555.11,
+    "speed": "inf",
+    "exhausted": true
+  },
+  "replay_exit_code": 0,
+  "natural_strategy_signal": "UNVERIFIED_NOT_RUN",
+  "signal_injected": false,
+  "orders_or_fills_injected": false,
+  "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+  "blocking_facts": [
+    "Strategy 6 runtime_config_verified and risk_limits_available default to false in current strategy implementation; dataset generation cannot override those gates.",
+    "Synthetic contract identity remains blocked; no authoritative option identity was fabricated.",
+    "The replay runner is a canonical-tick parser and is not a StrategyHub end-to-end execution test.",
+    "A1-3 closure still requires natural StrategyHub Strategy 6 signal, fast/detailed equivalence, Freshness k={1,2,3,6}, and full StandardRuntimeInputProvider Replay."
+  ],
+  "kis_api_calls": 0,
+  "live_or_account_api_calls": 0
+}

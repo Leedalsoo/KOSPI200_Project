@@ -1,0 +1,271 @@
+{
+  "status": "PASS",
+  "scope": "one-event validation-only positive fixture; fast/detailed order-fill semantic comparison",
+  "run_id": "Q25-A1-3-POSITIVE-ORDER-FILL-EQUIVALENCE-20261029",
+  "dataset": "p5_run_20261026_trend_up_seed20261026",
+  "seed": 20261026,
+  "provenance": "DERIVED_SCENARIO",
+  "validation_only": true,
+  "production_runtime_eligible": false,
+  "manifest_sha256": "47d6746bfd7abfea9d52016434ca06f097ca117e6724f96c522b58eb8e5590f5",
+  "input_files_checked": 63,
+  "fast": {
+    "mode": "fast",
+    "tick_timestamp": "2026-10-08T08:45:00+09:00",
+    "instrument_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+    "runtime_counts": {
+      "signals": 1,
+      "approved": 1,
+      "routed": 1,
+      "filled": 1,
+      "rejected": 0,
+      "execution_ids": [
+        "EXEC-000001"
+      ]
+    },
+    "observer": {
+      "status": "CONNECTED",
+      "order_commands_observed": 1,
+      "execution_reports_observed": 1,
+      "fills_observed": 1,
+      "trace_write_errors": [],
+      "order_records_status": "OBSERVED_READ_ONLY",
+      "fill_records_status": "CANONICAL_FILLS_OBSERVED"
+    },
+    "semantic_events": [
+      {
+        "event_type": "order_command",
+        "event_sequence": 0,
+        "payload": {
+          "adapter": "single_leg",
+          "command": {
+            "client_order_id": "ORD-T1-TRACK1_TAIL_DEFENSE-1",
+            "instrument_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+            "side": "BUY",
+            "quantity": 1,
+            "order_type": "LIMIT",
+            "broker_symbol": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+            "session_id": null,
+            "instrument_identity": {
+              "instrument_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+              "symbol": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+              "expiry": "20261008",
+              "option_type": "CALL",
+              "strike": "1030.0",
+              "contract_multiplier": "250000.0",
+              "identity_source": "OPTION_MASTER"
+            },
+            "asset_type": "OPTION",
+            "requested_price": "14.75",
+            "strategy_id": "TRACK1_TAIL_DEFENSE",
+            "order_purpose": "AUTOMATED_STRATEGY",
+            "track_id": "TRACK1_TAIL_DEFENSE",
+            "tag_id": "VALIDATION_ONLY_FIXTURE_ENTRY",
+            "group_id": "ORD-T1-TRACK1_TAIL_DEFENSE-1",
+            "leg_id": "VALIDATION_ONLY_FIXTURE_ENTRY",
+            "position_role": "NONE"
+          }
+        }
+      },
+      {
+        "event_type": "execution_report",
+        "event_sequence": 0,
+        "payload": {
+          "adapter": "single_leg",
+          "report": {
+            "client_order_id": "ORD-T1-TRACK1_TAIL_DEFENSE-1",
+            "broker_order_id": null,
+            "execution_id": "EXEC-000001",
+            "status": "FILLED",
+            "filled_quantity": 1,
+            "remaining_quantity": 0,
+            "execution_price": 14.75,
+            "execution_timestamp": "2026-10-08T08:45:00+09:00",
+            "fee": "0.0",
+            "source_freshness": {
+              "is_fresh": true,
+              "is_complete": true,
+              "source_available": true,
+              "reason": "vssf_authoritative_execution"
+            },
+            "rejected_reason": null,
+            "group_id": null,
+            "leg_id": null
+          }
+        }
+      },
+      {
+        "event_type": "fill",
+        "event_sequence": 0,
+        "payload": {
+          "adapter": "single_leg",
+          "client_order_id": "ORD-T1-TRACK1_TAIL_DEFENSE-1",
+          "execution_id": "EXEC-000001",
+          "status": "FILLED",
+          "filled_quantity": 1,
+          "remaining_quantity": 0,
+          "execution_price": 14.75,
+          "execution_timestamp": "2026-10-08T08:45:00+09:00",
+          "fee": "0.0",
+          "group_id": null,
+          "leg_id": null
+        }
+      }
+    ],
+    "positions": {
+      "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37": {
+        "qty": 1,
+        "avg_price": 14.75
+      }
+    },
+    "input_files_unchanged": true,
+    "trace_status": "DISABLED_FAST_MODE",
+    "trace_write_errors": []
+  },
+  "detailed": {
+    "mode": "detailed",
+    "tick_timestamp": "2026-10-08T08:45:00+09:00",
+    "instrument_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+    "runtime_counts": {
+      "signals": 1,
+      "approved": 1,
+      "routed": 1,
+      "filled": 1,
+      "rejected": 0,
+      "execution_ids": [
+        "EXEC-000001"
+      ]
+    },
+    "observer": {
+      "status": "CONNECTED",
+      "order_commands_observed": 1,
+      "execution_reports_observed": 1,
+      "fills_observed": 1,
+      "trace_write_errors": [],
+      "order_records_status": "OBSERVED_READ_ONLY",
+      "fill_records_status": "CANONICAL_FILLS_OBSERVED"
+    },
+    "semantic_events": [
+      {
+        "event_type": "order_command",
+        "event_sequence": 0,
+        "payload": {
+          "adapter": "single_leg",
+          "command": {
+            "client_order_id": "ORD-T1-TRACK1_TAIL_DEFENSE-1",
+            "instrument_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+            "side": "BUY",
+            "quantity": 1,
+            "order_type": "LIMIT",
+            "broker_symbol": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+            "session_id": null,
+            "instrument_identity": {
+              "instrument_id": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+              "symbol": "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37",
+              "expiry": "20261008",
+              "option_type": "CALL",
+              "strike": "1030.0",
+              "contract_multiplier": "250000.0",
+              "identity_source": "OPTION_MASTER"
+            },
+            "asset_type": "OPTION",
+            "requested_price": "14.75",
+            "strategy_id": "TRACK1_TAIL_DEFENSE",
+            "order_purpose": "AUTOMATED_STRATEGY",
+            "track_id": "TRACK1_TAIL_DEFENSE",
+            "tag_id": "VALIDATION_ONLY_FIXTURE_ENTRY",
+            "group_id": "ORD-T1-TRACK1_TAIL_DEFENSE-1",
+            "leg_id": "VALIDATION_ONLY_FIXTURE_ENTRY",
+            "position_role": "NONE"
+          }
+        }
+      },
+      {
+        "event_type": "execution_report",
+        "event_sequence": 0,
+        "payload": {
+          "adapter": "single_leg",
+          "report": {
+            "client_order_id": "ORD-T1-TRACK1_TAIL_DEFENSE-1",
+            "broker_order_id": null,
+            "execution_id": "EXEC-000001",
+            "status": "FILLED",
+            "filled_quantity": 1,
+            "remaining_quantity": 0,
+            "execution_price": 14.75,
+            "execution_timestamp": "2026-10-08T08:45:00+09:00",
+            "fee": "0.0",
+            "source_freshness": {
+              "is_fresh": true,
+              "is_complete": true,
+              "source_available": true,
+              "reason": "vssf_authoritative_execution"
+            },
+            "rejected_reason": null,
+            "group_id": null,
+            "leg_id": null
+          }
+        }
+      },
+      {
+        "event_type": "fill",
+        "event_sequence": 0,
+        "payload": {
+          "adapter": "single_leg",
+          "client_order_id": "ORD-T1-TRACK1_TAIL_DEFENSE-1",
+          "execution_id": "EXEC-000001",
+          "status": "FILLED",
+          "filled_quantity": 1,
+          "remaining_quantity": 0,
+          "execution_price": 14.75,
+          "execution_timestamp": "2026-10-08T08:45:00+09:00",
+          "fee": "0.0",
+          "group_id": null,
+          "leg_id": null
+        }
+      }
+    ],
+    "positions": {
+      "SYNTHETIC_CONTRACT:b9ceb74541fef7d0ecceef37": {
+        "qty": 1,
+        "avg_price": 14.75
+      }
+    },
+    "input_files_unchanged": true,
+    "trace_status": "CONNECTED",
+    "trace_write_errors": []
+  },
+  "comparison": {
+    "same_run_id": true,
+    "same_input_timestamp": true,
+    "same_synthetic_instrument": true,
+    "runtime_counts_equal": true,
+    "order_report_fill_semantics_equal": true,
+    "fast_capture_matches_detailed_persisted_trace": true,
+    "positions_equal": true,
+    "positive_order_and_fill_in_both": true,
+    "input_files_unchanged": true,
+    "observer_and_trace_healthy": true,
+    "detailed_trace_sequence_valid": true,
+    "detailed_trace_event_types": [
+      "replay_started",
+      "order_command",
+      "execution_report",
+      "fill",
+      "market_event",
+      "replay_finished"
+    ],
+    "detailed_trace_record_count": 6
+  },
+  "trace_path": "reports\\synth\\Q25_A1_3_POSITIVE_ORDER_FILL_EQUIV_DETAILED_20261029.jsonl",
+  "trace_sha256": "f7c9eb99314ef5f89d09a2c18c8906227ace1b8049f92d6d89284b7dfa3f2289",
+  "trace_bytes": 3736,
+  "summary_path": "reports\\synth\\Q25_A1_3_POSITIVE_ORDER_FILL_EQUIV_20261029.json",
+  "limitations": [
+    "Positive signal is supplied by OneShotValidationOnlyEntry test fixture, not a naturally generated strategy signal.",
+    "FreshnessVerdict is test-fixture-only; production freshness wiring is not validated.",
+    "Synthetic contract identity is not production eligible.",
+    "Fast-mode semantic observer capture is in-memory test instrumentation; the product fast trace remains disabled and writes no trace file.",
+    "This is one event only, not full-dataset equivalence or production E2E."
+  ]
+}
