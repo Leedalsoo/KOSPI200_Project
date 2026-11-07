@@ -155,7 +155,7 @@ class Track9EventOvernightInsurance:
         if purpose != "OVERNIGHT_INSURANCE_CLOSE" or not self._exit_pending:
             return
         if bool(getattr(result, "group_complete", False)) and bool(getattr(result, "position_flat", False)):
-            self.state = replace(self.state, state="OVERNIGHT_INSURANCE_CLOSED", exit_reason=None)
+            self.state = replace(self.state, state="OVERNIGHT_INSURANCE_CLOSED")
             self._exit_pending = False
         else:
             self.state = replace(self.state, state="EXIT_PENDING")

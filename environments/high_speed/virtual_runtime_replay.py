@@ -122,6 +122,7 @@ class HighSpeedVirtualRuntimeReplayRunner:
                  validation_only_s8_risk_profile: str | Path | None = None,
                  validation_only_s9_contract_profile: str | Path | None = None,
                  validation_only_s9_risk_profile: str | Path | None = None,
+                 validation_only_s9_restart_snapshot_path: str | Path | None = None,
                  validation_only_track6_signal_mode: bool = False,
                  validation_only_track6_execution_mode: bool = False,
                  validation_only_track6_lifecycle_config: Track6LifecycleConfig | None = None,
@@ -134,6 +135,8 @@ class HighSpeedVirtualRuntimeReplayRunner:
         self.validation_only_s8_risk_profile = validation_only_s8_risk_profile
         self.validation_only_s9_contract_profile = validation_only_s9_contract_profile
         self.validation_only_s9_risk_profile = validation_only_s9_risk_profile
+        self.validation_only_s9_restart_snapshot_path = validation_only_s9_restart_snapshot_path
+        self.s9_restart_restore_status = None
         if (self.validation_only_s9_contract_profile is None) != (self.validation_only_s9_risk_profile is None):
             raise ValueError("S9_VALIDATION_CONTRACT_AND_RISK_PROFILES_REQUIRED_TOGETHER")
         if self.validation_only_s9_risk_profile is not None:
@@ -144,6 +147,8 @@ class HighSpeedVirtualRuntimeReplayRunner:
                 raise ValueError("S9_VALIDATION_RUN_MUST_SELECT_ONLY_STRATEGY9")
             if self.validation_only_s8_risk_profile is not None or validation_only_track6_execution_mode:
                 raise ValueError("S9_VALIDATION_CANNOT_SHARE_OTHER_STRATEGY_GATES")
+        if self.validation_only_s9_restart_snapshot_path is not None and self.validation_only_s9_risk_profile is None:
+            raise ValueError("S9_RESTART_REQUIRES_VALIDATION_ONLY_S9_RUNTIME")
         if self.validation_only_s8_risk_profile is not None and (not self.validation_only_synthetic or self.validation_only_synthetic_manifest is None):
             raise ValueError("S8_VALIDATION_RISK_PROFILE_REQUIRES_SYNTHETIC_MANIFEST")
         if self.validation_only_synthetic_manifest is not None and not self.validation_only_synthetic:
@@ -268,6 +273,14 @@ class HighSpeedVirtualRuntimeReplayRunner:
         replay_bridge = getattr(loop, "multi_leg_bridge", None)
         if replay_bridge is None:
             raise RuntimeError("HIGH_SPEED_REPLAY_MULTI_LEG_BRIDGE_REQUIRED")
+        if self.validation_only_s9_restart_snapshot_path is not None:
+            from environments.high_speed.validation_only_s9_restart import restore_restart_snapshot
+            vssf_for_restore = bootstrap.bundle.execution._authoritative_execute.__self__.vssf_runtime
+            self.s9_restart_restore_status = restore_restart_snapshot(
+                self.validation_only_s9_restart_snapshot_path, run_id=self.run_id,
+                adapter=self.s9_validation_runtime_adapter,
+                vssf_runtime=vssf_for_restore, replay_bridge=replay_bridge,
+            )
         bootstrap.bundle.broker_api.attach_group_read_model(
             snapshot_reader=replay_bridge.position_groups.snapshot,
             reports_reader=replay_bridge.group_reports,
@@ -496,9 +509,17 @@ class HighSpeedVirtualRuntimeReplayRunner:
                 "fee_records": tuple(replay_bridge.fee_ledger.snapshot(run_id=self.run_id)),
                 "risk_audit_records": tuple(self.s9_validation_runtime_adapter.risk_audit_records),
                 "strategy_state": getattr(getattr(self.s9_strategy, "state", None), "state", None),
+                "strategy_exit_reason": getattr(getattr(self.s9_strategy, "state", None), "exit_reason", None),
                 "realized_pnl": vssf_runtime.account.realized_pnl,
                 "unrealized_pnl": vssf_runtime.account.unrealized_pnl,
                 "net_pnl": vssf_runtime.account.realized_pnl + vssf_runtime.account.unrealized_pnl,
+                "account_positions": {key: dict(value) for key, value in vssf_runtime.account.positions.items()},
+                "account_balance": vssf_runtime.account.balance,
+                "account_free_margin": vssf_runtime.account.free_margin,
+                "account_used_margin": vssf_runtime.account.used_margin,
+                "ledger_transactions": list(vssf_runtime.account.ledger_engine.transactions),
+                "execution_sequence": int(vssf_runtime.execution_engine._seq),
+                "restart_restore_status": self.s9_restart_restore_status,
             }
         return final_report
 

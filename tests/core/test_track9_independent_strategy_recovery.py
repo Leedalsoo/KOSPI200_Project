@@ -2,7 +2,7 @@ from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 
-from core.strategy.track9_event_overnight_insurance import Track9EventOvernightInsurance
+from core.strategy.track9_event_overnight_insurance import Track9EventOvernightInsurance, Track9State
 from core.strategy.track9_independent_policy import (
     Track9OpenLot, Track9OptionCandidate, Track9RuntimeInput, Track9SyntheticQuote,
 )
@@ -57,3 +57,16 @@ def test_fresh_strategy_restores_open_lots_and_uses_stop_loss_below_one_percent(
     signals=strategy._opening_exit_signal(payload)
     assert len(signals)==1
     assert "OPENING_MOVE_BELOW_1PCT_STOP_LOSS" in signals[0].reason
+
+
+def test_completed_exit_preserves_the_approved_exit_reason_for_audit() -> None:
+    strategy = Track9EventOvernightInsurance()
+    reason = "OPENING_MOVE_BELOW_1PCT_STOP_LOSS"
+    strategy.state = Track9State(exit_reason=reason, state="EXIT_PENDING")
+    strategy._exit_pending = True
+    strategy.on_execution_result(
+        "OVERNIGHT_INSURANCE_CLOSE",
+        SimpleNamespace(group_complete=True, position_flat=True, reports=()),
+    )
+    assert strategy.state.state == "OVERNIGHT_INSURANCE_CLOSED"
+    assert strategy.state.exit_reason == reason
