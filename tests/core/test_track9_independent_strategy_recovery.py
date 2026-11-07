@@ -70,3 +70,61 @@ def test_completed_exit_preserves_the_approved_exit_reason_for_audit() -> None:
     )
     assert strategy.state.state == "OVERNIGHT_INSURANCE_CLOSED"
     assert strategy.state.exit_reason == reason
+
+
+def test_entry_partial_put_and_rejected_call_stays_reconciliation_required() -> None:
+    strategy = Track9EventOvernightInsurance()
+    reports = (
+        SimpleNamespace(leg_id="put", status="PARTIALLY_FILLED", filled_quantity=0),
+        SimpleNamespace(leg_id="call", status="REJECTED", filled_quantity=0),
+    )
+    strategy.on_execution_result(
+        "OVERNIGHT_INSURANCE",
+        SimpleNamespace(group_complete=False, position_flat=False, reports=reports),
+    )
+    assert strategy.state.state == "RECONCILIATION_REQUIRED"
+    assert strategy.state.put_entry_fill_price is None
+    assert strategy.state.call_entry_fill_price is None
+    assert strategy._exit_pending is False
+
+
+def test_entry_one_leg_filled_other_rejected_never_activates_unpaired_insurance() -> None:
+    strategy = Track9EventOvernightInsurance()
+    reports = (
+        SimpleNamespace(leg_id="put", status="FILLED", filled_quantity=1, execution_price=Decimal("10")),
+        SimpleNamespace(leg_id="call", status="REJECTED", filled_quantity=0),
+    )
+    strategy.on_execution_result(
+        "OVERNIGHT_INSURANCE",
+        SimpleNamespace(group_complete=False, position_flat=False, reports=reports),
+    )
+    assert strategy.state.state == "RECONCILIATION_REQUIRED"
+    assert strategy.state.put_entry_fill_price is None
+    assert strategy.state.call_entry_fill_price is None
+
+
+def test_close_with_one_leg_unresolved_remains_exit_pending_until_flat_confirmation() -> None:
+    strategy = Track9EventOvernightInsurance()
+    reason = "OPENING_MOVE_BELOW_1PCT_STOP_LOSS"
+    strategy.state = Track9State(exit_reason=reason, state="EXIT_PENDING")
+    strategy._exit_pending = True
+    reports = (
+        SimpleNamespace(leg_id="put", status="FILLED", filled_quantity=1),
+        SimpleNamespace(leg_id="call", status="CANCELLED", filled_quantity=0),
+    )
+    strategy.on_execution_result(
+        "OVERNIGHT_INSURANCE_CLOSE",
+        SimpleNamespace(group_complete=False, position_flat=False, reports=reports),
+    )
+    assert strategy.state.state == "EXIT_PENDING"
+    assert strategy.state.exit_reason == reason
+    assert strategy._exit_pending is True
+
+
+def test_initialize_with_single_open_s9_leg_requires_reconciliation() -> None:
+    from dataclasses import replace
+
+    payload = replace(runtime_input("502.5"), open_lots=runtime_input("502.5").open_lots[:1])
+    strategy = Track9EventOvernightInsurance()
+    strategy.initialize(SimpleNamespace(input=SimpleNamespace(payload=payload)))
+    assert strategy.state.state == "RECONCILIATION_REQUIRED"
