@@ -1,0 +1,56 @@
+{
+    "schema_version":  "q25-a5-s9-synthetic-contract-profile-report-v1",
+    "report_id":  "Q25_A5_S9_SYNTHETIC_CONTRACT_PROFILE_20261108",
+    "generated_at_kst":  "2026-11-08",
+    "stage":  "S9_INDEPENDENT_SYNTHETIC_CONTRACT_PROFILE_ADAPTER",
+    "verdict":  "PLUMBING_ONLY",
+    "scope":  "Validation-only adapter injects explicit synthetic contract multiplier and tradability into existing KIS/master contract identities for the independent S9 P0 selector",
+    "synthetic_profile":  {
+                              "multiplier_unit":  "SYNTHETIC_CURRENCY_PER_INDEX_POINT",
+                              "contract_multiplier":  "100000",
+                              "path":  "config/validation_only/track9_independent_synthetic_contract_profile.json",
+                              "tradable":  true,
+                              "production_runtime_eligible":  false,
+                              "runtime_eligible":  false,
+                              "sha256":  "d7c7cb9be3383d033bdef10c27102f06946dc30b314fe2e92615658522b7f1bd",
+                              "validation_only":  true,
+                              "profile_id":  "S9_INDEPENDENT_SYNTHETIC_CONTRACTS_V1",
+                              "provenance":  "SYNTHETIC",
+                              "orders_allowed":  false
+                          },
+    "files":  [
+                  {
+                      "sha256":  "8eb6d91528a02e173b0c59eb63c63d047c0de9df339592088ccce18b4e065ec3",
+                      "path":  "application/composition/track9_validation_only_contract_adapter.py"
+                  },
+                  {
+                      "sha256":  "8529522cea7c422d6f2950c0d6ffb91a3560da331c2ca48f4a9209fc1bc75d9e",
+                      "path":  "tests/application/test_track9_validation_only_contract_adapter.py"
+                  }
+              ],
+    "tests":  {
+                  "py_compile":  "PASS",
+                  "command":  "py -m pytest tests/core/test_track9_independent_policy.py tests/application/test_track9_validation_only_contract_adapter.py -q",
+                  "graphify_update":  "COMPLETED",
+                  "result":  "15 passed",
+                  "git_diff_check":  "PASS"
+              },
+    "execution":  {
+                      "order_cancel_execution_api_called":  false,
+                      "kis_api_called":  false,
+                      "strategyhub_natural_signal":  "NOT_RUN",
+                      "account_api_called":  false,
+                      "real_vts_api_called":  false,
+                      "live_api_called":  false,
+                      "fast_detailed_equivalence":  "NOT_RUN",
+                      "position_pnl":  "NOT_RUN",
+                      "virtual_broker_execution":  "NOT_RUN"
+                  },
+    "limitations":  [
+                        "This adapter is not yet wired into StrategyHub or the S9 strategy runtime.",
+                        "The registered legacy Track9EventOvernightInsurance.evaluate currently emits no signals; S9 runtime code implementation remains required.",
+                        "Synthetic multiplier and tradability do not establish official contract terms or real broker eligibility.",
+                        "ATM tie policy, quote freshness/liquidity, premium/risk limits, partial-fill and restart recovery remain separate validation gates."
+                    ],
+    "next_gate":  "Wire the independent S9 runtime input and strategy code to the validation-only synthetic adapter, then execute natural StrategyHub signal through Virtual Broker/Execution to Position/PnL."
+}`n
