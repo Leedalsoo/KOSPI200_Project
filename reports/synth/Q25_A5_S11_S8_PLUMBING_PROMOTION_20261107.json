@@ -1,101 +1,109 @@
 {
-    "report_id":  "Q25_A5_S11_S8_PLUMBING_PROMOTION_20261107",
-    "stage":  "S11",
-    "created_at_kst":  "2026-11-07",
-    "status":  "BLOCKED_NO_ELIGIBLE_CASES",
-    "mapping_status":  "COMPLETE",
-    "promotion_status":  "BLOCKED_NO_ELIGIBLE_CASES",
-    "validation_only":  true,
-    "runtime_eligible":  false,
-    "production_runtime_eligible":  false,
-    "source_branch":  "cleanup/p2-quarantine-20261026",
-    "source_head":  "a6d3f8db8a5447eefdecacdb1427c5a71f091072",
-    "policy_basis":  {
-                         "retry_window":  "3 trading days",
-                         "retry_attempt_count":  "UNSET",
-                         "decision_log":  "No.1169",
-                         "code_observation":  "Track8 still contains a legacy 10-minute retry due-time and retry_count \u003e= 3 behavior; not approved for promotion.",
-                         "retry_interval":  "UNSET",
-                         "timeout":  "600 seconds"
-                     },
-    "plumbing_only_cases":  [
-                                {
-                                    "classification":  "RETAIN_PLUMBING_ONLY",
-                                    "reason":  "Test harness prepares strategy state/proposal directly. A natural timeout callback enters retry handling; retry interval/attempt count remain UNSET, so the natural-signal retry lifecycle cannot be promoted safely.",
-                                    "id":  "No.1395",
-                                    "topic":  "10-minute timeout and terminal callback"
-                                },
-                                {
-                                    "classification":  "RETAIN_PLUMBING_ONLY",
-                                    "reason":  "Calendar boundary helper only; it does not validate a natural StrategyHub signal through Runtime. Retry policy is incomplete because interval and attempt count are UNSET.",
-                                    "id":  "No.1396",
-                                    "topic":  "3-trading-day retry window and 15:00 cutoff"
-                                },
-                                {
-                                    "classification":  "RETAIN_PLUMBING_ONLY",
-                                    "reason":  "The implemented retry behavior uses legacy 10-minute interval and retry_count \u003e= 3 despite No.1169 leaving both interval and attempt count UNSET. S8-U20 remains BLOCKED_POLICY_CODE_MISMATCH.",
-                                    "id":  "No.1397",
-                                    "topic":  "Runtime retry execution"
-                                },
-                                {
-                                    "classification":  "RETAIN_PLUMBING_ONLY",
-                                    "reason":  "The test constructs a manual MultiLegExecutionPlan with quantity 5 and injected ExecutionFill records. Track8 evaluate_entry currently sets qty_call=1 and qty_put=1, so multiple positive-integer partial fills cannot arise from its natural signal without a separate quantity-policy/code change.",
-                                    "id":  "No.1398",
-                                    "topic":  "multi-partial fill to PositionLot and fee ledger"
-                                }
-                            ],
-    "already_promoted_cases":  [
-                                   {
-                                       "classification":  "ALREADY_PROMOTED",
-                                       "evidence":  "NORMAL/HIGH_VOL natural-signal replay; 57 focused tests; Fast/Detailed equivalence and account/group PnL reconciliation PASS.",
-                                       "id":  "No.1402",
-                                       "topic":  "PositionGroup mark-to-market and Fast/Detailed equivalence"
-                                   },
-                                   {
-                                       "classification":  "ALREADY_PROMOTED",
-                                       "evidence":  "Natural-signal validation-only expiry cash-settlement E2E PASS; not authoritative KIS settlement.",
-                                       "id":  "No.1405",
-                                       "topic":  "validation-only expiry cash settlement"
-                                   },
-                                   {
-                                       "classification":  "ALREADY_PROMOTED",
-                                       "evidence":  "3 scenarios; FAST/DETAILED semantic equivalence 3/3 PASS; reject 0; validation-only synthetic.",
-                                       "id":  "No.1423",
-                                       "topic":  "S10 STOP/TRAILING/EXPIRY exits"
-                                   }
-                               ],
-    "eligible_case_reruns":  [
-
-                             ],
-    "rerun_result":  {
-                         "focused_regression_runs":  [
-                                                         {
-                                                             "duration":  "15.07s",
-                                                             "suite":  "S8 retry timeout, Track8 retry policy, PositionGroup MTM, R4 multileg lifecycle",
-                                                             "failed":  0,
-                                                             "passed":  24
-                                                         },
-                                                         {
-                                                             "duration":  "0.31s",
-                                                             "suite":  "S8 multi-partial reconciliation, Track8 sequential entry/spec, S8 runtime adapter",
-                                                             "failed":  0,
-                                                             "passed":  29
-                                                         }
-                                                     ],
-                         "status":  "NOT_RUN_NO_ELIGIBLE_CASES",
-                         "total_passed":  53,
-                         "reason":  "No remaining PLUMBING_ONLY case can be safely promoted without resolving No.1169 retry policy or changing the Track8 quantity contract.",
-                         "total_failed":  0
-                     },
-    "constraints":  [
-                        "No retry interval or attempt count was invented or changed.",
-                        "Track8 quantity defaults/configuration were not changed.",
-                        "No KIS API, REAL_VTS, Live, real account, or real order was used.",
-                        "No production RiskConfig or runtime eligibility flag was changed."
-                    ],
-    "code_changes":  0,
-    "source_changes":  0,
-    "git_commit_push":  "Report-only commit 47a1ae99aca8f84fb11ac22e38d05bedea942202 pushed; remote HEAD verified.",
-    "next_gate":  "Resolve S8-U20 through an explicit Decision Log update before retry-path natural-signal promotion; separately approve any Track8 multi-contract quantity policy.",
-    "published_commit":  "47a1ae99aca8f84fb11ac22e38d05bedea942202"
+    "report_id": "Q25_A5_S11_S8_PLUMBING_PROMOTION_20261107",
+    "stage": "S11",
+    "created_at_kst": "2026-11-07",
+    "status": "BLOCKED_NO_ELIGIBLE_CASES",
+    "mapping_status": "COMPLETE",
+    "promotion_status": "BLOCKED_NO_ELIGIBLE_CASES",
+    "validation_only": true,
+    "runtime_eligible": false,
+    "production_runtime_eligible": false,
+    "source_branch": "cleanup/p2-quarantine-20261026",
+    "source_head": "a6d3f8db8a5447eefdecacdb1427c5a71f091072",
+    "policy_basis": {
+        "retry_policy_status": "APPROVED_BY_NO1397",
+        "decision_log": "No.1397 (2026-11-04); supersedes the earlier No.1169 UNSET fields",
+        "timeout": "600 seconds (10-minute unfilled-order timeout)",
+        "retry_interval": "NOT_APPLICABLE: 10 minutes is the unfilled-order timeout, not a periodic retry interval",
+        "retry_attempt_count": "Maximum 3 retries per leg; CALL and PUT tracked independently",
+        "retry_window": "3 trading days; initial S8 order submission day is day 1",
+        "retry_cutoff": "15:00:00 KST on the third trading day",
+        "retry_trigger": "TIMEOUT_10M followed by terminal CANCELLED confirmation; retry only when there are no partial fills",
+        "non_retryable": "Ordinary cancellation, rejection, unknown terminal state, or partial fill",
+        "code_observation": "Track8 code matches the approved policy: 600-second timeout, TIMEOUT_10M classification, and per-leg retry counters capped at 3"
+    },
+    "plumbing_only_cases": [
+        {
+            "classification": "RETAIN_PLUMBING_ONLY",
+            "reason": "The test harness prepares strategy state/proposal directly. No.1397 has approved the retry policy; this case remains PLUMBING_ONLY because a natural StrategyHub signal through timeout, terminal CANCELLED callback, and Runtime lifecycle has not been demonstrated.",
+            "id": "No.1395",
+            "topic": "10-minute timeout and terminal callback"
+        },
+        {
+            "classification": "RETAIN_PLUMBING_ONLY",
+            "reason": "Calendar boundary helper only; it does not validate a natural StrategyHub signal through Runtime. The retry window and cutoff policy are approved by No.1397, but this helper-only test is not natural-signal E2E evidence.",
+            "id": "No.1396",
+            "topic": "3-trading-day retry window and 15:00 cutoff"
+        },
+        {
+            "classification": "RETAIN_PLUMBING_ONLY",
+            "reason": "Retry execution and per-leg counters are covered by plumbing/state-transition tests, and the code agrees with No.1397. The test harness prepares state/proposal directly; the full natural-signal StrategyHub → timeout → terminal CANCELLED → retry → execution lifecycle has not been validated.",
+            "id": "No.1397",
+            "topic": "Runtime retry execution"
+        },
+        {
+            "classification": "RETAIN_PLUMBING_ONLY",
+            "reason": "The test constructs a manual MultiLegExecutionPlan with quantity 5 and injected ExecutionFill records. Track8 evaluate_entry currently sets qty_call=1 and qty_put=1, so multiple positive-integer partial fills cannot arise from its natural signal without a separate quantity-policy/code change.",
+            "id": "No.1398",
+            "topic": "multi-partial fill to PositionLot and fee ledger"
+        }
+    ],
+    "already_promoted_cases": [
+        {
+            "classification": "ALREADY_PROMOTED",
+            "evidence": "NORMAL/HIGH_VOL natural-signal replay; 57 focused tests; Fast/Detailed equivalence and account/group PnL reconciliation PASS.",
+            "id": "No.1402",
+            "topic": "PositionGroup mark-to-market and Fast/Detailed equivalence"
+        },
+        {
+            "classification": "ALREADY_PROMOTED",
+            "evidence": "Natural-signal validation-only expiry cash-settlement E2E PASS; not authoritative KIS settlement.",
+            "id": "No.1405",
+            "topic": "validation-only expiry cash settlement"
+        },
+        {
+            "classification": "ALREADY_PROMOTED",
+            "evidence": "3 scenarios; FAST/DETAILED semantic equivalence 3/3 PASS; reject 0; validation-only synthetic.",
+            "id": "No.1423",
+            "topic": "S10 STOP/TRAILING/EXPIRY exits"
+        }
+    ],
+    "eligible_case_reruns": [],
+    "rerun_result": {
+        "focused_regression_runs": [
+            {
+                "duration": "15.07s",
+                "suite": "S8 retry timeout, Track8 retry policy, PositionGroup MTM, R4 multileg lifecycle",
+                "failed": 0,
+                "passed": 24
+            },
+            {
+                "duration": "0.31s",
+                "suite": "S8 multi-partial reconciliation, Track8 sequential entry/spec, S8 runtime adapter",
+                "failed": 0,
+                "passed": 29
+            }
+        ],
+        "status": "NOT_RUN_NO_ELIGIBLE_CASES",
+        "total_passed": 53,
+        "reason": "No remaining case was eligible for promotion because No.1395–1397 lack full natural-signal Runtime E2E evidence. No.1398 additionally requires a separately approved Track8 multi-contract quantity policy for natural multi-partial execution.",
+        "total_failed": 0
+    },
+    "constraints": [
+        "The already-approved No.1397 retry policy was applied as the governing basis; no retry policy or source code was changed in S11 correction.",
+        "Track8 quantity defaults/configuration were not changed.",
+        "No KIS API, REAL_VTS, Live, real account, or real order was used.",
+        "No production RiskConfig or runtime eligibility flag was changed."
+    ],
+    "code_changes": 0,
+    "source_changes": 0,
+    "git_commit_push": "Report-only commit 47a1ae99aca8f84fb11ac22e38d05bedea942202 pushed; remote HEAD verified.",
+    "next_gate": "Validate No.1395–1397 through a natural-signal StrategyHub → Runtime retry E2E under the approved No.1397 policy; separately approve any Track8 multi-contract quantity policy before natural multi-partial promotion.",
+    "published_commit": "47a1ae99aca8f84fb11ac22e38d05bedea942202",
+    "policy_resolution": {
+        "S8-U20": "RESOLVED_BY_NO1397",
+        "basis": "No.1397 explicitly approved the 10-minute unfilled-order timeout, TIMEOUT_10M + terminal CANCELLED retry trigger, maximum 3 retries per CALL/PUT leg, and 3-trading-day window with a 15:00 KST third-day cutoff. Current Track8 code matches these settings.",
+        "scope_note": "This resolves the retry policy/code mismatch only. It does not promote the existing plumbing-only tests to natural-signal E2E."
+    },
+    "correction_note": "Corrected 2026-11-07: No.1397 (2026-11-04) supersedes No.1169's earlier UNSET retry fields. Ten minutes is an unfilled-order timeout, not a periodic retry interval. S11 remains BLOCKED_NO_ELIGIBLE_CASES because the existing No.1395–1397 tests do not provide full natural-signal E2E evidence; No.1398 remains blocked by its separate quantity limitation."
 }
