@@ -170,6 +170,89 @@ def test_s8_validation_risk_gate_allows_identity_checked_reduce_only_close():
     )
     identity = SimpleNamespace(
         instrument_id="SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:CALL:515",
+        option_type="CALL", strike=515, expiry="20261119", contract_multiplier=250000,
     )
-    leg = SimpleNamespace(leg_id="call", side="SELL", quantity=1)
+    leg = SimpleNamespace(leg_id="call", side="SELL", quantity=1, strike=515)
     adapter.validate_group(plan, [(leg, identity, "client", object(), object(), "1.00", "1.10")])
+
+
+def test_s8_validation_risk_gate_allows_identity_checked_two_leg_expiry_close():
+    adapter = _adapter()
+    plan = SimpleNamespace(
+        strategy_id="track8_macro_regime_monthly_strangle",
+        purpose="MONTHLY_STRANGLE_CLOSE",
+        group_id="S8-EXPIRY-CLOSE-1",
+    )
+    prepared = []
+    for leg_id, strike in (("put", 485), ("call", 515)):
+        identity = SimpleNamespace(
+            instrument_id=f"SYNTHETIC_CONTRACT:S8V3:NORMAL:20261119:{leg_id.upper()}:{strike}",
+            option_type=leg_id.upper(), strike=strike,
+            expiry="20261119", contract_multiplier=250000,
+        )
+        leg = SimpleNamespace(leg_id=leg_id, side="SELL", quantity=1, strike=strike)
+        prepared.append((leg, identity, f"client-{leg_id}", object(), object(), "1.00", "1.10"))
+    adapter.validate_group(plan, prepared)
+
+
+def test_s8_validation_option_marks_require_exact_manifest_bound_current_quotes():
+    from decimal import Decimal
+
+    adapter = _adapter()
+    timestamp = "2026-11-05T09:10:00+09:00"
+    call_id = "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:CALL:515"
+    put_id = "SYNTHETIC_CONTRACT:S8A5S09:STOP:20261119:PUT:485"
+    call = SimpleNamespace(
+        shrn_iscd=call_id, option_type="CALL", strike=515,
+        expiry="20261119", contract_multiplier=250000,
+    )
+    put = SimpleNamespace(
+        shrn_iscd=put_id, option_type="PUT", strike=485,
+        expiry="20261119", contract_multiplier=250000,
+    )
+    selection = SimpleNamespace(expiry="20261119", call=call, put=put)
+
+    def quote(instrument_id, option_type, strike, last):
+        return {
+            "instrument_id": instrument_id, "option_type": option_type,
+            "strike": strike, "expiry": "20261119",
+            "contract_multiplier": 250000, "bid": last - 0.02,
+            "ask": last + 0.02, "last": last, "timestamp": timestamp,
+            "source": "SYNTHETIC:DERIVED_SCENARIO",
+        }
+
+    market = SimpleNamespace(option_quotes_by_instrument_id={
+        call_id: quote(call_id, "CALL", 515, 0.40),
+        put_id: quote(put_id, "PUT", 485, 1.00),
+    })
+    tick = SimpleNamespace(timestamp=timestamp)
+    assert adapter.option_mark_prices(selection, market=market, tick=tick) == {
+        "call": Decimal("0.4"), "put": Decimal("1.0"),
+    }
+    market.option_quotes_by_instrument_id[call_id]["timestamp"] = "2026-11-05T09:09:00+09:00"
+    assert adapter.option_mark_prices(selection, market=market, tick=tick) is None
+
+
+def test_s8_validation_expiry_pair_close_rejects_identity_expiry_mismatch():
+    adapter = _adapter()
+    plan = SimpleNamespace(
+        strategy_id="track8_macro_regime_monthly_strangle",
+        purpose="MONTHLY_STRANGLE_CLOSE",
+        group_id="S8-EXPIRY-CLOSE-IDENTITY-MISMATCH",
+    )
+    prepared = []
+    for leg_id, strike, expiry in (
+        ("put", 485, "20261119"),
+        ("call", 515, "20261126"),
+    ):
+        instrument_expiry = "20261119"
+        identity = SimpleNamespace(
+            instrument_id=f"SYNTHETIC_CONTRACT:S8V3:NORMAL:{instrument_expiry}:{leg_id.upper()}:{strike}",
+            option_type=leg_id.upper(), strike=strike,
+            expiry=expiry, contract_multiplier=250000,
+        )
+        leg = SimpleNamespace(leg_id=leg_id, side="SELL", quantity=1, strike=strike)
+        prepared.append((leg, identity, f"client-{leg_id}", object(), object(), "1.00", "1.10"))
+
+    with pytest.raises(ValueError, match="S8_VALIDATION_EXPIRY_CLOSE_REDUCTION_IDENTITY_INVALID"):
+        adapter.validate_group(plan, prepared)

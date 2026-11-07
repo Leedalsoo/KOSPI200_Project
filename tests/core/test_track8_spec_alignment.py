@@ -120,3 +120,186 @@ def test_track8_expiry_day_force_close_is_1510() -> None:
     signals = strategy.evaluate_expiry_cutoff(at_cutoff)
     assert len(signals) == 1
     assert signals[0].reason == "MONTHLY_EXPIRY_15:10_FORCE_CLOSE"
+
+
+def test_track8_close_callback_updates_single_leg_state_and_releases_exit_lock():
+    strategy = Track8MacroRegimeMonthlyStrangle()
+    strategy.state = Track8State(
+        is_active=True, qty_call=1, qty_put=1,
+        call_open=True, put_open=True,
+        call_strike=Decimal("515"), put_strike=Decimal("485"),
+    )
+    strategy._exit_pending = True
+    report = SimpleNamespace(
+        leg_id="call", status="FILLED", filled_quantity=1, remaining_quantity=0,
+        execution_id="S8-CLOSE-CALL-1", execution_timestamp=datetime(2026, 11, 5, 9, 10),
+    )
+    result = SimpleNamespace(reports=(report,), position_flat=False, group_complete=True)
+
+    strategy.on_execution_result("MONTHLY_STRANGLE_CLOSE_CALL", result)
+
+    assert strategy.state.call_open is False
+    assert strategy.state.put_open is True
+    assert strategy.state.is_active is True
+    assert strategy._exit_pending is False
+
+
+def test_track8_expiry_pair_close_callback_resets_only_after_confirmed_flat():
+    strategy = Track8MacroRegimeMonthlyStrangle()
+    strategy.state = Track8State(
+        is_active=True, qty_call=1, qty_put=1,
+        call_open=True, put_open=True,
+        call_strike=Decimal("515"), put_strike=Decimal("485"),
+    )
+    strategy._exit_pending = True
+    reports = tuple(
+        SimpleNamespace(
+            leg_id=leg, status="FILLED", filled_quantity=1, remaining_quantity=0,
+            execution_id=f"S8-EXPIRY-{leg.upper()}",
+            execution_timestamp=datetime(2026, 11, 19, 15, 10),
+        )
+        for leg in ("put", "call")
+    )
+    result = SimpleNamespace(reports=reports, position_flat=True, group_complete=True)
+
+    strategy.on_execution_result("MONTHLY_STRANGLE_CLOSE", result)
+
+    assert strategy.state == Track8State()
+    assert strategy._exit_pending is False
+
+
+def test_track8_analytics_snapshot_exposes_validation_only_option_marks():
+    from datetime import date
+    from application.composition.track8_analytics_provider import build_track8_analytics_snapshot
+
+    data = SimpleNamespace(
+        price=Decimal("500"), days_to_expiry=10, option_expiry=date(2026, 11, 19),
+        option_iv=Decimal("0.25"), put_iv=Decimal("0.25"),
+        call_strike=Decimal("515"), put_strike=Decimal("485"),
+        call_contract_multiplier=Decimal("250000"), put_contract_multiplier=Decimal("250000"),
+    )
+    selection = SimpleNamespace(
+        call=SimpleNamespace(strike=Decimal("515"), contract_multiplier=Decimal("250000")),
+        put=SimpleNamespace(strike=Decimal("485"), contract_multiplier=Decimal("250000")),
+    )
+    snapshot = build_track8_analytics_snapshot(
+        data, run_id="S8-MARK-TEST", as_of=datetime(2026, 11, 5, 9, 10),
+        option_contract_selection=selection,
+        option_mark_prices={"call": Decimal("0.40"), "put": Decimal("1.00")},
+    )
+
+    assert snapshot.get("options.track8_call_mark_price").value == Decimal("0.40")
+    assert snapshot.get("options.track8_put_mark_price").value == Decimal("1.00")
+
+
+def test_track8_expiry_cutoff_preempts_per_leg_stop_at_1510():
+    strategy = Track8MacroRegimeMonthlyStrangle()
+    strategy.state = Track8State(
+        is_active=True, qty_call=1, qty_put=1, expiry="20261119",
+        call_strike=Decimal("515"), put_strike=Decimal("485"),
+        call_entry_fill_price=Decimal("1.0"), put_entry_fill_price=Decimal("1.0"),
+        call_peak_mark=Decimal("1.0"), put_peak_mark=Decimal("1.0"),
+        call_open=True, put_open=True,
+    )
+    values = {
+        "options.track8_call_mark_price": Decimal("0.40"),
+        "options.track8_put_mark_price": Decimal("1.00"),
+    }
+    context = SimpleNamespace(
+        strategy_id=strategy.strategy_id,
+        analytics=SimpleNamespace(
+            as_of=datetime(2026, 11, 19, 15, 10, 0),
+            get=lambda key: _metric(values.get(key)),
+        ),
+    )
+
+    signals = strategy.evaluate(context)
+
+    assert len(signals) == 1
+    assert signals[0].reason == "MONTHLY_EXPIRY_15:10_FORCE_CLOSE"
+    assert signals[0].execution_proposal.tag_id == "MONTHLY_STRANGLE_CLOSE"
+
+
+def test_track8_rejected_single_leg_close_does_not_consume_prior_entry_fill_reports():
+    strategy = Track8MacroRegimeMonthlyStrangle()
+    strategy.state = Track8State(
+        is_active=True, qty_call=1, qty_put=1,
+        call_open=True, put_open=True,
+    )
+    strategy._exit_pending = True
+    historical_call = SimpleNamespace(
+        leg_id="call", status="FILLED", filled_quantity=1, remaining_quantity=0,
+        execution_id="ENTRY-CALL", execution_timestamp=datetime(2026, 11, 5, 9, 0),
+    )
+    historical_put = SimpleNamespace(
+        leg_id="put", status="FILLED", filled_quantity=1, remaining_quantity=0,
+        execution_id="ENTRY-PUT", execution_timestamp=datetime(2026, 11, 5, 9, 0),
+    )
+    rejected_close = SimpleNamespace(
+        leg_id="close-call", status="REJECTED", filled_quantity=0, remaining_quantity=1,
+        execution_id=None, execution_timestamp=None,
+    )
+    result = SimpleNamespace(
+        reports=(historical_call, historical_put, rejected_close),
+        position_flat=False, group_complete=False,
+    )
+
+    strategy.on_execution_result("MONTHLY_STRANGLE_CLOSE_CALL", result)
+
+    assert strategy.state.call_open is True
+    assert strategy.state.put_open is True
+    assert strategy._exit_pending is True
+
+
+def test_track8_expiry_pair_close_requires_both_equal_quantities_fully_filled():
+    strategy = Track8MacroRegimeMonthlyStrangle()
+    strategy.state = Track8State(
+        is_active=True, qty_call=2, qty_put=2,
+        call_open=True, put_open=True,
+        call_strike=Decimal("515"), put_strike=Decimal("485"),
+    )
+    strategy._exit_pending = True
+    # The Virtual bridge returns canonical close reports in CALL, PUT order.
+    reports = (
+        SimpleNamespace(
+            leg_id="close-call", status="FILLED", filled_quantity=2, remaining_quantity=0,
+            execution_id="S8-EXPIRY-CALL", execution_timestamp=datetime(2026, 11, 19, 15, 10),
+        ),
+        SimpleNamespace(
+            leg_id="close-put", status="FILLED", filled_quantity=2, remaining_quantity=0,
+            execution_id="S8-EXPIRY-PUT", execution_timestamp=datetime(2026, 11, 19, 15, 10),
+        ),
+    )
+    result = SimpleNamespace(reports=reports, position_flat=True, group_complete=True)
+
+    strategy.on_execution_result("MONTHLY_STRANGLE_CLOSE", result)
+
+    assert strategy.state == Track8State()
+    assert strategy._exit_pending is False
+
+
+def test_track8_expiry_pair_close_with_unequal_quantities_fails_closed():
+    strategy = Track8MacroRegimeMonthlyStrangle()
+    strategy.state = Track8State(
+        is_active=True, qty_call=2, qty_put=3,
+        call_open=True, put_open=True,
+        call_strike=Decimal("515"), put_strike=Decimal("485"),
+    )
+    strategy._exit_pending = True
+    reports = (
+        SimpleNamespace(
+            leg_id="close-call", status="FILLED", filled_quantity=2, remaining_quantity=0,
+            execution_id="S8-EXPIRY-CALL", execution_timestamp=datetime(2026, 11, 19, 15, 10),
+        ),
+        SimpleNamespace(
+            leg_id="close-put", status="FILLED", filled_quantity=3, remaining_quantity=0,
+            execution_id="S8-EXPIRY-PUT", execution_timestamp=datetime(2026, 11, 19, 15, 10),
+        ),
+    )
+    result = SimpleNamespace(reports=reports, position_flat=True, group_complete=True)
+
+    strategy.on_execution_result("MONTHLY_STRANGLE_CLOSE", result)
+
+    assert strategy.state.call_open is True
+    assert strategy.state.put_open is True
+    assert strategy._exit_pending is True

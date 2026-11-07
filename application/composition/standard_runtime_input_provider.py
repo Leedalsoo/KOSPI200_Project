@@ -647,10 +647,19 @@ class StandardRuntimeInputProvider:
             )
         )
         track8_validation_pair_quotes_ready = True
+        track8_validation_option_marks = None
         if self.validation_only_s8_runtime_adapter is not None:
             track8_validation_pair_quotes_ready = self.validation_only_s8_runtime_adapter.pair_quotes_ready(
                 track8_selection, market=self.data.market, tick=tick
             )
+            if track8_validation_pair_quotes_ready:
+                track8_validation_option_marks = self.validation_only_s8_runtime_adapter.option_mark_prices(
+                    track8_selection, market=self.data.market, tick=tick
+                )
+        track8_validation_marks_ready = (
+            self.validation_only_s8_runtime_adapter is None
+            or track8_validation_option_marks is not None
+        )
         track8_required = (
             d.days_to_expiry,
             d.option_iv,
@@ -658,6 +667,7 @@ class StandardRuntimeInputProvider:
             track8_selection,
             self.track9_margin_ratio,
             track8_validation_pair_quotes_ready,
+            track8_validation_marks_ready,
         )
         if (not all(value is not None for value in track8_required)
                 or track8_common_missing or not track8_validation_pair_quotes_ready):
@@ -672,6 +682,8 @@ class StandardRuntimeInputProvider:
                 missing.append("margin_read_model")
             if not track8_validation_pair_quotes_ready:
                 missing.append("validation_only_current_timestamp_call_put_quotes")
+            if not track8_validation_marks_ready:
+                missing.append("validation_only_current_timestamp_call_put_marks")
             missing.extend(track8_common_missing)
             contexts["track8_macro_regime_monthly_strangle"] = self._unavailable(
                 "track8_macro_regime_monthly_strangle",
@@ -685,6 +697,7 @@ class StandardRuntimeInputProvider:
                     d, run_id=self.run_id or "virtual", as_of=d.as_of,
                     option_contract_selection=track8_selection,
                     common_snapshot=common_analytics,
+                    option_mark_prices=track8_validation_option_marks,
                 ),
             )
 

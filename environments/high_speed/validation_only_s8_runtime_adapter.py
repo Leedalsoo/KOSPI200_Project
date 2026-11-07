@@ -162,19 +162,140 @@ class S8ValidationOnlyRuntimeAdapter:
                 return False
         return True
 
+    def option_mark_prices(self, selection: Any, *, market: Any, tick: Any) -> dict[str, Decimal] | None:
+        """Return exact-instant last-price marks from this manifest-bound synthetic scenario."""
+        if selection is None or tick is None:
+            return None
+        quotes = getattr(market, "option_quotes_by_instrument_id", {})
+        if not isinstance(quotes, dict):
+            return None
+        current_timestamp = str(getattr(tick, "timestamp", ""))
+        expiry = str(getattr(selection, "expiry", "")).replace("-", "")[:8]
+        result: dict[str, Decimal] = {}
+        for leg_id, identity in (("call", getattr(selection, "call", None)),
+                                 ("put", getattr(selection, "put", None))):
+            if identity is None:
+                return None
+            instrument_id = str(getattr(identity, "shrn_iscd", "") or
+                                getattr(identity, "instrument_id", ""))
+            identity_expiry = str(getattr(identity, "expiry", "")).replace("-", "")[:8]
+            identity_type = str(getattr(identity, "option_type", "")).upper()
+            try:
+                identity_strike = Decimal(str(getattr(identity, "strike", "0")))
+                id_parts = instrument_id.split(":")
+                id_strike = Decimal(id_parts[-1]) if len(id_parts) >= 6 else Decimal("0")
+            except Exception:
+                return None
+            if (
+                identity_expiry != expiry
+                or len(id_parts) < 6
+                or id_parts[-3] != identity_expiry
+                or id_parts[-2].upper() != identity_type
+                or id_strike != identity_strike
+            ):
+                return None
+            quote = quotes.get(instrument_id)
+            if not isinstance(quote, dict):
+                return None
+            try:
+                observed = str(quote["timestamp"])
+                option_type = str(quote["option_type"]).upper()
+                strike = Decimal(str(quote["strike"]))
+                quote_expiry = str(quote["expiry"]).replace("-", "")[:8]
+                multiplier = Decimal(str(quote["contract_multiplier"]))
+                bid = Decimal(str(quote["bid"]))
+                ask = Decimal(str(quote["ask"]))
+                last = Decimal(str(quote["last"]))
+            except (KeyError, TypeError, ValueError):
+                return None
+            if (
+                quote.get("source") != "SYNTHETIC:DERIVED_SCENARIO"
+                or str(quote.get("instrument_id", "")) != instrument_id
+                or observed != current_timestamp
+                or option_type != identity_type
+                or strike != identity_strike
+                or quote_expiry != identity_expiry
+                or multiplier != Decimal(str(getattr(identity, "contract_multiplier", "0")))
+                or bid <= 0 or ask <= bid or last <= 0
+            ):
+                return None
+            result[leg_id] = last
+        return result if set(result) == {"call", "put"} else None
+
     def validate_group(self, plan: Any, prepared: list[tuple]) -> None:
         purpose = str(getattr(plan, "purpose", "") or "")
         if getattr(plan, "strategy_id", None) != STRATEGY_ID:
             raise ValueError("S8_VALIDATION_ORDER_SCOPE_INVALID")
-        if purpose in {"MONTHLY_STRANGLE_CLOSE_CALL", "MONTHLY_STRANGLE_CLOSE_PUT", "MONTHLY_STRANGLE_CLOSE"}:
+
+        expected_expiry = str(
+            self.manifest.get("date_end")
+            or self.manifest.get("scenario_expectations", {}).get("expiry")
+            or ""
+        ).replace("-", "")[:8]
+        expected_multiplier_value = (
+            self.manifest.get("scenario_reference_only", {}).get("contract_multiplier")
+            or self.manifest.get("contract_multiplier")
+        )
+        expected_multiplier = (
+            Decimal(str(expected_multiplier_value)) if expected_multiplier_value is not None else None
+        )
+
+        def valid_close_identity(close_leg: Any, identity: Any, expected_type: str) -> bool:
+            instrument_id = str(getattr(identity, "instrument_id", ""))
+            identity_expiry = str(getattr(identity, "expiry", "")).replace("-", "")[:8]
+            identity_type = str(getattr(identity, "option_type", "")).upper()
+            try:
+                identity_strike = Decimal(str(getattr(identity, "strike", "0")))
+                leg_strike = Decimal(str(getattr(close_leg, "strike", "0")))
+                multiplier = Decimal(str(getattr(identity, "contract_multiplier", "0")))
+                id_strike = Decimal(instrument_id.split(":")[-1])
+            except Exception:
+                return False
+            id_parts = instrument_id.split(":")
+            return (
+                instrument_id.startswith(SYNTHETIC_ID_PREFIX)
+                and len(id_parts) >= 6
+                and identity_expiry
+                and id_parts[-3] == identity_expiry
+                and (not expected_expiry or identity_expiry == expected_expiry)
+                and id_parts[-2].upper() == expected_type
+                and identity_type == expected_type
+                and id_strike == identity_strike == leg_strike
+                and multiplier > 0
+                and (expected_multiplier is None or multiplier == expected_multiplier)
+                and int(getattr(close_leg, "quantity", 0)) > 0
+                and str(getattr(close_leg, "side", "")).upper() == "SELL"
+                and str(getattr(close_leg, "option_type", expected_type)).upper() == expected_type
+            )
+
+        if purpose in {"MONTHLY_STRANGLE_CLOSE_CALL", "MONTHLY_STRANGLE_CLOSE_PUT"}:
+            expected_option_type = "CALL" if purpose.endswith("_CALL") else "PUT"
             if len(prepared) != 1:
                 raise ValueError("S8_VALIDATION_CLOSE_SINGLE_LEG_REQUIRED")
             close_leg, close_identity, _client_id, _command, _canonical, close_bid, close_ask = prepared[0]
-            if (str(getattr(close_leg, "side", "")).upper() != "SELL"
-                    or not str(getattr(close_identity, "instrument_id", "")).startswith(SYNTHETIC_ID_PREFIX)
-                    or Decimal(str(close_bid)) <= 0
-                    or Decimal(str(close_ask)) < Decimal(str(close_bid))):
+            if (
+                not valid_close_identity(close_leg, close_identity, expected_option_type)
+                or Decimal(str(close_bid)) <= 0
+                or Decimal(str(close_ask)) < Decimal(str(close_bid))
+            ):
                 raise ValueError("S8_VALIDATION_CLOSE_REDUCTION_IDENTITY_INVALID")
+            return
+        if purpose == "MONTHLY_STRANGLE_CLOSE":
+            if len(prepared) != 2:
+                raise ValueError("S8_VALIDATION_EXPIRY_CLOSE_PAIR_REQUIRED")
+            seen: set[str] = set()
+            for close_leg, close_identity, _client_id, _command, _canonical, close_bid, close_ask in prepared:
+                option_type = str(getattr(close_identity, "option_type", "")).upper()
+                if (
+                    option_type not in {"CALL", "PUT"} or option_type in seen
+                    or not valid_close_identity(close_leg, close_identity, option_type)
+                    or Decimal(str(close_bid)) <= 0
+                    or Decimal(str(close_ask)) < Decimal(str(close_bid))
+                ):
+                    raise ValueError("S8_VALIDATION_EXPIRY_CLOSE_REDUCTION_IDENTITY_INVALID")
+                seen.add(option_type)
+            if seen != {"CALL", "PUT"}:
+                raise ValueError("S8_VALIDATION_EXPIRY_CLOSE_PAIR_REQUIRED")
             return
         if purpose not in {"MONTHLY_STRANGLE_ENTRY_CALL", "MONTHLY_STRANGLE_ENTRY_PUT"}:
             raise ValueError("S8_VALIDATION_ORDER_SCOPE_INVALID")

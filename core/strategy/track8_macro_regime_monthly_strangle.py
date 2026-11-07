@@ -89,35 +89,6 @@ class Track8MacroRegimeMonthlyStrangle:
         self.state = Track8State()
         self._exit_pending = False
 
-    def on_execution_result(self, purpose: str, result: object) -> None:
-        reports = tuple(getattr(result, "reports", ()) or ())
-        if purpose == "MONTHLY_STRANGLE_ENTRY" and self.state.entry_pending:
-            by_leg = {str(getattr(report, "leg_id", "")).lower(): report for report in reports}
-            call = by_leg.get("call")
-            put = by_leg.get("put")
-            def valid_fill(report, qty: int) -> bool:
-                return bool(report) and str(getattr(report, "status", "")).upper() == "FILLED" and int(getattr(report, "filled_quantity", 0) or 0) == qty and int(getattr(report, "remaining_quantity", -1)) == 0 and bool(getattr(report, "execution_id", None)) and getattr(report, "execution_timestamp", None) is not None and isinstance(getattr(report, "execution_price", None), Decimal)
-            if valid_fill(call, self.state.qty_call) and valid_fill(put, self.state.qty_put) and bool(getattr(result, "group_complete", False)) and not bool(getattr(result, "position_flat", True)):
-                premium = call.execution_price * self.state.qty_call * self.state.call_contract_multiplier + put.execution_price * self.state.qty_put * self.state.put_contract_multiplier
-                self.state = replace(self.state, is_active=True, entry_pending=False,
-                    call_entry_fill_price=call.execution_price, put_entry_fill_price=put.execution_price,
-                    call_peak_mark=call.execution_price, put_peak_mark=put.execution_price,
-                    premium_spent=premium, call_open=True, put_open=True)
-            return
-        if purpose in {"MONTHLY_STRANGLE_CLOSE_CALL", "MONTHLY_STRANGLE_CLOSE_PUT"} and self._exit_pending:
-            if reports and all(str(getattr(r, "status", "")).upper() == "FILLED" and int(getattr(r, "remaining_quantity", -1)) == 0 and bool(getattr(r, "execution_id", None)) and getattr(r, "execution_timestamp", None) is not None for r in reports):
-                self.state = replace(self.state, call_open=False if purpose.endswith("_CALL") else self.state.call_open,
-                    put_open=False if purpose.endswith("_PUT") else self.state.put_open)
-                self._exit_pending = False
-                if not self.state.call_open and not self.state.put_open:
-                    if bool(getattr(result, "position_flat", False)):
-                        self.reset()
-                    else:
-                        self._exit_pending = True
-            return
-        if purpose == "MONTHLY_STRANGLE_CLOSE" and self._exit_pending and bool(getattr(result, "group_complete", False)) and bool(getattr(result, "position_flat", False)):
-            self.reset()
-
     @staticmethod
     def _m(snapshot, key):
         metric = snapshot.get(key)
@@ -381,7 +352,64 @@ class Track8MacroRegimeMonthlyStrangle:
 
 
     def on_execution_result(self, purpose: str, result: object) -> None:
-        if purpose not in {"MONTHLY_STRANGLE_ENTRY_CALL", "MONTHLY_STRANGLE_ENTRY_PUT"}:
+        reports = tuple(getattr(result, "reports", ()) or ())
+
+        def fully_filled(report, expected_quantity: int) -> bool:
+            raw_status = getattr(report, "status", "")
+            status = str(getattr(raw_status, "value", raw_status)).upper()
+            return (
+                status == "FILLED"
+                and int(getattr(report, "filled_quantity", 0) or 0) == expected_quantity
+                and int(getattr(report, "remaining_quantity", -1)) == 0
+                and bool(getattr(report, "execution_id", None))
+                and getattr(report, "execution_timestamp", None) is not None
+            )
+
+        if purpose in {"MONTHLY_STRANGLE_CLOSE_CALL", "MONTHLY_STRANGLE_CLOSE_PUT"}:
+            if not self._exit_pending:
+                return
+            leg_id = "call" if purpose.endswith("_CALL") else "put"
+            expected = self.state.qty_call if leg_id == "call" else self.state.qty_put
+            # VirtualMultiLegExecutionBridge may return the group's historical reports
+            # before appending this close report; the newest report is the submitted close.
+            report = reports[-1] if reports else None
+            if report is None or not fully_filled(report, expected):
+                return
+            self.state = replace(
+                self.state,
+                call_open=False if leg_id == "call" else self.state.call_open,
+                put_open=False if leg_id == "put" else self.state.put_open,
+            )
+            if not self.state.call_open and not self.state.put_open:
+                if bool(getattr(result, "position_flat", False)):
+                    self.reset()
+                else:
+                    self._exit_pending = True
+            else:
+                # A single-leg exit leaves the opposite leg active and independently managed.
+                self._exit_pending = False
+            return
+
+        if purpose == "MONTHLY_STRANGLE_CLOSE" and self._exit_pending:
+            close_reports = reports[-2:]
+            # The runtime canonicalizes pair-close report order; Strategy 8 keeps
+            # equal CALL/PUT contract quantities, so verify both fills without guessing leg order.
+            expected_pair_quantity = self.state.qty_call
+            if (
+                self.state.qty_call == self.state.qty_put
+                and expected_pair_quantity > 0
+                and len(close_reports) == 2
+                and all(fully_filled(report, expected_pair_quantity) for report in close_reports)
+                and bool(getattr(result, "group_complete", False))
+                and bool(getattr(result, "position_flat", False))
+            ):
+                self.reset()
+            else:
+                # Keep the strategy locked until partial/rejected close state is reconciled.
+                self._exit_pending = True
+            return
+
+        if purpose not in {"MONTHLY_STRANGLE_ENTRY_CALL", "MONTHLY_STRANGLE_ENTRY_PUT"} or not self.state.entry_pending:
             return
         leg_id = "call" if purpose.endswith("_CALL") else "put"
 
@@ -399,9 +427,10 @@ class Track8MacroRegimeMonthlyStrangle:
             block_entry("TRACK8_ENTRY_RESULT_GROUP_ID_MISMATCH")
             return
         quantity = self.state.qty_call if leg_id == "call" else self.state.qty_put
-
-        reports = tuple(getattr(result, "reports", ()) or ())
-        report = next((item for item in reversed(reports) if str(getattr(item, "leg_id", "")).lower() == leg_id), None)
+        report = next(
+            (item for item in reversed(reports) if str(getattr(item, "leg_id", "")).lower() == leg_id),
+            None,
+        )
         if report is None:
             block_entry(f"TRACK8_{leg_id.upper()}_ENTRY_REPORT_MISSING")
             return

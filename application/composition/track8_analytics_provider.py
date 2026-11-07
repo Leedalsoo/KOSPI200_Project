@@ -6,7 +6,7 @@ from core.analytics.track8 import build_track8_evaluators
 from core.analytics.common import COMMON_METRIC_CONTRACTS, merge_analytics_snapshots
 
 
-def build_track8_analytics_snapshot(data, *, run_id: str, as_of, option_contract_selection=None, common_snapshot=None):
+def build_track8_analytics_snapshot(data, *, run_id: str, as_of, option_contract_selection=None, common_snapshot=None, option_mark_prices=None):
     observations = {
         # Common Analytics owns regime, volatility, portfolio/PnL, margin and risk
         # metrics. Track8 only materializes strategy-specific option inputs here.
@@ -16,6 +16,8 @@ def build_track8_analytics_snapshot(data, *, run_id: str, as_of, option_contract
         "call_strike": getattr(option_contract_selection.call, "strike", None) if option_contract_selection is not None else getattr(data, "call_strike", None), "put_strike": getattr(option_contract_selection.put, "strike", None) if option_contract_selection is not None else getattr(data, "put_strike", None),
         "call_contract_multiplier": getattr(option_contract_selection.call, "contract_multiplier", None) if option_contract_selection is not None else getattr(data, "call_contract_multiplier", None),
         "put_contract_multiplier": getattr(option_contract_selection.put, "contract_multiplier", None) if option_contract_selection is not None else getattr(data, "put_contract_multiplier", None),
+        "track8_call_mark_price": option_mark_prices.get("call") if isinstance(option_mark_prices, dict) else None,
+        "track8_put_mark_price": option_mark_prices.get("put") if isinstance(option_mark_prices, dict) else None,
     }
     market = MarketSnapshot(run_id=run_id, as_of=as_of,
         provenance=AnalyticsProvenance(source="standard-runtime.track8"), instrument_identity=None,
@@ -26,6 +28,8 @@ def build_track8_analytics_snapshot(data, *, run_id: str, as_of, option_contract
         "options.atm_iv": ("atm_iv",), "options.call_strike": ("call_strike",),
         "options.put_strike": ("put_strike",), "options.call_contract_multiplier": ("call_contract_multiplier",),
         "options.put_contract_multiplier": ("put_contract_multiplier",),
+        "options.track8_call_mark_price": ("track8_call_mark_price",),
+        "options.track8_put_mark_price": ("track8_put_mark_price",),
         "options.moneyness": ("current_price", "call_strike", "put_strike"),
         "market.current_regime": ("current_regime",), "volatility.active": ("active_vol",),
         "portfolio.current_pnl": ("current_pnl",), "portfolio.total_fees": ("total_fees",),

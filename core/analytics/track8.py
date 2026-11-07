@@ -55,6 +55,8 @@ def build_track8_evaluators() -> Mapping[str, object]:
         "options.put_strike": _passthrough("put_strike", "index-points"),
         "options.call_contract_multiplier": _passthrough("call_contract_multiplier", "contract-unit"),
         "options.put_contract_multiplier": _passthrough("put_contract_multiplier", "contract-unit"),
+        "options.track8_call_mark_price": _passthrough("track8_call_mark_price", "option-price"),
+        "options.track8_put_mark_price": _passthrough("track8_put_mark_price", "option-price"),
         "options.moneyness": _moneyness,
         "market.current_regime": _passthrough("current_regime", "regime"),
         "volatility.active": _passthrough("active_vol", "volatility"),
