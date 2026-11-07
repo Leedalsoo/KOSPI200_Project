@@ -1,0 +1,40 @@
+{
+  "schema_version": "q25-validation-only-risk-profile-v1",
+  "validation_only": true,
+  "runtime_eligible": false,
+  "allow_kis_api": false,
+  "allow_live_orders": false,
+  "allow_real_account": false,
+  "operational_config_mutated": false,
+  "operational_config_path": "config/risk/option-hedge-risk.v1.json",
+  "risk_checks_enabled": true,
+  "enforcement_mode": "VALIDATION_ONLY_HARD_CAP_WITH_OVERAGE_AUDIT",
+  "currency": "KRW",
+  "audit_fields_required": [
+    "computed_gross_premium_krw",
+    "computed_max_loss_krw",
+    "computed_concurrent_exposure_krw",
+    "operational_reference_overage_krw",
+    "validation_budget_overage_krw",
+    "run_id",
+    "scenario_id",
+    "manifest_sha256",
+    "dataset_sha256"
+  ],
+  "profiles": {
+    "track6_daily_tail_insurance": {
+      "max_gross_premium_outlay_krw": 622500,
+      "max_loss_krw": 622500,
+      "max_concurrent_groups": 1,
+      "operational_reference_limit_krw": 250000,
+      "fee_policy": "ACCOUNT_SEPARATELY; FEES ARE NOT INCLUDED IN THE GROSS PREMIUM CAP",
+      "dataset_manifests": [
+        "reports/synth/Q25_A2_1_S6_SYN_EVT_MANIFEST_20261102.json",
+        "reports/synth/Q25_A3_1_S6_BUDGET_FIT_MANIFEST_20261105.json",
+        "reports/synth/Q25_A3_2_S6_ORIGINAL_DATA_SYNTHETIC_CAL_MANIFEST_20261105.json",
+        "reports/synth/Q25_A4_S6_RANK5_RANK6_MANIFEST_20261106.json"
+      ]
+    }
+  },
+  "validation_profile_id": "Q25_A4_S6_RANK5_RANK6_VALIDATION_ONLY"
+}

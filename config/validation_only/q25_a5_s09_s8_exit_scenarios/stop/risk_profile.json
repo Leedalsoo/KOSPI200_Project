@@ -1,0 +1,36 @@
+{
+  "allow_kis_api": false,
+  "allow_live_orders": false,
+  "allow_real_account": false,
+  "audit_fields_required": [
+    "computed_gross_premium_krw",
+    "computed_max_loss_krw",
+    "computed_concurrent_exposure_krw",
+    "operational_reference_overage_krw",
+    "validation_budget_overage_krw",
+    "run_id",
+    "scenario_id",
+    "manifest_sha256",
+    "dataset_sha256"
+  ],
+  "currency": "KRW",
+  "enforcement_mode": "VALIDATION_ONLY_ALLOW_WITH_OVERAGE_AUDIT",
+  "fee_model_status": "NOT_DEFINED_BY_S09_DATASET_GENERATION",
+  "operational_config_mutated": false,
+  "operational_config_path": "config/risk/option-hedge-risk.v1.json",
+  "profiles": {
+    "track8_monthly_strangle": {
+      "budget_basis": "one CALL + one PUT BUY pair; max loss capped at premium paid; validation-only reference cap copied from existing S8 V3 profile",
+      "dataset_manifest": "data/derived_scenario/q25_a5_s09_s8_exit_scenarios/stop/manifest.json",
+      "entry_policy": "No.1169 DTE >= 10 trading days; 200,000 KRW minimum-budget gate retired.",
+      "max_concurrent_groups": 1,
+      "max_gross_premium_outlay_krw": 2300000,
+      "max_loss_krw": 2300000,
+      "operational_reference_limit_krw": 250000
+    }
+  },
+  "risk_checks_enabled": true,
+  "runtime_eligible": false,
+  "schema_version": "q25-validation-only-risk-profile-v1",
+  "validation_only": true
+}
