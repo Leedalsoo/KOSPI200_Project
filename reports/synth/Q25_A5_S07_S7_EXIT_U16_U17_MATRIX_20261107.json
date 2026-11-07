@@ -1,0 +1,79 @@
+{
+  "run_id": "Q25-A5-S07-S7-EXIT-U16-U17-MATRIX-20261107",
+  "scope": "VALIDATION_ONLY_SYNTHETIC",
+  "verdict": "PSB_PASS",
+  "exit_policy": {
+    "per_leg_stop": "mark <= entry_fill * 0.50",
+    "trailing_activation": "high_water_mark >= entry_fill * 2.0",
+    "trailing_exit": "mark <= high_water_mark * 0.90 after activation",
+    "expiry_terminal_close": "expiry date at/after 15:10 KST; closes all remaining PUT/CALL legs",
+    "precedence": "expiry terminal close before per-leg stop/trailing marks"
+  },
+  "exit_policy_scenarios": [
+    {
+      "id": "S07-STOP-PUT",
+      "expected": "PUT-only close at 50% threshold",
+      "result": "PASS"
+    },
+    {
+      "id": "S07-STOP-CALL",
+      "expected": "CALL-only close at 50% threshold",
+      "result": "PASS"
+    },
+    {
+      "id": "S07-TRAIL-ARM",
+      "expected": "2x high-water arms trailing; no immediate close",
+      "result": "PASS"
+    },
+    {
+      "id": "S07-TRAIL-DRAWDOWN",
+      "expected": "10% decline from updated high-water closes that leg",
+      "result": "PASS"
+    },
+    {
+      "id": "S07-EXPIRY-PRIORITY",
+      "expected": "15:10 expiry terminal group close supersedes per-leg stop",
+      "result": "PASS"
+    },
+    {
+      "id": "S07-PRE-CUTOFF",
+      "expected": "15:09:59 remains eligible for per-leg stop",
+      "result": "PASS"
+    }
+  ],
+  "u16": {
+    "source_report": "Q25_A5_S06_3_S7_U16_TIMEOUT_RUNTIME_E2E_20261107.json",
+    "source_sha256": "e4d218e0c008dabf341c06089360863cafd68350b528098441dc63e1dbc59934",
+    "events": 216,
+    "signals": 4,
+    "approved": 4,
+    "routed": 4,
+    "fills": 2,
+    "pending_orders_final": 0,
+    "open_put_lots_retained": 2,
+    "both_expiry_groups_blocked_u16": true
+  },
+  "u17": {
+    "source_report": "Q25_A5_S06_3_S7_U17_NATURAL_SIGNAL_RUNTIME_E2E_20261107.json",
+    "source_sha256": "9651e6b3faab915fe0dffa6bd70408ce8cb665b875ee46f5bb845b1b7d81ccff",
+    "cancel_case": {
+      "submitted_at": "14:59:30 KST",
+      "final_at": "15:00:00 KST",
+      "status": "CANCELLED",
+      "reason": "15:00_CUTOFF"
+    },
+    "race_case": {
+      "filled_at": "14:59:45 KST",
+      "status": "FILLED",
+      "execution_id": "EXEC-000003"
+    }
+  },
+  "safety": {
+    "kis_api_called": false,
+    "live_orders_or_real_account_used": false,
+    "runtime_eligible": false,
+    "production_eligible": false,
+    "synthetic_identity_authority": "UNRESOLVED",
+    "fees_included": false
+  }
+}

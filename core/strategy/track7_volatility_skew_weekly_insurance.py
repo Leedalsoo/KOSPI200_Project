@@ -233,6 +233,14 @@ class Track7VolatilitySkewWeeklyInsurance:
         if self.state.entry_pending:
             return ()
         if self.state.insurance_active:
+            # Expiry settlement is a terminal group action and takes precedence
+            # over per-leg mark exits at/after the configured KST cutoff.
+            as_of = context.analytics.as_of
+            kst_as_of = (as_of.astimezone(__import__("zoneinfo").ZoneInfo("Asia/Seoul"))
+                         if as_of.tzinfo is not None else as_of)
+            if (self.state.expiry == kst_as_of.strftime("%Y%m%d")
+                    and kst_as_of.hour * 100 + kst_as_of.minute >= 1510):
+                return (self._close_signal("WEEKLY_EXACT_EXPIRY_15:10"),)
             put_mark = self._metric(context.analytics, "options.track7_put_mark_price")
             call_mark = self._metric(context.analytics, "options.track7_call_mark_price")
             if isinstance(put_mark, Decimal) and self.state.put_open and self.state.put_entry_fill_price is not None:
@@ -249,11 +257,6 @@ class Track7VolatilitySkewWeeklyInsurance:
                     return (self._close_signal("CALL_LEG_50PCT_STOP", option_type="CALL"),)
                 if peak >= self.state.call_entry_fill_price * self.PER_LEG_TRAILING_ACTIVATION_MULTIPLE and call_mark <= peak * (Decimal("1") - self.TRAILING_DRAWDOWN):
                     return (self._close_signal("CALL_LEG_2X_ARMED_10PCT_DRAWDOWN", option_type="CALL"),)
-            # Exact expiry-day terminal close supersedes per-leg mark triggers.
-            if self.state.expiry == context.analytics.as_of.strftime("%Y%m%d"):
-                hhmm = context.analytics.as_of.hour * 100 + context.analytics.as_of.minute
-                if hhmm >= 1510:
-                    return (self._close_signal("WEEKLY_EXACT_EXPIRY_15:10"),)
             return ()
         if not self.runtime_config_verified or not self.risk_limits_available:
             return ()
