@@ -95,6 +95,7 @@
                     ],
     "code_changes":  0,
     "source_changes":  0,
-    "git_commit_push":  "report-only commit/push pending",
-    "next_gate":  "Resolve S8-U20 through an explicit Decision Log update before retry-path natural-signal promotion; separately approve any Track8 multi-contract quantity policy."
+    "git_commit_push":  "Report-only commit 47a1ae99aca8f84fb11ac22e38d05bedea942202 pushed; remote HEAD verified.",
+    "next_gate":  "Resolve S8-U20 through an explicit Decision Log update before retry-path natural-signal promotion; separately approve any Track8 multi-contract quantity policy.",
+    "published_commit":  "47a1ae99aca8f84fb11ac22e38d05bedea942202"
 }
