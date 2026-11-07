@@ -105,6 +105,7 @@ def build_standard_strategy_registry(
     config_path: str | Path | None = None,
     *,
     expected_sha256: str | None = None,
+    strategy_ids: set[str] | tuple[str, ...] | None = None,
 ) -> StrategyRegistry:
     """Build strategies from a pinned manifest; code and config versions stay distinct."""
     manifest = load_strategy_manifest(config_path, expected_sha256=expected_sha256)
@@ -117,8 +118,14 @@ def build_standard_strategy_registry(
             f"unknown_config={sorted(config_ids-code_ids)}"
         )
 
+    selected_ids = set(strategy_ids) if strategy_ids is not None else code_ids
+    unknown_selected = selected_ids - code_ids
+    if unknown_selected:
+        raise ValueError(f"STRATEGY_SELECTION_UNKNOWN:{sorted(unknown_selected)}")
     registry = StrategyRegistry()
     for strategy_type in STANDARD_STRATEGY_TYPES:
+        if strategy_type.strategy_id not in selected_ids:
+            continue
         definition = definitions[strategy_type.strategy_id]
         if definition.code_version != strategy_type.version:
             raise ValueError(

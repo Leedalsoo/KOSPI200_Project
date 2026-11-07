@@ -31,6 +31,7 @@ from contracts.risk_guard import RiskGuardStatusSource
 from core.analytics.common import COMMON_METRIC_CONTRACTS, build_common_analytics_snapshot
 from core.sensor.market_condition_sensor import MarketConditionSensor
 from application.composition.track9_analytics_provider import build_track9_analytics_snapshot
+from core.strategy.track9_independent_policy import select_nearest_expiry_atm_pair
 from application.composition.track9_option_contract_source import Track9OptionContractSource
 from contracts.option_expiry_source import OptionExpirySource
 from contracts.option_orderbook_source import OptionOrderBookSource
@@ -60,7 +61,7 @@ from application.composition.track8_analytics_provider import build_track8_analy
 class StandardRuntimeInputProvider:
     """Build standard inputs from observable VMS/VSSF sources only."""
 
-    def __init__(self, market: Any, *, track9_fee_ledger: Track9FeeLedger | None = None, track9_margin_read_model: Track9MarginReadModel | None = None, track9_position_execution_source: Track9PositionExecutionReadModel | None = None, track9_event_source: Track9EventSource | None = None, track9_event_risk_source: Track9EventRiskSource | None = None, run_id: str | None = None, track7_order_timeout_source: Any | None = None, track7_support_resistance_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None, track6_option_contract_source: Track6OptionContractSource | None = None, track6_option_mark_max_age_seconds: int | None = None, track7_option_contract_source: Track7OptionContractSource | None = None, track8_option_contract_source: Track8OptionContractSource | None = None, track9_option_contract_source: Track9OptionContractSource | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None, track4_greeks_provider: Track4KisGreeksProvider | None = None, kospi200_daily_source: KOSPI200DailySource | None = None, track6_volatility_source: Track6VolatilitySource | None = None, track1_fence_type_source: Any | None = None, track1_position_lot_store: Any | None = None, track1_option_delta_source: Any | None = None, strategy_keys: tuple[str, ...] | None = None, validation_only_s8_runtime_adapter: Any | None = None, track6_first_rank: int | None = None) -> None:
+    def __init__(self, market: Any, *, track9_fee_ledger: Track9FeeLedger | None = None, track9_margin_read_model: Track9MarginReadModel | None = None, track9_position_execution_source: Track9PositionExecutionReadModel | None = None, track9_event_source: Track9EventSource | None = None, track9_event_risk_source: Track9EventRiskSource | None = None, run_id: str | None = None, track7_order_timeout_source: Any | None = None, track7_support_resistance_source: Any | None = None, option_expiry_source: OptionExpirySource | None = None, trading_calendar: Any | None = None, option_master: Any | None = None, option_orderbook_source: OptionOrderBookSource | None = None, track9_iv_event_materializer: Track9IVEventMaterializer | None = None, track9_atm_iv_source: Track9ATMIVSource | None = None, volume_profile_source: VolumeProfileSource | None = None, basis_source: BasisSource | None = None, track2_metrics_source: Track2MarketMetricsSource | None = None, track2_option_iv_source: Track2OptionIVSource | None = None, track3_runtime_input_source: Any | None = None, track6_option_contract_source: Track6OptionContractSource | None = None, track6_option_mark_max_age_seconds: int | None = None, track7_option_contract_source: Track7OptionContractSource | None = None, track8_option_contract_source: Track8OptionContractSource | None = None, track9_option_contract_source: Track9OptionContractSource | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None, track4_greeks_provider: Track4KisGreeksProvider | None = None, kospi200_daily_source: KOSPI200DailySource | None = None, track6_volatility_source: Track6VolatilitySource | None = None, track1_fence_type_source: Any | None = None, track1_position_lot_store: Any | None = None, track1_option_delta_source: Any | None = None, strategy_keys: tuple[str, ...] | None = None, validation_only_s8_runtime_adapter: Any | None = None, validation_only_s9_runtime_adapter: Any | None = None, track9_position_lot_store: Any | None = None, track6_first_rank: int | None = None) -> None:
         self.risk_guard_status_source = risk_guard_status_source
         self.strategy_keys = frozenset(strategy_keys or ())
         self.market_condition_sensor = MarketConditionSensor()
@@ -83,6 +84,9 @@ class StandardRuntimeInputProvider:
         self.track7_option_contract_source = track7_option_contract_source
         self.track8_option_contract_source = track8_option_contract_source
         self.validation_only_s8_runtime_adapter = validation_only_s8_runtime_adapter
+        self.validation_only_s9_runtime_adapter = validation_only_s9_runtime_adapter
+        self.track9_position_lot_store = track9_position_lot_store
+        self.option_master = option_master
         self.track9_option_contract_source = track9_option_contract_source
         self.option_orderbook_source = option_orderbook_source
         self.data = VirtualRuntimeDataProvider(
@@ -209,6 +213,58 @@ class StandardRuntimeInputProvider:
             risk_guard_status=risk_guard_status,
         )
         contexts: dict[str, StrategyContext] = {}
+
+        # Isolated S9 validation runs do not construct unrelated strategy inputs.
+        if self.strategy_keys == frozenset({"track9_event_overnight_insurance"}):
+            if self.validation_only_s9_runtime_adapter is None:
+                return {"track9_event_overnight_insurance": self._unavailable(
+                    "track9_event_overnight_insurance",
+                    ("official_independent_option_master", "official_previous_close_next_open",
+                     "official_option_quotes", "authoritative_position_lots"),
+                    "S9_OFFICIAL_INDEPENDENT_RUNTIME_INPUT_NOT_CONNECTED",
+                )}
+            try:
+                payload = self.validation_only_s9_runtime_adapter.build_runtime_input(
+                    tick=tick, data=d, market=self.data.market, option_master=self.option_master,
+                    position_lot_store=self.track9_position_lot_store,
+                )
+                pair = select_nearest_expiry_atm_pair(
+                    payload.contract_candidates, underlying_price=payload.underlying_price,
+                    as_of_date=payload.as_of.date(),
+                )
+                quote_by_id = {item.instrument_id: item for item in payload.option_quotes}
+                put_quote, call_quote = quote_by_id.get(pair.put.symbol), quote_by_id.get(pair.call.symbol)
+                analytics = build_track9_analytics_snapshot(
+                    d, run_id=self.run_id or "S9-VALIDATION", as_of=payload.as_of,
+                    option_contract_selection=pair, common_snapshot=common_analytics,
+                    option_prices={
+                        "put_mark_price": put_quote.last if put_quote is not None else None,
+                        "call_mark_price": call_quote.last if call_quote is not None else None,
+                    },
+                    provenance_source=("SYNTHETIC:DERIVED_SCENARIO" if payload.provenance == "SYNTHETIC" else "OFFICIAL"),
+                )
+            except (ValueError, TypeError, AttributeError) as exc:
+                self.s9_last_unavailable_reason = str(exc)
+                return {"track9_event_overnight_insurance": self._unavailable(
+                    "track9_event_overnight_insurance",
+                    ("manifest_bound_synthetic_option_master", "synthetic_two_sided_quotes",
+                     "synthetic_open_close_reference", "virtual_position_lots"),
+                    str(exc) or "S9_VALIDATION_RUNTIME_INPUT_UNAVAILABLE",
+                )}
+            self.s9_last_runtime_input = payload
+            self.s9_last_analytics = analytics
+            self.s9_last_unavailable_reason = None
+            return {"track9_event_overnight_insurance": StrategyContext(
+                market_state, "track9_event_overnight_insurance",
+                StrategyInput(common, payload, data_status={
+                    "authoritative_option_contract": "AVAILABLE",
+                    "option_orderbook": "AVAILABLE",
+                    "filled_position_execution_read_model": "AVAILABLE",
+                    "common_analytics": "AVAILABLE",
+                    "provenance": payload.provenance, "scenario_id": payload.scenario_id,
+                    "source_provenance": dict(payload.source_provenance),
+                }), analytics=analytics,
+            )}
 
         # Strategy-specific Runtime Input is materialized only for strategies
         # selected for this run. This prevents an unrelated strategy's
@@ -701,50 +757,16 @@ class StandardRuntimeInputProvider:
                 ),
             )
 
-        # Strategy 9 uses exact KIS master/expiry evidence and S1 short-PUT lots.
-        # Missing quote freshness, liquidity, or linkage policies stay BLOCKED.
+        # S9 cannot borrow another strategy's inputs. Its synthetic adapter is accepted
+        # only by the isolated S9-only branch above; mixed/production runs remain blocked.
         if "track9_event_overnight_insurance" in self.strategy_keys:
-            if self.track9_option_contract_source is None:
-                contexts["track9_event_overnight_insurance"] = self._unavailable(
-                    "track9_event_overnight_insurance",
-                    (
-                        "kis_official_option_master",
-                        "kis_exact_option_expiry_evidence",
-                        "kis_two_sided_option_quote",
-                        "s1_short_put_position_lots",
-                    ),
-                    "TRACK9_OPTION_CONTRACT_SOURCE_UNAVAILABLE",
-                )
-            elif d.underlying_price is None or d.as_of is None:
-                contexts["track9_event_overnight_insurance"] = self._unavailable(
-                    "track9_event_overnight_insurance",
-                    ("authoritative_underlying_price", "runtime_as_of"),
-                    "TRACK9_UNDERLYING_OR_AS_OF_UNAVAILABLE",
-                )
-            else:
-                try:
-                    track9_selection = self.track9_option_contract_source.select(
-                        current_price=Decimal(str(d.underlying_price)),
-                        as_of=d.as_of,
-                    )
-                except (ValueError, TypeError, AttributeError) as exc:
-                    reason = str(exc) or "TRACK9_OPTION_SELECTION_BLOCKED"
-                    contexts["track9_event_overnight_insurance"] = self._unavailable(
-                        "track9_event_overnight_insurance",
-                        ("s1_short_put_position_lots", "kis_exact_option_expiry_evidence"),
-                        reason,
-                    )
-                else:
-                    contexts["track9_event_overnight_insurance"] = StrategyContext(
-                        market_state,
-                        "track9_event_overnight_insurance",
-                        StrategyInput(
-                            common,
-                            track9_selection,
-                            data_status={
-                                "track9_option_contract_selection": track9_selection.status,
-                                "track9_blockers": ",".join(track9_selection.blockers),
-                            },
-                        ),
-                    )
+            reason = ("S9_VALIDATION_REQUIRES_ISOLATED_S9_ONLY_RUNTIME"
+                      if self.validation_only_s9_runtime_adapter is not None
+                      else "S9_OFFICIAL_INDEPENDENT_RUNTIME_INPUT_NOT_CONNECTED")
+            contexts["track9_event_overnight_insurance"] = self._unavailable(
+                "track9_event_overnight_insurance",
+                ("official_independent_option_master", "official_previous_close_next_open",
+                 "official_option_quotes", "authoritative_position_lots"),
+                reason,
+            )
         return contexts

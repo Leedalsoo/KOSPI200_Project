@@ -1,0 +1,44 @@
+{
+  "account_source": "SYNTHETIC:VIRTUAL_ACCOUNT",
+  "allow_kis_api": false,
+  "allow_live_orders": false,
+  "allow_real_account": false,
+  "allow_real_vts": false,
+  "audit_fields_required": [
+    "run_id",
+    "scenario_id",
+    "manifest_sha256",
+    "dataset_sha256",
+    "risk_profile_sha256",
+    "group_id",
+    "purpose",
+    "gross_premium_krw",
+    "status"
+  ],
+  "fee_assumption": {
+    "fee_per_contract_krw": 0,
+    "provenance": "SYNTHETIC_ZERO_FEE_ASSUMPTION"
+  },
+  "initial_capital_krw": 10000000,
+  "limits": {
+    "max_concurrent_groups": 1,
+    "max_gross_premium_krw": 5000000,
+    "max_loss_krw": 5000000,
+    "max_quantity_per_leg": 1,
+    "max_quote_age_seconds": 5
+  },
+  "notes": [
+    "Every amount and limit is synthetic validation input, not an operational account or risk limit.",
+    "The virtual broker is enabled only inside this manifest-bound replay; KIS, REAL_VTS, Live and real accounts remain denied.",
+    "The zero-fee assumption is synthetic and must be replaced by an official fee schedule before real-account validation."
+  ],
+  "operational_config_mutated": false,
+  "production_runtime_eligible": false,
+  "profile_id": "S9_INDEPENDENT_OVERNIGHT_VIRTUAL_RISK_V1",
+  "provenance": "SYNTHETIC",
+  "risk_checks_enabled": true,
+  "runtime_eligible": false,
+  "schema_version": "track9-independent-virtual-risk-profile-v1",
+  "validation_only": true,
+  "virtual_broker_orders_allowed": true
+}

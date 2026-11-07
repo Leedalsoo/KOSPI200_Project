@@ -120,6 +120,7 @@ def create_virtual_runtime_bootstrap(
     initial_market_price: float | Decimal = 350.0,
     option_master: Any | None = None,
     risk_guard_status_source: RiskGuardStatusSource | None = None,
+    strategy_keys: tuple[tuple[str, str], ...] | None = None,
 ) -> VirtualRuntimeBootstrap:
     """Create a Virtual runtime and configure the isolated Run/Scenario lifecycle."""
     from application.composition.option_master_factory import create_production_option_master
@@ -134,7 +135,10 @@ def create_virtual_runtime_bootstrap(
         option_master = create_production_option_master()
     run_hub = RunScenarioHub()
     run_hub.configure(lambda run_context: create_virtual_run_session(run_context, option_master, risk_guard_status_source))
-    context = RunContextFactory().create(run_id=str(uuid4()), environment="virtual", initial_capital=float(initial_capital))
+    context = RunContextFactory().create(
+        run_id=str(uuid4()), environment="virtual", initial_capital=float(initial_capital),
+        strategy_keys=tuple(strategy_keys or ()),
+    )
     session = create_virtual_run_session(context, option_master, risk_guard_status_source)
     run_hub.adopt(session)
     session.control_tower_hub.attach_run_hub(run_hub)
