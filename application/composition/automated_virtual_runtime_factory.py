@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from datetime import datetime
-from pathlib import Path
 from decimal import Decimal
+from pathlib import Path
 
 from application.composition.automated_virtual_trading_loop import AutomatedVirtualTradingLoop
 from application.composition.standard_runtime_input_provider import StandardRuntimeInputProvider
@@ -48,7 +49,6 @@ from application.composition.futures_identity_source import KisFuturesIdentitySo
 from application.composition.futures_target_configuration import FuturesTargetConfiguration
 from application.composition.track3_hedge_identity_source import Track3HedgeIdentitySource
 from application.composition.track3_multi_leg_execution_plan_adapter import Track3MultiLegExecutionPlanAdapter
-from decimal import Decimal
 from contracts.risk_guard import RiskGuardStatusSource
 from core.strategy.standard_registry import STANDARD_STRATEGY_KEYS, build_standard_strategy_registry
 from environments.high_speed.validation_only_track6_gates import apply_track6_validation_gates
@@ -362,6 +362,8 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
             # Keep the Virtual runtime available, but never fall back to a stale local master.
             logger.warning("VIRTUAL_FUTURES_IDENTITY_SOURCE_UNAVAILABLE: %s", exc)
     def on_multi_leg_execution_result(plan, result):
+        if plan.strategy_id == "track9_event_overnight_insurance":
+            result = replace(result, reports=multi_leg_bridge.group_reports(result.group_id))
         strategy_hub.on_execution_result(plan.strategy_id, plan.purpose or "", result)
         if (validation_only_s8_runtime_adapter is not None
                 and plan.strategy_id == "track8_macro_regime_monthly_strangle"
@@ -786,7 +788,13 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
             action = strategy.lifecycle_clock_action(now)
             if action is not None and action.kind in {"CANCEL", "CANCEL_AND_RECONCILE"} and action.client_order_id:
                 multi_leg_bridge.cancel_pending_order(action.client_order_id)
-        return multi_leg_bridge.process_pending_quotes()
+        pending_results = list(multi_leg_bridge.process_pending_quotes())
+        if validation_only_s9_runtime_adapter is not None and tick is not None:
+            now = datetime.fromisoformat(str(tick.timestamp))
+            pending_results.extend(multi_leg_bridge.process_s9_entry_retries(
+                now, strategy=registry.get("track9_event_overnight_insurance", "3.0"),
+            ))
+        return tuple(pending_results)
 
     loop = AutomatedVirtualTradingLoop(
         bundle=bootstrap.bundle,

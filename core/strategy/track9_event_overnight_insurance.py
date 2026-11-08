@@ -14,6 +14,7 @@ from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
 from core.strategy.track9_independent_policy import (
     ENTRY_EVALUATION_TIME,
     Track9AtmPair,
+    Track9OpenLot,
     Track9OptionCandidate,
     Track9PolicyBlocked,
     Track9RuntimeInput,
@@ -31,6 +32,7 @@ class Track9State:
     put_entry_fill_price: Decimal | None = None
     call_entry_fill_price: Decimal | None = None
     exit_reason: str | None = None
+    partial_open_lots: tuple[Track9OpenLot, ...] = ()
     state: str = "WAITING_ENTRY"
 
 
@@ -109,46 +111,88 @@ class Track9EventOvernightInsurance:
                      and item.remaining_quantity > 0)
         if not lots:
             return
-        by_type = {item.option_type.upper(): item for item in lots}
-        if len(lots) != 2 or set(by_type) != {"PUT", "CALL"}:
+        by_type: dict[str, list[Track9OpenLot]] = {}
+        for item in lots:
+            by_type.setdefault(item.option_type.upper(), []).append(item)
+        if set(by_type) not in ({"PUT"}, {"CALL"}, {"PUT", "CALL"}):
             self.state = Track9State(state="RECONCILIATION_REQUIRED")
             return
-        put_lot, call_lot = by_type["PUT"], by_type["CALL"]
+        for kind_lots in by_type.values():
+            if len({(x.instrument_id, x.expiry, x.strike, x.contract_multiplier) for x in kind_lots}) != 1:
+                self.state = Track9State(state="RECONCILIATION_REQUIRED")
+                return
+        if len(by_type) == 1:
+            partial_lots = tuple(next(iter(by_type.values())))
+            self.state = Track9State(
+                entry_date=min(x.executed_at for x in partial_lots).date(),
+                entry_qty=sum(x.remaining_quantity for x in partial_lots),
+                partial_open_lots=partial_lots,
+                state="OVERNIGHT_INSURANCE_PARTIAL",
+            )
+            return
+        put_lots, call_lots = by_type["PUT"], by_type["CALL"]
+        put_lot, call_lot = put_lots[0], call_lots[0]
+        put_quantity = sum(x.remaining_quantity for x in put_lots)
+        call_quantity = sum(x.remaining_quantity for x in call_lots)
         if (put_lot.expiry != call_lot.expiry or put_lot.strike != call_lot.strike
-                or put_lot.contract_multiplier != call_lot.contract_multiplier
-                or put_lot.remaining_quantity != call_lot.remaining_quantity):
+                or put_lot.contract_multiplier != call_lot.contract_multiplier):
             self.state = Track9State(state="RECONCILIATION_REQUIRED")
+            return
+        if put_quantity != call_quantity:
+            self.state = Track9State(
+                entry_date=min(x.executed_at for x in lots).date(),
+                entry_qty=max(put_quantity, call_quantity),
+                partial_open_lots=lots,
+                state="OVERNIGHT_INSURANCE_PARTIAL",
+            )
             return
         put = Track9OptionCandidate(put_lot.instrument_id, put_lot.expiry, "PUT", put_lot.strike,
                                     "STANDARD", put_lot.contract_multiplier, True)
         call = Track9OptionCandidate(call_lot.instrument_id, call_lot.expiry, "CALL", call_lot.strike,
                                       "STANDARD", call_lot.contract_multiplier, True)
         pair = Track9AtmPair(put.expiry, put.strike, put, call, put.contract_multiplier)
-        entry_date = min(put_lot.executed_at, call_lot.executed_at).date()
+        entry_date = min(x.executed_at for x in lots).date()
+
+        def weighted_entry_price(items: tuple[Track9OpenLot, ...]) -> Decimal | None:
+            if not items or any(x.entry_price is None for x in items):
+                return None
+            quantity = sum(x.remaining_quantity for x in items)
+            if quantity <= 0:
+                return None
+            return sum(Decimal(str(x.entry_price)) * x.remaining_quantity for x in items) / quantity
+
         self.state = Track9State(
-            entry_date=entry_date, pair=pair, entry_qty=put_lot.remaining_quantity,
-            put_entry_fill_price=put_lot.entry_price, call_entry_fill_price=call_lot.entry_price,
+            entry_date=entry_date, pair=pair, entry_qty=put_quantity,
+            put_entry_fill_price=weighted_entry_price(tuple(put_lots)),
+            call_entry_fill_price=weighted_entry_price(tuple(call_lots)),
             state="OVERNIGHT_INSURANCE_ACTIVE",
         )
 
     def mark_exit_pending(self) -> None:
         self._exit_pending = True
-        if self.state.pair is not None:
+        if self.state.pair is not None or self.state.partial_open_lots:
             self.state = replace(self.state, state="EXIT_PENDING")
 
     def on_execution_result(self, purpose: str, result: object) -> None:
         reports = tuple(getattr(result, "reports", ()) or ())
         if purpose == "OVERNIGHT_INSURANCE":
-            filled = {str(getattr(item, "leg_id", "")): item for item in reports
-                      if str(getattr(item, "status", "")).upper() == "FILLED"
-                      and int(getattr(item, "filled_quantity", 0) or 0) > 0}
-            if bool(getattr(result, "group_complete", False)) and {"put", "call"}.issubset(filled):
-                self.state = replace(
-                    self.state,
-                    put_entry_fill_price=Decimal(str(filled["put"].execution_price)),
-                    call_entry_fill_price=Decimal(str(filled["call"].execution_price)),
-                    state="OVERNIGHT_INSURANCE_ACTIVE",
-                )
+            totals = {"put": 0, "call": 0}
+            values = {"put": Decimal("0"), "call": Decimal("0")}
+            for item in reports:
+                leg_id = str(getattr(item, "leg_id", "") or "")
+                quantity = int(getattr(item, "filled_quantity", 0) or 0)
+                price = getattr(item, "execution_price", None)
+                if leg_id in totals and quantity > 0 and price is not None:
+                    totals[leg_id] += quantity
+                    values[leg_id] += Decimal(str(price)) * quantity
+            put_price = values["put"] / totals["put"] if totals["put"] else self.state.put_entry_fill_price
+            call_price = values["call"] / totals["call"] if totals["call"] else self.state.call_entry_fill_price
+            if bool(getattr(result, "group_complete", False)) and totals["put"] > 0 and totals["call"] > 0:
+                self.state = replace(self.state, put_entry_fill_price=put_price,
+                                     call_entry_fill_price=call_price, state="OVERNIGHT_INSURANCE_ACTIVE")
+            elif totals["put"] > 0 or totals["call"] > 0:
+                self.state = replace(self.state, put_entry_fill_price=put_price,
+                                     call_entry_fill_price=call_price, state="OVERNIGHT_INSURANCE_PARTIAL")
             else:
                 self.state = replace(self.state, state="RECONCILIATION_REQUIRED")
             return
@@ -227,6 +271,59 @@ class Track9EventOvernightInsurance:
             execution_proposal=proposal,
         ),)
 
+    def _partial_opening_exit_signal(self, payload: Track9RuntimeInput) -> Sequence[Signal]:
+        if self.state.entry_date is None or payload.as_of.date() <= self.state.entry_date:
+            return ()
+        lots = tuple(x for x in payload.open_lots
+                     if x.strategy_id == self.strategy_id and x.side.upper() == "BUY"
+                     and x.remaining_quantity > 0)
+        if not lots:
+            return ()
+        identities = {(x.instrument_id, x.option_type.upper(), x.expiry, x.strike,
+                       x.contract_multiplier) for x in lots}
+        if not identities or len(identities) > 2:
+            return ()
+        option_types = {identity[1] for identity in identities}
+        if not option_types.issubset({"PUT", "CALL"}) or len(option_types) != len(identities):
+            return ()
+        if len({(expiry, strike, multiplier) for _instrument, _kind, expiry, strike, multiplier in identities}) != 1:
+            return ()
+        quotes = {item.instrument_id: item for item in payload.option_quotes}
+        for instrument_id, option_type, expiry, strike, _multiplier in identities:
+            quote = quotes.get(instrument_id)
+            if (quote is None or quote.option_type.upper() != option_type or quote.expiry != expiry
+                    or quote.strike != strike or quote.bid <= 0 or quote.ask < quote.bid or quote.last <= 0
+                    or quote.observed_at.tzinfo is None or payload.as_of.tzinfo is None):
+                return ()
+            age = (payload.as_of - quote.observed_at).total_seconds()
+            if age < 0 or Decimal(str(age)) > payload.max_quote_age_seconds:
+                return ()
+        option_type = lots[0].option_type.upper()
+        strike = lots[0].strike
+        try:
+            decision = evaluate_track9_opening_move(
+                previous_official_close=payload.previous_official_close,
+                next_session_official_open=payload.next_session_official_open,
+            )
+        except Track9PolicyBlocked:
+            return ()
+        reason = ("OPENING_MOVE_AT_OR_ABOVE_1PCT_CLOSE_INSURANCE"
+                  if decision.action == "CLOSE_INSURANCE" else "OPENING_MOVE_BELOW_1PCT_STOP_LOSS")
+        self.state = replace(self.state, state="EXIT_PENDING", exit_reason=reason)
+        self._exit_pending = True
+        proposal = StrategyExecutionProposal(
+            proposed_quantity=sum(x.remaining_quantity for x in lots), asset_type="OPTION",
+            side="SELL", track_id=self.strategy_id, tag_id="OVERNIGHT_INSURANCE_CLOSE",
+            option_type=option_type, strike=strike,
+        )
+        return (Signal(
+            self.strategy_id, "CLOSE_OVERNIGHT_PARTIAL_ATM_OPTION", 1.0,
+            f"{reason};MOVE:{decision.move};THRESHOLD:0.01;"
+            f"PREVIOUS_CLOSE:{payload.previous_official_close};"
+            f"NEXT_OPEN:{payload.next_session_official_open};SCENARIO:{payload.scenario_id}",
+            execution_proposal=proposal,
+        ),)
+
     def evaluate(self, context: StrategyContext) -> Sequence[Signal]:
         if context.strategy_id != self.strategy_id:
             return ()
@@ -245,6 +342,8 @@ class Track9EventOvernightInsurance:
             return ()
         if self.state.state == "OVERNIGHT_INSURANCE_ACTIVE":
             return self._opening_exit_signal(payload)
+        if self.state.state == "OVERNIGHT_INSURANCE_PARTIAL":
+            return self._partial_opening_exit_signal(payload)
         return ()
 
     def build_execution_plan(self, group_id: str, *, proposal: StrategyExecutionProposal) -> MultiLegExecutionPlan:
@@ -254,8 +353,8 @@ class Track9EventOvernightInsurance:
         if pair is None or self.state.entry_qty <= 0:
             raise ValueError("TRACK9_INDEPENDENT_PAIR_STATE_REQUIRED")
         side = str(proposal.side or "").upper()
-        if side not in {"BUY", "SELL"}:
-            raise ValueError("TRACK9_PAIR_SIDE_REQUIRED")
+        if side != "BUY":
+            raise ValueError("TRACK9_ENTRY_MUST_BE_BUY_BUY")
         def identity(candidate: Track9OptionCandidate) -> OptionInstrumentIdentity:
             return OptionInstrumentIdentity(
                 instrument_id=candidate.symbol, symbol=candidate.symbol,
@@ -265,11 +364,11 @@ class Track9EventOvernightInsurance:
             )
         return MultiLegExecutionPlan(
             group_id=group_id, strategy_id=self.strategy_id,
-            purpose="OVERNIGHT_INSURANCE" if side == "BUY" else "OVERNIGHT_INSURANCE_CLOSE",
+            purpose="OVERNIGHT_INSURANCE",
             legs=(
-                ExecutionLeg("put", side, self.state.entry_qty, "PUT", pair.put.strike,
+                ExecutionLeg("put", "BUY", self.state.entry_qty, "PUT", pair.put.strike,
                              position_role="OVERNIGHT_INSURANCE", instrument_identity=identity(pair.put)),
-                ExecutionLeg("call", side, self.state.entry_qty, "CALL", pair.call.strike,
+                ExecutionLeg("call", "BUY", self.state.entry_qty, "CALL", pair.call.strike,
                              position_role="OVERNIGHT_INSURANCE", instrument_identity=identity(pair.call)),
             ),
             strategy_code_version=self.version,

@@ -264,9 +264,15 @@ class Track9ValidationOnlyRuntimeAdapter:
             lots = tuple(item for item in self._last_input.open_lots
                          if item.strategy_id == STRATEGY_ID and item.side.upper() == "BUY"
                          and item.remaining_quantity > 0)
-            expected_lots = {item.option_type.upper(): item for item in lots}
-            if len(lots) != 2 or set(expected_lots) != expected_types:
-                raise ValueError("S9_VALIDATION_CLOSE_REQUIRES_EXACT_OPEN_PUT_CALL_PAIR")
+            expected_lots = {}
+            for item in lots:
+                expected_lots.setdefault(item.option_type.upper(), []).append(item)
+            if not lots or not set(expected_lots).issubset(expected_types):
+                raise ValueError("S9_VALIDATION_CLOSE_OPEN_LOTS_REQUIRED")
+            for kind_lots in expected_lots.values():
+                if len({(x.instrument_id, x.expiry, x.strike, x.contract_multiplier)
+                        for x in kind_lots}) != 1:
+                    raise ValueError("S9_VALIDATION_CLOSE_OPEN_LOT_IDENTITY_AMBIGUOUS")
         else:
             raise ValueError("S9_VALIDATION_PURPOSE_INVALID")
         seen: set[str] = set()
@@ -288,10 +294,13 @@ class Track9ValidationOnlyRuntimeAdapter:
             if purpose == "OVERNIGHT_INSURANCE" and instrument_id != expected_symbols.get(option_type):
                 raise ValueError("S9_VALIDATION_ENTRY_NOT_SELECTED_ATM_PAIR")
             if purpose == "OVERNIGHT_INSURANCE_CLOSE":
-                expected_lot = expected_lots.get(option_type)
-                if (expected_lot is None or instrument_id != expected_lot.instrument_id
-                        or quantity != expected_lot.remaining_quantity
-                        or multiplier != expected_lot.contract_multiplier):
+                expected_type_lots = expected_lots.get(option_type, ())
+                expected_quantity = sum(item.remaining_quantity for item in expected_type_lots
+                                         if item.instrument_id == instrument_id)
+                if (not expected_type_lots
+                        or any(item.instrument_id != instrument_id for item in expected_type_lots)
+                        or quantity != expected_quantity
+                        or multiplier != expected_type_lots[0].contract_multiplier):
                     raise ValueError("S9_VALIDATION_CLOSE_MUST_MATCH_OPEN_POSITION_LOT")
             seen.add(option_type)
             bid_d, ask_d = Decimal(str(bid)), Decimal(str(ask))
@@ -304,8 +313,11 @@ class Track9ValidationOnlyRuntimeAdapter:
             elif purpose == "OVERNIGHT_INSURANCE_CLOSE":
                 if str(getattr(leg, "side", "")).upper() != "SELL":
                     raise ValueError("S9_VALIDATION_CLOSE_SELL_ONLY")
-        if seen != expected_types:
-            raise ValueError("S9_VALIDATION_PUT_CALL_PAIR_REQUIRED")
+        if purpose == "OVERNIGHT_INSURANCE":
+            if seen != expected_types and not (len(seen) == 1 and group_id in self._reserved):
+                raise ValueError("S9_VALIDATION_PUT_CALL_PAIR_REQUIRED")
+        elif seen != set(expected_lots):
+            raise ValueError("S9_VALIDATION_CLOSE_OPEN_LOTS_REQUIRED")
         if purpose == "OVERNIGHT_INSURANCE":
             if self._last_input is None:
                 raise ValueError("S9_VALIDATION_RUNTIME_INPUT_REQUIRED")
@@ -313,7 +325,8 @@ class Track9ValidationOnlyRuntimeAdapter:
                 raise ValueError("S9_VALIDATION_CONCURRENT_GROUP_LIMIT_EXCEEDED")
             if gross > self.evidence.max_gross_premium_krw or gross > self.evidence.max_loss_krw:
                 raise ValueError("S9_VALIDATION_SYNTHETIC_PREMIUM_RISK_LIMIT_EXCEEDED")
-            self._reserved[group_id] = gross
+            if group_id not in self._reserved:
+                self._reserved[group_id] = gross
         self.risk_audit_records.append({
             "run_id": self.run_id, "scenario_id": self.evidence.scenario_id,
             "manifest_sha256": self.evidence.manifest_sha256,

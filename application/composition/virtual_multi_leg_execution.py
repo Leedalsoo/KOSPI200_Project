@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from hashlib import sha256
 from decimal import Decimal
+from datetime import datetime, time, timedelta, timezone
 from typing import Any, Callable
 
 from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
@@ -144,6 +145,11 @@ class VirtualMultiLegExecutionBridge:
         self.leg_positions: dict[str, Any] = {}
         self.pending_legs: dict[str, tuple[MultiLegExecutionPlan, Any, BrokerOrderCommand]] = {}
         self._applied_execution_fingerprints: dict[str, tuple] = {}
+        self._s9_retry_schedule: dict[
+            tuple[str, str], tuple[MultiLegExecutionPlan, Any, datetime, int]
+        ] = {}
+        self._s9_retry_attempts: dict[tuple[str, str], int] = {}
+        self._pending_attempt_ids: dict[str, str | None] = {}
 
     def _record_strategy5_risk_preflight_diagnostic(self, **payload: Any) -> None:
         """Record diagnostic evidence without allowing storage failures to affect trading."""
@@ -230,6 +236,8 @@ class VirtualMultiLegExecutionBridge:
                 "DAILY_TAIL_INSURANCE_TRAILING_CLOSE_PUT",
                 "DAILY_TAIL_INSURANCE_TRAILING_CLOSE_CALL",
             }
+        if plan.strategy_id == "track9_event_overnight_insurance":
+            return purpose == "OVERNIGHT_INSURANCE_CLOSE"
         if plan.strategy_id != "track8_macro_regime_monthly_strangle":
             return False
         return any(token in purpose for token in ("CLOSE", "EXPIRY", "SETTLEMENT", "LIQUIDATION"))
@@ -708,6 +716,9 @@ class VirtualMultiLegExecutionBridge:
     ) -> MultiLegExecutionResult:
         if group_plan is None:
             group_plan = plan
+            if (plan.strategy_id == "track9_event_overnight_insurance"
+                    and str(plan.purpose or "").upper() == "OVERNIGHT_INSURANCE"):
+                self._group_plans[plan.group_id] = plan
             if ((plan.strategy_id == "track8_macro_regime_monthly_strangle"
                     and plan.purpose in {"MONTHLY_STRANGLE_ENTRY_CALL", "MONTHLY_STRANGLE_ENTRY_PUT"})
                     or (plan.strategy_id == "track6_daily_tail_insurance"
@@ -1028,8 +1039,10 @@ class VirtualMultiLegExecutionBridge:
             reports.append(report)
             if report.status in {"NEW", "PARTIALLY_FILLED", "UNKNOWN", "RECONCILIATION_REQUIRED"} and report.remaining_quantity > 0:
                 self.pending_legs[client_order_id] = (group_plan, leg, broker_command)
+                self._pending_attempt_ids[client_order_id] = plan.attempt_id
             else:
                 self.pending_legs.pop(client_order_id, None)
+                self._pending_attempt_ids.pop(client_order_id, None)
             if report.status == "FILLED" and report.filled_quantity <= 0:
                 raise RuntimeError("MULTI_LEG_FILLED_QUANTITY_REQUIRED")
             self._apply_reconciled_execution(
@@ -1056,8 +1069,10 @@ class VirtualMultiLegExecutionBridge:
             )
             if report.status in {"NEW", "PARTIALLY_FILLED", "UNKNOWN", "RECONCILIATION_REQUIRED"} and report.remaining_quantity > 0:
                 self.pending_legs[client_order_id] = (group_plan, leg, broker_command)
+                self._pending_attempt_ids[client_order_id] = plan.attempt_id
             else:
                 self.pending_legs.pop(client_order_id, None)
+                self._pending_attempt_ids.pop(client_order_id, None)
             if report.filled_quantity > 0:
                 filled += report.filled_quantity
 
@@ -1242,8 +1257,11 @@ class VirtualMultiLegExecutionBridge:
             )),
             pending_legs=pending_legs + sum(
                 1 for leg in group_plan.legs
-                if self._client_order_id(group_plan, leg, self.identity_for_leg(group_plan, leg)) in self.pending_legs
-                and not any(r.leg_id == leg.leg_id and r.status == "FILLED" for r in merged_reports)
+                if any(
+                    pending_plan.group_id == group_plan.group_id and pending_leg.leg_id == leg.leg_id
+                    for pending_plan, pending_leg, _pending_command in self.pending_legs.values()
+                )
+                and sum(r.filled_quantity for r in merged_reports if r.leg_id == leg.leg_id) < leg.quantity
             ),
             position_flat=self._position_flat_for_result(group_plan),
         )
@@ -1267,7 +1285,8 @@ class VirtualMultiLegExecutionBridge:
             raise RuntimeError("VIRTUAL_CANCEL_TERMINAL_RECONCILIATION_REQUIRED")
         single_plan = MultiLegExecutionPlan(
             group_id=group_plan.group_id, strategy_id=group_plan.strategy_id,
-            purpose=group_plan.purpose, legs=(leg,), attempt_id=group_plan.attempt_id,
+            purpose=group_plan.purpose, legs=(leg,),
+            attempt_id=self._pending_attempt_ids.get(client_order_id, group_plan.attempt_id),
         )
         result = self.execute(
             single_plan, group_plan=group_plan,
@@ -1316,7 +1335,7 @@ class VirtualMultiLegExecutionBridge:
                 strategy_id=group_plan.strategy_id,
                 purpose=group_plan.purpose,
                 legs=(leg,),
-                attempt_id=group_plan.attempt_id,
+                attempt_id=self._pending_attempt_ids.get(client_order_id, group_plan.attempt_id),
             )
             result = self.execute(
                 single_plan,
@@ -1326,6 +1345,147 @@ class VirtualMultiLegExecutionBridge:
             )
             completed.append(result)
         return tuple(completed)
+
+    def process_s9_entry_retries(
+        self, as_of: datetime, *, strategy: Any | None = None,
+    ) -> tuple[MultiLegExecutionResult, ...]:
+        """S9 BUY-only regular-session timeout/cancel/confirm/wait/retry.
+
+        KRX KOSPI200 options regular session closes at 15:45 KST (15:20 on
+        the contract's last trading day). The separate KRX night session is
+        intentionally outside this S9 retry policy pending explicit approval.
+        """
+        if not isinstance(as_of, datetime) or as_of.tzinfo is None:
+            return ()
+        kst = timezone(timedelta(hours=9))
+        now = as_of.astimezone(kst)
+        results: list[MultiLegExecutionResult] = []
+
+        def cutoff_for(group_plan: MultiLegExecutionPlan) -> time:
+            for item in group_plan.legs:
+                identity = getattr(item, "instrument_identity", None)
+                expiry = str(getattr(identity, "expiry", "") or "").replace("-", "")[:8]
+                if len(expiry) == 8 and expiry.isdigit():
+                    try:
+                        if datetime.strptime(expiry, "%Y%m%d").date() == now.date():
+                            return time(15, 20)
+                    except ValueError:
+                        pass
+            return time(15, 45)
+
+        for client_id, pending in tuple(self.pending_legs.items()):
+            group_plan, leg, _command = pending
+            if (group_plan.strategy_id != "track9_event_overnight_insurance"
+                    or str(group_plan.purpose or "").upper() != "OVERNIGHT_INSURANCE"
+                    or str(leg.side).upper() != "BUY"):
+                continue
+            cutoff = cutoff_for(group_plan)
+            latest = next((r for r in self.groups.get(group_plan.group_id, ())
+                           if r.client_order_id == client_id), None)
+            submitted = getattr(latest, "submitted_at", None)
+            timed_out = (submitted is not None and submitted.tzinfo is not None
+                         and now - submitted.astimezone(kst) >= timedelta(minutes=5))
+            if now.time() < cutoff and not timed_out:
+                continue
+            try:
+                cancelled = self.cancel_pending_order(client_id)
+            except Exception:
+                if strategy is not None:
+                    strategy.state = replace(strategy.state, state="RECONCILIATION_REQUIRED")
+                continue
+            report = next((r for r in cancelled.reports if r.client_order_id == client_id), None)
+            if str(getattr(getattr(report, "status", ""), "value",
+                           getattr(report, "status", ""))).upper() != "CANCELLED":
+                continue
+            remaining = int(getattr(report, "remaining_quantity", 0) or 0)
+            if remaining <= 0 or now.time() >= cutoff:
+                continue
+            key = (group_plan.group_id, leg.leg_id)
+            attempt = self._s9_retry_attempts.get(key, 0) + 1
+            self._s9_retry_schedule[key] = (group_plan, leg, now + timedelta(minutes=5), attempt)
+
+        # A broker-side REJECTED order is already terminal (there is nothing left
+        # to cancel). Wait five minutes from its rejection/submission evidence before
+        # retrying the still-unfilled BUY leg.
+        for group_id, group_plan in tuple(self._group_plans.items()):
+            if (group_plan.strategy_id != "track9_event_overnight_insurance"
+                    or str(group_plan.purpose or "").upper() != "OVERNIGHT_INSURANCE"):
+                continue
+            for leg in group_plan.legs:
+                key = (group_id, leg.leg_id)
+                if key in self._s9_retry_schedule:
+                    continue
+                if any(p[0].group_id == group_id and p[1].leg_id == leg.leg_id
+                       for p in self.pending_legs.values()):
+                    continue
+                filled = sum(int(getattr(r, "filled_quantity", 0) or 0)
+                             for r in self.groups.get(group_id, ()) if r.leg_id == leg.leg_id)
+                if filled >= int(leg.quantity):
+                    continue
+                leg_reports = [r for r in self.groups.get(group_id, ()) if r.leg_id == leg.leg_id]
+                if not leg_reports:
+                    continue
+                def report_clock(report):
+                    value = (getattr(report, "execution_timestamp", None)
+                             or getattr(report, "submitted_at", None))
+                    return (value.astimezone(kst) if value is not None and value.tzinfo is not None
+                            else datetime.min.replace(tzinfo=kst))
+                latest = max(leg_reports, key=report_clock)
+                if str(getattr(getattr(latest, "status", ""), "value",
+                               getattr(latest, "status", ""))).upper() != "REJECTED":
+                    continue
+                evidence_time = getattr(latest, "execution_timestamp", None)
+                if evidence_time is not None and evidence_time.tzinfo is not None:
+                    retry_at = evidence_time.astimezone(kst) + timedelta(minutes=5)
+                else:
+                    retry_at = now + timedelta(minutes=5)
+                if retry_at.time() >= cutoff_for(group_plan):
+                    continue
+                attempt = self._s9_retry_attempts.get(key, 0) + 1
+                self._s9_retry_schedule[key] = (group_plan, leg, retry_at, attempt)
+
+        for key, (group_plan, leg, retry_at, attempt) in tuple(self._s9_retry_schedule.items()):
+            if now.time() >= cutoff_for(group_plan):
+                self._s9_retry_schedule.pop(key, None)
+                continue
+            if now < retry_at:
+                continue
+            if any(x[0].group_id == group_plan.group_id and x[1].leg_id == leg.leg_id
+                   for x in self.pending_legs.values()):
+                self._s9_retry_schedule.pop(key, None)
+                continue
+            target = next((x for x in group_plan.legs if x.leg_id == leg.leg_id), None)
+            if target is None:
+                self._s9_retry_schedule.pop(key, None)
+                continue
+            filled = sum(int(getattr(r, "filled_quantity", 0) or 0)
+                         for r in self.groups.get(group_plan.group_id, ()) if r.leg_id == leg.leg_id)
+            remaining = int(target.quantity) - filled
+            if remaining <= 0:
+                self._s9_retry_schedule.pop(key, None)
+                continue
+            retry_leg = replace(leg, quantity=remaining)
+            retry_plan = MultiLegExecutionPlan(
+                group_id=group_plan.group_id, strategy_id=group_plan.strategy_id,
+                purpose=group_plan.purpose, legs=(retry_leg,),
+                strategy_code_version=group_plan.strategy_code_version,
+                strategy_config_version=group_plan.strategy_config_version,
+                strategy_config_hash=group_plan.strategy_config_hash,
+                attempt_id=f"S9-RETRY-{attempt:04d}",
+            )
+            try:
+                result = self.execute(retry_plan, group_plan=group_plan)
+            except Exception:
+                if strategy is not None:
+                    strategy.state = replace(strategy.state, state="RECONCILIATION_REQUIRED")
+                self._s9_retry_schedule[key] = (
+                    group_plan, leg, now + timedelta(minutes=5), attempt,
+                )
+                continue
+            self._s9_retry_attempts[key] = attempt
+            self._s9_retry_schedule.pop(key, None)
+            results.append(result)
+        return tuple(results)
 
     def _merge_group_reports(
         self, group_plan: MultiLegExecutionPlan, new_reports: Sequence[ExecutionReport]

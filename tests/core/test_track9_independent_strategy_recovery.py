@@ -2,6 +2,8 @@ from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 
+import pytest
+
 from core.strategy.track9_event_overnight_insurance import Track9EventOvernightInsurance, Track9State
 from core.strategy.track9_independent_policy import (
     Track9OpenLot, Track9OptionCandidate, Track9RuntimeInput, Track9SyntheticQuote,
@@ -88,7 +90,7 @@ def test_entry_partial_put_and_rejected_call_stays_reconciliation_required() -> 
     assert strategy._exit_pending is False
 
 
-def test_entry_one_leg_filled_other_rejected_never_activates_unpaired_insurance() -> None:
+def test_entry_one_leg_filled_other_rejected_is_held_as_partial_overnight_insurance() -> None:
     strategy = Track9EventOvernightInsurance()
     reports = (
         SimpleNamespace(leg_id="put", status="FILLED", filled_quantity=1, execution_price=Decimal("10")),
@@ -98,8 +100,8 @@ def test_entry_one_leg_filled_other_rejected_never_activates_unpaired_insurance(
         "OVERNIGHT_INSURANCE",
         SimpleNamespace(group_complete=False, position_flat=False, reports=reports),
     )
-    assert strategy.state.state == "RECONCILIATION_REQUIRED"
-    assert strategy.state.put_entry_fill_price is None
+    assert strategy.state.state == "OVERNIGHT_INSURANCE_PARTIAL"
+    assert strategy.state.put_entry_fill_price == Decimal("10")
     assert strategy.state.call_entry_fill_price is None
 
 
@@ -121,10 +123,55 @@ def test_close_with_one_leg_unresolved_remains_exit_pending_until_flat_confirmat
     assert strategy._exit_pending is True
 
 
-def test_initialize_with_single_open_s9_leg_requires_reconciliation() -> None:
+def test_initialize_with_single_open_s9_leg_restores_partial_overnight_insurance() -> None:
     from dataclasses import replace
 
     payload = replace(runtime_input("502.5"), open_lots=runtime_input("502.5").open_lots[:1])
     strategy = Track9EventOvernightInsurance()
     strategy.initialize(SimpleNamespace(input=SimpleNamespace(payload=payload)))
-    assert strategy.state.state == "RECONCILIATION_REQUIRED"
+    assert strategy.state.state == "OVERNIGHT_INSURANCE_PARTIAL"
+    assert strategy.state.entry_qty == 1
+    assert len(strategy.state.partial_open_lots) == 1
+
+
+def test_partial_one_leg_is_closed_on_next_session_using_existing_opening_rule() -> None:
+    from dataclasses import replace
+    base = runtime_input("506")
+    partial_lot = base.open_lots[:1]
+    entry_time = datetime(2026, 11, 6, 15, 0, tzinfo=KST)
+    payload = replace(base, as_of=entry_time, open_lots=partial_lot,
+                      option_quotes=(replace(base.option_quotes[0], observed_at=entry_time),))
+    strategy = Track9EventOvernightInsurance()
+    strategy.initialize(SimpleNamespace(input=SimpleNamespace(payload=payload)))
+    signal = strategy._partial_opening_exit_signal(payload)
+    # Same-day input is not eligible for overnight exit.
+    assert signal == ()
+    next_day = replace(
+        payload,
+        as_of=datetime(2026, 11, 9, 9, 0, tzinfo=KST),
+        option_quotes=(replace(base.option_quotes[0],
+                               observed_at=datetime(2026, 11, 9, 9, 0, tzinfo=KST)),),
+    )
+    signal = strategy._partial_opening_exit_signal(next_day)
+    assert len(signal) == 1
+    assert signal[0].execution_proposal.side == "SELL"
+    assert signal[0].execution_proposal.option_type == "PUT"
+
+
+def test_s9_entry_plan_is_strictly_buy_buy_and_sell_entry_is_rejected() -> None:
+    from dataclasses import replace
+
+    base = runtime_input("506")
+    entry_time = datetime(2026, 11, 9, 15, 0, tzinfo=KST)
+    payload = replace(
+        base, as_of=entry_time,
+        option_quotes=tuple(replace(item, observed_at=entry_time) for item in base.option_quotes),
+    )
+    strategy = Track9EventOvernightInsurance()
+    signals = strategy._entry_signal(payload)
+    assert len(signals) == 1
+    plan = strategy.build_execution_plan("S9-BUY-BUY", proposal=signals[0].execution_proposal)
+    assert [leg.side for leg in plan.legs] == ["BUY", "BUY"]
+    sell_proposal = replace(signals[0].execution_proposal, side="SELL")
+    with pytest.raises(ValueError, match="TRACK9_ENTRY_MUST_BE_BUY_BUY"):
+        strategy.build_execution_plan("S9-SELL-ENTRY-BLOCKED", proposal=sell_proposal)
