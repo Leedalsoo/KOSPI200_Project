@@ -1,0 +1,147 @@
+{
+    "schema":  "q25-a5-stage-report-v1",
+    "stage":  "S15B_ORDERBOOK_EVIDENCE_AUDIT",
+    "date":  "2026-11-09",
+    "verdict":  "BLOCKED_SPEC",
+    "scope":  "Read-only audit of preserved S15b KIS order-book evidence and existing order-book completeness validation",
+    "observations":  [
+                         {
+                             "symbol":  "B01611885",
+                             "source":  "KIS VTS REST H0IOASP0",
+                             "source_hour":  "154500",
+                             "received_at_utc":  "2026-10-21T17:15:25.376678+00:00",
+                             "bid_levels":  [
+                                                {
+                                                    "price":  "1.85",
+                                                    "quantity":  "1"
+                                                },
+                                                {
+                                                    "price":  "0.43",
+                                                    "quantity":  "3"
+                                                },
+                                                {
+                                                    "price":  "0.09",
+                                                    "quantity":  "15"
+                                                },
+                                                {
+                                                    "price":  "0.06",
+                                                    "quantity":  "11"
+                                                },
+                                                {
+                                                    "price":  "0.04",
+                                                    "quantity":  "33"
+                                                }
+                                            ],
+                             "ask_levels":  [
+                                                {
+                                                    "price":  "0.00",
+                                                    "quantity":  "0"
+                                                },
+                                                {
+                                                    "price":  "0.00",
+                                                    "quantity":  "0"
+                                                },
+                                                {
+                                                    "price":  "0.00",
+                                                    "quantity":  "0"
+                                                },
+                                                {
+                                                    "price":  "0.00",
+                                                    "quantity":  "0"
+                                                },
+                                                {
+                                                    "price":  "0.00",
+                                                    "quantity":  "0"
+                                                }
+                                            ],
+                             "order_book_response_sha256":  "d04e535f47f937e820167fe8707c05265d4e694d167278980386e0bf45ed074a"
+                         },
+                         {
+                             "symbol":  "B01611887",
+                             "source":  "KIS VTS REST H0IOASP0",
+                             "source_hour":  "154500",
+                             "received_at_utc":  "2026-10-21T17:15:26.628393+00:00",
+                             "bid_levels":  [
+                                                {
+                                                    "price":  "1.84",
+                                                    "quantity":  "1"
+                                                },
+                                                {
+                                                    "price":  "0.43",
+                                                    "quantity":  "3"
+                                                },
+                                                {
+                                                    "price":  "0.09",
+                                                    "quantity":  "15"
+                                                },
+                                                {
+                                                    "price":  "0.06",
+                                                    "quantity":  "11"
+                                                },
+                                                {
+                                                    "price":  "0.04",
+                                                    "quantity":  "33"
+                                                }
+                                            ],
+                             "ask_levels":  [
+                                                {
+                                                    "price":  "0.00",
+                                                    "quantity":  "0"
+                                                },
+                                                {
+                                                    "price":  "0.00",
+                                                    "quantity":  "0"
+                                                },
+                                                {
+                                                    "price":  "0.00",
+                                                    "quantity":  "0"
+                                                },
+                                                {
+                                                    "price":  "0.00",
+                                                    "quantity":  "0"
+                                                },
+                                                {
+                                                    "price":  "0.00",
+                                                    "quantity":  "0"
+                                                }
+                                            ],
+                             "order_book_response_sha256":  "812003757bcbad8ddbafec126889df7fed17ab40d4fffcc704d6ebfcd1d1d7d2"
+                         }
+                     ],
+    "evidence_conclusion":  "Two historical order-book snapshots contain five bid levels with quantities but all five ask prices and quantities are zero. These are one-sided, stale observations, not complete two-sided executable order books. S15b supplement retains only the order_book_response_sha256 and does not include depth levels.",
+    "code_gap":  {
+                     "contract":  "OptionOrderBookSnapshot.is_complete",
+                     "finding":  "Checks 5 levels per side and quantity \u003e= 0, but does not require positive price or positive quantity for a populated level.",
+                     "reproduction":  "Constructed five ask levels with price=0 and quantity=0 plus five positive bid levels; is_complete() returned True.",
+                     "downstream":  "KIS H0IOASP0 adapter also relies on is_complete(), so zero-price/zero-quantity ask levels can pass the current completeness predicate. Canonical normalizer later maps zero prices to None, but the source predicate itself is permissive."
+                 },
+    "runtime_boundary":  {
+                             "S15b_order_book_adapter":  "NOT_IMPLEMENTED",
+                             "usable_complete_orderbook":  "UNAVAILABLE",
+                             "synthetic_depth_fabricated":  false,
+                             "production_runtime_eligible":  false,
+                             "orders_allowed":  false
+                         },
+    "tests":  {
+                  "focused_regressions":  "16 passed",
+                  "scope":  "KIS WebSocket canonical pipeline, Track5 option contract source, S15b validation adapter"
+              },
+    "integrity":  {
+                      "quote_probe_sha256":  "dc68dedd044221e4090f64e996b44482980c0f1e3993f55ff03dd8ad2a839e36",
+                      "s15b_dataset_sha256":  "81d961331e1e0ef370e61494fd3595bb5c8b08d05291809e06b527741ac7aa8c",
+                      "s15b_manifest_sha256":  "81f70193b4c783f5333c8ece9640a9db216361a9ea3702db470d251a77e77976",
+                      "atm_probe_sha256":  "38aa5db65b1694e141aece2410434dbc926ff8d54071dae99cda2cfa3fa8c769",
+                      "original_evidence_mutated":  false
+                  },
+    "safety":  {
+                   "kis_api_called":  false,
+                   "real_vts_api_called":  false,
+                   "live_api_called":  false,
+                   "account_api_called":  false,
+                   "order_api_called":  false,
+                   "source_files_modified":  false,
+                   "code_modified":  false,
+                   "s15a_mutated":  false
+               },
+    "next_candidate":  "S15b validation-only order-book completeness hardening: require valid positive prices for populated levels and preserve explicit empty levels as unavailable; add regression for zero ask prices/quantities. Do not synthesize missing depth."
+}
