@@ -1,5 +1,6 @@
 """Runtime-owned multi-leg execution bridge for the Virtual environment."""
 from __future__ import annotations
+import inspect
 from dataclasses import dataclass, replace
 from hashlib import sha256
 from decimal import Decimal
@@ -238,7 +239,7 @@ class VirtualMultiLegExecutionBridge:
             }
         if plan.strategy_id == "track9_event_overnight_insurance":
             return purpose == "OVERNIGHT_INSURANCE_CLOSE"
-        if plan.strategy_id != "track8_macro_regime_monthly_strangle":
+        if plan.strategy_id not in {"track8_macro_regime_monthly_strangle", "track7_volatility_skew_weekly_insurance"}:
             return False
         return any(token in purpose for token in ("CLOSE", "EXPIRY", "SETTLEMENT", "LIQUIDATION"))
 
@@ -716,18 +717,26 @@ class VirtualMultiLegExecutionBridge:
     ) -> MultiLegExecutionResult:
         if group_plan is None:
             group_plan = plan
-            if (plan.strategy_id == "track9_event_overnight_insurance"
-                    and str(plan.purpose or "").upper() == "OVERNIGHT_INSURANCE"):
+            if (plan.strategy_id == "track9_event_overnight_insurance" and str(plan.purpose or "").upper() == "OVERNIGHT_INSURANCE"):
                 self._group_plans[plan.group_id] = plan
-            if ((plan.strategy_id == "track8_macro_regime_monthly_strangle"
-                    and plan.purpose in {"MONTHLY_STRANGLE_ENTRY_CALL", "MONTHLY_STRANGLE_ENTRY_PUT"})
-                    or (plan.strategy_id == "track6_daily_tail_insurance"
-                        and plan.purpose == "DAILY_TAIL_INSURANCE_ENTRY")):
+            is_group_entry = (
+                (plan.strategy_id == "track8_macro_regime_monthly_strangle" and plan.purpose in {"MONTHLY_STRANGLE_ENTRY_CALL", "MONTHLY_STRANGLE_ENTRY_PUT"})
+                or (plan.strategy_id == "track6_daily_tail_insurance" and plan.purpose == "DAILY_TAIL_INSURANCE_ENTRY")
+                or (plan.strategy_id == "track7_volatility_skew_weekly_insurance" and plan.purpose in {"WEEKLY_INSURANCE_ENTRY", "WEEKLY_INSURANCE_ENTRY_PUT", "WEEKLY_INSURANCE_ENTRY_CALL"})
+            )
+            if is_group_entry:
                 prior_group_plan = self._group_plans.get(plan.group_id)
                 if prior_group_plan is not None:
                     merged_legs = {leg.leg_id: leg for leg in prior_group_plan.legs}
                     merged_legs.update({leg.leg_id: leg for leg in plan.legs})
                     group_plan = replace(plan, legs=tuple(merged_legs.values()))
+                self._group_plans[plan.group_id] = group_plan
+                if prior_group_plan is not None:
+                    merged_legs = {leg.leg_id: leg for leg in prior_group_plan.legs}
+                    merged_legs.update({leg.leg_id: leg for leg in plan.legs})
+                    group_plan = replace(plan, legs=tuple(merged_legs.values()))
+                else:
+                    group_plan = plan
                 self._group_plans[plan.group_id] = group_plan
         reconciled_reports = dict(reconciled_reports or {})
         reconciled_commands = dict(reconciled_commands or {})
@@ -756,6 +765,21 @@ class VirtualMultiLegExecutionBridge:
             if leg.side not in {"BUY", "SELL"} or int(leg.quantity) <= 0:
                 raise ValueError("MULTI_LEG_SIDE_AND_POSITIVE_QUANTITY_REQUIRED")
             identity = self.identity_for_leg(plan, leg)
+            # Persist the authoritative identity into the group plan at first
+            # resolution. Pending orders may be reconciled on a later market tick
+            # belonging to another expiry; re-resolving from that tick would bind
+            # the pending leg to the wrong contract.
+            group_plan_legs = []
+            for group_leg in group_plan.legs:
+                if group_leg.leg_id == leg.leg_id:
+                    prior_identity = getattr(group_leg, "instrument_identity", None)
+                    if prior_identity is not None and prior_identity != identity:
+                        raise ValueError("MULTI_LEG_GROUP_LEG_IDENTITY_CONFLICT")
+                    group_leg = replace(group_leg, instrument_identity=identity)
+                group_plan_legs.append(group_leg)
+            group_plan = replace(group_plan, legs=tuple(group_plan_legs))
+            if plan.group_id in getattr(self, "_group_plans", {}):
+                self._group_plans[plan.group_id] = group_plan
             client_order_id = self._client_order_id(plan, leg, identity)
             prior_intent = next((report for report in self.groups.get(group_plan.group_id, ())
                                  if report.client_order_id == client_order_id), None)
@@ -1038,7 +1062,8 @@ class VirtualMultiLegExecutionBridge:
             )
             reports.append(report)
             if report.status in {"NEW", "PARTIALLY_FILLED", "UNKNOWN", "RECONCILIATION_REQUIRED"} and report.remaining_quantity > 0:
-                self.pending_legs[client_order_id] = (group_plan, leg, broker_command)
+                stored_leg = next(group_leg for group_leg in group_plan.legs if group_leg.leg_id == leg.leg_id)
+                self.pending_legs[client_order_id] = (group_plan, stored_leg, broker_command)
                 self._pending_attempt_ids[client_order_id] = plan.attempt_id
             else:
                 self.pending_legs.pop(client_order_id, None)
@@ -1068,7 +1093,8 @@ class VirtualMultiLegExecutionBridge:
                 broker_command=broker_command, report=report,
             )
             if report.status in {"NEW", "PARTIALLY_FILLED", "UNKNOWN", "RECONCILIATION_REQUIRED"} and report.remaining_quantity > 0:
-                self.pending_legs[client_order_id] = (group_plan, leg, broker_command)
+                stored_leg = next(group_leg for group_leg in group_plan.legs if group_leg.leg_id == leg.leg_id)
+                self.pending_legs[client_order_id] = (group_plan, stored_leg, broker_command)
                 self._pending_attempt_ids[client_order_id] = plan.attempt_id
             else:
                 self.pending_legs.pop(client_order_id, None)
@@ -1269,7 +1295,9 @@ class VirtualMultiLegExecutionBridge:
             self.execution_result_callback(plan, result)
         return result
 
-    def cancel_pending_order(self, client_order_id: str) -> MultiLegExecutionResult:
+    def cancel_pending_order(
+        self, client_order_id: str, *, reason: str = "MANUAL"
+    ) -> MultiLegExecutionResult:
         pending = self.pending_legs.get(client_order_id)
         if pending is None:
             raise ValueError("VIRTUAL_PENDING_ORDER_NOT_FOUND")
@@ -1278,7 +1306,14 @@ class VirtualMultiLegExecutionBridge:
         query = getattr(self.ack.broker, "query", None)
         if not callable(cancel) or not callable(query):
             raise RuntimeError("VIRTUAL_CANCEL_QUERY_PORT_REQUIRED")
-        cancel(client_order_id)
+        try:
+            cancel_parameters = inspect.signature(cancel).parameters
+        except (TypeError, ValueError):
+            cancel_parameters = {}
+        if "lifecycle_reason" in cancel_parameters:
+            cancel(client_order_id, lifecycle_reason=str(reason))
+        else:
+            cancel(client_order_id)
         confirmed = query(client_order_id)
         status = str(getattr(confirmed, "status", "")).upper() if confirmed is not None else ""
         if status not in {"CANCELLED", "FILLED", "REJECTED"}:

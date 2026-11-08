@@ -58,7 +58,13 @@ class MarketCalendarHub:
                 source_status=f"UNKNOWN:{type(exc).__name__}",
             )
 
-        is_new_week = previous.isocalendar().week != observed_date.isocalendar().week
+        validation_entry_by_expiry = getattr(self._calendar, "validation_only_entry_date_by_expiry", None)
+        if expiry is not None and validation_entry_by_expiry is not None:
+            expiry_key = expiry.strftime("%Y%m%d")
+            is_new_week = validation_entry_by_expiry.get(expiry_key) == observed_date
+        else:
+            validation_week_starts = getattr(self._calendar, "validation_only_week_start_dates", None)
+            is_new_week = (observed_date in validation_week_starts) if validation_week_starts is not None else (previous.isocalendar().week != observed_date.isocalendar().week)
         is_week_end = next_day.isocalendar().week != observed_date.isocalendar().week
         source_status = getattr(resolution, "status", "AVAILABLE")
         source = getattr(resolution, "source", "ProductionTradingCalendar")

@@ -25,6 +25,8 @@ class ValidationOnlyTradingCalendar:
     source_type: str = "SYNTHETIC"
     timezone: str = "Asia/Seoul"
     authoritative: bool = False
+    strategy7_entry_dates: tuple[date, ...] = ()
+    strategy7_entry_date_by_expiry: tuple[tuple[str, date], ...] = ()
 
     def __post_init__(self) -> None:
         days = tuple(self.trading_days)
@@ -38,7 +40,16 @@ class ValidationOnlyTradingCalendar:
             raise ValueError("VALIDATION_CALENDAR_TIMEZONE_MUST_BE_ASIA_SEOUL")
         if any(day.weekday() >= 5 for day in days):
             raise ValueError("VALIDATION_CALENDAR_WEEKEND_DATE_NOT_ALLOWED")
+        entry_dates = tuple(self.strategy7_entry_dates)
+        if any(day not in days for day in entry_dates) or len(set(entry_dates)) != len(entry_dates):
+            raise ValueError("VALIDATION_CALENDAR_STRATEGY7_ENTRY_DATES_INVALID")
+        expiry_entries = tuple((str(expiry), value) for expiry, value in self.strategy7_entry_date_by_expiry)
+        if (any(len(expiry) != 8 or not expiry.isdigit() or value not in days for expiry, value in expiry_entries)
+                or len({expiry for expiry, _ in expiry_entries}) != len(expiry_entries)):
+            raise ValueError("VALIDATION_CALENDAR_STRATEGY7_EXPIRY_ENTRY_MAP_INVALID")
         object.__setattr__(self, "trading_days", days)
+        object.__setattr__(self, "strategy7_entry_dates", entry_dates)
+        object.__setattr__(self, "strategy7_entry_date_by_expiry", expiry_entries)
 
     def is_trading_day(self, value: date) -> bool:
         return value in self.trading_days
@@ -108,9 +119,19 @@ class ValidationOnlyTradingCalendar:
         )
         return observed < cutoff
 
+    @property
+    def validation_only_week_start_dates(self) -> tuple[date, ...] | None:
+        return self.strategy7_entry_dates or None
+
+    @property
+    def validation_only_entry_date_by_expiry(self) -> dict[str, date] | None:
+        return dict(self.strategy7_entry_date_by_expiry) or None
+
     def is_new_week_start(self, value: date) -> bool:
         if not self.is_trading_day(value):
             raise ValueError("VALIDATION_CALENDAR_DATE_NOT_TRADING_DAY")
+        if self.strategy7_entry_dates:
+            return value in self.strategy7_entry_dates
         try:
             previous = self.prev_trading_day(value)
         except ValueError:
@@ -147,6 +168,11 @@ def load_validation_only_trading_calendar(
         days = tuple(date.fromisoformat(item) for item in schedule["trading_days"])
     except (KeyError, TypeError, ValueError) as exc:
         raise ValueError("VALIDATION_CALENDAR_SCHEDULE_INVALID") from exc
+    policy = payload.get("strategy_policy_inputs") or {}
+    group_entry_dates = {str(group): date.fromisoformat(str(value)) for group, value in (policy.get("strategy7_group_entry_dates") or {}).items()}
+    strategy7_dates = tuple(group_entry_dates.values())
+    group_expiries = payload.get("strategy7_group_expiry_by_id") or {}
+    expiry_entry_dates = tuple((str(group_expiries[group]), entry_date) for group, entry_date in group_entry_dates.items() if group in group_expiries)
     return ValidationOnlyTradingCalendar(
         scenario_id=str(payload.get("scenario_id") or ""),
         calendar_id=str(schedule.get("calendar_id") or ""),
@@ -154,4 +180,6 @@ def load_validation_only_trading_calendar(
         source_type=str(schedule.get("source_type") or ""),
         timezone=str(schedule.get("timezone") or ""),
         authoritative=bool(schedule.get("authoritative", True)),
+        strategy7_entry_dates=strategy7_dates,
+        strategy7_entry_date_by_expiry=expiry_entry_dates,
     )

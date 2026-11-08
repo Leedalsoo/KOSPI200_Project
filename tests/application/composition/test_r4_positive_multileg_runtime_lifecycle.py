@@ -62,7 +62,7 @@ def test_positive_multi_leg_virtual_execution_group_lifecycle():
     if original_loop is not None:
         bootstrap.bundle.market.unsubscribe(original_loop.on_tick)
     loop = attach_standard_automated_loop(
-        bootstrap, strategy_keys=(("TRACK1_TAIL_DEFENSE", "1.1.0"),),
+        bootstrap, strategy_keys=(("TRACK1_TAIL_DEFENSE", "1.2.0"),),
         run_id="R4-POSITIVE-MULTILEG-FIXTURE",
         synthetic_runtime_sources=sources, track4_greeks_provider=sources,
         risk_guard_status_source=sources,
@@ -139,7 +139,7 @@ def test_pending_virtual_order_fill_is_reconciled_to_callback_and_position():
     if bootstrap.automated_loop is not None:
         bootstrap.bundle.market.unsubscribe(bootstrap.automated_loop.on_tick)
     loop = attach_standard_automated_loop(
-        bootstrap, strategy_keys=(("TRACK1_TAIL_DEFENSE", "1.1.0"),),
+        bootstrap, strategy_keys=(("TRACK1_TAIL_DEFENSE", "1.2.0"),),
         run_id="Q25-PENDING-ORDER-RECONCILIATION",
         synthetic_runtime_sources=sources, track4_greeks_provider=sources,
         risk_guard_status_source=sources,
@@ -223,7 +223,7 @@ def test_multiple_partial_fills_reconcile_to_bridge_position_lots_once():
     if bootstrap.automated_loop is not None:
         bootstrap.bundle.market.unsubscribe(bootstrap.automated_loop.on_tick)
     loop = attach_standard_automated_loop(
-        bootstrap, strategy_keys=(("TRACK1_TAIL_DEFENSE", "1.1.0"),),
+        bootstrap, strategy_keys=(("TRACK1_TAIL_DEFENSE", "1.2.0"),),
         run_id="Q25-S8-MULTI-PARTIAL-BRIDGE",
         synthetic_runtime_sources=sources, track4_greeks_provider=sources,
         risk_guard_status_source=sources,

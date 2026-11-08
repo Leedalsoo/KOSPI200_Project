@@ -79,6 +79,30 @@ class SyntheticRuntimeSources:
     def current_theta(self) -> Decimal: return self._greeks["theta"]
     def active_vol(self) -> Decimal: return self._greeks["iv"]
 
+    def prime_option_quote(self, tick: Any) -> None:
+        """Cache one manifest-bound quote without advancing replay analytics state."""
+        instrument_id = str(getattr(tick, "instrument_id", "") or "")
+        if not instrument_id.startswith("SYNTHETIC_CONTRACT:"):
+            return
+        try:
+            observed = datetime.fromisoformat(tick.timestamp)
+            bid = Decimal(str(tick.bid_price))
+            ask = Decimal(str(tick.ask_price))
+            last = Decimal(str(tick.last_price))
+            if bid > 0 and ask >= bid and last > 0:
+                self._option_quote_cache[instrument_id] = {
+                    "instrument_id": instrument_id,
+                    "option_type": str(tick.option_type).upper(),
+                    "strike": Decimal(str(tick.strike_price)),
+                    "expiry": str(tick.expiry),
+                    "bid": bid, "ask": ask, "last": last,
+                    "timestamp": observed,
+                    "volume": max(1, int(getattr(tick, "volume", 1) or 1)),
+                    "source": "SYNTHETIC:DERIVED_SCENARIO",
+                }
+        except (AttributeError, TypeError, ValueError):
+            return
+
     def set_tick(self, tick: Any) -> None:
         self._tick = tick
         observed = datetime.fromisoformat(tick.timestamp)

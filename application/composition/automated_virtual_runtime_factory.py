@@ -53,13 +53,14 @@ from contracts.risk_guard import RiskGuardStatusSource
 from core.strategy.standard_registry import STANDARD_STRATEGY_KEYS, build_standard_strategy_registry
 from environments.high_speed.validation_only_track6_gates import apply_track6_validation_gates
 from environments.high_speed.validation_only_track6_execution import Track6SyntheticFreshnessProvider
+from environments.high_speed.validation_only_track7_execution import S7ValidationOnlyRuntimeAdapter
 from core.strategy.track6_order_lifecycle import Track6LifecycleConfig
 from environments.high_speed.track6_validation_state_store import Track6ValidationStateStore
 
 logger = logging.getLogger(__name__)
 
 
-def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=None, strategy_keys=None, track9_iv_history_path=None, run_id=None, historical_observation_option_source=None, risk_guard_status_source: RiskGuardStatusSource | None = None, synthetic_runtime_sources=None, track4_greeks_provider=None, market_calendar_hub=None, validation_only_track6_signal_mode: bool = False, validation_only_track6_execution_gate=None, validation_only_s8_runtime_adapter=None, validation_only_s9_runtime_adapter=None, validation_only_track6_lifecycle_config: Track6LifecycleConfig | None = None):
+def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=None, strategy_keys=None, track9_iv_history_path=None, run_id=None, historical_observation_option_source=None, risk_guard_status_source: RiskGuardStatusSource | None = None, synthetic_runtime_sources=None, track4_greeks_provider=None, market_calendar_hub=None, validation_only_track6_signal_mode: bool = False, validation_only_track6_execution_gate=None, validation_only_s8_runtime_adapter=None, validation_only_s7_runtime_adapter: S7ValidationOnlyRuntimeAdapter | None = None, validation_only_s9_runtime_adapter=None, validation_only_track6_lifecycle_config: Track6LifecycleConfig | None = None):
     """Attach all nine Standard strategies to the RuntimeController-owned VMS."""
     selected_keys = tuple(strategy_keys) if strategy_keys else STANDARD_STRATEGY_KEYS
     selected_ids = {key[0] if isinstance(key, tuple) else str(key) for key in selected_keys}
@@ -108,6 +109,16 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
             raise ValueError("S8_VALIDATION_STRATEGY_OR_SOURCE_REQUIRED")
         validation_only_s8_runtime_adapter.apply_to_strategy(
             registry.get("track8_macro_regime_monthly_strangle", "2.0"),
+            synthetic_sources=synthetic_runtime_sources,
+        )
+    if validation_only_s7_runtime_adapter is not None:
+        if validation_only_track6_execution_gate is not None or validation_only_track6_signal_mode or validation_only_s8_runtime_adapter is not None:
+            raise ValueError("S7_VALIDATION_GATE_MODE_CONFLICT")
+        selected_ids = {key[0] if isinstance(key, tuple) else str(key) for key in selected_keys}
+        if "track7_volatility_skew_weekly_insurance" not in selected_ids or synthetic_runtime_sources is None:
+            raise ValueError("S7_VALIDATION_STRATEGY_OR_SOURCE_REQUIRED")
+        validation_only_s7_runtime_adapter.apply_to_strategy(
+            registry.get("track7_volatility_skew_weekly_insurance", "1.0"),
             synthetic_sources=synthetic_runtime_sources,
         )
     if validation_only_track6_lifecycle_config is not None:
@@ -290,7 +301,7 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
                 if same_target:
                     identity = observed_identity
                     break
-        if identity is None and (validation_only_track6_execution_gate is not None or validation_only_s8_runtime_adapter is not None or validation_only_s9_runtime_adapter is not None):
+        if identity is None and (validation_only_track6_execution_gate is not None or validation_only_s8_runtime_adapter is not None or validation_only_s7_runtime_adapter is not None or validation_only_s9_runtime_adapter is not None):
             # Execution validation may only route an identity already present in the
             # manifest-adapted dataset Option Master. Never invoke the synthetic
             # fallback identity generator for an unlisted contract.
@@ -369,10 +380,12 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
                 and plan.strategy_id == "track8_macro_regime_monthly_strangle"
                 and bool(getattr(result, "position_flat", False))):
             validation_only_s8_runtime_adapter.release_all_groups()
-        if (validation_only_s9_runtime_adapter is not None
-                and plan.strategy_id == "track9_event_overnight_insurance"
-                and bool(getattr(result, "position_flat", False))):
+        if (validation_only_s9_runtime_adapter is not None and plan.strategy_id == "track9_event_overnight_insurance" and bool(getattr(result, "position_flat", False))):
             validation_only_s9_runtime_adapter.release_group(plan.group_id)
+        if (validation_only_s7_runtime_adapter is not None and plan.strategy_id == "track7_volatility_skew_weekly_insurance"):
+            group_has_open_lots = any(lot.run_id == run_id and lot.strategy_id == "track7_volatility_skew_weekly_insurance" and lot.group_id == plan.group_id and lot.remaining_quantity > 0 for lot in multi_leg_bridge.position_lot_store.open_lots())
+            if not group_has_open_lots:
+                validation_only_s7_runtime_adapter.release_group(plan.group_id)
         if (validation_only_track6_execution_gate is not None
                 and validation_only_track6_lifecycle_config is not None
                 and plan.strategy_id == "track6_daily_tail_insurance"):
@@ -397,6 +410,28 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
                     if premiums:
                         validation_only_track6_execution_gate.sync_group_reservation(lifecycle.snapshot.group_id, premiums)
 
+    authoritative_freshness_provider = AuthoritativeOptionQuoteFreshnessProvider(
+        option_master=bootstrap.bundle.option_master,
+        evidence_provider=(
+            lambda _plan, _leg, _identity, command: (
+                historical_observation_option_source.get_freshness_evidence(
+                    str(command.broker_symbol or command.instrument_id or "")
+                ) if historical_observation_option_source is not None else None
+            )
+        ),
+    )
+    def validation_freshness_verdict(plan, leg, identity, command):
+        if validation_only_s8_runtime_adapter is not None and plan.strategy_id == "track8_macro_regime_monthly_strangle":
+            return validation_only_s8_runtime_adapter.freshness_verdict(plan=plan, identity=identity, command=command, option_master=bootstrap.bundle.option_master, market=bootstrap.bundle.market, synthetic_sources=synthetic_runtime_sources)
+        if validation_only_s9_runtime_adapter is not None and plan.strategy_id == "track9_event_overnight_insurance":
+            return validation_only_s9_runtime_adapter.freshness_verdict(plan=plan, identity=identity, command=command, option_master=bootstrap.bundle.option_master, market=bootstrap.bundle.market, synthetic_sources=synthetic_runtime_sources)
+        if validation_only_s7_runtime_adapter is not None and plan.strategy_id == "track7_volatility_skew_weekly_insurance":
+            return validation_only_s7_runtime_adapter.freshness_verdict(plan=plan, identity=identity, command=command, option_master=bootstrap.bundle.option_master, market=bootstrap.bundle.market, synthetic_sources=synthetic_runtime_sources)
+        return authoritative_freshness_provider(plan, leg, identity, command)
+    freshness_verdict_provider = (
+        Track6SyntheticFreshnessProvider(option_master=bootstrap.bundle.option_master, market=bootstrap.bundle.market, max_age_seconds=validation_only_track6_execution_gate.evidence.max_quote_age_seconds, synthetic_sources=synthetic_runtime_sources)
+        if validation_only_track6_execution_gate is not None else validation_freshness_verdict
+    )
     multi_leg_bridge = VirtualMultiLegExecutionBridge(
         bundle=bootstrap.bundle,
         run_id=run_id,
@@ -405,35 +440,7 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         option_expiry_source=expiry_source,
         risk_guard_status_source=(risk_guard_status_source or synthetic_runtime_sources),
         execution_result_callback=on_multi_leg_execution_result,
-        freshness_verdict_provider=(
-            Track6SyntheticFreshnessProvider(
-                option_master=bootstrap.bundle.option_master, market=bootstrap.bundle.market,
-                max_age_seconds=validation_only_track6_execution_gate.evidence.max_quote_age_seconds,
-                synthetic_sources=synthetic_runtime_sources,
-            ) if validation_only_track6_execution_gate is not None else (
-                (lambda plan, _leg, identity, command: validation_only_s8_runtime_adapter.freshness_verdict(
-                    plan=plan, identity=identity, command=command,
-                    option_master=bootstrap.bundle.option_master,
-                    market=bootstrap.bundle.market, synthetic_sources=synthetic_runtime_sources,
-                )) if validation_only_s8_runtime_adapter is not None else (
-                    (lambda plan, _leg, identity, command: validation_only_s9_runtime_adapter.freshness_verdict(
-                        plan=plan, identity=identity, command=command,
-                        option_master=bootstrap.bundle.option_master,
-                        market=bootstrap.bundle.market, synthetic_sources=synthetic_runtime_sources,
-                    )) if validation_only_s9_runtime_adapter is not None else AuthoritativeOptionQuoteFreshnessProvider(
-                        option_master=bootstrap.bundle.option_master,
-                        evidence_provider=(
-                            lambda _plan, _leg, _identity, command: (
-                                historical_observation_option_source.get_freshness_evidence(
-                                    str(command.broker_symbol or command.instrument_id or "")
-                                )
-                                if historical_observation_option_source is not None else None
-                            )
-                        ),
-                    )
-                )
-            )
-        ),
+        freshness_verdict_provider=freshness_verdict_provider,
         validation_order_gate=(
             validation_only_track6_execution_gate.validate_group
             if validation_only_track6_execution_gate is not None
@@ -441,16 +448,15 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
             if validation_only_s8_runtime_adapter is not None
             else validation_only_s9_runtime_adapter.validate_group
             if validation_only_s9_runtime_adapter is not None
+            else validation_only_s7_runtime_adapter.validate_group
+            if validation_only_s7_runtime_adapter is not None
             else None
         ),
     )
 
     def track1_fence_type_source():
-        strategy = registry.get("TRACK1_TAIL_DEFENSE", "1.1.0")
-        if strategy.state.active_fence_type in {"PUT", "CALL"}:
-            return strategy.state.active_fence_type
-        if not strategy.state.market_opened:
-            return "PUT"
+        # Strategy 1 v1.2.0 is direction-agnostic and no longer stores the
+        # legacy active_fence_type/market_opened state fields.
         return None
 
 
@@ -779,21 +785,27 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         return execution_resolvers.resolve(strategy_id, evaluation, canonical)
 
     def process_pending_multi_leg(tick=None):
-        if "track6_daily_tail_insurance" in selected_ids:
-            strategy = registry.get("track6_daily_tail_insurance", "1.0")
-        else:
-            strategy = None
-        if strategy is not None and strategy.sequential_lifecycle_enabled and strategy.lifecycle is not None and tick is not None:
+        if tick is not None:
             now = datetime.fromisoformat(str(tick.timestamp))
-            action = strategy.lifecycle_clock_action(now)
-            if action is not None and action.kind in {"CANCEL", "CANCEL_AND_RECONCILE"} and action.client_order_id:
-                multi_leg_bridge.cancel_pending_order(action.client_order_id)
+            if "track6_daily_tail_insurance" in selected_ids:
+                strategy6 = registry.get("track6_daily_tail_insurance", "1.0")
+                if strategy6.sequential_lifecycle_enabled and strategy6.lifecycle is not None:
+                    action = strategy6.lifecycle_clock_action(now)
+                    if action is not None and action.kind in {"CANCEL", "CANCEL_AND_RECONCILE"} and action.client_order_id:
+                        multi_leg_bridge.cancel_pending_order(action.client_order_id)
+            if "track7_volatility_skew_weekly_insurance" in selected_ids:
+                strategy7 = registry.get("track7_volatility_skew_weekly_insurance", "1.0")
+                action7 = strategy7.lifecycle_clock_action(now)
+                if action7 is not None and action7.kind == "CANCEL_AND_RECONCILE" and action7.client_order_id:
+                    try:
+                        multi_leg_bridge.cancel_pending_order(action7.client_order_id, reason=action7.reason)
+                    except Exception:
+                        strategy7.cancel_reconciliation_retry()
+                        logger.warning("S7_CALL_CANCEL_RECONCILIATION_PENDING: %s", action7.client_order_id, exc_info=True)
         pending_results = list(multi_leg_bridge.process_pending_quotes())
         if validation_only_s9_runtime_adapter is not None and tick is not None:
             now = datetime.fromisoformat(str(tick.timestamp))
-            pending_results.extend(multi_leg_bridge.process_s9_entry_retries(
-                now, strategy=registry.get("track9_event_overnight_insurance", "3.0"),
-            ))
+            pending_results.extend(multi_leg_bridge.process_s9_entry_retries(now, strategy=registry.get("track9_event_overnight_insurance", "3.0")))
         return tuple(pending_results)
 
     loop = AutomatedVirtualTradingLoop(

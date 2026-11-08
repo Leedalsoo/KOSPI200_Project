@@ -1,6 +1,7 @@
 from contracts.trading_date import format_trading_date
 from dataclasses import dataclass, replace
 from decimal import Decimal
+from datetime import datetime, timedelta
 from typing import Sequence
 from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
 from contracts.analytics import AnalyticsSnapshot, AnalyticsStatus
@@ -36,11 +37,19 @@ class Track7State:
     contract_multiplier: Decimal = Decimal("0")
     peak_profit: Decimal = Decimal("0")
     put_entry_fill_price: Decimal | None = None
+    put_entry_filled_at: datetime | None = None
     call_entry_fill_price: Decimal | None = None
     put_peak_mark: Decimal = Decimal("0")
     call_peak_mark: Decimal = Decimal("0")
     put_open: bool = False
     call_open: bool = False
+    entry_stage: str = "IDLE"
+    entry_group_id: str | None = None
+    entry_block_reason: str | None = None
+    call_client_order_id: str | None = None
+    call_submitted_at: datetime | None = None
+    entry_cancel_requested: bool = False
+    entry_cancel_reason: str | None = None
 
     def __post_init__(self) -> None:
         if self.expiry:
@@ -172,6 +181,84 @@ class Track7VolatilitySkewWeeklyInsurance:
                 return
             self._activate_expiry(expiry)
         reports = tuple(getattr(result, "reports", ()) or ())
+        if purpose in {"WEEKLY_INSURANCE_ENTRY_PUT", "WEEKLY_INSURANCE_ENTRY_CALL"} and self.state.entry_pending:
+            expected_group = self.state.entry_group_id
+            observed_group = str(group_id or "")
+            if not expected_group or observed_group != expected_group:
+                self.state = replace(self.state, entry_stage="BLOCKED", entry_block_reason="TRACK7_ENTRY_RESULT_GROUP_ID_MISMATCH")
+                return
+            leg_id = "put" if purpose.endswith("_PUT") else "call"
+            report = next((item for item in reversed(reports) if str(getattr(item, "leg_id", "")).lower() == leg_id), None)
+            if report is None:
+                self.state = replace(self.state, entry_stage="BLOCKED", entry_block_reason=f"TRACK7_{leg_id.upper()}_ENTRY_REPORT_MISSING")
+                return
+            raw_status = getattr(report, "status", "")
+            status = str(getattr(raw_status, "value", raw_status)).upper()
+            filled = int(getattr(report, "filled_quantity", 0) or 0)
+            remaining = int(getattr(report, "remaining_quantity", max(0, self.insurance_qty - filled)) or 0)
+            if status in {"NEW", "PENDING", "PARTIALLY_FILLED", "ACCEPTED", "UNKNOWN", "RECONCILIATION_REQUIRED"} and remaining > 0:
+                if leg_id == "call" and self.state.entry_stage == "CALL_PENDING":
+                    client_order_id = getattr(report, "client_order_id", None)
+                    submitted_at = getattr(report, "submitted_at", None)
+                    if not client_order_id or not isinstance(submitted_at, datetime) or submitted_at.tzinfo is None:
+                        self.state = replace(
+                            self.state, entry_block_reason="TRACK7_CALL_TIMEOUT_METADATA_MISSING",
+                        )
+                    else:
+                        self.state = replace(
+                            self.state, call_client_order_id=str(client_order_id),
+                            call_submitted_at=submitted_at,
+                        )
+                return
+            fill_price = getattr(report, "execution_price", None)
+            valid_fill = (
+                status == "FILLED" and filled == self.insurance_qty and remaining == 0
+                and bool(getattr(report, "execution_id", None))
+                and isinstance(getattr(report, "execution_timestamp", None), datetime)
+                and getattr(report, "execution_timestamp").tzinfo is not None
+                and isinstance(fill_price, Decimal) and fill_price > 0
+                and not bool(getattr(result, "position_flat", True))
+            )
+            if not valid_fill:
+                reason = str(getattr(report, "rejected_reason", "") or f"TRACK7_{leg_id.upper()}_ENTRY_NOT_FULLY_FILLED:{status}")
+                blocked_stage = "BLOCKED"
+                if leg_id == "call" and self.state.put_open:
+                    blocked_stage = (
+                        "BLOCKED_U17" if self.state.entry_cancel_reason == "15:00_CUTOFF"
+                        else "BLOCKED_U16"
+                    )
+                self.state = replace(
+                    self.state, entry_stage=blocked_stage,
+                    entry_block_reason=reason, put_open=self.state.put_open or (leg_id == "put" and filled > 0),
+                    call_open=self.state.call_open or (leg_id == "call" and filled > 0),
+                    entry_pending=True,
+                )
+                return
+            if leg_id == "put":
+                if self.state.entry_stage != "PUT_PENDING":
+                    self.state = replace(self.state, entry_stage="BLOCKED", entry_block_reason="TRACK7_PUT_FILL_STAGE_MISMATCH")
+                    return
+                self.state = replace(
+                    self.state, put_open=True, put_entry_fill_price=fill_price,
+                    put_entry_filled_at=report.execution_timestamp,
+                    put_peak_mark=fill_price, entry_stage="CALL_READY", entry_block_reason=None,
+                    call_client_order_id=None, call_submitted_at=None,
+                    entry_cancel_requested=False, entry_cancel_reason=None,
+                )
+                return
+            if (self.state.entry_stage != "CALL_PENDING" or not self.state.put_open
+                    or self.state.put_entry_fill_price is None
+                    or not bool(getattr(result, "group_complete", False))):
+                self.state = replace(self.state, entry_stage="BLOCKED_U16", entry_block_reason="TRACK7_CALL_FILL_WITHOUT_RECONCILED_PUT_GROUP")
+                return
+            self.state = replace(
+                self.state, insurance_active=True, entry_pending=False, entry_stage="COMPLETE",
+                call_open=True, call_entry_fill_price=fill_price, call_peak_mark=fill_price,
+                entry_block_reason=None, call_client_order_id=None,
+                call_submitted_at=None, entry_cancel_requested=False,
+                entry_cancel_reason=None,
+            )
+            return
         if purpose == "WEEKLY_INSURANCE_ENTRY" and self.state.entry_pending:
             by_leg = {str(getattr(report, "leg_id", "")).lower(): report for report in reports}
             put = by_leg.get("put")
@@ -179,7 +266,7 @@ class Track7VolatilitySkewWeeklyInsurance:
             def valid_fill(report) -> bool:
                 return bool(report) and str(getattr(report, "status", "")).upper() == "FILLED" and int(getattr(report, "filled_quantity", 0) or 0) == self.insurance_qty and int(getattr(report, "remaining_quantity", -1)) == 0 and bool(getattr(report, "execution_id", None)) and getattr(report, "execution_timestamp", None) is not None and isinstance(getattr(report, "execution_price", None), Decimal)
             if valid_fill(put) and valid_fill(call) and bool(getattr(result, "group_complete", False)) and not bool(getattr(result, "position_flat", True)):
-                self.state = replace(self.state, insurance_active=True, entry_pending=False,
+                self.state = replace(self.state, insurance_active=True, entry_pending=False, entry_stage="COMPLETE",
                     put_entry_fill_price=put.execution_price, call_entry_fill_price=call.execution_price,
                     put_peak_mark=put.execution_price, call_peak_mark=call.execution_price,
                     put_open=True, call_open=True)
@@ -222,6 +309,61 @@ class Track7VolatilitySkewWeeklyInsurance:
                 track_id=self.strategy_id, tag_id=tag_id,
                 option_type=option_type or "PUT", strike=strike))
 
+    def lifecycle_clock_action(self, now: datetime):
+        """Cancel a working sequential CALL at its 10-minute deadline or 15:00 cutoff."""
+        state = self.state
+        if (state.entry_stage != "CALL_PENDING" or not state.put_open
+                or not state.call_client_order_id or state.entry_cancel_requested):
+            return None
+        if not isinstance(now, datetime) or now.tzinfo is None:
+            return None
+        kst = now.astimezone(__import__("zoneinfo").ZoneInfo("Asia/Seoul"))
+        if kst.strftime("%H:%M:%S") >= "15:00:00":
+            reason = "15:00_CUTOFF"
+        elif (state.put_entry_filled_at is not None
+              and state.put_entry_filled_at.tzinfo is not None
+              and kst >= state.put_entry_filled_at.astimezone(__import__("zoneinfo").ZoneInfo("Asia/Seoul")) + timedelta(minutes=10)):
+            reason = "TIMEOUT_10M"
+        else:
+            return None
+        self.state = replace(
+            state, entry_cancel_requested=True, entry_cancel_reason=reason,
+            entry_block_reason=f"TRACK7_CALL_CANCEL_REQUESTED:{reason}",
+        )
+        return type("Track7LifecycleAction", (), {
+            "kind": "CANCEL_AND_RECONCILE",
+            "client_order_id": state.call_client_order_id,
+            "reason": reason,
+        })()
+
+    def cancel_reconciliation_retry(self) -> None:
+        """Permit a later clock tick to retry when cancel/query did not reach terminal state."""
+        if self.state.entry_stage == "CALL_PENDING":
+            self.state = replace(self.state, entry_cancel_requested=False)
+
+    def _call_entry_signal(self, as_of: datetime | None) -> Sequence[Signal]:
+        if self.state.entry_stage != "CALL_READY":
+            return ()
+        if not isinstance(as_of, datetime) or as_of.tzinfo is None:
+            self.state = replace(self.state, entry_stage="BLOCKED_U16", entry_block_reason="TRACK7_PUT_FILL_OR_RUNTIME_TIMESTAMP_UNAVAILABLE")
+            return ()
+        kst_as_of = as_of.astimezone(__import__("zoneinfo").ZoneInfo("Asia/Seoul"))
+        if kst_as_of.strftime("%H:%M:%S") >= "15:00:00":
+            self.state = replace(self.state, entry_stage="BLOCKED_U17", entry_block_reason="TRACK7_CALL_FOLLOWUP_AFTER_1500_CUTOFF_UNRESOLVED")
+            return ()
+        put_filled_at = self.state.put_entry_filled_at
+        if put_filled_at is None or put_filled_at.tzinfo is None:
+            self.state = replace(self.state, entry_stage="BLOCKED_U16", entry_block_reason="TRACK7_PUT_FILL_TIMESTAMP_UNAVAILABLE")
+            return ()
+        if kst_as_of >= put_filled_at.astimezone(__import__("zoneinfo").ZoneInfo("Asia/Seoul")) + timedelta(minutes=10):
+            self.state = replace(self.state, entry_stage="BLOCKED_U16", entry_block_reason="TRACK7_CALL_FOLLOWUP_AFTER_PUT_FILL_10M_TIMEOUT")
+            return ()
+        return (Signal(self.strategy_id, "BUY_WEEKLY_INSURANCE_CALL", 1.0, "SEQUENTIAL_ENTRY_PUT_FILLED",
+            execution_proposal=StrategyExecutionProposal(
+                proposed_quantity=self.insurance_qty, asset_type="OPTION", side="BUY",
+                track_id=self.strategy_id, tag_id="WEEKLY_INSURANCE_ENTRY_CALL",
+                option_type="CALL", strike=self.state.call_strike)),)
+
     def evaluate(self, context: StrategyContext) -> Sequence[Signal]:
         if context.strategy_id != self.strategy_id or context.analytics is None:
             return ()
@@ -231,7 +373,9 @@ class Track7VolatilitySkewWeeklyInsurance:
         if self._exit_pending:
             return ()
         if self.state.entry_pending:
-            return ()
+            if self.state.entry_stage != "CALL_READY":
+                return ()
+            return self._call_entry_signal(getattr(context.analytics, "as_of", None))
         if self.state.insurance_active:
             # Expiry settlement is a terminal group action and takes precedence
             # over per-leg mark exits at/after the configured KST cutoff.
@@ -276,12 +420,13 @@ class Track7VolatilitySkewWeeklyInsurance:
             bought_date=format_trading_date(context.analytics.as_of.date()), expiry=contract.expiry,
             reference_price=contract.reference_price, put_strike=contract.put_strike,
             call_strike=contract.call_strike, contract_multiplier=contract.contract_multiplier,
-            peak_profit=Decimal("0"), put_open=False, call_open=False)
-        return (Signal(self.strategy_id, "BUY_WEEKLY_INSURANCE", 1.0,
+            peak_profit=Decimal("0"), put_open=False, call_open=False,
+            entry_stage="PUT_READY", entry_group_id=None, entry_block_reason=None)
+        return (Signal(self.strategy_id, "BUY_WEEKLY_INSURANCE_PUT", 1.0,
             f"NEW_WEEK:{self.state.bought_date};REF:{contract.reference_price};PUT:{contract.put_strike};CALL:{contract.call_strike}",
             execution_proposal=StrategyExecutionProposal(
                 proposed_quantity=self.insurance_qty, asset_type="OPTION", side="BUY",
-                track_id=self.strategy_id, tag_id="WEEKLY_INSURANCE_ENTRY",
+                track_id=self.strategy_id, tag_id="WEEKLY_INSURANCE_ENTRY_PUT",
                 option_type="PUT", strike=contract.put_strike)),)
 
     def build_execution_plan(self, group_id: str, *, proposal: StrategyExecutionProposal) -> MultiLegExecutionPlan:
@@ -291,13 +436,33 @@ class Track7VolatilitySkewWeeklyInsurance:
         if side == "BUY":
             if not self.runtime_config_verified or not self.risk_limits_available or not self.state.entry_pending:
                 raise ValueError("TRACK7_CONFIG_OR_RISK_GATE_BLOCKED")
-            if proposal.option_type != "PUT" or Decimal(str(proposal.strike)) != self.state.put_strike:
-                raise ValueError("TRACK7_EXECUTION_STRIKE_MISMATCH")
-            self._bind_group(group_id)
-            return MultiLegExecutionPlan(group_id=group_id, strategy_id=self.strategy_id,
-                purpose="WEEKLY_INSURANCE_ENTRY",
-                legs=(ExecutionLeg("put","BUY",self.insurance_qty,"PUT",self.state.put_strike),
-                      ExecutionLeg("call","BUY",self.insurance_qty,"CALL",self.state.call_strike)))
+            if proposal.tag_id == "WEEKLY_INSURANCE_ENTRY_PUT":
+                if self.state.entry_stage != "PUT_READY" or proposal.option_type != "PUT" or Decimal(str(proposal.strike)) != self.state.put_strike:
+                    raise ValueError("TRACK7_PUT_ENTRY_STAGE_OR_IDENTITY_MISMATCH")
+                self._bind_group(group_id)
+                self.state = replace(self.state, entry_stage="PUT_PENDING", entry_group_id=group_id)
+                return MultiLegExecutionPlan(group_id=group_id, strategy_id=self.strategy_id,
+                    purpose="WEEKLY_INSURANCE_ENTRY_PUT",
+                    legs=(ExecutionLeg("put", "BUY", self.insurance_qty, "PUT", self.state.put_strike),))
+            if proposal.tag_id == "WEEKLY_INSURANCE_ENTRY_CALL":
+                if (self.state.entry_stage != "CALL_READY" or not self.state.entry_group_id
+                        or proposal.option_type != "CALL" or Decimal(str(proposal.strike)) != self.state.call_strike):
+                    raise ValueError("TRACK7_CALL_ENTRY_STAGE_OR_IDENTITY_MISMATCH")
+                entry_group_id = self.state.entry_group_id
+                self._bind_group(entry_group_id)
+                self.state = replace(self.state, entry_stage="CALL_PENDING")
+                return MultiLegExecutionPlan(group_id=entry_group_id, strategy_id=self.strategy_id,
+                    purpose="WEEKLY_INSURANCE_ENTRY_CALL",
+                    legs=(ExecutionLeg("call", "BUY", self.insurance_qty, "CALL", self.state.call_strike),))
+            # Legacy two-leg proposal remains available to older callers/tests only.
+            if proposal.tag_id == "WEEKLY_INSURANCE_ENTRY" and proposal.option_type == "PUT" and Decimal(str(proposal.strike)) == self.state.put_strike:
+                self._bind_group(group_id)
+                self.state = replace(self.state, entry_stage="PUT_PENDING", entry_group_id=group_id)
+                return MultiLegExecutionPlan(group_id=group_id, strategy_id=self.strategy_id,
+                    purpose="WEEKLY_INSURANCE_ENTRY",
+                    legs=(ExecutionLeg("put", "BUY", self.insurance_qty, "PUT", self.state.put_strike),
+                          ExecutionLeg("call", "BUY", self.insurance_qty, "CALL", self.state.call_strike)))
+            raise ValueError("TRACK7_EXECUTION_STRIKE_MISMATCH")
         if side == "SELL":
             self._exit_pending = True
             if proposal.tag_id == "WEEKLY_INSURANCE_CLOSE_PUT":

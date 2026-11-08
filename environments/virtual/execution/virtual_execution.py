@@ -1,4 +1,5 @@
 from dataclasses import replace
+import inspect
 from typing import Callable, Iterable
 
 from contracts.execution import ExecutionProvider
@@ -24,9 +25,18 @@ class VirtualExecutionEngine(ExecutionProvider):
         self._reports[order.client_order_id] = report
         return report
 
-    def cancel(self, client_order_id: str) -> ExecutionReport:
+    def cancel(self, client_order_id: str, *, lifecycle_reason: str = "MANUAL") -> ExecutionReport:
         if self._authoritative_cancel is not None:
-            report = self._authoritative_cancel(client_order_id)
+            try:
+                parameters = inspect.signature(self._authoritative_cancel).parameters
+            except (TypeError, ValueError):
+                parameters = {}
+            if "lifecycle_reason" in parameters:
+                report = self._authoritative_cancel(
+                    client_order_id, lifecycle_reason=lifecycle_reason
+                )
+            else:
+                report = self._authoritative_cancel(client_order_id)
             self._reports[client_order_id] = report
             return report
         report = ExecutionReport(

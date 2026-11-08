@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 from dataclasses import dataclass, replace
 from pathlib import Path
 from uuid import uuid4
+from types import SimpleNamespace
 from decimal import Decimal
 
 from application.bootstrap import create_virtual_runtime_bootstrap
@@ -13,6 +15,7 @@ from environments.high_speed.replay_runner import HighSpeedReplayRunner
 from environments.high_speed.synthetic_runtime_sources import SyntheticRuntimeSources, build_synthetic_option_master
 from environments.high_speed.synthetic_replay_adapter import SyntheticReplayAdapter
 from environments.high_speed.validation_only_track6_execution import Track6SyntheticExecutionGate
+from environments.high_speed.validation_only_track7_execution import S7ValidationOnlyRuntimeAdapter
 from contracts.strategy_runtime_status import StrategyRuntimeStatus
 from core.strategy.track6_order_lifecycle import Track6LifecycleConfig
 from contracts.clock import ClockProvider
@@ -120,9 +123,10 @@ class HighSpeedVirtualRuntimeReplayRunner:
                  validation_only_synthetic: bool = False,
                  validation_only_synthetic_manifest: str | Path | None = None,
                  validation_only_s8_risk_profile: str | Path | None = None,
-                 validation_only_s9_contract_profile: str | Path | None = None,
-                 validation_only_s9_risk_profile: str | Path | None = None,
-                 validation_only_s9_restart_snapshot_path: str | Path | None = None,
+                  validation_only_s9_contract_profile: str | Path | None = None,
+                  validation_only_s9_risk_profile: str | Path | None = None,
+                  validation_only_s9_restart_snapshot_path: str | Path | None = None,
+                  validation_only_s7_risk_profile: str | Path | None = None,
                  validation_only_track6_signal_mode: bool = False,
                  validation_only_track6_execution_mode: bool = False,
                  validation_only_track6_lifecycle_config: Track6LifecycleConfig | None = None,
@@ -149,6 +153,9 @@ class HighSpeedVirtualRuntimeReplayRunner:
                 raise ValueError("S9_VALIDATION_CANNOT_SHARE_OTHER_STRATEGY_GATES")
         if self.validation_only_s9_restart_snapshot_path is not None and self.validation_only_s9_risk_profile is None:
             raise ValueError("S9_RESTART_REQUIRES_VALIDATION_ONLY_S9_RUNTIME")
+        self.validation_only_s7_risk_profile = validation_only_s7_risk_profile
+        if self.validation_only_s7_risk_profile is not None and (not self.validation_only_synthetic or self.validation_only_synthetic_manifest is None):
+            raise ValueError("S7_VALIDATION_RISK_PROFILE_REQUIRES_SYNTHETIC_MANIFEST")
         if self.validation_only_s8_risk_profile is not None and (not self.validation_only_synthetic or self.validation_only_synthetic_manifest is None):
             raise ValueError("S8_VALIDATION_RISK_PROFILE_REQUIRES_SYNTHETIC_MANIFEST")
         if self.validation_only_synthetic_manifest is not None and not self.validation_only_synthetic:
@@ -178,6 +185,7 @@ class HighSpeedVirtualRuntimeReplayRunner:
         self.s9_runtime_snapshot = None
         self.s9_runtime_provider = None
         self.s9_strategy = None
+        self.s7_validation_runtime_adapter = None
 
     def run(self, *, start: str | None = None, end: str | None = None,
             speed: float = float("inf"), max_events: int | None = None) -> HighSpeedVirtualReplayReport:
@@ -206,11 +214,33 @@ class HighSpeedVirtualRuntimeReplayRunner:
             validation_calendar = load_validation_only_trading_calendar(
                 self.validation_only_synthetic_manifest, self.dataset
             )
+        synthetic_quote_batches: dict[str, tuple[Any, ...]] = {}
+        if synthetic_adapter is not None:
+            from collections import defaultdict
+            quote_batches = defaultdict(list)
+            for dataset_file in sorted(self.dataset.glob("*.jsonl")):
+                with dataset_file.open(encoding="utf-8") as handle:
+                    for line in handle:
+                        if not line.strip():
+                            continue
+                        adapted_record = synthetic_adapter.adapt_record(json.loads(line))
+                        quote_tick = SimpleNamespace(**adapted_record["tick"])
+                        quote_batches[str(quote_tick.timestamp)].append(quote_tick)
+            synthetic_quote_batches = {key: tuple(value) for key, value in quote_batches.items()}
         synthetic_sources = SyntheticRuntimeSources(
             track5_opening_gap_points=self.track5_opening_gap_points,
             clock=self.clock,
             calendar=validation_calendar,
         )
+        if self.validation_only_s7_risk_profile is not None:
+            selected_ids = {key[0] if isinstance(key, tuple) else str(key) for key in (self.strategy_keys or ())}
+            if selected_ids != {"track7_volatility_skew_weekly_insurance"}:
+                raise ValueError("S7_VALIDATION_RUN_MUST_SELECT_ONLY_STRATEGY7")
+            self.s7_validation_runtime_adapter = S7ValidationOnlyRuntimeAdapter(
+                dataset=self.dataset, manifest_path=self.validation_only_synthetic_manifest,
+                risk_profile_path=self.validation_only_s7_risk_profile,
+            )
+            self.s7_validation_runtime_adapter.bind_run_id(self.run_id)
         if self.validation_only_s8_risk_profile is not None:
             selected_ids = {key[0] if isinstance(key, tuple) else str(key) for key in (self.strategy_keys or ())}
             if selected_ids != {"track8_macro_regime_monthly_strangle"}:
@@ -264,6 +294,7 @@ class HighSpeedVirtualRuntimeReplayRunner:
             validation_only_track6_execution_gate=self.track6_synthetic_execution_gate,
             validation_only_s8_runtime_adapter=self.s8_validation_runtime_adapter,
             validation_only_s9_runtime_adapter=self.s9_validation_runtime_adapter,
+            validation_only_s7_runtime_adapter=self.s7_validation_runtime_adapter,
             validation_only_track6_lifecycle_config=self.validation_only_track6_lifecycle_config,
         )
         self.s9_runtime_provider = getattr(loop, "standard_runtime_input_provider", None)
@@ -342,18 +373,19 @@ class HighSpeedVirtualRuntimeReplayRunner:
         def publish(tick) -> None:
             if observer is not None:
                 observer.event_sequence = totals["events"]
-            # Keep the DERIVED_SCENARIO runtime-source snapshot aligned with the
-            # current replay tick before StandardRuntimeInputProvider consumes it.
+            # Prime every contract quote sharing this exact event timestamp before
+            # strategy evaluation. This creates one coherent synthetic snapshot
+            # without advancing the analytics clock or mixing different timestamps.
+            if self.validation_only_synthetic:
+                for quote_tick in synthetic_quote_batches.get(str(tick.timestamp), ()):
+                    synthetic_sources.prime_option_quote(quote_tick)
+                    _publish_contract_scoped_replay_quote(
+                        quote_tick, option_master=bootstrap.bundle.option_master,
+                        market=bootstrap.bundle.market, order_book=vssf_runtime.order_book,
+                    )
             synthetic_sources.set_tick(tick)
             spot = float(tick.underlying_price)
-            if self.validation_only_synthetic:
-                _publish_contract_scoped_replay_quote(
-                    tick,
-                    option_master=bootstrap.bundle.option_master,
-                    market=bootstrap.bundle.market,
-                    order_book=vssf_runtime.order_book,
-                )
-            else:
+            if not self.validation_only_synthetic:
                 # Preserve the legacy non-synthetic replay contract. The P5
                 # DERIVED_SCENARIO path above must never infer other contracts'
                 # quotes from this row's option premium.

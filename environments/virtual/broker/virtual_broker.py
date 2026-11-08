@@ -40,8 +40,8 @@ class VirtualBroker(BrokerAdapter):
     def submit(self, command: BrokerOrderCommand) -> ExecutionReport:
         return self.execution_engine.execute(command)
 
-    def cancel(self, order_id: str) -> ExecutionReport:
-        return self.execution_engine.cancel(order_id)
+    def cancel(self, order_id: str, *, lifecycle_reason: str = "MANUAL") -> ExecutionReport:
+        return self.execution_engine.cancel(order_id, lifecycle_reason=lifecycle_reason)
 
     def query(self, order_id: str) -> ExecutionReport | None:
         return self.execution_engine.query(order_id)

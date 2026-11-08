@@ -4,8 +4,8 @@
   "strategies": [
     {
       "strategy_id": "TRACK1_TAIL_DEFENSE",
-      "code_version": "1.1.0",
-      "config_version": "1.0.0",
+      "code_version": "1.2.0",
+      "config_version": "1.1.0",
       "enabled": true,
       "execution_contract": "SINGLE_ORDER",
       "required_sources": [
@@ -14,21 +14,13 @@
       "required_analytics": [],
       "required_execution_tags": [],
       "required_execution_directions": [],
-      "supported_exit_modes": [
-        "DTE_CUTOFF",
-        "FENCE_CLEAR",
-        "FUTURES_UNWIND"
-      ],
+      "supported_exit_modes": [],
       "parameters": {
-        "profit_target": 500000,
-        "max_hedge_allowed": 20,
-        "FENCE_QUANTITY": 1,
-        "INITIAL_FENCE_DISTANCE": 7.5,
-        "OUTER_FENCE_DISTANCE": 12.5,
-        "VOLATILITY_EXPANSION_MULTIPLIER": 1.15,
-        "FENCE_APPROACH_RATIO": 0.9,
-        "HEDGE_REVERSION_POINTS": 1.5,
-        "DTE_CUTOFF": 4
+        "SHORT_STEP_POINTS": "2.5",
+        "SHORT_OFFSET_POINTS": "7.5",
+        "MAX_OPEN_SHORT_CONTRACTS": 10,
+        "SHORT_QUANTITY_PER_CROSSING": 1,
+        "DTE_CUTOFF": 4.0
       }
     },
     {
