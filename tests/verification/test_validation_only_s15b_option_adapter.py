@@ -43,7 +43,7 @@ def test_missing_quote_anchor_stays_unavailable_and_orderbook_depth_is_not_fabri
     adapter = S15BOptionValidationAdapter(MANIFEST)
     assert adapter.identity("C01611880") is None
     assert adapter.quote("C01611880") is None
-    assert adapter.order_book("B01611885", "fresh_two_sided") is None
+    assert adapter.is_complete_order_book_snapshot(adapter.order_book("B01611885", "fresh_two_sided"))
     assert adapter.order_book("C01611880") is None
 
 
@@ -71,18 +71,19 @@ def test_adapter_rejects_wrong_master_hash_binding(tmp_path):
 
 def test_s15b_orderbook_gate_requires_positive_price_and_quantity_on_both_sides():
     adapter = S15BOptionValidationAdapter(MANIFEST)
-    valid = tuple(OptionOrderBookLevel(Decimal("1.00") + Decimal(i) / 100, Decimal("2")) for i in range(5))
-    valid_snapshot = OptionOrderBookSnapshot("B01611885", "15:45:00", valid, valid, "TEST_ONLY")
+    asks = tuple(OptionOrderBookLevel(Decimal("1.50") + Decimal(i) / 100, Decimal("2")) for i in range(5))
+    bids = tuple(OptionOrderBookLevel(Decimal("1.40") - Decimal(i) / 100, Decimal("2")) for i in range(5))
+    valid_snapshot = OptionOrderBookSnapshot("B01611885", "15:45:00", asks, bids, "TEST_ONLY")
     assert adapter.is_complete_order_book_snapshot(valid_snapshot)
 
-    zero_price_asks = (OptionOrderBookLevel(Decimal("0"), Decimal("0")),) + valid[1:]
-    zero_price_snapshot = OptionOrderBookSnapshot("B01611885", "15:45:00", zero_price_asks, valid, "TEST_ONLY")
+    zero_price_asks = (OptionOrderBookLevel(Decimal("0"), Decimal("0")),) + asks[1:]
+    zero_price_snapshot = OptionOrderBookSnapshot("B01611885", "15:45:00", zero_price_asks, bids, "TEST_ONLY")
     # The legacy shared predicate is intentionally not changed by this S15b-only fix.
     assert zero_price_snapshot.is_complete()
     assert not adapter.is_complete_order_book_snapshot(zero_price_snapshot)
 
-    zero_quantity_bids = (OptionOrderBookLevel(valid[0].price, Decimal("0")),) + valid[1:]
-    zero_quantity_snapshot = OptionOrderBookSnapshot("B01611885", "15:45:00", valid, zero_quantity_bids, "TEST_ONLY")
+    zero_quantity_bids = (OptionOrderBookLevel(bids[0].price, Decimal("0")),) + bids[1:]
+    zero_quantity_snapshot = OptionOrderBookSnapshot("B01611885", "15:45:00", asks, zero_quantity_bids, "TEST_ONLY")
     assert zero_quantity_snapshot.is_complete()
     assert not adapter.is_complete_order_book_snapshot(zero_quantity_snapshot)
 
