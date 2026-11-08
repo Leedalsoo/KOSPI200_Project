@@ -131,6 +131,27 @@ class S15BOptionValidationAdapter:
             payload_sha256=row.get("payload_sha256"),
         )
 
+    @staticmethod
+    def is_complete_order_book_snapshot(
+        snapshot: OptionOrderBookSnapshot | None,
+        *,
+        depth: int = 5,
+    ) -> bool:
+        """Strict S15b-only depth gate; the shared production contract is unchanged."""
+        if snapshot is None or isinstance(depth, bool) or not isinstance(depth, int) or depth < 1:
+            return False
+        if not str(snapshot.symbol).strip():
+            return False
+        for levels in (snapshot.ask_levels, snapshot.bid_levels):
+            if len(levels) < depth:
+                return False
+            for level in levels[:depth]:
+                if not level.price.is_finite() or level.price <= 0:
+                    return False
+                if not level.quantity.is_finite() or level.quantity <= 0:
+                    return False
+        return True
+
     def order_book(self, symbol: str, scenario_id: str | None = None) -> OptionOrderBookSnapshot | None:
         # The supplement has bid/ask prices but no quantities/depth. Never invent them.
         self.quote(symbol, scenario_id)

@@ -1,10 +1,12 @@
 ﻿from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
 from contracts.market_data_freshness import FreshnessStatus
+from contracts.option_orderbook_source import OptionOrderBookLevel, OptionOrderBookSnapshot
 from environments.high_speed.validation_only_s15b_option_adapter import (
     S15BOptionValidationAdapter,
     S15BValidationAdapterError,
@@ -65,3 +67,25 @@ def test_adapter_rejects_wrong_master_hash_binding(tmp_path):
     altered.write_text(json.dumps(original), encoding="utf-8")
     with pytest.raises(S15BValidationAdapterError, match="S15B_ROW_MASTER_HASH_MISMATCH"):
         S15BOptionValidationAdapter(altered, project_root=ROOT)
+
+
+def test_s15b_orderbook_gate_requires_positive_price_and_quantity_on_both_sides():
+    adapter = S15BOptionValidationAdapter(MANIFEST)
+    valid = tuple(OptionOrderBookLevel(Decimal("1.00") + Decimal(i) / 100, Decimal("2")) for i in range(5))
+    valid_snapshot = OptionOrderBookSnapshot("B01611885", "15:45:00", valid, valid, "TEST_ONLY")
+    assert adapter.is_complete_order_book_snapshot(valid_snapshot)
+
+    zero_price_asks = (OptionOrderBookLevel(Decimal("0"), Decimal("0")),) + valid[1:]
+    zero_price_snapshot = OptionOrderBookSnapshot("B01611885", "15:45:00", zero_price_asks, valid, "TEST_ONLY")
+    # The legacy shared predicate is intentionally not changed by this S15b-only fix.
+    assert zero_price_snapshot.is_complete()
+    assert not adapter.is_complete_order_book_snapshot(zero_price_snapshot)
+
+    zero_quantity_bids = (OptionOrderBookLevel(valid[0].price, Decimal("0")),) + valid[1:]
+    zero_quantity_snapshot = OptionOrderBookSnapshot("B01611885", "15:45:00", valid, zero_quantity_bids, "TEST_ONLY")
+    assert zero_quantity_snapshot.is_complete()
+    assert not adapter.is_complete_order_book_snapshot(zero_quantity_snapshot)
+
+    assert not adapter.is_complete_order_book_snapshot(None)
+    assert not adapter.is_complete_order_book_snapshot(valid_snapshot, depth=0)
+    assert not adapter.is_complete_order_book_snapshot(valid_snapshot, depth=6)
