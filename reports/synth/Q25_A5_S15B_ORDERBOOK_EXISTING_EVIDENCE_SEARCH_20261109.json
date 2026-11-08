@@ -1,0 +1,32 @@
+{
+  "schema": "q25-a5-stage-report-v1",
+  "stage": "S15B_ORDERBOOK_EXISTING_EVIDENCE_SEARCH",
+  "date": "2026-11-09",
+  "verdict": "BLOCKED_SPEC",
+  "scope": "Read-only search of already-preserved local evidence only; no API access",
+  "searched_locations": [
+    "isolated S15b worktree data/, verification/, reports/, environments/",
+    "original workfolder data/, verification/, reports/",
+    "data/kis_market_data_restart/20261001/kis_vts_websocket_orderbook_raw.jsonl"
+  ],
+  "findings": [
+    "The isolated worktree contains the prior S15b order-book audit and validation-only reports, but no additional raw order-book snapshot file.",
+    "The original workfolder contains one additional named raw H0IOASP0 WebSocket JSONL file for 2026-10-01 (133123 bytes).",
+    "That JSONL file has zero occurrences of target S15b contracts B01611885 and B01611887; it cannot provide their order-book depth.",
+    "The previously audited 2026-10-21 H0IOASP0 REST snapshots for B01611885/B01611887 remain one-sided: five valid bid levels and five zero-price/zero-quantity ask levels."
+  ],
+  "conclusion": {
+    "usable_two_sided_orderbook_for_s15b": "UNAVAILABLE",
+    "synthetic_depth_created": false,
+    "new_market_evidence_acquired": false,
+    "next_gate": "A valid two-sided depth source for the exact S15b contract(s), or separate explicit decision to change the shared Production completeness predicate. KIS API access remains prohibited without separate explicit approval."
+  },
+  "safety": {
+    "kis_api_called": false,
+    "real_vts_live_account_order_api_called": false,
+    "original_raw_data_modified": false,
+    "s15a_modified": false,
+    "source_code_modified": false,
+    "original_workfolder_modified": false
+  }
+}
