@@ -230,6 +230,13 @@ class S15BOptionValidationAdapter:
             source=f"SYNTHETIC:DERIVED_SCENARIO:{row.get('scenario_id')}",
         )
 
+    def get_order_book(self, symbol: str) -> OptionOrderBookSnapshot | None:
+        """OptionOrderBookSource port for the positive S15b validation scenario only."""
+        snapshot = self.order_book(symbol, "fresh_two_sided")
+        if not self.is_complete_order_book_snapshot(snapshot):
+            return None
+        return snapshot
+
     def freshness(
         self,
         symbol: str,
