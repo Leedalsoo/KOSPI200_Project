@@ -73,4 +73,5 @@ SSOT: Current Baseline v2 @E865A11E5B12862294DA0DC2386870381AC91E0A5490A6D87BEDA
 
 - All source changes and generated artifacts are in isolated worktree `q25-a5-s22-s5-group-close-20261109`.
 - Original workfolder dirty count remains 224; no original files were modified.
-- No commit/push has been executed yet. S23 permits non-force push only to `cleanup/p2-quarantine-20261026`; target remote SHA must be checked for fast-forward before push.
+- Commit `575712b875965eb7f16c91fd1b4aced00758d691` pushed non-force to `cleanup/p2-quarantine-20261026`; remote SHA verified identical.
+- Earlier S21/S23 diagnostic reports and retry outputs remain untracked and were excluded from this commit; the committed final runner, source seed, FAST/DETAILED datasets, result, trace, and report are complete.
