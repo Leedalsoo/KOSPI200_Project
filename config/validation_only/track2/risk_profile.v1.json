@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0.0",
+  "profile_id": "S2-VALIDATION-ONLY-RISK-PROFILE-v1",
+  "profile_type": "VALIDATION_ONLY",
+  "strategy_id": "track2_asymmetric_trap",
+  "status": "BLOCKED_SPEC_UNTIL_POLICY_AND_AUTHORITATIVE_INPUTS_APPROVED",
+  "execution_enabled": false,
+  "order_submission_enabled": false,
+  "live_api_enabled": false,
+  "real_vts_api_enabled": false,
+  "risk_limits": {
+    "account_capital_krw": null,
+    "account_max_premium_krw": null,
+    "account_max_loss_krw": null,
+    "max_margin_utilization_ratio": null,
+    "max_concurrent_risk_budget_krw": null,
+    "strategy_max_premium_krw": null,
+    "strategy_max_loss_krw": null,
+    "max_concurrent_groups": null,
+    "group_max_loss_krw": null,
+    "fee_model_version": null,
+    "slippage_model_version": null,
+    "margin_model_version": null
+  },
+  "unresolved_policy_dependencies": ["S2-U16", "S2-U17", "S2-U18", "S2-U19", "S2-U20", "S2-U21"],
+  "notes": "Validation metadata only. Null limits are intentional; this profile cannot authorize entry, order submission, risk approval, or margin calculation."
+}
