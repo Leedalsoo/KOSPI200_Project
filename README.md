@@ -1,163 +1,54 @@
 # KOSPI200 Project200
 
-KOSPI200 선물·옵션 자동매매 시스템 개발 프로젝트다. 현재 개발·검증의 중심은 **Virtual Trading / KIS VTS / Control Tower / Strategy 1~9 / REAL_VTS 기반 E2E**이며, Live 주문은 실행하지 않는다.
+KOSPI200 옵션 데이터·전략·가상 검증 프로젝트입니다. 현재 검증 기준과 작업 범위는 **Current Baseline v2**를 단일 SSOT로 사용합니다.
 
-상세 작업 기준은 [AGENTS.md](AGENTS.md)를 따른다.
+- 기준 문서: [`docs/CURRENT_BASELINE.md`](docs/CURRENT_BASELINE.md)
+- 작업·안전 지침: [`AGENTS.md`](AGENTS.md)
+- 기준 Notion: [Current Baseline v2 — SSOT (2026-11-09)](https://app.notion.com/p/4135f4f6eaa181f7ac42dea70e10fa42)
+- 정리 진행표: [Q25 A6 기준 정리 진행표 — No.1476](https://app.notion.com/p/4135f4f6eaa1817fb644c2280e813de1)
 
-## 1. 현재 표준 실행 구조
+## 현재 범위와 검증 상태
 
-**Market Data Source → Runtime Input → Strategy → Decision → Risk → OMS/Order Router → Broker → Execution → Position/Margin/PnL → Control Tower Read Model**
+Q25의 현재 검증은 PSB(validation-only) 범위입니다. `PSB_PASS`는 명시된 가상·합성 입력과 검증 경로의 결과이며 Production, 실계좌 또는 Live 준비 완료를 뜻하지 않습니다. 현재 전략 범위는 S1, S2, S5, S6, S7, S8, S9이며 S3/S4는 제외합니다.
 
-Control Tower는 감독·운영·read-model 계층이며 정상적인 주문 생성이나 전략 로직을 소유하지 않는다.
+| 전략 | 기준 상태 | 제한 사항 |
+|---|---|---|
+| S1 | S15a signal-only 완료; S15b 단일 short CALL plumbing 검증 `PSB_PASS` | 단일 leg validation-only. Multi-leg·Production route 미검증 |
+| S2 | Rank 5 검증 | Rank 6 Runtime 미연결, `PSB_UNVERIFIED` |
+| S5 | 신규 진입 `BLOCKED`; S21 시나리오 카탈로그 54건 생성 | 카탈로그 생성은 Runtime PASS가 아님; S22 대기 |
+| S6 | Synthetic validation-only E2E `PSB_PASS` | Production 검증 아님 |
+| S7 | Synthetic validation-only Runtime/exit/fee-aware E2E `PSB_PASS` | Production 검증 아님 |
+| S8 | S10 exit E2E `PSB_PASS`; S11b natural-signal retry `PSB_PASS_VALIDATION_ONLY_SYNTHETIC` | No.1397의 제한된 timeout/retry 정책 적용 |
+| S9 | No.1439 독립 v0.3 승인 기준: ATM PUT+CALL BUY/BUY, 15:00 진입 | 야간 세션 미사용; 미확정 KIS 계약·가격 입력은 fail-closed |
 
-| 경로 | 역할 |
-|---|---|
-| `contracts/` | 표준 계약·DTO·Port |
-| `core/` | 환경 독립 Domain·Strategy·Risk·OMS |
-| `application/` | Orchestration·Composition·Hub |
-| `environments/` | Virtual/Paper/Live/High-Speed 구현 |
-| `infrastructure/` | KIS/KRX 등 외부 Adapter/Source |
-| `interfaces/` | Control Tower/API/UI |
-| `tests/` | 회귀·통합 검증 |
+전략별 세부 상태, 데이터 범위, 근거 및 미해결 항목은 Current Baseline v2를 확인하십시오. 시나리오 카탈로그, fixture 관찰, 단일 plumbing 검증만으로 자연 신호 기반 Runtime E2E 완료를 주장하지 않습니다.
 
-## 2. Strategy 기준
+## 데이터와 검증 원칙
 
-Strategy 1~9는 독립적인 Strategy Plugin/Registry 경계를 유지한다.
+- Runtime/contract의 authoritative source는 공식 KIS API 및 공식 KIS 종목 Master 범위입니다. KIS 값의 누락을 다른 공급자나 추정값으로 대체하지 않습니다.
+- REST, WebSocket, REAL_VTS, SYNTHETIC, DERIVED_SCENARIO는 source/provenance를 구분합니다. Synthetic/derived 입력은 유효한 KIS anchor, provenance, manifest/hash가 보존된 validation-only 보완 검증에만 사용하며 Production authoritative 입력으로 취급하지 않습니다.
+- 관측 identity/time semantics 및 replay eligibility가 입증되지 않은 데이터는 검증 가능하다고 간주하지 않습니다.
+- 계약 identity, expiry, strike, option type, broker symbol, multiplier, tradability 및 source timestamp가 확인되지 않으면 `UNAVAILABLE` 또는 구체적인 `BLOCKED_*`로 fail-closed 처리합니다.
+- `PSB_PASS`, `PLUMBING_ONLY`, `PSB_UNVERIFIED`, `BLOCKED_*`는 각각 검증 범위를 구분해 기록합니다. 과거 테스트 결과는 현재 기준의 재검증을 대신하지 않습니다.
 
-공통 시장지표와 계산은 Common Analytics가 소유하고 표준 `AnalyticsSnapshot`으로 제공한다. Strategy는 이를 소비하고 전략 고유의 진입·청산·헤지·상태전이·포지션 규칙을 담당한다.
+## 안전 경계
 
-Authoritative source가 없는 값을 고정값, 0/False, 추정값 또는 synthetic 값으로 채워 정상 신호를 만들지 않는다.
+- KIS Live, REAL_VTS, 실계좌의 주문·정정·취소·잔고·체결·증거금 API 호출은 금지합니다.
+- credential/secret, `.env`, 운영 RiskConfig, runtime 권한, scheduler, collector 설정 및 원본 데이터를 임의로 변경하지 않습니다.
+- 검증 산출물은 원본과 분리된 경로에 저장하고, 원본 데이터 및 기존 dirty/untracked 작업물을 보존합니다.
+- Git 작업은 격리 worktree에서 수행합니다. 승인된 대상은 `cleanup/p2-quarantine-20261026`이며 non-force push만 허용됩니다. `Project200`/`master` push, force push, merge 및 history rewrite는 금지됩니다.
+- 불명확한 authoritative source, 상충하는 승인 결정, 원본 손상 위험 또는 운영 설정 변경 필요성이 발견되면 중단하고 보고합니다.
 
-## 3. KIS VTS / REAL_VTS 데이터
+## 작업 절차
 
-KIS VTS 모의계좌에서 수집한 실제 시장데이터는 **REAL_VTS 원본**으로 취급한다. REAL_VTS는 Live 데이터가 아니며 Live E2E PASS를 의미하지 않는다.
+세부 작업 순서와 승인 규칙은 [`AGENTS.md`](AGENTS.md)를 따릅니다. A6 C01–C10 기준 정리 중에는 A5 전략 실행 단계를 재개하지 않습니다. A6 승인 한 번은 대기 중인 C 단계 하나만 실행하며, 해당 단계가 끝나면 멈춥니다.
 
-현재 운영 저장 루트:
+Windows에서 Python 명령은 `py`를 사용합니다. 실제 실행 명령, 출력, 종료 코드 및 관련 증거를 기록하고, 실행하지 않은 검증을 완료한 것으로 보고하지 않습니다.
 
-`data/kis_market_data_restart/YYYYMMDD/`
+## 별도 결정 대기 항목
 
-날짜별 partition은 독립적인 테스트 데이터셋이 아니라 누적되는 실제 시장 데이터 stream의 저장 단위다.
+3개월 자동 E2E/Replay, scheduler 및 Control Tower 운영 범위와 Calendar/휴일 자동화의 세부 요구사항은 현재 확정된 작업 요건으로 간주하지 않습니다. A6 결정 카드 DC-03/DC-04의 사용자 결정 전에는 이를 근거로 운영 설정이나 scheduler를 변경하지 않습니다.
 
-REST와 WebSocket은 독립적인 수집 경계로 유지한다.
+---
 
-- REST: 시장관측/Historical Store 원본
-- WebSocket: raw frame 원본
-- source/provenance와 timestamp를 transport 간 혼용하지 않는다.
-- WebSocket 연결 성공만으로 frame 수신 PASS를 선언하지 않는다.
-- manifest와 실제 raw/canonical evidence가 다르면 collector lifecycle 문제로 별도 조사한다.
-
-## 4. Replay / E2E 검증
-
-Strategy 1~9는 가능한 authoritative input 범위에서 독립적으로 검증한다.
-
-**Source → Runtime Input → Strategy Signal → Decision → Risk → OMS/Router → Virtual Execution → Position/PnL → Regression**
-
-실제 signal이 관찰되지 않은 전략은 signal-driven execution lifecycle PASS를 선언하지 않는다.
-
-REAL_VTS, DERIVED_SCENARIO, SYNTHETIC, VIRTUAL_EXECUTION provenance는 서로 구분한다.
-
-각 실행은 독립 Run ID와 독립적인 execution/position/strategy state를 사용한다.
-
-High-Speed Replay은 필요에 따라 가속 실행하되 원본 event timestamp의 순서와 시간관계를 보존한다.
-
-## 5. Control Tower
-
-현재 UI는 다음 구조를 유지한다.
-
-- 6개 운영 탭
-- Strategy 1~9
-- 3×3 동일 크기 Strategy Grid
-- Strategy별 독립 Composition Graph
-- Strategy Control의 USE / ENTRY / EXIT
-- Strategy Trade P/L과 Account P/L 분리
-- Strategy 카드의 월별 Trade P/L: ENTRY → CLOSE/EXPIRY
-- 카드 하단의 Strategy Integrated P/L
-- Graph에서는 BUY/SELL trade value와 계약 구조를 표시하며 P/L을 계산하지 않음
-
-UI 표준 경로:
-
-**Authoritative Runtime / Execution / Position Read Model → Option Program Read Model → Control Tower API → UI**
-
-UI가 Strategy/Core를 직접 호출하거나 없는 데이터를 임의 생성하지 않는다.
-
-## 6. Filled → Position → Trade P/L → UI
-
-**ExecutionReport → Position Group → Strategy Trade P/L → Strategy Card P/L**
-
-Runtime execution과 Control Tower Read Model은 동일한 authoritative execution/position-group 상태를 바라보아야 한다.
-
-Account P/L과 Strategy Trade P/L은 의미가 다를 수 있으므로 임의로 동일하게 맞추지 않는다. Position open/closed와 Trade Ledger 상태가 불일치하면 별도 accounting/read-model 검증 대상으로 취급한다.
-
-현재 일부 실제 VTS 연결 증거가 확보되어 있지만 이를 Strategy 1~9 전체 Full E2E PASS로 확대하지 않는다.
-
-## 7. 3개월 자동 E2E
-
-자동 검증 pattern:
-
-**trend_up → trend_down → mean_revert → high_volatility → low_volatility → shock**
-
-판정 규칙:
-
-- Replay PASS + UI smoke PASS → PASS
-- Replay FAIL → FAIL
-- UI smoke FAIL → FAIL
-- Replay FAIL이어도 UI smoke는 실행
-- UI smoke FAIL이면 다음 pattern으로 회전
-- Replay만 FAIL이고 UI smoke가 PASS이면 같은 pattern 재시도
-
-현재 scheduled UI smoke는 HTTP/API/UI contract를 검증한다. 동일 replay의 실제 브라우저 DOM Playwright 검증과는 구분한다.
-
-## 8. 검증 원칙
-
-테스트 파일의 PASS만으로 production 기능의 PASS를 선언하지 않는다.
-
-실제 검증은 현재 코드와 실제 실행 evidence를 우선한다.
-
-기본 참조 순서:
-
-**Current Baseline → 최신 활성 Decision Log → AGENTS.md → 현재 코드/실제 데이터/source → 새 검증**
-
-Windows Python 실행은 `py`를 사용한다.
-
-판정은 실제 실행 명령, 출력, exit code 및 관련 evidence를 기준으로 **PASS / FAIL / BLOCKED**를 구분한다.
-
-## 9. Git / 작업 기준
-
-- `.env` 및 credential은 commit하지 않는다.
-- 사용자 작업 중인 unrelated 변경은 임의로 수정하거나 함께 commit하지 않는다.
-- 일회성 실행 로그, cache 및 폐기된 Legacy 산출물은 저장소에 남기지 않는다.
-- 변경 후 focused test 및 필요한 E2E를 수행한다.
-- `git diff --check`와 `git status`를 확인한다.
-- commit/push 후 원격 `Project200` HEAD를 확인한다.
-
-상세 작업 절차와 현재 세부 기준은 **[AGENTS.md](AGENTS.md)**를 기준으로 한다.
-
-## 10. 현재 미완료 범주
-
-실제 evidence가 확보될 때까지 다음 항목은 전체 PASS로 취급하지 않는다.
-
-- Strategy 1~9 전체의 REAL_VTS signal → execution → Position/PnL Full E2E
-- 동일 3개월 replay와 동일 runtime state를 대상으로 한 실제 browser DOM Playwright 자동 검증
-- Strategy Trade P/L / Account P/L / Position open·closed semantics의 완전한 회계 정합성
-- KIS VTS Collector manifest/lifecycle과 실제 evidence의 완전한 정합성
-- KIS Live credential 및 실제 Live E2E
-- 옵션 매수호가·승수·수량·수수료·슬리피지를 반영하는 Runtime 프리미엄 검사
-- 옵션 레그별 만기 payoff/max-loss 및 기존 미청산 포지션·체결 원장 기반 계좌 전체 위험 집계
-- 부분체결·거절·청산·만기 회귀 검증
-- Strategy 1 헤지 구조와 Strategy 3·4·5 선물 레그의 경제적 목적·위험 한도 확정
-
-## 11. 옵션 헤지 위험 검사 — 현재 계획
-
-옵션 헤지 설정 초안은 config/risk/option-hedge-risk.v1.json, 검증 모델은 core/risk/option_hedge_risk_config.py에 있다. 현재 DISABLED_UNTIL_RUNTIME_INTEGRATION 상태이므로 실제 주문 경로의 위험 차단 기능으로 간주하지 않는다. 단위 테스트가 통과해도 Runtime enforcement PASS를 의미하지 않는다.
-
-구현 순서는 다음과 같다.
-
-1. Strategy 1 보호 구조와 Strategy 3·4·5 선물 레그의 경제적 목적·위험 한도를 별도 검토한다.
-2. authoritative 매수호가, 계약 승수, 수량, 수수료 및 보수적 슬리피지를 포함해 프리미엄을 검사한다.
-3. 각 레그의 정확한 만기·행사가·방향·수량으로 만기 payoff와 최대손실을 계산한다.
-4. 기존 미청산 포지션과 실제 체결 원장을 연결해 중복 없는 계좌 전체 위험을 집계한다.
-5. 부분체결·거절·청산·만기 및 입력 누락/오류 회귀를 검증한다.
-
-기존 공통 RiskConfig의 일일 손실 한도와 증거금 한도는 그대로 유지하며 옵션 프리미엄/최대손실 한도로 재해석하지 않는다. 임시 설정 금액은 최종 운용 한도로 확정되지 않았다. authoritative 데이터가 누락되거나 계산이 불가능하면 fail-closed한다. 전략 코드·manifest·매매 정책은 전략별 설계 및 회귀 범위 승인을 거친 뒤 변경한다.
-
-README는 프로젝트의 현재 구조와 작업 순서를 요약하고, 상세 절차는 AGENTS.md, 실제 결정 상태는 Notion의 최신 Q&A와 확정 Decision Log를 기준으로 한다.
+이 README는 프로젝트 개요입니다. 최신 기준은 Current Baseline v2이며, 충돌 시 README의 설명보다 SSOT와 `AGENTS.md`의 우선순위를 따릅니다.
