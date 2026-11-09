@@ -104,3 +104,15 @@ A6 C01–C10은 문서·기준 정합성 정리 작업이다. 완료 전까지 A
 - authoritative source, 명세 또는 사용자 결정이 필요한 충돌이 확인된 경우
 - 같은 오류가 연속 2회 발생한 경우
 - 승인 범위 밖 파일·브랜치·Notion 기록을 변경해야 하는 경우
+
+## 14. Current Baseline v2 검증 게이트 (필수)
+모든 검토·수정·테스트·검증 보고는 작업 전에 다음 gate를 통과해야 한다.
+
+1. 기준 고정: `docs/CURRENT_BASELINE.md`가 Current Baseline v2인지 확인하고 SHA-256을 계산한다. Notion SSOT와 불일치하거나 버전/hash를 확인할 수 없으면 작업을 시작하지 않고 `BLOCKED_SSOT`로 보고한다.
+2. 보고 첫 줄: 모든 검증 보고서의 첫 줄은 반드시 다음 형식으로 시작한다. `기준: Current Baseline v2 @<실제 SHA-256>, 사용한 SSOT 항목 ID: <CB2-xx 목록>` 기준 문서 hash와 사용한 항목 ID를 생략하거나 추정하지 않는다.
+3. 항목 ID mapping: `CB2-01` 권위·적용 순서(§1), `CB2-02` 프로젝트 범위·안전 경계(§2), `CB2-03` 검증 원칙(§3), `CB2-04` 전략별 상태(§4), `CB2-05` 데이터·계약·시간(§5), `CB2-06` Runtime·Risk·OMS(§6), `CB2-07` A6 단계(§7), `CB2-08` 근거 페이지(§8), `CB2-09` 미확인·별도 결정(§9). 실제 작업에 적용한 ID만 기재한다.
+4. 사전 대조: 작업 목적·대상 파일·허용 변경·금지 범위·검증 방법을 관련 CB2 ID와 연결한다. AGENTS.md, 확정 Decision Log 및 사용자 승인과 충돌하는 내용이 발견되면 수정·테스트·Notion 변경을 진행하지 말고 `BLOCKED_POLICY_CONFLICT`로 중단·보고한다. 확인되지 않은 우선순위나 오래된 Q&A로 충돌을 임의 해소하지 않는다.
+5. 실행 증거: 명령, 실행 환경, 입력 범위, 종료 코드, 통과/실패/skip 수치, 로그·산출물 위치, 변경 파일 및 commit SHA를 기록한다. 수행하지 않은 항목은 `미실행`으로 표시한다.
+6. 결과 분리: `PASS`는 해당 범위의 실행 증거가 있을 때만 사용한다. validation-only `PSB_PASS`는 Production/Live 승인으로 확대 해석하지 않는다. `BLOCKED_INPUT`, `BLOCKED_POLICY_CONFLICT`, `BLOCKED_SSOT`, `PSB_UNVERIFIED`, `PLUMBING_ONLY` 등 실제 근거에 맞는 상태를 구분한다.
+7. 무결성: 테스트/도구가 원본·미승인 파일을 변경했는지 사후 확인한다. side effect는 원인을 확인하고 승인된 범위에서만 복구한다. 복구할 수 없거나 원본 손상 위험이 있으면 중단한다.
+8. 종료 조건: 기준 hash, SSOT ID, 충돌 여부, 실행 결과 및 미검증 범위가 보고서에 모두 기록되고 diff/status 검토가 끝나야 완료 처리한다. 충돌 발견 시 우회하거나 기준을 고쳐 맞추지 않는다.
