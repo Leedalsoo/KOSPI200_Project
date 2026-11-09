@@ -1,0 +1,32 @@
+{
+  "account_api_allowed": false,
+  "event_count": 1,
+  "events_file": "events.jsonl",
+  "events_sha256": "46c9ac69714bff1b48600d4218e7e3ab0d70258f8d9bbc1adaa3b0d272b846a8",
+  "execution_enabled": false,
+  "group_id": "S5-S23-STRATEGYHUB-FAST",
+  "instrument_id": "SYNTHETIC_CONTRACT:S5:20261112:CALL:887.50",
+  "kis_api_allowed": false,
+  "live_api_allowed": false,
+  "multiplier_source_url": "https://securities.koreainvestment.com/main/bond/domestic/_static/TF03bd010100.jsp?templet-bypass=true",
+  "orders_allowed": false,
+  "production_runtime_eligible": false,
+  "provenance": "SYNTHETIC:DERIVED_SCENARIO",
+  "real_vts_api_allowed": false,
+  "run_id": "Q25-A5-S23-S5-STRATEGYHUB-FAST-20261109",
+  "schema": "q25-a5-validation-only-position-seed-manifest-v1",
+  "source_expiry_file_sha256": "DC100CD8D218A2FDE77406D4761C0ACCE617F3D5088C0D951796CE7F9595234F",
+  "source_instrument_code": "B01611887",
+  "source_master_file_sha256": "EFB5B80BE190971EEA41A73F20573E7F4A4B33CAEABF1FC47CA8298A315E43EB",
+  "strategy_id": "track5_gap_divergence",
+  "synthetic_identity_mapping": {
+    "contract_multiplier": "250000",
+    "mapping_provenance": "VALIDATION_ONLY_ALIAS_FROM_KIS_ANCHORED_SEED",
+    "option_type": "CALL",
+    "source_expiry": "20261112",
+    "source_kis_instrument_code": "B01611887",
+    "strike": "887.50",
+    "synthetic_instrument_id": "SYNTHETIC_CONTRACT:S5:20261112:CALL:887.50"
+  },
+  "validation_only": true
+}

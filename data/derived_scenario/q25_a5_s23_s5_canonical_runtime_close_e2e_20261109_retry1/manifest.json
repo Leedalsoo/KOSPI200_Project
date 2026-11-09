@@ -1,0 +1,22 @@
+{
+  "account_api_allowed": false,
+  "event_count": 1,
+  "events_file": "events.jsonl",
+  "events_sha256": "7e7af03974c7fd1cb7a7b1ab1c185088a370711757f432d6be959f3eb4095008",
+  "execution_enabled": false,
+  "group_id": "S5-S23-KIS-ANCHORED-SYNTHETIC",
+  "instrument_id": "B01611887",
+  "kis_api_allowed": false,
+  "live_api_allowed": false,
+  "multiplier_source_url": "https://securities.koreainvestment.com/main/bond/domestic/_static/TF03bd010100.jsp?templet-bypass=true",
+  "orders_allowed": false,
+  "production_runtime_eligible": false,
+  "provenance": "SYNTHETIC:DERIVED_SCENARIO",
+  "real_vts_api_allowed": false,
+  "run_id": "Q25-A5-S23-S5-KIS-ANCHORED-SYNTHETIC-20261109",
+  "schema": "q25-a5-validation-only-position-seed-manifest-v1",
+  "source_expiry_file_sha256": "DC100CD8D218A2FDE77406D4761C0ACCE617F3D5088C0D951796CE7F9595234F",
+  "source_master_file_sha256": "EFB5B80BE190971EEA41A73F20573E7F4A4B33CAEABF1FC47CA8298A315E43EB",
+  "strategy_id": "track5_gap_divergence",
+  "validation_only": true
+}

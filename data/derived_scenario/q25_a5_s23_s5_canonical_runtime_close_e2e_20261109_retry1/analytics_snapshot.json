@@ -1,0 +1,14 @@
+{
+  "direction": "SHORT",
+  "entry_price_scenario": "891.04",
+  "exit_input_scenario": "858.78",
+  "market_snapshot_sha256": "e05c3c973485dd804b8561bbb89948f6641800090116d644a4ec17c53579faf7",
+  "open_ticks_scenario": 2,
+  "production_runtime_eligible": false,
+  "provenance": "SYNTHETIC:DERIVED_SCENARIO",
+  "scenario_as_of": "2026-10-22T02:16:00+09:00",
+  "schema": "q25-a5-s23-analytics-snapshot-v1",
+  "state_origin": "SYNTHETIC_TEST_FIXTURE_NOT_HISTORICAL_TRACK5_STATE",
+  "target_price_scenario": "858.78",
+  "validation_only": true
+}

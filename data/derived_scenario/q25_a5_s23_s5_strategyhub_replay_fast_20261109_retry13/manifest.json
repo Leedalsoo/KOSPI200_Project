@@ -1,0 +1,31 @@
+{
+  "contract_multiplier": "250000",
+  "event_count": 2,
+  "events_file": "20261022.jsonl",
+  "events_sha256": "2e08db90131cf23ea99bdc0ca3a24f29b221d03fd9352af02e93bb7c3107c8b5",
+  "identity_policy": {
+    "mode": "SYNTHETIC_ONLY",
+    "production_standard_instrument_id_assigned": false,
+    "synthetic_contract_id_namespace": "SYNTHETIC_CONTRACT:"
+  },
+  "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+  "note": "Validation-only synthetic alias; no Standard instrument ID is assigned to runtime routing.",
+  "production_runtime_eligible": false,
+  "provenance": "DERIVED_SCENARIO",
+  "scenario_count": 1,
+  "scenario_ids": [
+    "S5-S23-STRATEGYHUB-CLOSE"
+  ],
+  "scenario_regimes": {
+    "S5-S23-STRATEGYHUB-CLOSE": "NORMAL"
+  },
+  "schema": "reference-canonical-market-tick-v1",
+  "source_contract_identity": "KIS_OFFICIAL_MASTER|KIS_PRODUCT_SPEC",
+  "source_expiry_file_sha256": "DC100CD8D218A2FDE77406D4761C0ACCE617F3D5088C0D951796CE7F9595234F",
+  "source_instrument_code": "B01611887",
+  "source_kis_expiry": "20261112",
+  "source_master_file_sha256": "EFB5B80BE190971EEA41A73F20573E7F4A4B33CAEABF1FC47CA8298A315E43EB",
+  "synthetic": true,
+  "validation_identity_namespace": "SYNTHETIC_CONTRACT:",
+  "validation_only": true
+}

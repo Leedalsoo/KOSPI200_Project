@@ -1,0 +1,21 @@
+{
+  "anchor_environment": "HISTORICAL_VTS_RESPONSE_ONLY",
+  "anchor_file_sha256": "DC100CD8D218A2FDE77406D4761C0ACCE617F3D5088C0D951796CE7F9595234F",
+  "anchor_source": "KIS_REST:futs_last_tr_date",
+  "derived_prior_close_scenario_price": "858.78",
+  "expiry": "20261112",
+  "index_previous_change_reference": "32.26",
+  "index_spot_reference": "891.04",
+  "instrument_id": "B01611887",
+  "master_file_sha256": "EFB5B80BE190971EEA41A73F20573E7F4A4B33CAEABF1FC47CA8298A315E43EB",
+  "option_last_reference": "42.30",
+  "option_quote_freshness_eligible": false,
+  "option_quote_source_timestamp_available": false,
+  "production_runtime_eligible": false,
+  "provenance": "SYNTHETIC:DERIVED_SCENARIO",
+  "schema": "q25-a5-s23-market-snapshot-v1",
+  "synthetic_orderbook_ask": "42.35",
+  "synthetic_orderbook_bid": "42.25",
+  "synthetic_orderbook_note": "Bid/ask are test-only values around the KIS last-price reference; not KIS quotes.",
+  "validation_only": true
+}
