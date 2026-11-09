@@ -140,6 +140,22 @@ class S15BOptionValidationAdapter:
             identity_source=f"KIS_OPTION_MASTER:shrn_iscd:VALIDATION_ONLY:{self.manifest['target_kis_master_sha256']}",
         )
 
+    def list_contract_identities(self, expiry: str | None = None) -> tuple[OptionInstrumentIdentity, ...]:
+        """Option-master view restricted to manifest-bound validation anchors."""
+        symbols = sorted({
+            str(row.get("symbol") or "")
+            for row in self.rows
+            if row.get("scenario_id") == "fresh_two_sided"
+            and row.get("record_type") == "VALIDATION_SCENARIO"
+            and row.get("validation_only") is True
+        })
+        identities = tuple(
+            identity for symbol in symbols
+            if (identity := self.identity(symbol, "fresh_two_sided")) is not None
+            and (expiry is None or identity.expiry == str(expiry).replace("-", ""))
+        )
+        return identities
+
     def quote(self, symbol: str, scenario_id: str | None = None) -> S15BQuote | None:
         row = self._row(symbol, scenario_id)
         identity = self.identity(symbol, scenario_id)
@@ -222,12 +238,17 @@ class S15BOptionValidationAdapter:
             OptionOrderBookLevel(Decimal(str(level["price"])), Decimal(str(level["quantity"])))
             for level in row.get("bid_levels", [])
         )
+        source_timestamp = row.get("source_timestamp")
+        observed_at = datetime.fromisoformat(source_timestamp) if source_timestamp else None
+        if observed_at is not None and observed_at.tzinfo is None:
+            raise S15BValidationAdapterError("S15B_ORDERBOOK_SOURCE_TIMESTAMP_NOT_TIMEZONE_AWARE")
         return OptionOrderBookSnapshot(
             symbol=symbol,
             observed_hour=str(row.get("observed_hour") or ""),
             ask_levels=asks,
             bid_levels=bids,
             source=f"SYNTHETIC:DERIVED_SCENARIO:{row.get('scenario_id')}",
+            observed_at=observed_at,
         )
 
     def get_order_book(self, symbol: str) -> OptionOrderBookSnapshot | None:

@@ -472,6 +472,10 @@ class StandardRuntimeInputProvider:
                     expiry=str(getattr(tick, "expiry", "") or ""),
                     current_price=Decimal(str(d.underlying_price)),
                     option_type=gap_direction,
+                    as_of=d.as_of,
+                    max_quote_age_seconds=(
+                        self.track5_option_contract_source.validation_only_max_quote_age_seconds
+                    ),
                 )
                 track5_execution_input = Track5ExecutionInput(
                     expiry=selection.expiry,

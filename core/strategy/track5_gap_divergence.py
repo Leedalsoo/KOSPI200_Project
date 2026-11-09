@@ -59,8 +59,11 @@ class Track5State:
 class Track5GapDivergence:
     strategy_id = "track5_gap_divergence"
     version = "2.0"
-    # No.1168: two same-direction standard KOSPI200 option contracts; no new futures hedge.
-    ENTRY_QUANTITY = 2
+    # The former S5 entry policy is retired. Keep legacy lifecycle only for
+    # already-open positions; no replacement entry policy is currently approved.
+    CURRENT_EXECUTION_POLICY_APPROVED = False
+    CURRENT_EXECUTION_POLICY_STATUS = "UNAPPROVED_REPLACEMENT_REQUIRED"
+    ENTRY_QUANTITY = 2  # legacy open-position reconciliation only
     MINI_FUTURES_QUANTITY = 5  # legacy close/reconciliation only; never used for new entry
     # Counts evaluate_mean_reversion calls while a position is open, not elapsed minutes or bars.
     MAX_OPEN_EVALUATIONS = 30
@@ -77,6 +80,7 @@ class Track5GapDivergence:
         # S5 config remains PROVISIONAL and capital/premium/max-loss gates are unset.
         self.runtime_config_verified = runtime_config_verified
         self.risk_limits_available = risk_limits_available
+        self.last_block_reason: str | None = None
         self.state = Track5State()
 
     def feature_requirements(self) -> Sequence[StrategyFeatureRequirement]:
@@ -96,6 +100,7 @@ class Track5GapDivergence:
 
     def reset(self) -> None:
         self.state = Track5State()
+        self.last_block_reason = None
 
     def effective_z_threshold(self, regime: str) -> Decimal:
         if regime in {"HIGH_VOL", "NOISE_CHOPPY", "CIRCUIT_BREAKER"}:
@@ -157,7 +162,11 @@ class Track5GapDivergence:
         )
 
     def evaluate_gap(self, snapshot: AnalyticsSnapshot, execution_input: Track5ExecutionInput | None = None) -> Sequence[Signal]:
+        if not self.CURRENT_EXECUTION_POLICY_APPROVED:
+            self.last_block_reason = "TRACK5_CURRENT_EXECUTION_POLICY_UNAPPROVED"
+            return ()
         if not self.runtime_config_verified or not self.risk_limits_available:
+            self.last_block_reason = "TRACK5_CONFIG_OR_RISK_GATE_BLOCKED"
             return ()
         if self.state.is_active or self.state.entry_pending:
             return ()
@@ -468,6 +477,8 @@ class Track5GapDivergence:
         if proposal.track_id != self.strategy_id:
             raise ValueError("TRACK5_STRATEGY_REQUIRED")
         if proposal.asset_type == "OPTION" and proposal.side == "BUY":
+            if not self.CURRENT_EXECUTION_POLICY_APPROVED:
+                raise ValueError("TRACK5_CURRENT_EXECUTION_POLICY_UNAPPROVED")
             if not self.runtime_config_verified or not self.risk_limits_available:
                 raise ValueError("TRACK5_CONFIG_OR_RISK_GATE_BLOCKED")
             if proposal.option_type not in {"CALL", "PUT"} or proposal.strike is None:
@@ -481,8 +492,15 @@ class Track5GapDivergence:
                 ),
             )
         if proposal.asset_type == "FUTURES":
-            if not self.state.is_active or self.state.futures_closed:
-                raise ValueError("TRACK5_NEW_FUTURES_ORDERS_DISABLED_BY_APPROVED_SPEC")
+            if (
+                not self.state.is_active or self.state.futures_closed
+                or not self.state.futures_close_requested
+                or proposal.tag_id not in {"GAP_DIVERGENCE_FUTURES_FIRST_EXIT", "GAP_DIVERGENCE_TERMINAL_EXIT"}
+            ):
+                raise ValueError("TRACK5_FUTURES_CLOSE_NOT_REQUESTED_OR_UNSUPPORTED")
+            expected_side = "BUY" if self.state.futures_side == "SELL" else "SELL" if self.state.futures_side == "BUY" else None
+            if proposal.side != expected_side:
+                raise ValueError("TRACK5_FUTURES_CLOSE_SIDE_MISMATCH")
             return MultiLegExecutionPlan(
                 group_id=group_id,
                 strategy_id=self.strategy_id,
@@ -490,6 +508,16 @@ class Track5GapDivergence:
                 legs=(ExecutionLeg("MINI_FUTURES_EXIT", proposal.side or "", self.MINI_FUTURES_QUANTITY, position_role="NONE"),),
             )
         if proposal.asset_type == "OPTION" and proposal.side == "SELL":
+            if (
+                not self.state.is_active or not self.state.option_close_requested
+                or proposal.tag_id not in {
+                    "GAP_DIVERGENCE_OPTION_SECOND_EXIT", "GAP_DIVERGENCE_OPTION_STOP_EXIT",
+                    "GAP_DIVERGENCE_OPTION_TIMEOUT_EXIT", "GAP_DIVERGENCE_OPTION_TRAILING_EXIT",
+                }
+                or proposal.option_type != self.state.option_type
+                or proposal.strike != self.state.selected_strike
+            ):
+                raise ValueError("TRACK5_OPTION_CLOSE_NOT_REQUESTED_OR_IDENTITY_MISMATCH")
             if proposal.option_type not in {"CALL", "PUT"} or proposal.strike is None:
                 raise ValueError("TRACK5_OPTION_EXIT_PROPOSAL_REQUIRED")
             return MultiLegExecutionPlan(
