@@ -32,7 +32,7 @@
 
 ### 활성 전략 회귀
 
-S1/S2/S5/S6/S7/S8/S9 관련 core, application composition, validation-only runtime 테스트 35개 파일을 대상으로 실행했다.
+S1/S2/S5/S6/S7/S8/S9 관련 core, application composition, validation-only runtime 테스트 36개 파일을 대상으로 실행했다.
 
 - **224 passed** (6.95초)
 - S2 sequence validation, execution-plan adapter 및 fail-closed profile 테스트 포함.
