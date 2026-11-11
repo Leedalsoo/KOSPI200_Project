@@ -1,10 +1,13 @@
 """Runtime-owned multi-leg execution bridge for the Virtual environment."""
 from __future__ import annotations
+import inspect
 from dataclasses import dataclass, replace
 from hashlib import sha256
 from decimal import Decimal
+from datetime import datetime, time, timedelta, timezone
 from typing import Any, Callable
 
+from contracts.kis_option_product_spec import KIS_KOSPI200_OPTION_CONTRACT_MULTIPLIER
 from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
 from contracts.types import BrokerOrderCommand, ExecutionReport, MultiLegExecutionPlan, OptionInstrumentIdentity
 from contracts.market_data_freshness import FreshnessVerdict, admits_freshness_verdict_for_identity, permits_risk_increasing_order
@@ -144,6 +147,89 @@ class VirtualMultiLegExecutionBridge:
         self.leg_positions: dict[str, Any] = {}
         self.pending_legs: dict[str, tuple[MultiLegExecutionPlan, Any, BrokerOrderCommand]] = {}
         self._applied_execution_fingerprints: dict[str, tuple] = {}
+        self._s9_retry_schedule: dict[
+            tuple[str, str], tuple[MultiLegExecutionPlan, Any, datetime, int]
+        ] = {}
+        self._s9_retry_attempts: dict[tuple[str, str], int] = {}
+        self._pending_attempt_ids: dict[str, str | None] = {}
+
+    @staticmethod
+    def _track2_mid_quote(quote: Any, instrument_id: str) -> tuple[Decimal, Decimal, Decimal, datetime]:
+        if not isinstance(quote, dict):
+            raise ValueError(f"TRACK2_GROUP_PNL_QUOTE_REQUIRED:{instrument_id}")
+        try:
+            bid = Decimal(str(quote.get("bid")))
+            ask = Decimal(str(quote.get("ask")))
+        except Exception as exc:
+            raise ValueError(f"TRACK2_GROUP_PNL_MID_BID_ASK_REQUIRED:{instrument_id}") from exc
+        if not bid.is_finite() or not ask.is_finite() or bid <= 0 or ask <= 0 or ask < bid:
+            raise ValueError(f"TRACK2_GROUP_PNL_MID_BID_ASK_INVALID:{instrument_id}")
+        raw_timestamp = quote.get("timestamp")
+        if raw_timestamp is None:
+            raise ValueError(f"TRACK2_GROUP_PNL_QUOTE_TIMESTAMP_REQUIRED:{instrument_id}")
+        try:
+            observed_at = raw_timestamp if isinstance(raw_timestamp, datetime) else datetime.fromisoformat(str(raw_timestamp))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"TRACK2_GROUP_PNL_QUOTE_TIMESTAMP_INVALID:{instrument_id}") from exc
+        return (bid + ask) / Decimal("2"), bid, ask, observed_at
+
+    def _option_quote_for_instrument_id(self, instrument_id: str) -> dict[str, Any] | None:
+        market = getattr(self.bundle, "market", None)
+        by_id = getattr(market, "option_quotes_by_instrument_id", {}) or {}
+        quote = by_id.get(instrument_id)
+        if isinstance(quote, dict):
+            return quote
+        option_master = getattr(self, "option_master", None)
+        if option_master is None:
+            return None
+        identity = option_master.get_contract_identity(instrument_id)
+        if identity is None:
+            return None
+        option_quotes = getattr(market, "option_quotes", {}) or {}
+        expiry = str(getattr(identity, "expiry", "") or "").replace("-", "")[:8]
+        for key, value in option_quotes.items():
+            if (isinstance(key, tuple) and len(key) == 3
+                    and str(key[0]).upper() == str(identity.option_type).upper()
+                    and Decimal(str(key[1])) == Decimal(str(identity.strike))
+                    and str(key[2]).replace("-", "")[:8] == expiry):
+                return value if isinstance(value, dict) else None
+        return None
+
+    @staticmethod
+    def _track2_fee_total(reports: Any) -> Decimal | None:
+        filled_reports = [item for item in tuple(reports or ()) if int(getattr(item, "filled_quantity", 0) or 0) > 0]
+        if not filled_reports:
+            return Decimal("0")
+        total = Decimal("0")
+        seen: set[str] = set()
+        for report in filled_reports:
+            fills = tuple(getattr(report, "execution_fills", ()) or ())
+            if fills:
+                for fill in fills:
+                    key = str(getattr(fill, "execution_id", "") or "")
+                    if not key or key in seen:
+                        continue
+                    fee = getattr(fill, "fee", None)
+                    if fee is None:
+                        return None
+                    total += Decimal(str(fee))
+                    seen.add(key)
+            else:
+                key = str(getattr(report, "execution_id", None) or getattr(report, "client_order_id", ""))
+                if not key or key in seen:
+                    continue
+                fee = getattr(report, "fee", None)
+                if fee is None:
+                    return None
+                total += Decimal(str(fee))
+                seen.add(key)
+        return total
+
+    @staticmethod
+    def _track2_net_pnl(realized: Decimal, unrealized: Decimal, fees: float | None, slippage: float | None) -> Decimal | None:
+        if fees is None or slippage is None:
+            return None
+        return realized + unrealized - Decimal(str(fees)) - Decimal(str(slippage))
 
     def _record_strategy5_risk_preflight_diagnostic(self, **payload: Any) -> None:
         """Record diagnostic evidence without allowing storage failures to affect trading."""
@@ -230,7 +316,11 @@ class VirtualMultiLegExecutionBridge:
                 "DAILY_TAIL_INSURANCE_TRAILING_CLOSE_PUT",
                 "DAILY_TAIL_INSURANCE_TRAILING_CLOSE_CALL",
             }
-        if plan.strategy_id != "track8_macro_regime_monthly_strangle":
+        if plan.strategy_id == "track9_event_overnight_insurance":
+            return purpose == "OVERNIGHT_INSURANCE_CLOSE"
+        if plan.strategy_id == "track2_asymmetric_trap":
+            return purpose == "TRAP_CLOSE"
+        if plan.strategy_id not in {"track8_macro_regime_monthly_strangle", "track7_volatility_skew_weekly_insurance"}:
             return False
         return any(token in purpose for token in ("CLOSE", "EXPIRY", "SETTLEMENT", "LIQUIDATION"))
 
@@ -280,11 +370,6 @@ class VirtualMultiLegExecutionBridge:
                     leg.instrument_id, Decimal(str(leg.current_price))
                 )
             else:
-                mark_value = position.get("mark_price")
-                if mark_value is None:
-                    raise ValueError(
-                        f"POSITION_GROUP_TERMINAL_MARK_PRICE_REQUIRED:{leg.instrument_id}"
-                    )
                 quantity = Decimal(str(position.get("qty", 0)))
                 side = str(position.get("side", "")).strip().upper()
                 if side not in {"BUY", "SELL"}:
@@ -292,16 +377,42 @@ class VirtualMultiLegExecutionBridge:
                         f"POSITION_GROUP_TERMINAL_SIDE_INVALID:{leg.instrument_id}"
                     )
                 average_price = Decimal(str(position.get("avg_price")))
-                current_price = Decimal(str(mark_value))
+                mark_source = leg.mark_source
+                quote_bid = leg.quote_bid
+                quote_ask = leg.quote_ask
+                quote_observed_at = leg.quote_observed_at
+                if plan.strategy_id == "track2_asymmetric_trap":
+                    quote = self._option_quote_for_instrument_id(leg.instrument_id)
+                    mid, bid, ask, quote_observed_at = self._track2_mid_quote(quote, leg.instrument_id)
+                    current_price = mid
+                    mark_source = "BID_ASK_MID"
+                    quote_bid = float(bid)
+                    quote_ask = float(ask)
+                else:
+                    mark_value = position.get("mark_price")
+                    if mark_value is None:
+                        raise ValueError(
+                            f"POSITION_GROUP_TERMINAL_MARK_PRICE_REQUIRED:{leg.instrument_id}"
+                        )
+                    current_price = Decimal(str(mark_value))
                 multiplier = Decimal(str(leg.contract_multiplier))
                 delta = current_price - average_price if side == "BUY" else average_price - current_price
                 unrealized = delta * quantity * multiplier
+            if position is None:
+                mark_source = leg.mark_source
+                quote_bid = leg.quote_bid
+                quote_ask = leg.quote_ask
+                quote_observed_at = leg.quote_observed_at
             refreshed_legs.append(
                 replace(
                     leg,
                     quantity=int(quantity),
                     current_price=float(current_price),
                     unrealized_pnl=float(unrealized),
+                    mark_source=mark_source,
+                    quote_bid=quote_bid,
+                    quote_ask=quote_ask,
+                    quote_observed_at=quote_observed_at,
                 )
             )
 
@@ -310,25 +421,39 @@ class VirtualMultiLegExecutionBridge:
             (Decimal(str(leg.unrealized_pnl)) for leg in refreshed_legs),
             Decimal("0"),
         )
+        fees = previous.fees
+        slippage = previous.slippage
+        net_pnl = previous.net_pnl
+        if plan.strategy_id == "track2_asymmetric_trap":
+            close_fees = self._track2_fee_total(reports)
+            fees = (float(Decimal(str(previous.fees)) + close_fees)
+                    if previous.fees is not None and close_fees is not None else None)
+            slippage = None
+            net_pnl = None
         return replace(
             previous,
             legs=tuple(refreshed_legs),
             realized_pnl=float(realized_pnl),
             unrealized_pnl=float(unrealized_pnl),
             total_pnl=float(realized_pnl + unrealized_pnl),
+            fees=fees,
+            slippage=slippage,
+            net_pnl=net_pnl,
         )
 
-    def refresh_position_group_marks(self) -> int:
-        """Refresh open-leg MTM snapshots from the current VSSF account marks."""
+    def refresh_position_group_marks(self, *, strategy_id: str | None = None) -> int:
+        """Refresh open-leg MTM; Track2 uses the approved BID/ASK MID mark."""
         vssf = self.bundle.execution._authoritative_execute.__self__.vssf_runtime
         account_positions = vssf.account.positions
         pending_updates: list[PositionGroupSnapshot] = []
 
-        for group_id in self.position_groups.all():
+        for group_id, group in self.position_groups.all().items():
+            if strategy_id is not None and group.strategy_id != strategy_id:
+                continue
             snapshot = self.position_groups.snapshot(group_id)
             if snapshot is None:
                 continue
-
+            is_track2 = snapshot.strategy_id == "track2_asymmetric_trap"
             refreshed_legs = []
             for leg in snapshot.legs:
                 position = account_positions.get(leg.instrument_id)
@@ -336,11 +461,6 @@ class VirtualMultiLegExecutionBridge:
                     refreshed_legs.append(replace(leg, quantity=0, unrealized_pnl=0.0))
                     continue
 
-                mark_value = position.get("mark_price")
-                if mark_value is None:
-                    raise ValueError(
-                        f"POSITION_GROUP_MTM_MARK_PRICE_REQUIRED:{leg.instrument_id}"
-                    )
                 quantity = Decimal(str(position.get("qty", 0)))
                 if quantity <= 0:
                     raise ValueError(
@@ -352,7 +472,25 @@ class VirtualMultiLegExecutionBridge:
                         f"POSITION_GROUP_MTM_SIDE_INVALID:{leg.instrument_id}"
                     )
                 average_price = Decimal(str(position.get("avg_price")))
-                mark_price = Decimal(str(mark_value))
+                mark_source = leg.mark_source
+                quote_bid = leg.quote_bid
+                quote_ask = leg.quote_ask
+                quote_observed_at = leg.quote_observed_at
+                if is_track2:
+                    quote = self._option_quote_for_instrument_id(leg.instrument_id)
+                    mark_price, bid, ask, quote_observed_at = self._track2_mid_quote(
+                        quote, leg.instrument_id
+                    )
+                    mark_source = "BID_ASK_MID"
+                    quote_bid = float(bid)
+                    quote_ask = float(ask)
+                else:
+                    mark_value = position.get("mark_price")
+                    if mark_value is None:
+                        raise ValueError(
+                            f"POSITION_GROUP_MTM_MARK_PRICE_REQUIRED:{leg.instrument_id}"
+                        )
+                    mark_price = Decimal(str(mark_value))
                 multiplier = Decimal(str(leg.contract_multiplier))
                 if multiplier <= 0:
                     raise ValueError(
@@ -371,6 +509,10 @@ class VirtualMultiLegExecutionBridge:
                         avg_price=float(average_price),
                         current_price=float(mark_price),
                         unrealized_pnl=float(unrealized),
+                        mark_source=mark_source,
+                        quote_bid=quote_bid,
+                        quote_ask=quote_ask,
+                        quote_observed_at=quote_observed_at,
                     )
                 )
 
@@ -385,6 +527,7 @@ class VirtualMultiLegExecutionBridge:
                     legs=tuple(refreshed_legs),
                     unrealized_pnl=float(unrealized_pnl),
                     total_pnl=float(realized_pnl + unrealized_pnl),
+                    net_pnl=None if is_track2 else snapshot.net_pnl,
                 )
             )
 
@@ -497,6 +640,35 @@ class VirtualMultiLegExecutionBridge:
             purpose=purpose, legs=tuple(legs),
         )
 
+    @staticmethod
+    def _is_sha256(value: Any) -> bool:
+        text = str(value or "").strip().lower()
+        return len(text) == 64 and all(ch in "0123456789abcdef" for ch in text)
+
+    @classmethod
+    def _valid_monthly_expiry_provenance(cls, identity: Any) -> bool:
+        source = str(getattr(identity, "expiry_source", "") or "").strip().upper()
+        endpoint = str(getattr(identity, "expiry_endpoint", "") or "")
+        tr_id = str(getattr(identity, "expiry_tr_id", "") or "")
+        if source == "KIS_REST:FUTS_LAST_TR_DATE":
+            return (
+                cls._is_sha256(getattr(identity, "expiry_response_sha256", None))
+                and endpoint == "/uapi/domestic-futureoption/v1/quotations/inquire-price"
+                and tr_id == "FHMIF10000000"
+                and bool(getattr(identity, "expiry_observed_at", None))
+            )
+        if source == "KIS_OFFICIAL_PRODUCT_SPEC:MONTHLY_SECOND_THURSDAY":
+            return (
+                endpoint == "https://m.koreainvestment.com/main/bond/domestic/_static/TF03bd010100.jsp"
+                and tr_id == "KIS_PRODUCT_GUIDE_MONTHLY_OPTION_EXPIRY"
+            )
+        if source == "KIS_OFFICIAL_INDEX_MASTER:EXACT_DATE":
+            return (
+                endpoint == "https://new.real.download.dws.co.kr/common/master/fo_idx_code_mts.mst.zip"
+                and tr_id == "KIS_MST_EXACT_EXPIRY"
+            )
+        return False
+
     def identity_for_leg(self, plan: MultiLegExecutionPlan, leg) -> OptionInstrumentIdentity | FuturesInstrumentIdentity:
         stored_identity = getattr(leg, "instrument_identity", None)
         if stored_identity is not None:
@@ -505,6 +677,31 @@ class VirtualMultiLegExecutionBridge:
             if isinstance(stored_identity, OptionInstrumentIdentity):
                 if stored_identity.option_type not in {"CALL", "PUT"} or stored_identity.strike is None or not stored_identity.expiry:
                     raise ValueError("MULTI_LEG_STORED_OPTION_IDENTITY_INVALID")
+                if plan.strategy_id == "track2_asymmetric_trap":
+                    master_identity = (
+                        self.option_master.get_contract_identity(stored_identity.instrument_id)
+                        if self.option_master is not None else None
+                    )
+                    if (
+                        master_identity is None
+                        or str(getattr(master_identity, "instrument_family", "") or "").upper() != "STANDARD"
+                        or str(getattr(master_identity, "product_series", "") or "").upper() != "MONTHLY"
+                        or not self._is_sha256(getattr(master_identity, "expiry_master_sha256", None))
+                        or not self._is_sha256(getattr(master_identity, "master_sha256", None))
+                        or str(master_identity.expiry_master_sha256).lower() != str(master_identity.master_sha256).lower()
+                        or not self._valid_monthly_expiry_provenance(master_identity)
+                        or stored_identity.contract_multiplier is None
+                        or Decimal(str(stored_identity.contract_multiplier)) <= 0
+                        or not getattr(master_identity, "expiry", None)
+                        or master_identity.strike is None
+                        or str(master_identity.expiry).replace("-", "")[:8] != stored_identity.expiry.replace("-", "")[:8]
+                        or str(master_identity.option_type).upper() != stored_identity.option_type
+                        or Decimal(str(master_identity.strike)) != Decimal(str(stored_identity.strike))
+                        or master_identity.contract_multiplier is None
+                        or Decimal(str(master_identity.contract_multiplier)) != KIS_KOSPI200_OPTION_CONTRACT_MULTIPLIER
+                        or Decimal(str(stored_identity.contract_multiplier)) != KIS_KOSPI200_OPTION_CONTRACT_MULTIPLIER
+                    ):
+                        raise ValueError("TRACK2_STORED_IDENTITY_NOT_AUTHORITATIVE_MONTHLY_STANDARD")
             elif not isinstance(stored_identity, FuturesInstrumentIdentity):
                 raise ValueError("MULTI_LEG_STORED_INSTRUMENT_IDENTITY_TYPE_INVALID")
             return stored_identity
@@ -708,15 +905,27 @@ class VirtualMultiLegExecutionBridge:
     ) -> MultiLegExecutionResult:
         if group_plan is None:
             group_plan = plan
-            if ((plan.strategy_id == "track8_macro_regime_monthly_strangle"
-                    and plan.purpose in {"MONTHLY_STRANGLE_ENTRY_CALL", "MONTHLY_STRANGLE_ENTRY_PUT"})
-                    or (plan.strategy_id == "track6_daily_tail_insurance"
-                        and plan.purpose == "DAILY_TAIL_INSURANCE_ENTRY")):
+            if (plan.strategy_id == "track9_event_overnight_insurance" and str(plan.purpose or "").upper() == "OVERNIGHT_INSURANCE"):
+                self._group_plans[plan.group_id] = plan
+            is_group_entry = (
+                (plan.strategy_id == "track8_macro_regime_monthly_strangle" and plan.purpose in {"MONTHLY_STRANGLE_ENTRY_CALL", "MONTHLY_STRANGLE_ENTRY_PUT"})
+                or (plan.strategy_id == "track6_daily_tail_insurance" and plan.purpose == "DAILY_TAIL_INSURANCE_ENTRY")
+                or (plan.strategy_id == "track7_volatility_skew_weekly_insurance" and plan.purpose in {"WEEKLY_INSURANCE_ENTRY", "WEEKLY_INSURANCE_ENTRY_PUT", "WEEKLY_INSURANCE_ENTRY_CALL"})
+                or (plan.strategy_id == "track2_asymmetric_trap" and str(plan.purpose or "").upper() != "TRAP_CLOSE")
+            )
+            if is_group_entry:
                 prior_group_plan = self._group_plans.get(plan.group_id)
                 if prior_group_plan is not None:
                     merged_legs = {leg.leg_id: leg for leg in prior_group_plan.legs}
                     merged_legs.update({leg.leg_id: leg for leg in plan.legs})
                     group_plan = replace(plan, legs=tuple(merged_legs.values()))
+                self._group_plans[plan.group_id] = group_plan
+                if prior_group_plan is not None:
+                    merged_legs = {leg.leg_id: leg for leg in prior_group_plan.legs}
+                    merged_legs.update({leg.leg_id: leg for leg in plan.legs})
+                    group_plan = replace(plan, legs=tuple(merged_legs.values()))
+                else:
+                    group_plan = plan
                 self._group_plans[plan.group_id] = group_plan
         reconciled_reports = dict(reconciled_reports or {})
         reconciled_commands = dict(reconciled_commands or {})
@@ -745,6 +954,21 @@ class VirtualMultiLegExecutionBridge:
             if leg.side not in {"BUY", "SELL"} or int(leg.quantity) <= 0:
                 raise ValueError("MULTI_LEG_SIDE_AND_POSITIVE_QUANTITY_REQUIRED")
             identity = self.identity_for_leg(plan, leg)
+            # Persist the authoritative identity into the group plan at first
+            # resolution. Pending orders may be reconciled on a later market tick
+            # belonging to another expiry; re-resolving from that tick would bind
+            # the pending leg to the wrong contract.
+            group_plan_legs = []
+            for group_leg in group_plan.legs:
+                if group_leg.leg_id == leg.leg_id:
+                    prior_identity = getattr(group_leg, "instrument_identity", None)
+                    if prior_identity is not None and prior_identity != identity:
+                        raise ValueError("MULTI_LEG_GROUP_LEG_IDENTITY_CONFLICT")
+                    group_leg = replace(group_leg, instrument_identity=identity)
+                group_plan_legs.append(group_leg)
+            group_plan = replace(group_plan, legs=tuple(group_plan_legs))
+            if plan.group_id in getattr(self, "_group_plans", {}):
+                self._group_plans[plan.group_id] = group_plan
             client_order_id = self._client_order_id(plan, leg, identity)
             prior_intent = next((report for report in self.groups.get(group_plan.group_id, ())
                                  if report.client_order_id == client_order_id), None)
@@ -952,7 +1176,22 @@ class VirtualMultiLegExecutionBridge:
             if self.execution_result_callback is not None: self.execution_result_callback(plan, result)
             return result
 
+        track2_next_leg_id = None
+        if plan.strategy_id == "track2_asymmetric_trap" and str(plan.purpose or "").upper() != "TRAP_CLOSE":
+            from core.strategy.track2_entry_sequence import evaluate_track2_entry_progress
+            progress = evaluate_track2_entry_progress(
+                group_plan, self.groups.get(group_plan.group_id, ())
+            )
+            track2_next_leg_id = progress.next_leg_id
+            if track2_next_leg_id and not self._track2_zero_fill_cancel_reconciled(
+                group_plan, self.groups.get(group_plan.group_id, ())
+            ):
+                track2_next_leg_id = None
+
         for leg, identity, client_order_id, broker_command, canonical, preflight_evaluation, _admitted in evaluations:
+            if plan.strategy_id == "track2_asymmetric_trap" and str(plan.purpose or "").upper() != "TRAP_CLOSE":
+                if track2_next_leg_id is None or leg.leg_id != track2_next_leg_id:
+                    continue
             freshness_verdict = freshness_verdict_by_leg[leg.leg_id]
             result = route_from_runtime_authoritative_sources(
                 canonical, risk_gate=self.risk_gate,
@@ -1027,9 +1266,12 @@ class VirtualMultiLegExecutionBridge:
             )
             reports.append(report)
             if report.status in {"NEW", "PARTIALLY_FILLED", "UNKNOWN", "RECONCILIATION_REQUIRED"} and report.remaining_quantity > 0:
-                self.pending_legs[client_order_id] = (group_plan, leg, broker_command)
+                stored_leg = next(group_leg for group_leg in group_plan.legs if group_leg.leg_id == leg.leg_id)
+                self.pending_legs[client_order_id] = (group_plan, stored_leg, broker_command)
+                self._pending_attempt_ids[client_order_id] = plan.attempt_id
             else:
                 self.pending_legs.pop(client_order_id, None)
+                self._pending_attempt_ids.pop(client_order_id, None)
             if report.status == "FILLED" and report.filled_quantity <= 0:
                 raise RuntimeError("MULTI_LEG_FILLED_QUANTITY_REQUIRED")
             self._apply_reconciled_execution(
@@ -1055,9 +1297,12 @@ class VirtualMultiLegExecutionBridge:
                 broker_command=broker_command, report=report,
             )
             if report.status in {"NEW", "PARTIALLY_FILLED", "UNKNOWN", "RECONCILIATION_REQUIRED"} and report.remaining_quantity > 0:
-                self.pending_legs[client_order_id] = (group_plan, leg, broker_command)
+                stored_leg = next(group_leg for group_leg in group_plan.legs if group_leg.leg_id == leg.leg_id)
+                self.pending_legs[client_order_id] = (group_plan, stored_leg, broker_command)
+                self._pending_attempt_ids[client_order_id] = plan.attempt_id
             else:
                 self.pending_legs.pop(client_order_id, None)
+                self._pending_attempt_ids.pop(client_order_id, None)
             if report.filled_quantity > 0:
                 filled += report.filled_quantity
 
@@ -1080,6 +1325,9 @@ class VirtualMultiLegExecutionBridge:
                         any(r.leg_id == leg.leg_id and r.status in {"NEW", "PARTIALLY_FILLED"} for r in merged_reports)
                         or self._client_order_id(group_plan, leg, self.identity_for_leg(group_plan, leg)) in self.pending_legs
                     )
+                    else LegStatus.CANCELLED
+                    if any(r.leg_id == leg.leg_id and str(getattr(r.status, "value", r.status)).upper() == "CANCELLED"
+                           and int(r.filled_quantity or 0) == 0 for r in merged_reports)
                     else LegStatus.REJECTED
                 ),
             ) for leg in group_plan.legs
@@ -1118,6 +1366,9 @@ class VirtualMultiLegExecutionBridge:
                 item.execution_id for item in leg_reports if item.execution_id
             ))
             identity = self.identity_for_leg(group_plan, leg)
+            mark_source = "FUTURES_MARK" if isinstance(identity, FuturesInstrumentIdentity) else None
+            mark_bid = mark_ask = None
+            mark_observed_at = None
             if isinstance(identity, FuturesInstrumentIdentity):
                 current = current_futures
             else:
@@ -1139,9 +1390,21 @@ class VirtualMultiLegExecutionBridge:
                         ),
                         None,
                     )
-                if quote is None or quote.get("last") is None:
+                if quote is None:
                     raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_MARK_NOT_FOUND")
-                current = float(quote["last"])
+                if plan.strategy_id == "track2_asymmetric_trap":
+                    mid, bid, ask, mark_observed_at = self._track2_mid_quote(
+                        quote, identity.instrument_id
+                    )
+                    current = float(mid)
+                    mark_source = "BID_ASK_MID"
+                    mark_bid = float(bid)
+                    mark_ask = float(ask)
+                else:
+                    if quote.get("last") is None:
+                        raise ValueError("MULTI_LEG_AUTHORITATIVE_OPTION_MARK_NOT_FOUND")
+                    current = float(quote["last"])
+                    mark_source = "LAST"
             position_state = self.leg_positions.get(identity.instrument_id)
             if position_state is None:
                 raise ValueError("MULTI_LEG_POSITION_STATE_REQUIRED")
@@ -1180,6 +1443,10 @@ class VirtualMultiLegExecutionBridge:
                     self.run_id, rep.client_order_id,
                     rep.execution_id or (execution_ids[0] if len(execution_ids) == 1 else ""),
                     execution_ids,
+                    mark_source=mark_source,
+                    quote_bid=mark_bid,
+                    quote_ask=mark_ask,
+                    quote_observed_at=mark_observed_at,
                 )
             )
         if terminal_execution:
@@ -1205,11 +1472,16 @@ class VirtualMultiLegExecutionBridge:
                         and str(key[2]).replace("-", "")[:8] == str(identity.expiry).replace("-", "")[:8]
                     ), None)
                     quote = option_quotes.get(quote_key) if quote_key is not None else None
-                if not isinstance(quote, dict) or quote.get("last") is None:
+                if not isinstance(quote, dict):
                     raise ValueError(f"POSITION_GROUP_TERMINAL_ACCOUNT_MARK_REQUIRED:{instrument_id}")
-                vssf.account.update_tick_price(
-                    quote["last"], instrument_id=instrument_id
-                )
+                if plan.strategy_id == "track2_asymmetric_trap":
+                    mid, _bid, _ask, _observed_at = self._track2_mid_quote(quote, instrument_id)
+                    account_mark = float(mid)
+                else:
+                    if quote.get("last") is None:
+                        raise ValueError(f"POSITION_GROUP_TERMINAL_ACCOUNT_MARK_REQUIRED:{instrument_id}")
+                    account_mark = quote["last"]
+                vssf.account.update_tick_price(account_mark, instrument_id=instrument_id)
         realized_after = Decimal(str(vssf.account.realized_pnl))
         realized_pnl = realized_after - realized_before
         unrealized_pnl = sum(Decimal(str(x.unrealized_pnl)) for x in pnl_legs)
@@ -1227,6 +1499,32 @@ class VirtualMultiLegExecutionBridge:
             group_plan.group_id, group_plan.strategy_id, group.is_complete, tuple(pnl_legs),
             float(realized_pnl), float(unrealized_pnl), float(total_pnl)
         )
+        if not terminal_execution and group_plan.strategy_id == "track2_asymmetric_trap":
+            fees = self._track2_fee_total(merged_reports)
+            initial_net_premium = None
+            if snapshot.complete:
+                side_by_leg = {item.leg_id: str(item.side).upper() for item in group_plan.legs}
+                premium = Decimal("0")
+                for pnl_leg in snapshot.legs:
+                    side = side_by_leg.get(pnl_leg.leg_id)
+                    if side not in {"BUY", "SELL"}:
+                        continue
+                    leg_premium = (
+                        Decimal(str(pnl_leg.avg_price))
+                        * Decimal(str(pnl_leg.quantity))
+                        * Decimal(str(pnl_leg.contract_multiplier))
+                    )
+                    premium += leg_premium if side == "SELL" else -leg_premium
+                if premium > 0:
+                    initial_net_premium = float(premium)
+            snapshot = replace(
+                snapshot,
+                fees=float(fees) if fees is not None else None,
+                slippage=None,
+                net_pnl=None,
+                initial_net_premium_received=initial_net_premium,
+                quote_freshness_verified=None,
+            )
         self.position_groups.update_snapshot(snapshot)
         result = MultiLegExecutionResult(
             group_id=group_plan.group_id,
@@ -1242,8 +1540,11 @@ class VirtualMultiLegExecutionBridge:
             )),
             pending_legs=pending_legs + sum(
                 1 for leg in group_plan.legs
-                if self._client_order_id(group_plan, leg, self.identity_for_leg(group_plan, leg)) in self.pending_legs
-                and not any(r.leg_id == leg.leg_id and r.status == "FILLED" for r in merged_reports)
+                if any(
+                    pending_plan.group_id == group_plan.group_id and pending_leg.leg_id == leg.leg_id
+                    for pending_plan, pending_leg, _pending_command in self.pending_legs.values()
+                )
+                and sum(r.filled_quantity for r in merged_reports if r.leg_id == leg.leg_id) < leg.quantity
             ),
             position_flat=self._position_flat_for_result(group_plan),
         )
@@ -1251,7 +1552,9 @@ class VirtualMultiLegExecutionBridge:
             self.execution_result_callback(plan, result)
         return result
 
-    def cancel_pending_order(self, client_order_id: str) -> MultiLegExecutionResult:
+    def cancel_pending_order(
+        self, client_order_id: str, *, reason: str = "MANUAL"
+    ) -> MultiLegExecutionResult:
         pending = self.pending_legs.get(client_order_id)
         if pending is None:
             raise ValueError("VIRTUAL_PENDING_ORDER_NOT_FOUND")
@@ -1260,14 +1563,22 @@ class VirtualMultiLegExecutionBridge:
         query = getattr(self.ack.broker, "query", None)
         if not callable(cancel) or not callable(query):
             raise RuntimeError("VIRTUAL_CANCEL_QUERY_PORT_REQUIRED")
-        cancel(client_order_id)
+        try:
+            cancel_parameters = inspect.signature(cancel).parameters
+        except (TypeError, ValueError):
+            cancel_parameters = {}
+        if "lifecycle_reason" in cancel_parameters:
+            cancel(client_order_id, lifecycle_reason=str(reason))
+        else:
+            cancel(client_order_id)
         confirmed = query(client_order_id)
         status = str(getattr(confirmed, "status", "")).upper() if confirmed is not None else ""
         if status not in {"CANCELLED", "FILLED", "REJECTED"}:
             raise RuntimeError("VIRTUAL_CANCEL_TERMINAL_RECONCILIATION_REQUIRED")
         single_plan = MultiLegExecutionPlan(
             group_id=group_plan.group_id, strategy_id=group_plan.strategy_id,
-            purpose=group_plan.purpose, legs=(leg,), attempt_id=group_plan.attempt_id,
+            purpose=group_plan.purpose, legs=(leg,),
+            attempt_id=self._pending_attempt_ids.get(client_order_id, group_plan.attempt_id),
         )
         result = self.execute(
             single_plan, group_plan=group_plan,
@@ -1316,7 +1627,7 @@ class VirtualMultiLegExecutionBridge:
                 strategy_id=group_plan.strategy_id,
                 purpose=group_plan.purpose,
                 legs=(leg,),
-                attempt_id=group_plan.attempt_id,
+                attempt_id=self._pending_attempt_ids.get(client_order_id, group_plan.attempt_id),
             )
             result = self.execute(
                 single_plan,
@@ -1326,6 +1637,235 @@ class VirtualMultiLegExecutionBridge:
             )
             completed.append(result)
         return tuple(completed)
+
+    def _track2_zero_fill_cancel_reconciled(
+        self, group_plan: MultiLegExecutionPlan, reports: Any,
+    ) -> bool:
+        """Require terminal zero-fill, no group lot, and flat account position before U20 advance."""
+        for leg in group_plan.legs:
+            leg_reports = [
+                item for item in reports
+                if str(getattr(item, "group_id", "") or "") == group_plan.group_id
+                and str(getattr(item, "leg_id", "") or "") == leg.leg_id
+            ]
+            if not leg_reports:
+                continue
+            statuses = {
+                str(getattr(getattr(item, "status", ""),
+                            "value", getattr(item, "status", ""))).upper()
+                for item in leg_reports
+            }
+            filled = sum(int(getattr(item, "filled_quantity", 0) or 0) for item in leg_reports)
+            fill_events = sum(
+                int(getattr(fill, "quantity", getattr(fill, "filled_quantity", 0)) or 0)
+                for item in leg_reports
+                for fill in tuple(getattr(item, "execution_fills", ()) or ())
+            )
+            if statuses != {"CANCELLED"} or filled != 0 or fill_events != 0:
+                continue
+            if any(
+                pending_plan.group_id == group_plan.group_id
+                and pending_leg.leg_id == leg.leg_id
+                for pending_plan, pending_leg, _command in self.pending_legs.values()
+            ):
+                return False
+            try:
+                identity = self.identity_for_leg(group_plan, leg)
+            except (ValueError, TypeError, AttributeError):
+                return False
+            if identity is None or not identity.instrument_id:
+                return False
+            if any(
+                lot.run_id == self.run_id
+                and lot.strategy_id == group_plan.strategy_id
+                and lot.group_id == group_plan.group_id
+                and lot.instrument_id == identity.instrument_id
+                and int(lot.remaining_quantity) > 0
+                for lot in self.position_lot_store.open_lots()
+            ):
+                return False
+            vssf = self.bundle.execution._authoritative_execute.__self__.vssf_runtime
+            position = vssf.account.positions.get(identity.instrument_id)
+            quantity = Decimal(str(position.get("qty", 0) or 0)) if position else Decimal("0")
+            if quantity != 0:
+                return False
+        return True
+
+    def process_track2_entry_progress(self) -> tuple[MultiLegExecutionResult, ...]:
+        """Submit only the next S2 leg after predecessor fills are fully reconciled.
+
+        Partial, rejected, unknown, or otherwise unresolved reports remain blocked.
+        A zero-fill CANCELLED leg advances only after account/lot reconciliation.
+        U16 repair/retry/flatten is deliberately not inferred here.
+        """
+        from core.strategy.track2_entry_sequence import evaluate_track2_entry_progress
+
+        results: list[MultiLegExecutionResult] = []
+        for group_id, group_plan in tuple(self._group_plans.items()):
+            if group_plan.strategy_id != "track2_asymmetric_trap":
+                continue
+            if any(
+                pending_plan.group_id == group_id
+                for pending_plan, _pending_leg, _pending_command in self.pending_legs.values()
+            ):
+                continue
+            group_reports = self.groups.get(group_id, ())
+            progress = evaluate_track2_entry_progress(group_plan, group_reports)
+            if progress.status != "READY" or not progress.next_leg_id:
+                continue
+            if not self._track2_zero_fill_cancel_reconciled(group_plan, group_reports):
+                continue
+            next_leg = next(
+                (leg for leg in group_plan.legs if leg.leg_id == progress.next_leg_id),
+                None,
+            )
+            if next_leg is None:
+                continue
+            # Re-run preflight for the complete remaining group; execute() routes
+            # only the progress-approved next leg.
+            results.append(self.execute(group_plan, group_plan=group_plan))
+        return tuple(results)
+
+    def process_s9_entry_retries(
+        self, as_of: datetime, *, strategy: Any | None = None,
+    ) -> tuple[MultiLegExecutionResult, ...]:
+        """S9 BUY-only regular-session timeout/cancel/confirm/wait/retry.
+
+        KRX KOSPI200 options regular session closes at 15:45 KST (15:20 on
+        the contract's last trading day). The separate KRX night session is
+        intentionally outside this S9 retry policy pending explicit approval.
+        """
+        if not isinstance(as_of, datetime) or as_of.tzinfo is None:
+            return ()
+        kst = timezone(timedelta(hours=9))
+        now = as_of.astimezone(kst)
+        results: list[MultiLegExecutionResult] = []
+
+        def cutoff_for(group_plan: MultiLegExecutionPlan) -> time:
+            for item in group_plan.legs:
+                identity = getattr(item, "instrument_identity", None)
+                expiry = str(getattr(identity, "expiry", "") or "").replace("-", "")[:8]
+                if len(expiry) == 8 and expiry.isdigit():
+                    try:
+                        if datetime.strptime(expiry, "%Y%m%d").date() == now.date():
+                            return time(15, 20)
+                    except ValueError:
+                        pass
+            return time(15, 45)
+
+        for client_id, pending in tuple(self.pending_legs.items()):
+            group_plan, leg, _command = pending
+            if (group_plan.strategy_id != "track9_event_overnight_insurance"
+                    or str(group_plan.purpose or "").upper() != "OVERNIGHT_INSURANCE"
+                    or str(leg.side).upper() != "BUY"):
+                continue
+            cutoff = cutoff_for(group_plan)
+            latest = next((r for r in self.groups.get(group_plan.group_id, ())
+                           if r.client_order_id == client_id), None)
+            submitted = getattr(latest, "submitted_at", None)
+            timed_out = (submitted is not None and submitted.tzinfo is not None
+                         and now - submitted.astimezone(kst) >= timedelta(minutes=5))
+            if now.time() < cutoff and not timed_out:
+                continue
+            try:
+                cancelled = self.cancel_pending_order(client_id)
+            except Exception:
+                if strategy is not None:
+                    strategy.state = replace(strategy.state, state="RECONCILIATION_REQUIRED")
+                continue
+            report = next((r for r in cancelled.reports if r.client_order_id == client_id), None)
+            if str(getattr(getattr(report, "status", ""), "value",
+                           getattr(report, "status", ""))).upper() != "CANCELLED":
+                continue
+            remaining = int(getattr(report, "remaining_quantity", 0) or 0)
+            if remaining <= 0 or now.time() >= cutoff:
+                continue
+            key = (group_plan.group_id, leg.leg_id)
+            attempt = self._s9_retry_attempts.get(key, 0) + 1
+            self._s9_retry_schedule[key] = (group_plan, leg, now + timedelta(minutes=5), attempt)
+
+        # A broker-side REJECTED order is already terminal (there is nothing left
+        # to cancel). Wait five minutes from its rejection/submission evidence before
+        # retrying the still-unfilled BUY leg.
+        for group_id, group_plan in tuple(self._group_plans.items()):
+            if (group_plan.strategy_id != "track9_event_overnight_insurance"
+                    or str(group_plan.purpose or "").upper() != "OVERNIGHT_INSURANCE"):
+                continue
+            for leg in group_plan.legs:
+                key = (group_id, leg.leg_id)
+                if key in self._s9_retry_schedule:
+                    continue
+                if any(p[0].group_id == group_id and p[1].leg_id == leg.leg_id
+                       for p in self.pending_legs.values()):
+                    continue
+                filled = sum(int(getattr(r, "filled_quantity", 0) or 0)
+                             for r in self.groups.get(group_id, ()) if r.leg_id == leg.leg_id)
+                if filled >= int(leg.quantity):
+                    continue
+                leg_reports = [r for r in self.groups.get(group_id, ()) if r.leg_id == leg.leg_id]
+                if not leg_reports:
+                    continue
+                def report_clock(report):
+                    value = (getattr(report, "execution_timestamp", None)
+                             or getattr(report, "submitted_at", None))
+                    return (value.astimezone(kst) if value is not None and value.tzinfo is not None
+                            else datetime.min.replace(tzinfo=kst))
+                latest = max(leg_reports, key=report_clock)
+                if str(getattr(getattr(latest, "status", ""), "value",
+                               getattr(latest, "status", ""))).upper() != "REJECTED":
+                    continue
+                evidence_time = getattr(latest, "execution_timestamp", None)
+                if evidence_time is not None and evidence_time.tzinfo is not None:
+                    retry_at = evidence_time.astimezone(kst) + timedelta(minutes=5)
+                else:
+                    retry_at = now + timedelta(minutes=5)
+                if retry_at.time() >= cutoff_for(group_plan):
+                    continue
+                attempt = self._s9_retry_attempts.get(key, 0) + 1
+                self._s9_retry_schedule[key] = (group_plan, leg, retry_at, attempt)
+
+        for key, (group_plan, leg, retry_at, attempt) in tuple(self._s9_retry_schedule.items()):
+            if now.time() >= cutoff_for(group_plan):
+                self._s9_retry_schedule.pop(key, None)
+                continue
+            if now < retry_at:
+                continue
+            if any(x[0].group_id == group_plan.group_id and x[1].leg_id == leg.leg_id
+                   for x in self.pending_legs.values()):
+                self._s9_retry_schedule.pop(key, None)
+                continue
+            target = next((x for x in group_plan.legs if x.leg_id == leg.leg_id), None)
+            if target is None:
+                self._s9_retry_schedule.pop(key, None)
+                continue
+            filled = sum(int(getattr(r, "filled_quantity", 0) or 0)
+                         for r in self.groups.get(group_plan.group_id, ()) if r.leg_id == leg.leg_id)
+            remaining = int(target.quantity) - filled
+            if remaining <= 0:
+                self._s9_retry_schedule.pop(key, None)
+                continue
+            retry_leg = replace(leg, quantity=remaining)
+            retry_plan = MultiLegExecutionPlan(
+                group_id=group_plan.group_id, strategy_id=group_plan.strategy_id,
+                purpose=group_plan.purpose, legs=(retry_leg,),
+                strategy_code_version=group_plan.strategy_code_version,
+                strategy_config_version=group_plan.strategy_config_version,
+                strategy_config_hash=group_plan.strategy_config_hash,
+                attempt_id=f"S9-RETRY-{attempt:04d}",
+            )
+            try:
+                result = self.execute(retry_plan, group_plan=group_plan)
+            except Exception:
+                if strategy is not None:
+                    strategy.state = replace(strategy.state, state="RECONCILIATION_REQUIRED")
+                self._s9_retry_schedule[key] = (
+                    group_plan, leg, now + timedelta(minutes=5), attempt,
+                )
+                continue
+            self._s9_retry_attempts[key] = attempt
+            self._s9_retry_schedule.pop(key, None)
+            results.append(result)
+        return tuple(results)
 
     def _merge_group_reports(
         self, group_plan: MultiLegExecutionPlan, new_reports: Sequence[ExecutionReport]

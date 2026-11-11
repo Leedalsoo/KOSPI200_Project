@@ -1,0 +1,32 @@
+{
+    "catalog_id":  "Q25_A5_S25_S2_SCENARIO_CATALOG_20261109",
+    "catalog_file":  "Q25_A5_S25_S2_SCENARIO_CATALOG_20261109.json",
+    "catalog_sha256":  "2d37736c05c2d0b3d7dfa0e5012ad347be402d68680c0e94da2e144963c62531",
+    "scenario_count":  40,
+    "status_counts":  {
+                          "BLOCKED_INPUT":  8,
+                          "BLOCKED_SPEC":  28,
+                          "DESIGNED":  4
+                      },
+    "source_sha256":  {
+                          "docs/strategy_specifications/04_strategy_1_to_9_scenario_test_plan_s2_delta_v0.2.md":  "22c2325b7123615bce9e7e65704752a2b3831526d4d6c9d1d3cbe28f3bb6795b",
+                          "docs/strategy_specifications/strategy_2_asymmetric_trap_spec_v0.4.md":  "9dc2264d31120dfbaa0b6987a5c8b97f67497f00093c641d72cbd6fffa324b85",
+                          "reports/synth/Q25_A5_S24_S2_SPEC_GAP_MATRIX_20261109.md":  "c5219521da7f20847ad4300085334a699a8c8afc7bfda2dfdcd20bc393480ac8",
+                          "docs/CURRENT_BASELINE.md":  "e865a11e5b12862294da0dc2386870381ac91e0a5490a6d87beda52a7f7cf95d",
+                          "AGENTS.md":  "0b68235c0f3c68ec0db608582875109d6fb4e97d9107de671272525927e1b858"
+                      },
+    "execution_enabled":  false,
+    "market_data_generated":  false,
+    "orders_allowed":  false,
+    "kis_api_allowed":  false,
+    "artifact_status":  "STALE_INPUTS_HISTORICAL_ONLY",
+    "current_use_allowed":  false,
+    "stale_reason":  "Old inputs: spec v0.4, plan v0.2 and previous SSOT/AGENTS hashes; superseded by No.1501-No.1505.",
+    "superseding_inputs":  {
+                               "current_baseline_sha256":  "9848792B24863A477CF10450D570C08A328776F84960A28425C62D193B3957F0",
+                               "agents_sha256":  "C66197D46A2E51281F54E4181D1D105E5F0F8A9CFF4086819C647B327587E5C0",
+                               "approved_spec":  "docs/strategy_specifications/strategy_2_asymmetric_trap_spec_v0.5.md",
+                               "scenario_plan":  "docs/strategy_specifications/04_strategy_1_to_9_scenario_test_plan_s2_delta_v0.3.md",
+                               "policy_decisions":  "No.1501-No.1505"
+                           }
+}

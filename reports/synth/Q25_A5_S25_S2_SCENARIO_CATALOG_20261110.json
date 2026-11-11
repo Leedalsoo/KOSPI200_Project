@@ -1,0 +1,550 @@
+{
+  "catalog_id": "Q25_A5_S25_S2_SCENARIO_CATALOG_20261110",
+  "stage": "S25",
+  "created_at": "2026-11-10",
+  "verdict": "PSB_PASS_SCENARIO_CATALOG_GENERATION_ONLY",
+  "specification_state": "USER_APPROVED_SPEC_V0.5_NO1500",
+  "catalog_state": "CURRENT_INPUTS_DOCUMENTATION_ONLY",
+  "source_commit": "1ea0129131370109344548827780a1e15b2ab414",
+  "source_worktree_only": true,
+  "scenario_count": 30,
+  "classification_counts": {
+    "BLOCKED_INPUT": 7,
+    "BLOCKED_SPEC": 12,
+    "DESIGNED": 11
+  },
+  "execution_enabled": false,
+  "market_data_generated": false,
+  "orders_allowed": false,
+  "kis_api_allowed": false,
+  "scenarios": [
+    {
+      "scenario_id": "S2-V05-U16-01",
+      "policy_group": "U16",
+      "section": "A. U16 — partial fill / reject / cancel race",
+      "event": "first leg partial fill, residual quantity remains",
+      "expected_behavior": "reconcile fill/leaves/position; calculate repair only under approved formula; no blind next leg",
+      "classification": "BLOCKED_SPEC",
+      "source_status": "NOT_RUN / BLOCKED_SPEC",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "FAIL_CLOSED_GUARD_PASS",
+      "unit_test_evidence": [
+        "test_track2_partial_fill_blocks_progress_without_repair_or_flatten_choice",
+        "test_track2_cancelled_partial_fill_does_not_advance"
+      ]
+    },
+    {
+      "scenario_id": "S2-V05-U16-02",
+      "policy_group": "U16",
+      "section": "A. U16 — partial fill / reject / cancel race",
+      "event": "later leg reject after earlier fills",
+      "expected_behavior": "use actual filled leg quantities for group repair decision; unresolved repair path blocks",
+      "classification": "BLOCKED_SPEC",
+      "source_status": "NOT_RUN / BLOCKED_SPEC",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "FAIL_CLOSED_GUARD_PASS",
+      "unit_test_evidence": [
+        "test_track2_reject_does_not_advance"
+      ]
+    },
+    {
+      "scenario_id": "S2-V05-U16-03",
+      "policy_group": "U16",
+      "section": "A. U16 — partial fill / reject / cancel race",
+      "event": "fill arrives during cancel request",
+      "expected_behavior": "wait for cancel terminal + fill/position reconciliation; include late fill",
+      "classification": "BLOCKED_INPUT",
+      "source_status": "NOT_RUN / BLOCKED_INPUT",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "FAIL_CLOSED_GUARD_PASS",
+      "unit_test_evidence": [
+        "test_track2_cancel_requested_does_not_advance_before_confirmation"
+      ]
+    },
+    {
+      "scenario_id": "S2-V05-U16-04",
+      "policy_group": "U16",
+      "section": "A. U16 — partial fill / reject / cancel race",
+      "event": "repair finally fails, or retry/time limit is exceeded",
+      "expected_behavior": "reconcile all order/fill/position state; apply full liquidation policy to already-filled legs and block group; if state is unclear, no duplicate order and RECONCILIATION_REQUIRED",
+      "classification": "BLOCKED_SPEC",
+      "source_status": "NOT_RUN / BLOCKED_SPEC",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "NOT_TESTED",
+      "unit_test_evidence": []
+    },
+    {
+      "scenario_id": "S2-V05-U16-05",
+      "policy_group": "U16",
+      "section": "A. U16 — partial fill / reject / cancel race",
+      "event": "repair quantity calculation after partial fill/reject",
+      "expected_behavior": "repair only the missing quantity derived from confirmed actual fills after cancel/terminal, fill and position reconciliation",
+      "classification": "DESIGNED",
+      "source_status": "NOT_RUN",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "NOT_TESTED",
+      "unit_test_evidence": []
+    },
+    {
+      "scenario_id": "S2-V05-U16-06",
+      "policy_group": "U16",
+      "section": "A. U16 — partial fill / reject / cancel race",
+      "event": "retry attempt begins",
+      "expected_behavior": "re-reconcile original/repair order terminal state, fills and positions before each retry; unknown state blocks retry",
+      "classification": "DESIGNED",
+      "source_status": "NOT_RUN",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "NOT_TESTED",
+      "unit_test_evidence": []
+    },
+    {
+      "scenario_id": "S2-V05-U16-07",
+      "policy_group": "U16",
+      "section": "A. U16 — partial fill / reject / cancel race",
+      "event": "retry/time boundary",
+      "expected_behavior": "allow at most 3 additional retries after initial repair and at most 120 seconds from initial repair submission; either limit exceeded means repair failure",
+      "classification": "DESIGNED",
+      "source_status": "NOT_RUN",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "NOT_TESTED",
+      "unit_test_evidence": []
+    },
+    {
+      "scenario_id": "S2-V05-U16-08",
+      "policy_group": "U16",
+      "section": "A. U16 — partial fill / reject / cancel race",
+      "event": "repair limit price",
+      "expected_behavior": "use best BID/ASK-based limit order; quote validity and fallback limits remain governed by U21 and are not inferred here",
+      "classification": "BLOCKED_SPEC",
+      "source_status": "NOT_RUN / BLOCKED_SPEC",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "NOT_TESTED",
+      "unit_test_evidence": []
+    },
+    {
+      "scenario_id": "S2-V05-U16-09",
+      "policy_group": "U16",
+      "section": "A. U16 — partial fill / reject / cancel race",
+      "event": "final repair failure",
+      "expected_behavior": "policy requires full liquidation of already-filled legs with opposite-direction orders and group block; actual submission remains unauthorized",
+      "classification": "BLOCKED_SPEC",
+      "source_status": "NOT_RUN / BLOCKED_SPEC",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "NOT_TESTED",
+      "unit_test_evidence": []
+    },
+    {
+      "scenario_id": "S2-V05-U20-01",
+      "policy_group": "U20",
+      "section": "B. U20 — zero-fill cancellation",
+      "event": "cancel confirmed; cumulative fill=0; no working order; position reconciles",
+      "expected_behavior": "mark ZERO_FILL_CONFIRMED and advance sequence cursor; do not mark leg filled or group ACTIVE; all four target quantities still require fill/reconciliation or U16 repair",
+      "classification": "DESIGNED",
+      "source_status": "NOT_RUN",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "SEQUENCE_AND_POSITION_GUARD_PASS",
+      "unit_test_evidence": [
+        "test_track2_confirmed_zero_fill_cancel_advances_to_next_leg",
+        "test_runtime_progression_advances_after_confirmed_zero_fill_cancel",
+        "test_zero_fill_cancel_guard_requires_flat_group_and_account_position"
+      ]
+    },
+    {
+      "scenario_id": "S2-V05-U20-02",
+      "policy_group": "U20",
+      "section": "B. U20 — zero-fill cancellation",
+      "event": "cancel requested but not confirmed",
+      "expected_behavior": "no next leg",
+      "classification": "DESIGNED",
+      "source_status": "NOT_RUN",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "FAIL_CLOSED_GUARD_PASS",
+      "unit_test_evidence": [
+        "test_track2_cancel_requested_does_not_advance_before_confirmation"
+      ]
+    },
+    {
+      "scenario_id": "S2-V05-U20-03",
+      "policy_group": "U20",
+      "section": "B. U20 — zero-fill cancellation",
+      "event": "cancel confirmed but fill/position query incomplete or late fill possible",
+      "expected_behavior": "no next leg; RECONCILIATION_REQUIRED",
+      "classification": "DESIGNED",
+      "source_status": "NOT_RUN",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "POSITION_AND_PENDING_GUARD_PASS",
+      "unit_test_evidence": [
+        "test_runtime_progression_blocks_zero_fill_cancel_without_position_reconciliation",
+        "test_zero_fill_cancel_guard_blocks_if_account_position_is_not_flat",
+        "test_zero_fill_cancel_guard_blocks_if_group_lot_remains",
+        "test_zero_fill_cancel_guard_blocks_while_cancelled_order_remains_pending"
+      ]
+    },
+    {
+      "scenario_id": "S2-V05-U20-04",
+      "policy_group": "U20",
+      "section": "B. U20 — zero-fill cancellation",
+      "event": "partial fill found after cancel",
+      "expected_behavior": "do not classify as zero-fill; route to U16 repair policy",
+      "classification": "BLOCKED_SPEC",
+      "source_status": "NOT_RUN / BLOCKED_SPEC",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "FAIL_CLOSED_GUARD_PASS",
+      "unit_test_evidence": [
+        "test_track2_cancelled_partial_fill_does_not_advance"
+      ]
+    },
+    {
+      "scenario_id": "S2-V05-U17-01",
+      "policy_group": "U17",
+      "section": "C. U17 — contract selection",
+      "event": "two listed strikes equidistant from index price",
+      "expected_behavior": "select lower listed strike at/below index price",
+      "classification": "DESIGNED",
+      "source_status": "NOT_RUN",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "MONTHLY_LISTED_STRIKE_GUARD_PASS",
+      "unit_test_evidence": [
+        "test_monthly_selection_uses_lower_strike_when_atm_distance_ties"
+      ]
+    },
+    {
+      "scenario_id": "S2-V05-U17-02",
+      "policy_group": "U17",
+      "section": "C. U17 — contract selection",
+      "event": "one or more offset strikes not listed",
+      "expected_behavior": "block; no inferred strike rounding",
+      "classification": "BLOCKED_INPUT",
+      "source_status": "NOT_RUN / BLOCKED_INPUT",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "MISSING_LISTED_CONTRACT_GUARD_PASS",
+      "unit_test_evidence": [
+        "test_four_leg_monthly_resolution_blocks_if_one_strike_is_missing"
+      ]
+    },
+    {
+      "scenario_id": "S2-V05-U17-03",
+      "policy_group": "U17",
+      "section": "C. U17 — contract selection",
+      "event": "nearest expiry is not confirmed monthly series",
+      "expected_behavior": "block; do not substitute nearest expiry",
+      "classification": "BLOCKED_INPUT",
+      "source_status": "NOT_RUN / BLOCKED_INPUT",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "MONTHLY_SERIES_GUARD_PASS",
+      "unit_test_evidence": [
+        "test_nearest_expiry_ignores_weekly_and_nonstandard_contracts",
+        "test_nearest_expiry_fails_when_only_weekly_or_mini_series_exist",
+        "test_select_fails_closed_when_expiry_has_no_monthly_standard_pair"
+      ]
+    },
+    {
+      "scenario_id": "S2-V05-U17-04",
+      "policy_group": "U17",
+      "section": "C. U17 — contract selection",
+      "event": "multiplier/tradability missing for any of four legs",
+      "expected_behavior": "block whole group",
+      "classification": "BLOCKED_INPUT",
+      "source_status": "NOT_RUN / BLOCKED_INPUT",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "FOUR_LEG_IDENTITY_MULTIPLIER_GUARD_PASS",
+      "unit_test_evidence": [
+        "test_all_four_entry_legs_resolve_from_one_exact_monthly_standard_series",
+        "test_resolve_identity_blocks_missing_multiplier",
+        "test_virtual_bridge_blocks_stored_identity_multiplier_mismatch"
+      ]
+    },
+    {
+      "scenario_id": "S2-V05-U18-01",
+      "policy_group": "U18",
+      "section": "D. U18 — group P&L",
+      "event": "valid BID/ASK for all four legs",
+      "expected_behavior": "use MID for each option mark",
+      "classification": "DESIGNED",
+      "source_status": "NOT_RUN",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "NOT_TESTED",
+      "unit_test_evidence": []
+    },
+    {
+      "scenario_id": "S2-V05-U18-02",
+      "policy_group": "U18",
+      "section": "D. U18 — group P&L",
+      "event": "initial group net premium received <= 0",
+      "expected_behavior": "block ratio/stop/trailing metric; no denominator substitution",
+      "classification": "BLOCKED_INPUT",
+      "source_status": "NOT_RUN / BLOCKED_INPUT",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "NOT_TESTED",
+      "unit_test_evidence": []
+    },
+    {
+      "scenario_id": "S2-V05-U18-03",
+      "policy_group": "U18",
+      "section": "D. U18 — group P&L",
+      "event": "realized and unrealized P&L with fees/slippage",
+      "expected_behavior": "include fees/slippage in both",
+      "classification": "DESIGNED",
+      "source_status": "NOT_RUN",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "NOT_TESTED",
+      "unit_test_evidence": []
+    },
+    {
+      "scenario_id": "S2-V05-U18-04",
+      "policy_group": "U18",
+      "section": "D. U18 — group P&L",
+      "event": "cumulative net loss reaches approved stop percentage",
+      "expected_behavior": "trigger close only after percentage is approved",
+      "classification": "BLOCKED_SPEC",
+      "source_status": "NOT_RUN / BLOCKED_SPEC",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "NOT_TESTED",
+      "unit_test_evidence": []
+    },
+    {
+      "scenario_id": "S2-V05-U18-05",
+      "policy_group": "U18",
+      "section": "D. U18 — group P&L",
+      "event": "pullback from maximum cumulative net profit reaches approved pullback percentage",
+      "expected_behavior": "trigger trailing close only after percentage is approved",
+      "classification": "BLOCKED_SPEC",
+      "source_status": "NOT_RUN / BLOCKED_SPEC",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "NOT_TESTED",
+      "unit_test_evidence": []
+    },
+    {
+      "scenario_id": "S2-V05-U19-01",
+      "policy_group": "U19",
+      "section": "E. U19 — restart reconciliation",
+      "event": "broker position and persisted ledger agree",
+      "expected_behavior": "broker position is primary; ledger is supplementary",
+      "classification": "DESIGNED",
+      "source_status": "NOT_RUN",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "NOT_TESTED",
+      "unit_test_evidence": []
+    },
+    {
+      "scenario_id": "S2-V05-U19-02",
+      "policy_group": "U19",
+      "section": "E. U19 — restart reconciliation",
+      "event": "broker position and ledger disagree",
+      "expected_behavior": "block resume/flat; apply no invented adjustment",
+      "classification": "BLOCKED_SPEC",
+      "source_status": "NOT_RUN / BLOCKED_SPEC",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "NOT_TESTED",
+      "unit_test_evidence": []
+    },
+    {
+      "scenario_id": "S2-V05-U19-03",
+      "policy_group": "U19",
+      "section": "E. U19 — restart reconciliation",
+      "event": "broker position unavailable or stale",
+      "expected_behavior": "block resume and new entry",
+      "classification": "BLOCKED_INPUT",
+      "source_status": "NOT_RUN / BLOCKED_INPUT",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "NOT_TESTED",
+      "unit_test_evidence": []
+    },
+    {
+      "scenario_id": "S2-V05-U19-04",
+      "policy_group": "U19",
+      "section": "E. U19 — restart reconciliation",
+      "event": "pending order or late fill across restart",
+      "expected_behavior": "reconcile terminal order/fill/position before resume",
+      "classification": "BLOCKED_INPUT",
+      "source_status": "NOT_RUN / BLOCKED_INPUT",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "NOT_TESTED",
+      "unit_test_evidence": []
+    },
+    {
+      "scenario_id": "S2-V05-U21-01",
+      "policy_group": "U21",
+      "section": "F. U21 — quote fallback and order price",
+      "event": "BID/ASK missing",
+      "expected_behavior": "conservative fallback only if approved formula yields valid price; otherwise block",
+      "classification": "BLOCKED_SPEC",
+      "source_status": "NOT_RUN / BLOCKED_SPEC",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "NOT_TESTED",
+      "unit_test_evidence": []
+    },
+    {
+      "scenario_id": "S2-V05-U21-02",
+      "policy_group": "U21",
+      "section": "F. U21 — quote fallback and order price",
+      "event": "quote stale or spread above approved limit",
+      "expected_behavior": "apply approved conservative fallback or block",
+      "classification": "BLOCKED_SPEC",
+      "source_status": "NOT_RUN / BLOCKED_SPEC",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "NOT_TESTED",
+      "unit_test_evidence": []
+    },
+    {
+      "scenario_id": "S2-V05-U21-03",
+      "policy_group": "U21",
+      "section": "F. U21 — quote fallback and order price",
+      "event": "fallback output violates tick/price bounds",
+      "expected_behavior": "block; do not round by guessed rule",
+      "classification": "BLOCKED_SPEC",
+      "source_status": "NOT_RUN / BLOCKED_SPEC",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "NOT_TESTED",
+      "unit_test_evidence": []
+    },
+    {
+      "scenario_id": "S2-V05-U21-04",
+      "policy_group": "U21",
+      "section": "F. U21 — quote fallback and order price",
+      "event": "no valid fallback",
+      "expected_behavior": "block order",
+      "classification": "DESIGNED",
+      "source_status": "NOT_RUN",
+      "execution_status": "NOT_RUN",
+      "market_data_status": "NOT_GENERATED",
+      "policy_status": "USER_APPROVED_POLICY_WITH_OPEN_IMPLEMENTATION_OR_INPUT_BLOCKERS",
+      "unit_test_status": "NOT_TESTED",
+      "unit_test_evidence": []
+    }
+  ],
+  "unresolved_policy_register": {
+    "U16": [
+      "retry interval",
+      "repricing timing",
+      "quote age/spread/fallback constraints from U21"
+    ],
+    "U17": [
+      "exact monthly expiry source",
+      "listed strike mapping",
+      "tick/strike rounding",
+      "volatility boundaries"
+    ],
+    "U18": [
+      "stop percentage",
+      "trailing pullback percentage",
+      "MID freshness/validity"
+    ],
+    "U19": [
+      "broker-position/ledger mismatch handling",
+      "resume/stop policy",
+      "durable restore evidence"
+    ],
+    "U20": [
+      "event ordering and late-fill evidence"
+    ],
+    "U21": [
+      "maximum quote age",
+      "maximum spread and units",
+      "fallback formula/priority",
+      "tick rounding"
+    ]
+  },
+  "source_sha256": {
+    "docs/CURRENT_BASELINE.md": "3fdc91266de43eab12edac50eb35200f824bc352024d21374f1db93cd3880cb4",
+    "AGENTS.md": "bc74b5940ac67ac834b563755e5673ec9b8f7f3020392ea478cf738801a20341",
+    "docs/strategy_specifications/strategy_2_asymmetric_trap_spec_v0.5.md": "b47307872f988a7ddebb956477a94b21d9a398b31328e268fc923f9a0f390dee",
+    "docs/strategy_specifications/02_decision_factor_integrated_design_matrix_s2_delta_v0.6.md": "b3b9bf0bbbeee643bc8f596b3b0ac3b324132b55881eb23de3846f79ced19d50",
+    "docs/strategy_specifications/03_requirements_spec_code_test_traceability_s2_delta_v0.3.md": "9a1f7893f1ee9d0f12646dfb6f531d7833a4e798abe7f9650fcdb796116efa49",
+    "docs/strategy_specifications/04_strategy_1_to_9_scenario_test_plan_s2_delta_v0.3.md": "5065ea63a9b0f9b85d268cccd2914e7ab1a4ceb7536d4ba8ee2d7fa3bd253c76"
+  },
+  "limitations": [
+    "Catalog generation only; not strategy execution, Runtime validation, or production readiness.",
+    "All 30 scenarios remain NOT_RUN; classification is a planning/blocker label only.",
+    "No synthetic prices, contract identities, fees, quantities, market events, or market data were fabricated.",
+    "No pytest, Runtime, Replay, KIS, REAL_VTS, Live, account, or order API was executed.",
+    "Source documents include untracked working-tree files and are not committed or pushed.",
+    "U20 unit-test evidence is guard-only; no natural-signal Runtime E2E or Replay was run.",
+    "U16 repair/retry/flatten, U17 authoritative monthly contract identity, U18 group PnL exit, U19 durable recovery, and U21 quote fallback remain unimplemented/unverified.",
+    "U17 code enforces STANDARD/MONTHLY series and binds all four exact listed identities, but no current authoritative KIS master snapshot or tradability evidence was loaded in this task.",
+    "U20 runtime wiring is unit-tested only; no natural-signal Virtual Runtime E2E or Replay was run.",
+    "U16 repair/retry/flatten, U17 strike/tick rounding and volatility boundaries, U18 fee/slippage-aware group PnL exit, U19 durable recovery, and U21 quote freshness/fallback remain incomplete."
+  ],
+  "implementation_sha256": {
+    "application/composition/virtual_multi_leg_execution.py": "eff9d268df7441cba545c3700e75cbfa9d095fcffbe94eca344c10abaa97757d",
+    "application/composition/automated_virtual_runtime_factory.py": "a5696a224a87fa3e22b51a02f3d6bde9e65dad8a2c4059de06926f615a3d53a5",
+    "application/composition/track2_option_contract_source.py": "fe6cb3a0d5f8e2a32795271b8ddc7ab3872ce9c468e344d7d134af8bd7ae13b3",
+    "core/strategy/track2_entry_sequence.py": "233a25111946225193f03a0d211bb9beca6fb90f6b13f2b40cbedff09774634b",
+    "tests/application/composition/test_track2_sequential_runtime_progression.py": "42beeafd6acb97003d37fee9c5f550d4703f4f16a9b8b2f6504141416e833755",
+    "tests/application/composition/test_track2_monthly_option_contract_source.py": "d932d3f0106a6d4b18dc1ac035d62f1d415975d1ebbc26cdb21775a0bbb7d693",
+    "tests/core/test_track2_validation_only_controls.py": "30e69d61984c91a9b9e327c0f8de3631b0d8fe34b6719d6484e6fe44233743f5"
+  },
+  "implementation_progress": {
+    "state": "U17_MONTHLY_IDENTITY_AND_U20_SEQUENTIAL_ENTRY_PARTIAL",
+    "scope": "validation-only Virtual Runtime/OMS; exact STANDARD/MONTHLY 4-leg identity binding; sequential one-leg routing with full remaining-group preflight",
+    "s2_focused_test_suite": "44 passed",
+    "adjacent_regression_suite": "37 passed",
+    "combined_unique_test_count": 81,
+    "runtime_e2e": "NOT_RUN",
+    "replay": "NOT_RUN",
+    "market_data_generated": false,
+    "orders_allowed": false,
+    "kis_api_allowed": false,
+    "real_vts_allowed": false,
+    "live_allowed": false
+  },
+  "implementation_report_sha256": "47e2fa92484153cd4df9cf35ccac6718beb54a788cc83605bfa3b186f14491cd"
+}

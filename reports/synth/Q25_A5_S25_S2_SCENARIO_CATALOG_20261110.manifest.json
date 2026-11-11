@@ -1,0 +1,49 @@
+{
+  "catalog_id": "Q25_A5_S25_S2_SCENARIO_CATALOG_20261110",
+  "catalog_file": "Q25_A5_S25_S2_SCENARIO_CATALOG_20261110.json",
+  "catalog_sha256": "a72ed5781c23d3e97621d7acdf7a062f85d137c3edfd2586574391ea0df6bcd8",
+  "scenario_count": 30,
+  "classification_counts": {
+    "BLOCKED_INPUT": 7,
+    "BLOCKED_SPEC": 12,
+    "DESIGNED": 11
+  },
+  "source_sha256": {
+    "docs/CURRENT_BASELINE.md": "3fdc91266de43eab12edac50eb35200f824bc352024d21374f1db93cd3880cb4",
+    "AGENTS.md": "bc74b5940ac67ac834b563755e5673ec9b8f7f3020392ea478cf738801a20341",
+    "docs/strategy_specifications/strategy_2_asymmetric_trap_spec_v0.5.md": "b47307872f988a7ddebb956477a94b21d9a398b31328e268fc923f9a0f390dee",
+    "docs/strategy_specifications/02_decision_factor_integrated_design_matrix_s2_delta_v0.6.md": "b3b9bf0bbbeee643bc8f596b3b0ac3b324132b55881eb23de3846f79ced19d50",
+    "docs/strategy_specifications/03_requirements_spec_code_test_traceability_s2_delta_v0.3.md": "9a1f7893f1ee9d0f12646dfb6f531d7833a4e798abe7f9650fcdb796116efa49",
+    "docs/strategy_specifications/04_strategy_1_to_9_scenario_test_plan_s2_delta_v0.3.md": "5065ea63a9b0f9b85d268cccd2914e7ab1a4ceb7536d4ba8ee2d7fa3bd253c76"
+  },
+  "source_commit": "1ea0129131370109344548827780a1e15b2ab414",
+  "source_worktree_only": true,
+  "execution_enabled": false,
+  "market_data_generated": false,
+  "orders_allowed": false,
+  "kis_api_allowed": false,
+  "implementation_sha256": {
+    "application/composition/virtual_multi_leg_execution.py": "eff9d268df7441cba545c3700e75cbfa9d095fcffbe94eca344c10abaa97757d",
+    "application/composition/automated_virtual_runtime_factory.py": "a5696a224a87fa3e22b51a02f3d6bde9e65dad8a2c4059de06926f615a3d53a5",
+    "application/composition/track2_option_contract_source.py": "fe6cb3a0d5f8e2a32795271b8ddc7ab3872ce9c468e344d7d134af8bd7ae13b3",
+    "core/strategy/track2_entry_sequence.py": "233a25111946225193f03a0d211bb9beca6fb90f6b13f2b40cbedff09774634b",
+    "tests/application/composition/test_track2_sequential_runtime_progression.py": "42beeafd6acb97003d37fee9c5f550d4703f4f16a9b8b2f6504141416e833755",
+    "tests/application/composition/test_track2_monthly_option_contract_source.py": "d932d3f0106a6d4b18dc1ac035d62f1d415975d1ebbc26cdb21775a0bbb7d693",
+    "tests/core/test_track2_validation_only_controls.py": "30e69d61984c91a9b9e327c0f8de3631b0d8fe34b6719d6484e6fe44233743f5"
+  },
+  "implementation_progress": {
+    "state": "U17_MONTHLY_IDENTITY_AND_U20_SEQUENTIAL_ENTRY_PARTIAL",
+    "scope": "validation-only Virtual Runtime/OMS; exact STANDARD/MONTHLY 4-leg identity binding; sequential one-leg routing with full remaining-group preflight",
+    "s2_focused_test_suite": "44 passed",
+    "adjacent_regression_suite": "37 passed",
+    "combined_unique_test_count": 81,
+    "runtime_e2e": "NOT_RUN",
+    "replay": "NOT_RUN",
+    "market_data_generated": false,
+    "orders_allowed": false,
+    "kis_api_allowed": false,
+    "real_vts_allowed": false,
+    "live_allowed": false
+  },
+  "implementation_report_sha256": "47e2fa92484153cd4df9cf35ccac6718beb54a788cc83605bfa3b186f14491cd"
+}

@@ -24,13 +24,14 @@ class Track2AsymmetricTrap:
     ENTRY_QUANTITY: ClassVar[int] = 1
     MAX_DAILY_ENTRIES = 2
     COOLDOWN = timedelta(minutes=15)
-    STOP_LOSS_RATIO = Decimal("-0.30")
+    STOP_LOSS_RATIO: ClassVar[Decimal | None] = None
     LOW_VOL_THRESHOLD_RATIO = 0.85
     WIDE_SHORT_OFFSET = Decimal("10.0")
     WIDE_LONG_OFFSET = Decimal("5.0")
     NARROW_SHORT_OFFSET = Decimal("7.5")
     NARROW_LONG_OFFSET = Decimal("2.5")
-    TRAILING_ACTIVATION_RATIO = Decimal("0.30")
+    TRAILING_ACTIVATION_RATIO: ClassVar[Decimal | None] = None
+    TRAILING_PULLBACK_RATIO: ClassVar[Decimal | None] = None
     TRAILING_TIER_MID = Decimal("0.50")
     TRAILING_TIER_HIGH = Decimal("1.0")
     TRAILING_RETAIN_LOW_PNL = Decimal("0.85")
@@ -43,7 +44,7 @@ class Track2AsymmetricTrap:
         "ENTRY_QUANTITY", "MAX_DAILY_ENTRIES", "COOLDOWN", "STOP_LOSS_RATIO",
         "LOW_VOL_THRESHOLD_RATIO", "WIDE_SHORT_OFFSET", "WIDE_LONG_OFFSET",
         "NARROW_SHORT_OFFSET", "NARROW_LONG_OFFSET", "TRAILING_ACTIVATION_RATIO",
-        "TRAILING_TIER_MID", "TRAILING_TIER_HIGH", "TRAILING_RETAIN_LOW_PNL",
+        "TRAILING_TIER_MID", "TRAILING_TIER_HIGH", "TRAILING_PULLBACK_RATIO", "TRAILING_RETAIN_LOW_PNL",
         "TRAILING_RETAIN_MID_PNL", "TRAILING_RETAIN_HIGH_PNL",
         "OBI_NEUTRAL_THRESHOLD", "BASIS_MIN_THRESHOLD", "POC_DISTANCE_THRESHOLD",
     )
@@ -58,6 +59,7 @@ class Track2AsymmetricTrap:
         self.runtime_config_verified = runtime_config_verified
         self.risk_limits_available = risk_limits_available
         self._trap_active = False
+        self._entry_pending = False
         self._entry_price: Decimal | None = None
         self._entry_instrument: str | None = None
         self._last_loss_at: datetime | None = None
@@ -69,6 +71,8 @@ class Track2AsymmetricTrap:
         self._pending_exit_reason: str | None = None
         self._short_switch_at: datetime | None = None
         self._short_switched = False
+        self._group_pnl_snapshot = None
+        self._group_pnl_status = "GROUP_PNL_SNAPSHOT_UNAVAILABLE"
 
     def initialize(self, context: StrategyContext) -> None:
         self.reset()
@@ -85,6 +89,7 @@ class Track2AsymmetricTrap:
 
     def reset(self) -> None:
         self._trap_active = False
+        self._entry_pending = False
         self._entry_price = None
         self._entry_instrument = None
         self._last_loss_at = None
@@ -96,13 +101,21 @@ class Track2AsymmetricTrap:
         self._pending_exit_reason = None
         self._short_switch_at = None
         self._short_switched = False
+        self._group_pnl_snapshot = None
+        self._group_pnl_status = "GROUP_PNL_SNAPSHOT_UNAVAILABLE"
 
     def on_execution_result(self, purpose: str, result: object) -> None:
+        if purpose in {"ASYMMETRIC_TRAP_WIDE", "ASYMMETRIC_TRAP_NARROW"} and self._entry_pending:
+            if bool(getattr(result, "group_complete", False)) and not bool(getattr(result, "position_flat", False)):
+                self._entry_pending = False
+                self._trap_active = True
+            return
         if purpose != "TRAP_CLOSE" or not self._exit_pending:
             return
         if not (bool(getattr(result, "group_complete", False)) and bool(getattr(result, "position_flat", False))):
             return
         self._trap_active = False
+        self._entry_pending = False
         self._entry_price = None
         self._entry_instrument = None
         self._entry_strike = None
@@ -197,12 +210,72 @@ class Track2AsymmetricTrap:
             quantity=self.ENTRY_QUANTITY,
         )
 
+    def update_group_pnl_status(self, status: str) -> None:
+        self._group_pnl_status = str(status or "GROUP_PNL_STATUS_UNAVAILABLE")
+
+    def update_group_pnl_snapshot(self, snapshot: object | None) -> None:
+        self._group_pnl_snapshot = snapshot
+        if snapshot is None:
+            self.update_group_pnl_status("GROUP_PNL_SNAPSHOT_UNAVAILABLE")
+            return
+        if getattr(snapshot, "strategy_id", None) != self.strategy_id:
+            self.update_group_pnl_status("GROUP_PNL_STRATEGY_ID_MISMATCH")
+            return
+        legs = tuple(getattr(snapshot, "legs", ()) or ())
+        if not bool(getattr(snapshot, "complete", False)) or len(legs) != 4:
+            self.update_group_pnl_status("GROUP_PNL_FOUR_LEG_GROUP_INCOMPLETE")
+            return
+        premium = getattr(snapshot, "initial_net_premium_received", None)
+        if premium is None or Decimal(str(premium)) <= 0:
+            self.update_group_pnl_status("GROUP_PNL_INITIAL_NET_PREMIUM_UNAVAILABLE")
+            return
+        if any(getattr(snapshot, key, None) is None for key in ("fees", "slippage", "net_pnl")):
+            self.update_group_pnl_status("GROUP_PNL_COST_EVIDENCE_MISSING")
+            return
+        if getattr(snapshot, "quote_freshness_verified", None) is not True:
+            self.update_group_pnl_status("GROUP_PNL_QUOTE_FRESHNESS_POLICY_UNRESOLVED")
+            return
+        if any(
+            getattr(leg, "mark_source", None) != "BID_ASK_MID"
+            or getattr(leg, "quote_bid", None) is None
+            or getattr(leg, "quote_ask", None) is None
+            or getattr(leg, "quote_observed_at", None) is None
+            for leg in legs
+        ):
+            self.update_group_pnl_status("GROUP_PNL_MID_QUOTE_EVIDENCE_MISSING")
+            return
+        if any(value is None for value in (
+            self.STOP_LOSS_RATIO, self.TRAILING_ACTIVATION_RATIO, self.TRAILING_PULLBACK_RATIO,
+        )):
+            self.update_group_pnl_status("GROUP_PNL_EXIT_POLICY_UNRESOLVED")
+            return
+        self.update_group_pnl_status("READY")
+
     def evaluate_trap(self, current_price: Decimal, now: datetime) -> Sequence[Signal]:
-        # current_price is the underlying/index price, not option-group P&L.
-        # The approved S2 specification requires authoritative option fills, marks,
-        # multiplier, remaining lots, fees and slippage. Until that input contract
-        # is wired, do not emit stop/trailing exits from an underlying-price proxy.
-        # Keep the signature for callers, but fail closed on P&L-driven decisions.
+        # Exit decisions use the complete option-group P&L snapshot, never the
+        # underlying/index price as a proxy. Unresolved cost/freshness/threshold
+        # evidence leaves the group open and emits no order signal.
+        if not self._trap_active or self._exit_pending or self._group_pnl_status != "READY":
+            return ()
+        snapshot = self._group_pnl_snapshot
+        if snapshot is None:
+            return ()
+        premium = Decimal(str(snapshot.initial_net_premium_received))
+        if premium <= 0:
+            self.update_group_pnl_status("GROUP_PNL_INITIAL_NET_PREMIUM_INVALID")
+            return ()
+        ratio = Decimal(str(snapshot.net_pnl)) / premium
+        if ratio > self._high_pnl_ratio:
+            self._high_pnl_ratio = ratio
+        if ratio <= Decimal(str(self.STOP_LOSS_RATIO)):
+            return (self._close_signal("TRAP_GROUP_STOP_LOSS", "EXIT", now),)
+        peak = self._high_pnl_ratio
+        activation = Decimal(str(self.TRAILING_ACTIVATION_RATIO))
+        pullback_limit = Decimal(str(self.TRAILING_PULLBACK_RATIO))
+        if peak >= activation and peak > 0:
+            pullback = (peak - ratio) / peak
+            if pullback >= pullback_limit:
+                return (self._close_signal("TRAP_GROUP_TRAILING_EXIT", "EXIT", now),)
         return ()
 
     def feature_requirements(self):
@@ -223,7 +296,18 @@ class Track2AsymmetricTrap:
         from contracts.analytics import AnalyticsStatus
         from core.strategy.contracts import validate_strategy_features
 
-        if context.strategy_id != self.strategy_id or context.analytics is None or self._exit_pending:
+        if context.strategy_id != self.strategy_id:
+            return ()
+        if self._trap_active:
+            now = getattr(context.market_state, "as_of", None) if context.market_state is not None else None
+            if now is None and context.analytics is not None:
+                now = getattr(context.analytics, "as_of", None)
+            if now is None:
+                return ()
+            tick = next(iter(context.market_state.ticks.values()), None) if context.market_state else None
+            current_price = Decimal(str(tick.price)) if tick is not None else Decimal("0")
+            return self.evaluate_trap(current_price, now)
+        if context.analytics is None or self._exit_pending or self._entry_pending:
             return ()
         if not self.runtime_config_verified or not self.risk_limits_available:
             return ()
@@ -255,7 +339,8 @@ class Track2AsymmetricTrap:
             return ()
         active_vol = float(values["volatility.active"])
         base_vol = float(values["volatility.base"])
-        self._trap_active = True
+        self._entry_pending = True
+        self._trap_active = False
         self._entry_price = tick.price
         self._entry_instrument = tick.instrument_id
         self._high_pnl_ratio = Decimal("0")

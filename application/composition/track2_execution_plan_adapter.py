@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import Any
 
 from contracts.types import MultiLegExecutionPlan
+from core.strategy.track2_entry_sequence import validate_track2_entry_plan
 
 
 class Track2ExecutionPlanAdapter:
@@ -41,4 +42,5 @@ class Track2ExecutionPlanAdapter:
             raise ValueError("TRACK2_PLAN_STRATEGY_MISMATCH")
         if len(plan.legs) != 4:
             raise ValueError("TRACK2_FOUR_LEG_PLAN_REQUIRED")
+        validate_track2_entry_plan(plan)
         return plan

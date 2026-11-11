@@ -5,6 +5,7 @@ Preserves the legacy expiry lookup while additively retaining authoritative
 KIS short/standard-code identity metadata from one raw MST parse boundary.
 Calendar behavior is supplied through the standard TradingCalendar contract.
 """
+import hashlib
 import io
 import logging
 import re
@@ -17,6 +18,13 @@ from decimal import Decimal, InvalidOperation
 from typing import Callable, Dict, Mapping, Optional
 
 from contracts.trading_calendar import TradingCalendar
+from contracts.kis_option_product_spec import (
+    KIS_MONTHLY_OPTION_EXPIRY_RULE_ID,
+    KIS_MONTHLY_OPTION_EXPIRY_SOURCE,
+    KIS_OPTION_PRODUCT_SPEC_URL,
+    calculate_kis_monthly_option_expiry,
+    kis_option_contract_multiplier,
+)
 
 logger = logging.getLogger(__name__)
 KIS_FO_IDX_MASTER_URL = "https://new.real.download.dws.co.kr/common/master/fo_idx_code_mts.mst.zip"
@@ -76,8 +84,8 @@ class KisOptionMasterParseResult:
     master_sha256: Optional[str] = None
 
 
-KIS_KOSPI200_OPTION_CONTRACT_MULTIPLIER = Decimal("250000")
-KIS_MINI_KOSPI200_OPTION_CONTRACT_MULTIPLIER = Decimal("50000")
+KIS_KOSPI200_OPTION_CONTRACT_MULTIPLIER = kis_option_contract_multiplier("STANDARD")
+KIS_MINI_KOSPI200_OPTION_CONTRACT_MULTIPLIER = kis_option_contract_multiplier("MINI")
 
 KIS_INFO_TYPE_TO_OPTION_TYPE = {
     "5": "CALL", "D": "CALL", "L": "CALL", "N": "CALL",
@@ -213,26 +221,49 @@ def parse_kis_fo_idx_mst_result(
 
         expiry = _calculate_expiry(symbol, name, calendar)
         expiry_record = expiry_records.get(symbol)
-        if expiry is None and expiry_record is not None:
-            expiry = str(getattr(expiry_record, "expiry_yyyymmdd", "") or "")
+        product_spec_expiry = None
+        if (
+            expiry is None
+            and product["product_series"] == "MONTHLY"
+            and master_sha256
+            and re.fullmatch(r"[0-9a-f]{64}", str(master_sha256))
+        ):
+            try:
+                product_spec_expiry = calculate_kis_monthly_option_expiry(
+                    str(product["month"]), calendar
+                )
+            except (TypeError, ValueError) as exc:
+                raise KisMasterParseError("KIS_MONTHLY_OPTION_PRODUCT_SPEC_EXPIRY_INVALID") from exc
+            expiry = product_spec_expiry
+
+        if expiry_record is not None:
             required_provenance = (
                 "source", "received_at_utc", "endpoint", "tr_id",
                 "raw_response_sha256", "master_sha256",
             )
-            if not expiry or any(not getattr(expiry_record, key, None) for key in required_provenance):
+            if any(not getattr(expiry_record, key, None) for key in required_provenance):
                 raise KisMasterParseError("KIS_OPTION_EXPIRY_PROVENANCE_REQUIRED")
+            if str(getattr(expiry_record, "source", "")) != "KIS_REST:futs_last_tr_date":
+                raise KisMasterParseError("KIS_OPTION_EXPIRY_SOURCE_INVALID")
+            if str(getattr(expiry_record, "master_sha256", "")) != str(master_sha256 or ""):
+                raise KisMasterParseError("KIS_OPTION_EXPIRY_MASTER_HASH_MISMATCH")
+            recorded_expiry = str(getattr(expiry_record, "expiry_yyyymmdd", "") or "")
+            if not expiry:
+                expiry = recorded_expiry
+            elif recorded_expiry != expiry:
+                raise KisMasterParseError("KIS_OPTION_EXPIRY_SOURCE_CONFLICT")
+
         if not expiry:
-            # YYYYMM / YYMMWn are labels, not exact expiry dates.
+            # YYYYMM / YYMMWn labels are not exact expiry dates.
             continue
         from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
         try:
             expiry = require_exact_option_expiry(expiry)
         except CanonicalOptionExpiryError as exc:
             raise KisMasterParseError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
-        if expiry_record is not None:
-            recorded_expiry = require_exact_option_expiry(str(getattr(expiry_record, "expiry_yyyymmdd", "")))
-            if recorded_expiry != expiry:
-                raise KisMasterParseError("KIS_OPTION_EXPIRY_SOURCE_CONFLICT")
+        if expiry_record is not None and product_spec_expiry is not None:
+            if expiry != product_spec_expiry:
+                raise KisMasterParseError("KIS_OPTION_EXPIRY_PRODUCT_SPEC_CONFLICT")
 
         legacy[symbol] = expiry
         if standard_code:
@@ -246,16 +277,20 @@ def parse_kis_fo_idx_mst_result(
             option_type=str(product["option_type"]),
             strike=strike,
             info_type=prod_type or None,
-            # No multiplier field exists in the observed KIS index-master row.
-            # Do not promote hard-coded product values to authoritative data.
-            contract_multiplier=None,
+            # Multipliers and monthly expiry rule are taken from KIS's official
+            # product specification, not inferred from the MST row.
+            contract_multiplier=kis_option_contract_multiplier(
+                str(product["instrument_family"])
+            ),
             instrument_family=str(product["instrument_family"]),
             product_series=str(product["product_series"]),
             week_label=str(product["week_label"]) if product["week_label"] is not None else None,
             expiry_source=(
                 str(getattr(expiry_record, "source"))
                 if expiry_record is not None
-                else "KIS_OFFICIAL_INDEX_MASTER"
+                else KIS_MONTHLY_OPTION_EXPIRY_SOURCE
+                if product_spec_expiry is not None
+                else "KIS_OFFICIAL_INDEX_MASTER:EXACT_DATE"
             ),
             expiry_observed_at=(
                 str(getattr(expiry_record, "received_at_utc"))
@@ -265,12 +300,16 @@ def parse_kis_fo_idx_mst_result(
             expiry_endpoint=(
                 str(getattr(expiry_record, "endpoint"))
                 if expiry_record is not None
-                else None
+                else KIS_OPTION_PRODUCT_SPEC_URL
+                if product_spec_expiry is not None
+                else KIS_FO_IDX_MASTER_URL
             ),
             expiry_tr_id=(
                 str(getattr(expiry_record, "tr_id"))
                 if expiry_record is not None
-                else None
+                else KIS_MONTHLY_OPTION_EXPIRY_RULE_ID
+                if product_spec_expiry is not None
+                else "KIS_MST_EXACT_EXPIRY"
             ),
             expiry_response_sha256=(
                 str(getattr(expiry_record, "raw_response_sha256"))
@@ -280,6 +319,8 @@ def parse_kis_fo_idx_mst_result(
             expiry_master_sha256=(
                 str(getattr(expiry_record, "master_sha256"))
                 if expiry_record is not None
+                else master_sha256
+                if product_spec_expiry is not None or expiry
                 else None
             ),
             master_sha256=master_sha256,
@@ -759,8 +800,27 @@ class KisProductionOptionContractMaster(_IdentityOptionContractMaster):
 
     def load_from_raw_mst_content(self, raw_text: str) -> int:
         try:
-            result = KisOptionMasterLoader.parse_raw_content(
-                raw_text, self.calendar
+            if not raw_text or not raw_text.strip():
+                raise KisMasterParseError("KIS_OPTION_MASTER_RAW_CONTENT_REQUIRED")
+            # The raw-MST path is used by validation-only historical runtimes.
+            # Bind derived product-spec expiry to a deterministic digest of the
+            # exact decoded KIS master text; no REST request or mutable cache is used.
+            master_sha256 = hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
+            self._master_raw_content = raw_text
+            self._master_sha256 = master_sha256
+            self._known_master_rows = {}
+            for line in raw_text.splitlines():
+                parts = [part.strip() for part in line.split("|")]
+                if (
+                    len(parts) >= 9
+                    and parts[7] == "2001"
+                    and _classify_kis_option_product(parts[0], parts[3])
+                ):
+                    self._known_master_rows[parts[1]] = line
+                    if parts[2]:
+                        self._known_master_rows[parts[2]] = line
+            result = parse_kis_fo_idx_mst_result(
+                raw_text, self.calendar, master_sha256=master_sha256
             )
             self._apply_parse_result(result)
             self._last_error = None

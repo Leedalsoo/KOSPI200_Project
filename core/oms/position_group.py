@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 from typing import Mapping
@@ -53,6 +54,10 @@ class PositionGroupLegPnL:
     client_order_id: str
     execution_id: str
     execution_ids: tuple[str, ...] = ()
+    mark_source: str | None = None
+    quote_bid: float | None = None
+    quote_ask: float | None = None
+    quote_observed_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -64,6 +69,11 @@ class PositionGroupSnapshot:
     realized_pnl: float
     unrealized_pnl: float
     total_pnl: float
+    fees: float | None = None
+    slippage: float | None = None
+    net_pnl: float | None = None
+    initial_net_premium_received: float | None = None
+    quote_freshness_verified: bool | None = None
 
 
 class PositionGroupRegistry:

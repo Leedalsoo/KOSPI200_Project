@@ -46,9 +46,9 @@ def build_trap_plan(
         strategy_id=strategy_id,
         purpose=purpose,
         legs=(
-            ExecutionLeg("short_put", "SELL", quantity, "PUT", short_put),
-            ExecutionLeg("short_call", "SELL", quantity, "CALL", short_call),
-            ExecutionLeg("long_put", "BUY", quantity, "PUT", long_put),
-            ExecutionLeg("long_call", "BUY", quantity, "CALL", long_call),
+            ExecutionLeg("inner_put", "BUY", quantity, "PUT", long_put),
+            ExecutionLeg("inner_call", "BUY", quantity, "CALL", long_call),
+            ExecutionLeg("outer_put", "SELL", quantity, "PUT", short_put),
+            ExecutionLeg("outer_call", "SELL", quantity, "CALL", short_call),
         ),
     )
