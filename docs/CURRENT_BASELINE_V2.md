@@ -14,7 +14,7 @@
 기준일: 2026-11-12 (KST)
 기준 브랜치: `cleanup/p2-quarantine-20261026`
 기준 HEAD: `b060fa57d3801e8227e88c8e54df8d2f9ffe7407`
-작업 기준: 로컬 작업폴더 HEAD. S2 통합 작업 브랜치 `integrate/q25-s2-20261111`는 A2에서 생성했고, C3 종료 후 현재 통합 HEAD는 `8b0fceb0e2670c78f9cbc5463d66dc9874b33cef`이다.
+작업 기준: 로컬 작업폴더 HEAD. S2 통합 작업 브랜치 `integrate/q25-s2-20261111`는 A2에서 생성했고, C3 종료 후 현재 통합 HEAD는 `916fd4feadd36f7dcbc63aeb86a65e24cf0bc400`이다.
 CB2 ID: `4135f4f6-eaa1-81f7-ac42-dea70e10fa42`
 Status: A1/A2/A3/B1/B2/B3/B4/C1/C2/C3 completed. C4 is the next pending step and requires separate user approval; C2 document restoration and C3 read-only dirty-tree classification are complete; B1/B2/B3/B4 and X+1 are complete. S2 remains PSB\\\_UNVERIFIED; no S2 natural-signal Runtime E2E PASS is claimed.
 
