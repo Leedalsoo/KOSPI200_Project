@@ -140,6 +140,7 @@ def test_virtual_runtime_semantic_report_independent_of_clock_origins(tmp_path: 
         runner = HighSpeedVirtualRuntimeReplayRunner(
             dataset,
             run_id="R4-CLOCK-INDEPENDENCE-FIXED",
+            strategy_keys=(("track2_asymmetric_trap", "1.0"),),
             validation_only_synthetic=True,
             clock=clock,
         )
@@ -157,3 +158,33 @@ def test_virtual_runtime_semantic_report_independent_of_clock_origins(tmp_path: 
     )
     assert report_a.events == 100
     assert report_a.exhausted is False
+
+
+def test_virtual_runtime_replay_honors_explicit_s2_strategy_selection(tmp_path: Path):
+    from environments.high_speed.virtual_runtime_replay import HighSpeedVirtualRuntimeReplayRunner
+    from environments.high_speed.replay_trace import ReplayLogMode
+
+    dataset = _make_dataset(tmp_path / "s2-dataset", rows=101)
+    reports = {}
+    for mode in (ReplayLogMode.FAST, ReplayLogMode.DETAILED):
+        runner = HighSpeedVirtualRuntimeReplayRunner(
+            dataset,
+            run_id="R4-S2-ISOLATED-STRATEGY-SELECTION",
+            strategy_keys=(("track2_asymmetric_trap", "1.0"),),
+            validation_only_synthetic=True,
+            log_mode=mode,
+            trace_output=(tmp_path / f"{mode.value}.trace.jsonl") if mode is ReplayLogMode.DETAILED else None,
+        )
+        reports[mode] = runner.run(speed=float("inf"), max_events=100)
+
+    fast, detailed = reports[ReplayLogMode.FAST], reports[ReplayLogMode.DETAILED]
+    assert fast.events == detailed.events == 100
+    assert any(status.strategy_id == "track2_asymmetric_trap" for status in fast.strategy_status)
+    assert {strategy_id for strategy_id, _ in fast.strategy_signal_counts} <= {"track2_asymmetric_trap"}
+    semantic_fields = (
+        "events", "signals", "approved", "routed", "filled", "rejected",
+        "execution_ids", "strategy_signal_counts", "realized_pnl", "unrealized_pnl", "net_pnl",
+    )
+    assert tuple(getattr(fast, field) for field in semantic_fields) == tuple(
+        getattr(detailed, field) for field in semantic_fields
+    )

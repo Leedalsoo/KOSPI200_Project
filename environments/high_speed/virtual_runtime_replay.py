@@ -211,7 +211,9 @@ class HighSpeedVirtualRuntimeReplayRunner:
                 self.dataset, validation_only_adapter=synthetic_adapter
             )
         bootstrap = create_virtual_runtime_bootstrap(
-            option_master=option_master, initial_capital=self.initial_capital
+            option_master=option_master,
+            initial_capital=self.initial_capital,
+            strategy_keys=self.strategy_keys or (),
         )
         # create_virtual_runtime_bootstrap already creates the UI/runtime loop.
         # High-Speed replay needs a second composition with DERIVED_SCENARIO
