@@ -6,7 +6,7 @@ resolve broker identities, or authorize a Runtime/Live execution path.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, time
+from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Iterable, Literal
 
@@ -41,6 +41,53 @@ class Track9AtmPair:
 class Track9OpeningDecision:
     move: Decimal
     action: Literal["CLOSE_INSURANCE", "STOP_LOSS"]
+
+
+@dataclass(frozen=True)
+class Track9SyntheticQuote:
+    instrument_id: str
+    option_type: str
+    strike: Decimal
+    expiry: date
+    bid: Decimal
+    ask: Decimal
+    last: Decimal
+    observed_at: datetime
+    source: str
+
+
+@dataclass(frozen=True)
+class Track9OpenLot:
+    strategy_id: str
+    instrument_id: str
+    expiry: date
+    option_type: str
+    strike: Decimal
+    remaining_quantity: int
+    side: str
+    entry_price: Decimal
+    contract_multiplier: Decimal
+    executed_at: datetime
+
+
+@dataclass(frozen=True)
+class Track9RuntimeInput:
+    """Manifest-bound runtime inputs; every field retains its source classification."""
+    contract_candidates: tuple[Track9OptionCandidate, ...]
+    underlying_price: Decimal
+    as_of: datetime
+    previous_official_close: Decimal | None
+    next_session_official_open: Decimal | None
+    option_quotes: tuple[Track9SyntheticQuote, ...]
+    open_lots: tuple[Track9OpenLot, ...]
+    provenance: str
+    source_provenance: tuple[tuple[str, str], ...]
+    scenario_id: str
+    manifest_sha256: str
+    dataset_sha256: str
+    contract_profile_sha256: str
+    risk_profile_sha256: str
+    max_quote_age_seconds: Decimal
 
 
 ENTRY_EVALUATION_TIME = time(15, 0)

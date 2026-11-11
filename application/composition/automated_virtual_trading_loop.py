@@ -1,6 +1,8 @@
 """Runtime-owned Strategy -> Orchestrator -> Risk/OMS -> Virtual Broker loop."""
 from __future__ import annotations
 
+import inspect
+
 from dataclasses import dataclass, replace
 from datetime import datetime
 from decimal import Decimal
@@ -84,7 +86,7 @@ class AutomatedVirtualTradingLoop:
                  identity_provider: Callable[[object], OptionInstrumentIdentity],
                  multi_leg_plan_resolver: Callable[[object, object], MultiLegExecutionPlan | None] | None = None,
                  multi_leg_executor: Callable[[MultiLegExecutionPlan], object] | None = None,
-                 pending_multi_leg_processor: Callable[[], int] | None = None,
+                 pending_multi_leg_processor: Callable[[object], object] | None = None,
                  risk_config: RiskConfig | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None,
                  signal_observation_only: bool = False) -> None:
         if not run_id.strip():
@@ -216,7 +218,8 @@ class AutomatedVirtualTradingLoop:
         )
         pending_execution_results: tuple[object, ...] = ()
         if self.pending_multi_leg_processor is not None and not self.signal_observation_only:
-            pending_result = self.pending_multi_leg_processor()
+            processor_parameters = inspect.signature(self.pending_multi_leg_processor).parameters
+            pending_result = (self.pending_multi_leg_processor(tick) if processor_parameters else self.pending_multi_leg_processor())
             if isinstance(pending_result, (tuple, list)):
                 pending_execution_results = tuple(pending_result)
         pending_routed, pending_filled, pending_execution_ids = summarize_pending_multi_leg_results(

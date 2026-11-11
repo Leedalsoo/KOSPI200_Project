@@ -1,0 +1,50 @@
+{
+  "report_id": "Q25_A5_S15B_ORDERBOOK_COMPLETENESS_HARDENING_20261109",
+  "date": "2026-11-09",
+  "scope": "S15b validation-only order-book completeness guard",
+  "verdict": "PSB_PASS_VALIDATION_ONLY_GUARD",
+  "changes": [
+    {
+      "path": "environments/high_speed/validation_only_s15b_option_adapter.py",
+      "detail": "Added an S15b-only strict completeness predicate requiring a non-empty symbol, requested depth on both sides, finite positive prices, and finite positive quantities for every checked level."
+    },
+    {
+      "path": "tests/verification/test_validation_only_s15b_option_adapter.py",
+      "detail": "Added regression coverage for valid depth, zero-price asks, zero-quantity bids, missing snapshots, and invalid depth."
+    }
+  ],
+  "validation": {
+    "pytest": {
+      "command": "py -m pytest -q tests/verification/test_validation_only_s15b_option_adapter.py tests/verification/test_q25_a5_s15b_option_quote_supplement.py tests/infrastructure/kis/test_kis_websocket_canonical_pipeline.py tests/application/test_track5_option_contract_source.py",
+      "result": "22 passed"
+    },
+    "py_compile": "PASS",
+    "git_diff_check": "PASS",
+    "graphify_update": {
+      "result": "PASS",
+      "nodes": 6981,
+      "edges": 19938,
+      "communities": 352
+    }
+  },
+  "boundaries": {
+    "shared_production_contract_changed": false,
+    "kis_orderbook_source_changed": false,
+    "orderbook_depth_synthesized": false,
+    "raw_source_or_s15a_data_changed": false,
+    "runtime_e2e_run": false,
+    "kis_api_called": false,
+    "real_vts_or_live_or_account_or_order_api_called": false
+  },
+  "remaining_status": {
+    "historical_kis_orderbook": "one-sided only; all ask levels have zero price and zero quantity",
+    "current_complete_orderbook": "UNAVAILABLE",
+    "production_shared_is_complete_predicate": "unchanged; remains a separately tracked issue outside this validation-only scope",
+    "overall_s15b_option_runtime": "BLOCKED_SPEC"
+  },
+  "notes": [
+    "The strict predicate is isolated to the S15b validation-only adapter and does not promote synthetic validation evidence to production authority.",
+    "The quote supplement contains no order-book quantities/depth; adapter.order_book continues to return None rather than inventing depth.",
+    "The legacy shared OptionOrderBookSnapshot.is_complete() remains unchanged and is explicitly shown by regression tests to be permissive for malformed zero-price/zero-quantity levels."
+  ]
+}

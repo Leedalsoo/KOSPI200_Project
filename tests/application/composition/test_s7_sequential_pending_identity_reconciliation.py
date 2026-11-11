@@ -62,7 +62,7 @@ def test_s7_pending_call_reconciliation_keeps_original_expiry_after_market_tick_
         bootstrap.bundle.market.unsubscribe(bootstrap.automated_loop.on_tick)
     loop = attach_standard_automated_loop(
         bootstrap,
-        strategy_keys=(("TRACK1_TAIL_DEFENSE", "1.1.0"),),
+        strategy_keys=(("TRACK1_TAIL_DEFENSE", "1.2.0"),),
         run_id="Q25-S7-PENDING-IDENTITY-RECONCILIATION",
         synthetic_runtime_sources=sources,
         track4_greeks_provider=sources,

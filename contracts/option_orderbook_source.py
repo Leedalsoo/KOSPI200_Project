@@ -19,6 +19,8 @@ class OptionOrderBookSnapshot:
     ask_levels: Sequence[OptionOrderBookLevel]
     bid_levels: Sequence[OptionOrderBookLevel]
     source: str
+    # Source event time, not local receive time. None means freshness is unproven.
+    observed_at: datetime | None = None
 
     @property
     def ask_quantities(self) -> tuple[Decimal, ...]:

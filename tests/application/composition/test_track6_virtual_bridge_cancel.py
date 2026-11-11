@@ -49,7 +49,7 @@ def test_virtual_bridge_explicit_cancel_reconciles_terminal_status_and_clears_pe
     if bootstrap.automated_loop is not None:
         bootstrap.bundle.market.unsubscribe(bootstrap.automated_loop.on_tick)
     loop = attach_standard_automated_loop(
-        bootstrap, strategy_keys=(("TRACK1_TAIL_DEFENSE", "1.1.0"),),
+        bootstrap, strategy_keys=(("TRACK1_TAIL_DEFENSE", "1.2.0"),),
         run_id="Q25-PENDING-EXPLICIT-CANCEL",
         synthetic_runtime_sources=sources, track4_greeks_provider=sources,
         risk_guard_status_source=sources,
@@ -114,7 +114,7 @@ def test_virtual_bridge_delayed_fill_reconciles_callback_and_position():
     if bootstrap.automated_loop is not None:
         bootstrap.bundle.market.unsubscribe(bootstrap.automated_loop.on_tick)
     loop = attach_standard_automated_loop(
-        bootstrap, strategy_keys=(("TRACK1_TAIL_DEFENSE", "1.1.0"),),
+        bootstrap, strategy_keys=(("TRACK1_TAIL_DEFENSE", "1.2.0"),),
         run_id="Q25-A4-PENDING-FILL-RECONCILIATION",
         synthetic_runtime_sources=sources, track4_greeks_provider=sources,
         risk_guard_status_source=sources,

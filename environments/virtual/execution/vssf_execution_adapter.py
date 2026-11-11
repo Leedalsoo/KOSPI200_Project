@@ -14,7 +14,7 @@ class VSSFCommandContextProvider(Protocol):
 class VSSFRuntime(Protocol):
     def process_order(self, command: object) -> object: ...
     def query_order(self, client_order_id: str) -> object | None: ...
-    def cancel_order(self, client_order_id: str) -> object | None: ...
+    def cancel_order(self, client_order_id: str, *, lifecycle_reason: str = "MANUAL") -> object | None: ...
 
 
 @dataclass(frozen=True)
@@ -75,8 +75,10 @@ class VSSFExecutionAdapter:
         result = self.vssf_runtime.query_order(client_order_id)
         return None if result is None else self._map(result)
 
-    def cancel(self, client_order_id: str) -> ExecutionReport:
-        cancel_result = self.vssf_runtime.cancel_order(client_order_id)
+    def cancel(self, client_order_id: str, *, lifecycle_reason: str = "MANUAL") -> ExecutionReport:
+        cancel_result = self.vssf_runtime.cancel_order(
+            client_order_id, lifecycle_reason=lifecycle_reason
+        )
         # Always re-query after a cancel request: the order may have filled just
         # before cancellation, or the cancel acknowledgement may not be terminal.
         confirmed = self.vssf_runtime.query_order(client_order_id)

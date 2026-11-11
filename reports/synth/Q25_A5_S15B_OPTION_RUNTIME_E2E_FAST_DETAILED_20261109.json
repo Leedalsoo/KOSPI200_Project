@@ -1,0 +1,209 @@
+{
+  "schema": "q25-a5-s15b-option-runtime-e2e-fast-detailed-v1",
+  "report_id": "Q25_A5_S15B_OPTION_RUNTIME_E2E_FAST_DETAILED_20261109",
+  "verdict": "PSB_PASS_VALIDATION_ONLY_SINGLE_LEG_OPTION_RUNTIME_E2E",
+  "overall_s15b_status": "PLUMBING_ONLY",
+  "run_id": "Q25-A5-S15B-OBSERVED-OPTION-RUNTIME-E2E-20261109",
+  "scope": "S1 natural short CALL 887.5 only; StrategyHub -> Decision -> Risk -> OMS/Router -> VSSF Virtual Execution -> Position/PnL; FAST/DETAILED observation parity",
+  "input_hashes": {
+    "manifest_sha256": "509a05f6b15b5eb01e62c874f3c3ad4f1ebedb8aabe2b9093ebce79598c9a6ff",
+    "dataset_sha256": "490a780298c371b005c34dc0b3e9a5ef373d1800dc4fd547f4e551670f0c37ae",
+    "target_kis_master_sha256": "96912b73fcf0fa549cb67cd03299b13afcbaaf229d5c03fdafefa1b5646aaf9e",
+    "observed_orderbook_payload_sha256": "99b91c1a7f0685ab21f2a0da7d87903bd408cf39555cd9202cd7fa4744c870fc"
+  },
+  "fast": {
+    "mode": "fast",
+    "trace_status": "DISABLED_FAST_MODE",
+    "trace_write_errors": [],
+    "observer_summary": {
+      "status": "CONNECTED",
+      "order_commands_observed": 1,
+      "execution_reports_observed": 1,
+      "fills_observed": 1,
+      "trace_write_errors": [],
+      "order_records_status": "OBSERVED_READ_ONLY",
+      "fill_records_status": "CANONICAL_FILLS_OBSERVED"
+    },
+    "semantic": {
+      "manifest_sha256": "509a05f6b15b5eb01e62c874f3c3ad4f1ebedb8aabe2b9093ebce79598c9a6ff",
+      "dataset_sha256": "490a780298c371b005c34dc0b3e9a5ef373d1800dc4fd547f4e551670f0c37ae",
+      "natural_signals": 1,
+      "decision_approved": 1,
+      "risk_approved": 1,
+      "routed": 1,
+      "filled": 1,
+      "rejected": 0,
+      "execution_ids": [
+        "EXEC-000001"
+      ],
+      "reports": [
+        {
+          "client_order_id": "Q25-A5-S15B-OBSERVED-S1-CALL-8875-S1_SHORT_ACCUMULATION_CALL_000001-cfa6dda6c569",
+          "execution_id": "EXEC-000001",
+          "status": "FILLED",
+          "filled_quantity": 1,
+          "execution_price": "35.0",
+          "execution_timestamp": "2026-10-21T00:01:16.106074+00:00",
+          "fee": "0.0",
+          "leg_id": "S1_SHORT_ACCUMULATION_CALL_000001"
+        }
+      ],
+      "position_group": {
+        "complete": true,
+        "leg_count": 1,
+        "legs": [
+          {
+            "leg_id": "S1_SHORT_ACCUMULATION_CALL_000001",
+            "instrument_id": "B01611887",
+            "quantity": 1,
+            "average_price": "35.0",
+            "current_mark": "36.325",
+            "unrealized_pnl_krw": "-331250.0",
+            "contract_multiplier": "250000"
+          }
+        ],
+        "realized_pnl_krw": "0.0",
+        "unrealized_pnl_krw": "-331250.0",
+        "total_pnl_krw": "-331250.0"
+      },
+      "account_balances": {
+        "cash": "249668750.0000",
+        "margin_used": "8750000.00",
+        "available_cash": "240918750.0000",
+        "realized_pnl": "0.0",
+        "unrealized_pnl": "-331250.0000"
+      },
+      "open_lot_count": 1,
+      "open_lot_remaining_quantity": 1,
+      "freshness_status": "FRESH",
+      "freshness_policy_version": "S15B_OBSERVED_COLLECTOR_RECEIVE_TIME_VALIDATION_ONLY",
+      "freshness_evidence_sha256": "99b91c1a7f0685ab21f2a0da7d87903bd408cf39555cd9202cd7fa4744c870fc",
+      "execution_timestamp_kst": "2026-10-21T09:01:16.106074+09:00",
+      "runtime_failures": 0,
+      "risk_rejections": 0
+    },
+    "validation_only": true,
+    "kis_api_called": false,
+    "live_or_real_account_used": false,
+    "orders_sent_to_external_broker": false,
+    "execution_price_basis": "OBSERVED_BEST_BID_USED_AS_VALIDATION_ONLY_VIRTUAL_FILL; NOT_AN_OBSERVED_HISTORICAL_FILL",
+    "mark_price_basis": "DERIVED_BEST_BID_ASK_MIDPOINT; NOT_AN_OBSERVED_TRADE",
+    "fee_model_status": "VSSF_DEFAULT_ZERO_FEE; NO_APPROVED_FEE_SCHEDULE",
+    "fee_inclusive_pnl_verified": false
+  },
+  "detailed": {
+    "mode": "detailed",
+    "trace_status": "CONNECTED",
+    "trace_write_errors": [],
+    "observer_summary": {
+      "status": "CONNECTED",
+      "order_commands_observed": 1,
+      "execution_reports_observed": 1,
+      "fills_observed": 1,
+      "trace_write_errors": [],
+      "order_records_status": "OBSERVED_READ_ONLY",
+      "fill_records_status": "CANONICAL_FILLS_OBSERVED"
+    },
+    "semantic": {
+      "manifest_sha256": "509a05f6b15b5eb01e62c874f3c3ad4f1ebedb8aabe2b9093ebce79598c9a6ff",
+      "dataset_sha256": "490a780298c371b005c34dc0b3e9a5ef373d1800dc4fd547f4e551670f0c37ae",
+      "natural_signals": 1,
+      "decision_approved": 1,
+      "risk_approved": 1,
+      "routed": 1,
+      "filled": 1,
+      "rejected": 0,
+      "execution_ids": [
+        "EXEC-000001"
+      ],
+      "reports": [
+        {
+          "client_order_id": "Q25-A5-S15B-OBSERVED-S1-CALL-8875-S1_SHORT_ACCUMULATION_CALL_000001-cfa6dda6c569",
+          "execution_id": "EXEC-000001",
+          "status": "FILLED",
+          "filled_quantity": 1,
+          "execution_price": "35.0",
+          "execution_timestamp": "2026-10-21T00:01:16.106074+00:00",
+          "fee": "0.0",
+          "leg_id": "S1_SHORT_ACCUMULATION_CALL_000001"
+        }
+      ],
+      "position_group": {
+        "complete": true,
+        "leg_count": 1,
+        "legs": [
+          {
+            "leg_id": "S1_SHORT_ACCUMULATION_CALL_000001",
+            "instrument_id": "B01611887",
+            "quantity": 1,
+            "average_price": "35.0",
+            "current_mark": "36.325",
+            "unrealized_pnl_krw": "-331250.0",
+            "contract_multiplier": "250000"
+          }
+        ],
+        "realized_pnl_krw": "0.0",
+        "unrealized_pnl_krw": "-331250.0",
+        "total_pnl_krw": "-331250.0"
+      },
+      "account_balances": {
+        "cash": "249668750.0000",
+        "margin_used": "8750000.00",
+        "available_cash": "240918750.0000",
+        "realized_pnl": "0.0",
+        "unrealized_pnl": "-331250.0000"
+      },
+      "open_lot_count": 1,
+      "open_lot_remaining_quantity": 1,
+      "freshness_status": "FRESH",
+      "freshness_policy_version": "S15B_OBSERVED_COLLECTOR_RECEIVE_TIME_VALIDATION_ONLY",
+      "freshness_evidence_sha256": "99b91c1a7f0685ab21f2a0da7d87903bd408cf39555cd9202cd7fa4744c870fc",
+      "execution_timestamp_kst": "2026-10-21T09:01:16.106074+09:00",
+      "runtime_failures": 0,
+      "risk_rejections": 0
+    },
+    "validation_only": true,
+    "kis_api_called": false,
+    "live_or_real_account_used": false,
+    "orders_sent_to_external_broker": false,
+    "execution_price_basis": "OBSERVED_BEST_BID_USED_AS_VALIDATION_ONLY_VIRTUAL_FILL; NOT_AN_OBSERVED_HISTORICAL_FILL",
+    "mark_price_basis": "DERIVED_BEST_BID_ASK_MIDPOINT; NOT_AN_OBSERVED_TRADE",
+    "fee_model_status": "VSSF_DEFAULT_ZERO_FEE; NO_APPROVED_FEE_SCHEDULE",
+    "fee_inclusive_pnl_verified": false
+  },
+  "detailed_trace": {
+    "path": "reports/synth/Q25_A5_S15B_OPTION_RUNTIME_E2E_DETAILED_TRACE_20261109.jsonl",
+    "sha256": "9c9aad7c6c76e90f9e5569358dd0c86c92b6b20c75e319cf6b1c8ce47d0c61b0",
+    "records": 8,
+    "sequence_contiguous": true
+  },
+  "assertions": {
+    "fast_detailed_semantics_equal": true,
+    "same_dataset_and_manifest_hashes": true,
+    "one_natural_signal_decision_risk_oms_virtual_fill": true,
+    "exact_observed_option_contract": true,
+    "position_and_account_mtm_reconcile": true,
+    "execution_timestamp_matches_observed_orderbook_receive_time": true,
+    "detailed_trace_and_observer_valid": true,
+    "no_runtime_or_risk_failures": true,
+    "validation_only_no_external_api_or_orders": true
+  },
+  "limitations": [
+    "Only the observed S1 short CALL 887.5 single-leg path is exercised; base strangle PUT/CALL and other contracts are not covered.",
+    "The virtual fill at observed best bid 35.00 is a validation-only simulated fill, not an observed historical execution.",
+    "The 36.325 midpoint mark is derived from observed best bid/ask and is not an observed trade.",
+    "VSSF default fee is zero; no approved fee schedule exists, so fee-inclusive/net PnL is not verified.",
+    "No exit/close event or realized PnL is tested; the short position remains open in the isolated run.",
+    "The OPTION resolver is still a validation-only injection; Production Runtime Factory OPTION routing remains unchanged and unconnected.",
+    "KRX STANDARD multiplier is used only in the manifest-bound validation-only profile."
+  ],
+  "safety": {
+    "validation_only": true,
+    "production_runtime_modified": false,
+    "kis_api_called": false,
+    "real_vts_or_live_called": false,
+    "external_broker_or_real_account_used": false,
+    "original_raw_data_modified": false,
+    "s15a_original_modified": false
+  }
+}

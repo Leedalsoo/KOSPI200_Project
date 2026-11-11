@@ -69,6 +69,7 @@ class HistoricalObservationOptionSource(Track2OptionIVSource):
                         ask_levels=ask_levels[:5],
                         bid_levels=bid_levels[:5],
                         source=f"HistoricalObservationStore:{observation.source}",
+                        observed_at=observed_at,
                     )
                     self._books.setdefault(str(identity.symbol), []).append(
                         (observed_at, snapshot, freshness_at)

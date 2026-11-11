@@ -25,6 +25,7 @@ def build_track9_analytics_snapshot(
     estimated_event_cost=None,
     premium_spent=None,
     option_prices=None,
+    provenance_source: str = "standard-runtime.track9",
 ):
     """Build Track9-specific analytics and merge canonical Common Analytics."""
     observations = {
@@ -57,7 +58,7 @@ def build_track9_analytics_snapshot(
     market = MarketSnapshot(
         run_id=run_id,
         as_of=as_of,
-        provenance=AnalyticsProvenance(source="standard-runtime.track9"),
+        provenance=AnalyticsProvenance(source=provenance_source),
         instrument_identity=None,
         observations=observations,
     )

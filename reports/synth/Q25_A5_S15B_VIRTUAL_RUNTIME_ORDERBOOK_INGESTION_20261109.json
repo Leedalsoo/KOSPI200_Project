@@ -1,0 +1,62 @@
+{
+  "task": "Q25_A5_S15B_VALIDATION_ONLY_VIRTUAL_RUNTIME_ORDERBOOK_INGESTION",
+  "date_kst": "2026-11-09",
+  "base_commit": "9c79f05a0b7528fbdf74569d266d27a19ac6af3f",
+  "branch": "q25-a5-s15b-option-20261108",
+  "verdict": "PLUMBING_ONLY_VALIDATION_ONLY_VIRTUAL_RUNTIME_DATA_PROVIDER_ORDERBOOK_INGESTION",
+  "scope": {
+    "implemented": "S15BOptionValidationAdapter now implements OptionOrderBookSource.get_order_book(symbol), exposing only the manifest-bound fresh_two_sided scenario after the S15b strict 5-level completeness gate.",
+    "runtime_consumer": "VirtualRuntimeDataProvider",
+    "runtime_input_verified": [
+      "option_orderbook available=true",
+      "source provenance SYNTHETIC:DERIVED_SCENARIO:fresh_two_sided",
+      "bid depth=5",
+      "ask depth=5"
+    ],
+    "freshness": "S15b adapter FRESH verdict covered by existing adapter regression tests; runtime data-provider status is not represented as production freshness evidence."
+  },
+  "verification": {
+    "focused_pytest": {
+      "passed": 18,
+      "failed": 0
+    },
+    "py_compile": "PASS",
+    "git_diff_check": "PASS",
+    "graphify": {
+      "status": "PASS_WITH_EXISTING_WARNINGS",
+      "nodes": 7031,
+      "edges": 20024,
+      "communities": 347,
+      "warnings": [
+        "application/composition/virtual_composition_root.py existing syntax error at line 54",
+        "28 code files yielded no symbols"
+      ]
+    }
+  },
+  "not_run_or_blocked": {
+    "strategyhub_natural_signal": "NOT_RUN",
+    "decision_risk_oms_virtual_execution_position_pnl": "NOT_RUN",
+    "fast_detailed_equivalence": "NOT_RUN",
+    "full_option_runtime_e2e": "BLOCKED_SPEC",
+    "blockers": [
+      "automated_virtual_runtime_factory.resolve_track1 returns None for OPTION proposals; current resolver only accepts FUTURES.",
+      "S1 signal strike scale 92.5-107.5 has no match to the preserved target master contracts around strikes 885/887.5; do not fabricate a contract mapping.",
+      "This step validates only VirtualRuntimeDataProvider OrderBook ingestion, not a StrategyHub-to-PnL lifecycle."
+    ]
+  },
+  "safety": {
+    "kis_api_called": false,
+    "real_vts_called": false,
+    "live_api_called": false,
+    "real_account_used": false,
+    "real_orders_submitted": false,
+    "production_common_logic_changed": false,
+    "original_raw_data_changed": false,
+    "s15a_source_changed": false,
+    "production_runtime_eligibility_enabled": false
+  },
+  "source_sha256": {
+    "environments/high_speed/validation_only_s15b_option_adapter.py": "df528474e71008aa00fb71ed0508d5a0fc397b3d4cb4e70ac80208fd1586b6d9",
+    "tests/verification/test_q25_a5_s15b_option_orderbook_supplement.py": "16c801a32e04349ddb652e51db1b87e47f45dde7f21a8081be456b4ccd7a0591"
+  }
+}

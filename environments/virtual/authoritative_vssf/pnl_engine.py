@@ -27,7 +27,10 @@ class PnLEngine:
                 price_delta = avg_price - current
             else:
                 raise ValueError("PNL_POSITION_SIDE_INVALID")
-            total += price_delta * quantity * unit_multiplier
+            position_multiplier = self._decimal(position.get("contract_multiplier", unit_multiplier))
+            if position_multiplier <= 0:
+                raise ValueError("PNL_CONTRACT_MULTIPLIER_INVALID")
+            total += price_delta * quantity * position_multiplier
         self.unrealized_pnl = total
         return total
 

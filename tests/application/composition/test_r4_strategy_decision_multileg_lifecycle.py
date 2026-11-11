@@ -20,7 +20,7 @@ from environments.high_speed.virtual_runtime_replay import _publish_contract_sco
 
 
 DATASET = Path("data/derived_scenario/p5_run_20261026_trend_up_seed20261026")
-TRACK1_KEY = ("TRACK1_TAIL_DEFENSE", "1.1.0")
+TRACK1_KEY = ("TRACK1_TAIL_DEFENSE", "1.2.0")
 
 
 class OneShotSyntheticEntry:

@@ -1,0 +1,25 @@
+{
+  "schema_version": "track9-independent-synthetic-contract-profile-v1",
+  "profile_id": "S9_INDEPENDENT_SYNTHETIC_CONTRACTS_V1",
+  "strategy_id": "track9_event_overnight_insurance",
+  "provenance": "SYNTHETIC",
+  "validation_only": true,
+  "runtime_eligible": false,
+  "production_runtime_eligible": false,
+  "kis_api_allowed": false,
+  "real_vts_allowed": false,
+  "live_api_allowed": false,
+  "account_api_allowed": false,
+  "orders_allowed": false,
+  "instrument_family": "STANDARD",
+  "contract_multiplier": "100000",
+  "multiplier_unit": "SYNTHETIC_CURRENCY_PER_INDEX_POINT",
+  "tradable": true,
+  "tradability_basis": "SYNTHETIC_SCENARIO_ELIGIBILITY_ONLY",
+  "notes": [
+    "The multiplier is an arbitrary validation scale, not an official KIS or exchange contract multiplier.",
+    "tradable=true means eligible only inside this synthetic validation profile; it is not a claim of real listing or broker acceptance.",
+    "Contract code, expiry, option type and strike must still come from an explicit scenario/master identity and are never invented by this profile.",
+    "This profile must never be loaded by production, REAL_VTS, KIS or Live execution paths."
+  ]
+}

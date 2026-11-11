@@ -1,0 +1,83 @@
+{
+  "contract_profile_path": "config/validation_only/track9_independent_synthetic_contract_profile.json",
+  "contract_profile_sha256": "d7c7cb9be3383d033bdef10c27102f06946dc30b314fe2e92615658522b7f1bd",
+  "dataset_file": "20261106.jsonl",
+  "dataset_id": "Q25_S9_INDEPENDENT_ATM_OVERNIGHT_20261108",
+  "dataset_sha256": "6c67810dbbcda69df86bebb0f304e005b2ec0f2e27af97cca9ccc54e4eee098b",
+  "entry_date": "2026-11-06",
+  "expiry": "20261112",
+  "expiry_is_authoritative": false,
+  "identity_source_status": "BLOCKED_IDENTITY_OWNER_UNRESOLVED",
+  "next_session_date": "2026-11-09",
+  "notes": [
+    "Standalone S9 ATM PUT+CALL overnight insurance; no S1 short-PUT linkage or S1 strategy code is used.",
+    "Contract identities, multiplier, tradability, quotes, previous close, next open, calendar, account and risk limits are all explicitly SYNTHETIC.",
+    "The 1.2% next-session opening move exercises the P0 >=1% close-insurance branch.",
+    "No official contract multiplier, listing/tradability, KIS account, REAL_VTS, Live or real order is asserted or accessed."
+  ],
+  "official_data_status": {
+    "kis_live_order_access": "MISSING",
+    "official_contract_multiplier": "MISSING",
+    "official_next_session_open": "MISSING",
+    "official_option_quotes": "MISSING",
+    "official_previous_close": "MISSING",
+    "official_tradability": "MISSING",
+    "official_trading_calendar": "MISSING",
+    "official_virtual_account": "MISSING"
+  },
+  "orders_allowed": false,
+  "output_bytes": 5292,
+  "output_path": "data/derived_scenario/q25_s9_independent_overnight_20261108/20261106.jsonl",
+  "output_sha256": "6c67810dbbcda69df86bebb0f304e005b2ec0f2e27af97cca9ccc54e4eee098b",
+  "production_runtime_eligible": false,
+  "provenance": "DERIVED_SCENARIO",
+  "risk_profile_path": "config/validation_only/q25_s9_independent_overnight_20261108/risk_profile.json",
+  "risk_profile_sha256": "cea09c560c3fd24ee3cb008a4191a3d6768f2d15c5e279269fa16184323379bf",
+  "rows": 4,
+  "runtime_eligible": false,
+  "scenario_count": 1,
+  "scenario_id": "S9_INDEPENDENT_ATM_OVERNIGHT_001",
+  "scenario_ids": [
+    "S9_INDEPENDENT_ATM_OVERNIGHT_001"
+  ],
+  "scenario_regimes": {
+    "S9_INDEPENDENT_ATM_OVERNIGHT_001": "NORMAL"
+  },
+  "schema_version": "q25-a2-1-s6-syn-evt-manifest-v1",
+  "source_type": "DERIVED_SCENARIO",
+  "strategy_code_version": "3.0",
+  "strategy_id": "track9_event_overnight_insurance",
+  "strategy_policy": {
+    "at_or_above_threshold_action": "CLOSE_INSURANCE",
+    "below_threshold_action": "STOP_LOSS",
+    "entry_evaluation_time": "15:00:00",
+    "entry_evaluation_timezone": "Asia/Seoul",
+    "entry_instrument_selection": "NEAREST_EXPIRY_SAME_STRIKE_ATM_PUT_CALL",
+    "opening_move_metric": "ABS((next_session_open-previous_close)/previous_close)",
+    "opening_move_threshold": "0.01",
+    "pair_quantity_per_leg": 1,
+    "trailing_profit_exit": "NOT_USED"
+  },
+  "synthetic": true,
+  "synthetic_reference_inputs": {
+    "next_session_official_open": "506",
+    "next_session_official_open_provenance": "SYNTHETIC",
+    "previous_official_close": "500",
+    "previous_official_close_provenance": "SYNTHETIC"
+  },
+  "trading_calendar": {
+    "authoritative": false,
+    "calendar_id": "S9_SYNTHETIC_CALENDAR_20261108",
+    "source_type": "SYNTHETIC",
+    "timezone": "Asia/Seoul",
+    "trading_days": [
+      "2026-11-06",
+      "2026-11-09",
+      "2026-11-10",
+      "2026-11-11",
+      "2026-11-12"
+    ]
+  },
+  "validation_identity_namespace": "SYNTHETIC_CONTRACT:S9-",
+  "validation_only": true
+}

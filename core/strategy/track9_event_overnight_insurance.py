@@ -1,75 +1,69 @@
-"""Strategy 9: end-of-day overnight strangle insurance.
-
-The strategy is deliberately independent of macro/event/IV indicators. It buys an
-ATM-ish PUT/CALL pair near the end of the session and uses the next session's
-opening move as the only market-condition trigger for closing the insurance.
-"""
+"""Independent Strategy 9: buy an ATM PUT+CALL pair for overnight insurance."""
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from datetime import time
+from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Sequence
 
+from contracts.types import ExecutionLeg, MultiLegExecutionPlan, OptionInstrumentIdentity
 from contracts.analytics import AnalyticsStatus
-from core.market.session_policy import MarketSessionPolicy
-from core.strategy.contracts import Signal, StrategyContext, StrategyFeatureRequirement
+from core.strategy.contracts import (Signal, StrategyContext, StrategyFeatureRequirement,
+                                      validate_strategy_features)
 from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
-from core.strategy.multi_leg_plan import build_pair_plan
-from contracts.types import MultiLegExecutionPlan
+from core.strategy.track9_independent_policy import (
+    ENTRY_EVALUATION_TIME,
+    Track9AtmPair,
+    Track9OpenLot,
+    Track9OptionCandidate,
+    Track9PolicyBlocked,
+    Track9RuntimeInput,
+    evaluate_track9_opening_move,
+    is_track9_entry_evaluation_time,
+    select_nearest_expiry_atm_pair,
+)
 
 
 @dataclass(frozen=True)
 class Track9State:
-    entry_date: str | None = None
-    entry_price: Decimal | None = None
-    put_entry_price: Decimal | None = None
-    call_entry_price: Decimal | None = None
-    entry_premium: Decimal | None = None
-    peak_profit: Decimal | None = None
-    trailing_active: bool = False
+    entry_date: date | None = None
+    pair: Track9AtmPair | None = None
     entry_qty: int = 0
-    put_strike: Decimal | None = None
-    call_strike: Decimal | None = None
-    entered_today: bool = False
-    closed_next_open: bool = False
+    put_entry_fill_price: Decimal | None = None
+    call_entry_fill_price: Decimal | None = None
+    exit_reason: str | None = None
+    partial_open_lots: tuple[Track9OpenLot, ...] = ()
     state: str = "WAITING_ENTRY"
 
 
 class Track9EventOvernightInsurance:
-    """Buy a PUT/CALL pair before close to insure the next session open."""
+    """Independent ATM PUT+CALL overnight insurance; no S1 exposure linkage."""
 
     strategy_id = "track9_event_overnight_insurance"
     version = "3.0"
+    ENTRY_TIME = ENTRY_EVALUATION_TIME
+    CONFIGURABLE_PARAMETERS = ()
 
-    # KOSPI200 cash-session policy currently defines 15:30 as the close.
-    # Strategy9 establishes its option-entry reference point 20 minutes before close: 15:10.
-    ENTRY_TIME = time(15, 10)
-    OPENING_WINDOW_END = MarketSessionPolicy.STABILIZATION_END
-
-    # This is intentionally a strategy parameter, not an external indicator.
-    # It can be tuned from REAL_VTS evidence without changing the strategy
-    # dependency boundary.
-    OPENING_SHOCK_THRESHOLD = Decimal("0.01")
-    TRAILING_PROFIT_GIVEBACK = Decimal("0.30")
-    CONFIGURABLE_PARAMETERS = ("ENTRY_TIME", "TRAILING_PROFIT_GIVEBACK")
-
-    def __init__(
-        self,
-        pair_quantity: int = 1,
-        opening_shock_threshold: Decimal = OPENING_SHOCK_THRESHOLD,
-    ) -> None:
-        if pair_quantity <= 0:
-            raise ValueError("PAIR_QUANTITY_MUST_BE_POSITIVE")
-        if opening_shock_threshold <= 0:
-            raise ValueError("OPENING_SHOCK_THRESHOLD_MUST_BE_POSITIVE")
-        self.pair_quantity = pair_quantity
-        self.opening_shock_threshold = opening_shock_threshold
+    def __init__(self, pair_quantity: int = 1,
+                 opening_shock_threshold: Decimal = Decimal("0.01"),
+                 ENTRY_TIME: time = ENTRY_EVALUATION_TIME,
+                 TRAILING_PROFIT_GIVEBACK: Decimal = Decimal("0.30")) -> None:
+        if isinstance(pair_quantity, bool) or pair_quantity <= 0:
+            raise ValueError("TRACK9_PAIR_QUANTITY_MUST_BE_POSITIVE")
+        threshold = Decimal(str(opening_shock_threshold))
+        if not threshold.is_finite() or threshold != Decimal("0.01"):
+            raise ValueError("TRACK9_OPENING_THRESHOLD_MUST_MATCH_APPROVED_P0")
+        self.pair_quantity = int(pair_quantity)
+        self.opening_shock_threshold = threshold
+        # Legacy manifest fields are accepted for compatibility but never override P0.
+        self.ENTRY_TIME = ENTRY_EVALUATION_TIME
         self.state = Track9State()
         self._exit_pending = False
+        self.validation_only_runtime = False
 
     def initialize(self, context: StrategyContext) -> None:
         self.reset()
+        self._restore_from_open_lots(self._runtime_input(context))
 
     def on_market_state(self, context: StrategyContext) -> None:
         return None
@@ -78,251 +72,307 @@ class Track9EventOvernightInsurance:
         self.state = Track9State()
         self._exit_pending = False
 
-    def mark_exit_pending(self) -> None:
-        self._exit_pending = True
+    @staticmethod
+    def _runtime_input(context: StrategyContext) -> Track9RuntimeInput | None:
+        payload = context.input.payload if context.input is not None else None
+        return payload if isinstance(payload, Track9RuntimeInput) else None
 
-    def on_execution_result(self, purpose: str, result: object) -> None:
-        """Mark overnight close complete only after fills and authoritative flat confirmation."""
-        if purpose != "OVERNIGHT_INSURANCE_CLOSE" or not self._exit_pending:
+    @staticmethod
+    def _provenance_ready(payload: Track9RuntimeInput) -> bool:
+        sources = dict(payload.source_provenance)
+        required = ("contract_identity", "contract_multiplier", "tradability", "option_quotes",
+                    "previous_official_close", "next_session_official_open", "trading_calendar",
+                    "account", "position", "risk_limits")
+        return all(sources.get(key) in {"OFFICIAL", "SYNTHETIC"} for key in required)
+
+    @staticmethod
+    def _quotes_ready(payload: Track9RuntimeInput, pair: Track9AtmPair) -> bool:
+        quotes = {item.instrument_id: item for item in payload.option_quotes}
+        for candidate in (pair.put, pair.call):
+            quote = quotes.get(candidate.symbol)
+            if quote is None:
+                return False
+            if (quote.option_type != candidate.option_type or quote.expiry != candidate.expiry
+                    or quote.strike != candidate.strike or quote.bid <= 0
+                    or quote.ask < quote.bid or quote.last <= 0):
+                return False
+            if quote.observed_at.tzinfo is None or payload.as_of.tzinfo is None:
+                return False
+            age = (payload.as_of - quote.observed_at).total_seconds()
+            if age < 0 or Decimal(str(age)) > payload.max_quote_age_seconds:
+                return False
+        return True
+
+    def _restore_from_open_lots(self, payload: Track9RuntimeInput | None) -> None:
+        if payload is None:
             return
-        if bool(getattr(result, "group_complete", False)) and bool(getattr(result, "position_flat", False)):
-            self.state = replace(
-                self.state, entry_price=None, put_entry_price=None, call_entry_price=None,
-                entry_premium=None, peak_profit=None, entry_qty=0, closed_next_open=True,
-                trailing_active=False, state="OVERNIGHT_INSURANCE_CLOSED",
+        lots = tuple(item for item in payload.open_lots
+                     if item.strategy_id == self.strategy_id and item.side.upper() == "BUY"
+                     and item.remaining_quantity > 0)
+        if not lots:
+            return
+        by_type: dict[str, list[Track9OpenLot]] = {}
+        for item in lots:
+            by_type.setdefault(item.option_type.upper(), []).append(item)
+        if set(by_type) not in ({"PUT"}, {"CALL"}, {"PUT", "CALL"}):
+            self.state = Track9State(state="RECONCILIATION_REQUIRED")
+            return
+        for kind_lots in by_type.values():
+            if len({(x.instrument_id, x.expiry, x.strike, x.contract_multiplier) for x in kind_lots}) != 1:
+                self.state = Track9State(state="RECONCILIATION_REQUIRED")
+                return
+        if len(by_type) == 1:
+            partial_lots = tuple(next(iter(by_type.values())))
+            self.state = Track9State(
+                entry_date=min(x.executed_at for x in partial_lots).date(),
+                entry_qty=sum(x.remaining_quantity for x in partial_lots),
+                partial_open_lots=partial_lots,
+                state="OVERNIGHT_INSURANCE_PARTIAL",
             )
-            self._exit_pending = False
-        # Otherwise retain the close-pending state for reconciliation; never infer flatness.
-
-    @staticmethod
-    def _requirement(key: str) -> StrategyFeatureRequirement:
-        return StrategyFeatureRequirement(
-            key, "tick", 1.0, frozenset({AnalyticsStatus.AVAILABLE})
-        )
-
-    def feature_requirements(self) -> Sequence[StrategyFeatureRequirement]:
-        # Strategy9 intentionally depends only on the underlying price/time
-        # needed to execute its own overnight insurance lifecycle.
-        return (
-            self._requirement("price.last"),
-            self._requirement("options.atm_call_strike"),
-            self._requirement("options.atm_put_strike"),
-            self._requirement("options.contract_multiplier"),
-            self._requirement("options.track9_put_mark_price"),
-            self._requirement("options.track9_call_mark_price"),
-        )
-
-    @staticmethod
-    def _metric(context: StrategyContext, key: str):
-        if context.analytics is None:
-            return None
-        metric = context.analytics.get(key)
-        if metric is None or metric.status is not AnalyticsStatus.AVAILABLE:
-            return None
-        return metric.value
-
-    def _sync_date(self, date_str: str) -> None:
-        if self.state.entry_date is not None and self.state.entry_date != date_str:
-            # A new trading day starts with the previous overnight position
-            # still eligible for the opening insurance exit.
-            self.state = replace(self.state, closed_next_open=False)
-
-    def _sync_filled_entry(self, context: StrategyContext) -> None:
-        """Promote only same-day VSSF FILLED prices into the strategy state."""
-        if self.state.entry_date is None or self.state.entry_premium is not None:
             return
-        put_entry = self._metric(context, "options.track9_put_entry_price")
-        call_entry = self._metric(context, "options.track9_call_entry_price")
-        multiplier = self._metric(context, "options.contract_multiplier")
-        if put_entry is None or call_entry is None or multiplier is None:
+        put_lots, call_lots = by_type["PUT"], by_type["CALL"]
+        put_lot, call_lot = put_lots[0], call_lots[0]
+        put_quantity = sum(x.remaining_quantity for x in put_lots)
+        call_quantity = sum(x.remaining_quantity for x in call_lots)
+        if (put_lot.expiry != call_lot.expiry or put_lot.strike != call_lot.strike
+                or put_lot.contract_multiplier != call_lot.contract_multiplier):
+            self.state = Track9State(state="RECONCILIATION_REQUIRED")
             return
-        if put_entry <= 0 or call_entry <= 0 or multiplier <= 0:
+        if put_quantity != call_quantity:
+            self.state = Track9State(
+                entry_date=min(x.executed_at for x in lots).date(),
+                entry_qty=max(put_quantity, call_quantity),
+                partial_open_lots=lots,
+                state="OVERNIGHT_INSURANCE_PARTIAL",
+            )
             return
-        entry_premium = (
-            (Decimal(str(put_entry)) + Decimal(str(call_entry)))
-            * Decimal(self.state.entry_qty)
-            * Decimal(str(multiplier))
-        )
-        self.state = replace(
-            self.state,
-            put_entry_price=Decimal(str(put_entry)),
-            call_entry_price=Decimal(str(call_entry)),
-            entry_premium=entry_premium,
+        put = Track9OptionCandidate(put_lot.instrument_id, put_lot.expiry, "PUT", put_lot.strike,
+                                    "STANDARD", put_lot.contract_multiplier, True)
+        call = Track9OptionCandidate(call_lot.instrument_id, call_lot.expiry, "CALL", call_lot.strike,
+                                      "STANDARD", call_lot.contract_multiplier, True)
+        pair = Track9AtmPair(put.expiry, put.strike, put, call, put.contract_multiplier)
+        entry_date = min(x.executed_at for x in lots).date()
+
+        def weighted_entry_price(items: tuple[Track9OpenLot, ...]) -> Decimal | None:
+            if not items or any(x.entry_price is None for x in items):
+                return None
+            quantity = sum(x.remaining_quantity for x in items)
+            if quantity <= 0:
+                return None
+            return sum(Decimal(str(x.entry_price)) * x.remaining_quantity for x in items) / quantity
+
+        self.state = Track9State(
+            entry_date=entry_date, pair=pair, entry_qty=put_quantity,
+            put_entry_fill_price=weighted_entry_price(tuple(put_lots)),
+            call_entry_fill_price=weighted_entry_price(tuple(call_lots)),
             state="OVERNIGHT_INSURANCE_ACTIVE",
         )
 
-    def _enter_signal(self, context: StrategyContext) -> Sequence[Signal]:
-        common = context.input.common if context.input else None
-        if common is None or common.time_str is None or common.date_str is None:
-            return ()
-        if self.state.entered_today:
-            return ()
-        if common.time_str < MarketSessionPolicy.text(self.ENTRY_TIME):
-            return ()
+    def mark_exit_pending(self) -> None:
+        self._exit_pending = True
+        if self.state.pair is not None or self.state.partial_open_lots:
+            self.state = replace(self.state, state="EXIT_PENDING")
 
-        price = self._metric(context, "price.last")
-        put = self._metric(context, "options.atm_put_strike")
-        call = self._metric(context, "options.atm_call_strike")
-        multiplier = self._metric(context, "options.contract_multiplier")
-        if price is None or put is None or call is None or multiplier is None:
-            return ()
-        if multiplier <= 0 or put <= 0 or call <= 0:
-            return ()
-
-        qty = self.pair_quantity
-        self.state = Track9State(
-            entry_date=common.date_str,
-            entry_price=Decimal(str(price)),
-            put_entry_price=None,
-            call_entry_price=None,
-            entry_premium=None,
-            peak_profit=Decimal("0"),
-            trailing_active=False,
-            entry_qty=qty,
-            put_strike=Decimal(str(put)),
-            call_strike=Decimal(str(call)),
-            entered_today=True,
-            closed_next_open=False,
-            state="OVERNIGHT_INSURANCE_AWAITING_FILLS",
-        )
-
-        return (
-            Signal(
-                self.strategy_id,
-                "ENTER_OVERNIGHT_STRANGLE_PUT",
-                1.0,
-                f"ENTRY:15:10;PUT:{put};CALL:{call};QTY:{qty};MULTIPLIER:{multiplier}",
-                execution_proposal=StrategyExecutionProposal(
-                    proposed_quantity=qty,
-                    asset_type="OPTION",
-                    side="BUY",
-                    track_id=self.strategy_id,
-                    tag_id="OVERNIGHT_INSURANCE_PUT",
-                    option_type="PUT",
-                    strike=put,
-                ),
-            ),
-        )
-
-    def _close_pair_signals(self, *, reason: str, action: str = "CLOSE_OVERNIGHT_INSURANCE") -> Sequence[Signal]:
-        if self.state.put_strike is None or self.state.call_strike is None or self.state.entry_qty <= 0:
-            return ()
-        return (
-            Signal(self.strategy_id, f"{action}_PUT", 1.0, reason,
-                execution_proposal=StrategyExecutionProposal(
-                    proposed_quantity=self.state.entry_qty, asset_type="OPTION", requested_price=None, side="SELL",
-                    track_id=self.strategy_id, tag_id=f"{action}_PUT", option_type="PUT", strike=self.state.put_strike)),
-        )
-
-    def _close_next_open(self, context: StrategyContext) -> Sequence[Signal]:
-        common = context.input.common if context.input else None
-        if common is None or common.time_str is None or common.date_str is None:
-            return ()
-        if (
-            self.state.entry_date is None
-            or self.state.entry_price is None
-            or self.state.entry_premium is None
-            or self.state.peak_profit is None
-        ):
-            return ()
-        if common.date_str == self.state.entry_date or self.state.closed_next_open:
-            return ()
-        if common.time_str > MarketSessionPolicy.text(self.OPENING_WINDOW_END):
-            return ()
-
-        price = self._metric(context, "price.last")
-        put_mark = self._metric(context, "options.track9_put_mark_price")
-        call_mark = self._metric(context, "options.track9_call_mark_price")
-        multiplier = self._metric(context, "options.contract_multiplier")
-        if price is None or price <= 0 or put_mark is None or call_mark is None or multiplier is None:
-            return ()
-        if put_mark <= 0 or call_mark <= 0 or multiplier <= 0:
-            return ()
-
-        opening_move = (
-            Decimal(str(price)) - self.state.entry_price
-        ) / self.state.entry_price
-        shock = abs(opening_move) >= self.opening_shock_threshold
-
-        current_value = (
-            (Decimal(str(put_mark)) + Decimal(str(call_mark)))
-            * Decimal(self.state.entry_qty)
-            * Decimal(str(multiplier))
-        )
-        current_profit = current_value - self.state.entry_premium
-
-        if not self.state.trailing_active and shock and current_profit > 0:
-            self.state = replace(
-                self.state,
-                peak_profit=current_profit,
-                trailing_active=True,
-                state="OPENING_INSURANCE_TRAILING",
-            )
-        elif self.state.trailing_active:
-            peak_profit = max(self.state.peak_profit, current_profit)
-            self.state = replace(self.state, peak_profit=peak_profit)
-
-            trailing_floor = peak_profit * (Decimal("1") - self.TRAILING_PROFIT_GIVEBACK)
-            if current_profit <= trailing_floor:
-                close_signals = self._close_pair_signals(
-                    reason=f"OPENING_SHOCK:{opening_move};CURRENT_PROFIT:{current_profit};PEAK_PROFIT:{peak_profit};TRAILING_FLOOR:{trailing_floor};GIVEBACK:{self.TRAILING_PROFIT_GIVEBACK};REASON:OPTION_PAIR_TRAILING_PROFIT"
-                )
-                self._exit_pending = True
-                return close_signals
-
-        if not shock and not self.state.trailing_active:
-            close_signals = self._close_pair_signals(
-                reason=f"OPENING_MOVE:{opening_move};THRESHOLD:{self.opening_shock_threshold};REASON:NO_OPENING_SHOCK",
-                action="STOP_LOSS_OVERNIGHT_INSURANCE",
-            )
-            self._exit_pending = True
-            return close_signals
-
-        if common.time_str == MarketSessionPolicy.text(self.OPENING_WINDOW_END) and not self.state.trailing_active:
-            close_signals = self._close_pair_signals(
-                reason=f"OPENING_SHOCK:{opening_move};CURRENT_PROFIT:{current_profit};REASON:TRAILING_PROFIT_NOT_ACTIVATED",
-                action="STOP_LOSS_OVERNIGHT_INSURANCE",
-            )
-            self._exit_pending = True
-            return close_signals
-
-        return ()
-
-    def build_execution_plan(self, group_id: str, *, proposal: StrategyExecutionProposal) -> MultiLegExecutionPlan:
-        """Resolve the approved PUT proposal into the authoritative PUT/CALL pair."""
-        if proposal.asset_type != "OPTION" or proposal.track_id != self.strategy_id:
-            raise ValueError("TRACK9_OPTION_EXECUTION_PROPOSAL_REQUIRED")
-        if self.state.put_strike is None or self.state.call_strike is None or self.state.entry_qty <= 0:
-            raise ValueError("TRACK9_PAIR_STATE_REQUIRED")
-        side = str(proposal.side).upper()
-        if side == "BUY":
-            purpose = "OVERNIGHT_INSURANCE"
-        elif side == "SELL":
-            purpose = "OVERNIGHT_INSURANCE_CLOSE"
+    def on_execution_result(self, purpose: str, result: object) -> None:
+        reports = tuple(getattr(result, "reports", ()) or ())
+        if purpose == "OVERNIGHT_INSURANCE":
+            totals = {"put": 0, "call": 0}
+            values = {"put": Decimal("0"), "call": Decimal("0")}
+            for item in reports:
+                leg_id = str(getattr(item, "leg_id", "") or "")
+                quantity = int(getattr(item, "filled_quantity", 0) or 0)
+                price = getattr(item, "execution_price", None)
+                if leg_id in totals and quantity > 0 and price is not None:
+                    totals[leg_id] += quantity
+                    values[leg_id] += Decimal(str(price)) * quantity
+            put_price = values["put"] / totals["put"] if totals["put"] else self.state.put_entry_fill_price
+            call_price = values["call"] / totals["call"] if totals["call"] else self.state.call_entry_fill_price
+            if bool(getattr(result, "group_complete", False)) and totals["put"] > 0 and totals["call"] > 0:
+                self.state = replace(self.state, put_entry_fill_price=put_price,
+                                     call_entry_fill_price=call_price, state="OVERNIGHT_INSURANCE_ACTIVE")
+            elif totals["put"] > 0 or totals["call"] > 0:
+                self.state = replace(self.state, put_entry_fill_price=put_price,
+                                     call_entry_fill_price=call_price, state="OVERNIGHT_INSURANCE_PARTIAL")
+            else:
+                self.state = replace(self.state, state="RECONCILIATION_REQUIRED")
+            return
+        if purpose != "OVERNIGHT_INSURANCE_CLOSE" or not self._exit_pending:
+            return
+        if bool(getattr(result, "group_complete", False)) and bool(getattr(result, "position_flat", False)):
+            self.state = replace(self.state, state="OVERNIGHT_INSURANCE_CLOSED")
+            self._exit_pending = False
         else:
-            raise ValueError("TRACK9_PAIR_SIDE_REQUIRED")
-        plan = build_pair_plan(
-            group_id=group_id,
-            strategy_id=self.strategy_id,
-            purpose=purpose,
-            put_strike=self.state.put_strike,
-            call_strike=self.state.call_strike,
-            put_quantity=self.state.entry_qty,
-            call_quantity=self.state.entry_qty,
-            side=side,
+            self.state = replace(self.state, state="EXIT_PENDING")
+
+    def feature_requirements(self) -> Sequence[StrategyFeatureRequirement]:
+        keys = ("price.last", "options.atm_call_strike", "options.atm_put_strike",
+                "options.contract_multiplier", "options.track9_put_mark_price",
+                "options.track9_call_mark_price")
+        return tuple(StrategyFeatureRequirement(key, "tick", 1.0, frozenset({AnalyticsStatus.AVAILABLE}))
+                     for key in keys)
+
+    def _entry_signal(self, payload: Track9RuntimeInput) -> Sequence[Signal]:
+        if not is_track9_entry_evaluation_time(payload.as_of.timetz().replace(tzinfo=None)):
+            return ()
+        try:
+            pair = select_nearest_expiry_atm_pair(
+                payload.contract_candidates, underlying_price=payload.underlying_price,
+                as_of_date=payload.as_of.date(),
+            )
+        except Track9PolicyBlocked:
+            return ()
+        if not self._quotes_ready(payload, pair):
+            return ()
+        self.state = Track9State(
+            entry_date=payload.as_of.date(), pair=pair, entry_qty=self.pair_quantity,
+            state="ENTRY_PENDING",
         )
-        if side == "SELL":
-            self._exit_pending = True
-        return plan
+        proposal = StrategyExecutionProposal(
+            proposed_quantity=self.pair_quantity, asset_type="OPTION", side="BUY",
+            track_id=self.strategy_id, tag_id="OVERNIGHT_INSURANCE_ENTRY",
+            option_type="PUT", strike=pair.put.strike,
+        )
+        return (Signal(
+            self.strategy_id, "ENTER_OVERNIGHT_ATM_PUT_CALL", 1.0,
+            f"S9_P0_ENTRY:15:00;EXPIRY:{pair.expiry:%Y%m%d};ATM:{pair.strike};"
+            f"PUT:{pair.put.symbol};CALL:{pair.call.symbol};QTY:{self.pair_quantity};"
+            f"PROVENANCE:{payload.provenance};SCENARIO:{payload.scenario_id}",
+            execution_proposal=proposal,
+        ),)
+
+    def _opening_exit_signal(self, payload: Track9RuntimeInput) -> Sequence[Signal]:
+        if self.state.state != "OVERNIGHT_INSURANCE_ACTIVE" or self.state.pair is None:
+            return ()
+        if self.state.entry_date is None or payload.as_of.date() <= self.state.entry_date:
+            return ()
+        if not self._quotes_ready(payload, self.state.pair):
+            return ()
+        try:
+            decision = evaluate_track9_opening_move(
+                previous_official_close=payload.previous_official_close,
+                next_session_official_open=payload.next_session_official_open,
+            )
+        except Track9PolicyBlocked:
+            return ()
+        reason = ("OPENING_MOVE_AT_OR_ABOVE_1PCT_CLOSE_INSURANCE" if decision.action == "CLOSE_INSURANCE"
+                  else "OPENING_MOVE_BELOW_1PCT_STOP_LOSS")
+        self.state = replace(self.state, state="EXIT_PENDING", exit_reason=reason)
+        self._exit_pending = True
+        proposal = StrategyExecutionProposal(
+            proposed_quantity=self.state.entry_qty, asset_type="OPTION", side="SELL",
+            track_id=self.strategy_id, tag_id="OVERNIGHT_INSURANCE_CLOSE",
+            option_type="PUT", strike=self.state.pair.put.strike,
+        )
+        return (Signal(
+            self.strategy_id, "CLOSE_OVERNIGHT_ATM_PUT_CALL", 1.0,
+            f"{reason};MOVE:{decision.move};THRESHOLD:0.01;"
+            f"PREVIOUS_CLOSE:{payload.previous_official_close};"
+            f"NEXT_OPEN:{payload.next_session_official_open};SCENARIO:{payload.scenario_id}",
+            execution_proposal=proposal,
+        ),)
+
+    def _partial_opening_exit_signal(self, payload: Track9RuntimeInput) -> Sequence[Signal]:
+        if self.state.entry_date is None or payload.as_of.date() <= self.state.entry_date:
+            return ()
+        lots = tuple(x for x in payload.open_lots
+                     if x.strategy_id == self.strategy_id and x.side.upper() == "BUY"
+                     and x.remaining_quantity > 0)
+        if not lots:
+            return ()
+        identities = {(x.instrument_id, x.option_type.upper(), x.expiry, x.strike,
+                       x.contract_multiplier) for x in lots}
+        if not identities or len(identities) > 2:
+            return ()
+        option_types = {identity[1] for identity in identities}
+        if not option_types.issubset({"PUT", "CALL"}) or len(option_types) != len(identities):
+            return ()
+        if len({(expiry, strike, multiplier) for _instrument, _kind, expiry, strike, multiplier in identities}) != 1:
+            return ()
+        quotes = {item.instrument_id: item for item in payload.option_quotes}
+        for instrument_id, option_type, expiry, strike, _multiplier in identities:
+            quote = quotes.get(instrument_id)
+            if (quote is None or quote.option_type.upper() != option_type or quote.expiry != expiry
+                    or quote.strike != strike or quote.bid <= 0 or quote.ask < quote.bid or quote.last <= 0
+                    or quote.observed_at.tzinfo is None or payload.as_of.tzinfo is None):
+                return ()
+            age = (payload.as_of - quote.observed_at).total_seconds()
+            if age < 0 or Decimal(str(age)) > payload.max_quote_age_seconds:
+                return ()
+        option_type = lots[0].option_type.upper()
+        strike = lots[0].strike
+        try:
+            decision = evaluate_track9_opening_move(
+                previous_official_close=payload.previous_official_close,
+                next_session_official_open=payload.next_session_official_open,
+            )
+        except Track9PolicyBlocked:
+            return ()
+        reason = ("OPENING_MOVE_AT_OR_ABOVE_1PCT_CLOSE_INSURANCE"
+                  if decision.action == "CLOSE_INSURANCE" else "OPENING_MOVE_BELOW_1PCT_STOP_LOSS")
+        self.state = replace(self.state, state="EXIT_PENDING", exit_reason=reason)
+        self._exit_pending = True
+        proposal = StrategyExecutionProposal(
+            proposed_quantity=sum(x.remaining_quantity for x in lots), asset_type="OPTION",
+            side="SELL", track_id=self.strategy_id, tag_id="OVERNIGHT_INSURANCE_CLOSE",
+            option_type=option_type, strike=strike,
+        )
+        return (Signal(
+            self.strategy_id, "CLOSE_OVERNIGHT_PARTIAL_ATM_OPTION", 1.0,
+            f"{reason};MOVE:{decision.move};THRESHOLD:0.01;"
+            f"PREVIOUS_CLOSE:{payload.previous_official_close};"
+            f"NEXT_OPEN:{payload.next_session_official_open};SCENARIO:{payload.scenario_id}",
+            execution_proposal=proposal,
+        ),)
 
     def evaluate(self, context: StrategyContext) -> Sequence[Signal]:
         if context.strategy_id != self.strategy_id:
             return ()
-        # The approved S9 specification replaces the legacy overnight PUT/CALL
-        # pair with an S1-linked OTM PUT. Until authoritative S1 short-PUT lots,
-        # eligible contract identity/quote, and non-PROVISIONAL required settings
-        # are wired into RuntimeInput, the legacy path must not emit signals.
+        payload = self._runtime_input(context)
+        if payload is None or not self._provenance_ready(payload) or context.analytics is None:
+            return ()
+        metrics = validate_strategy_features(self.feature_requirements(), context.analytics)
+        if any(metric.status is not AnalyticsStatus.AVAILABLE or metric.value is None for metric in metrics):
+            return ()
+        if self.state.state == "WAITING_ENTRY":
+            return self._entry_signal(payload)
+        if self.state.state == "OVERNIGHT_INSURANCE_CLOSED":
+            if payload.as_of.time() == self.ENTRY_TIME:
+                self.state = Track9State()
+                return self._entry_signal(payload)
+            return ()
+        if self.state.state == "OVERNIGHT_INSURANCE_ACTIVE":
+            return self._opening_exit_signal(payload)
+        if self.state.state == "OVERNIGHT_INSURANCE_PARTIAL":
+            return self._partial_opening_exit_signal(payload)
         return ()
+
+    def build_execution_plan(self, group_id: str, *, proposal: StrategyExecutionProposal) -> MultiLegExecutionPlan:
+        if proposal.asset_type != "OPTION" or proposal.track_id != self.strategy_id:
+            raise ValueError("TRACK9_OPTION_EXECUTION_PROPOSAL_REQUIRED")
+        pair = self.state.pair
+        if pair is None or self.state.entry_qty <= 0:
+            raise ValueError("TRACK9_INDEPENDENT_PAIR_STATE_REQUIRED")
+        side = str(proposal.side or "").upper()
+        if side != "BUY":
+            raise ValueError("TRACK9_ENTRY_MUST_BE_BUY_BUY")
+        def identity(candidate: Track9OptionCandidate) -> OptionInstrumentIdentity:
+            return OptionInstrumentIdentity(
+                instrument_id=candidate.symbol, symbol=candidate.symbol,
+                expiry=candidate.expiry.strftime("%Y%m%d"), option_type=candidate.option_type,
+                strike=candidate.strike, contract_multiplier=candidate.contract_multiplier,
+                identity_source="SYNTHETIC:DERIVED_SCENARIO",
+            )
+        return MultiLegExecutionPlan(
+            group_id=group_id, strategy_id=self.strategy_id,
+            purpose="OVERNIGHT_INSURANCE",
+            legs=(
+                ExecutionLeg("put", "BUY", self.state.entry_qty, "PUT", pair.put.strike,
+                             position_role="OVERNIGHT_INSURANCE", instrument_identity=identity(pair.put)),
+                ExecutionLeg("call", "BUY", self.state.entry_qty, "CALL", pair.call.strike,
+                             position_role="OVERNIGHT_INSURANCE", instrument_identity=identity(pair.call)),
+            ),
+            strategy_code_version=self.version,
+        )
 
 
 __all__ = ("Track9EventOvernightInsurance", "Track9State")

@@ -1,0 +1,156 @@
+{
+  "schema": "q25-a5-s15b-observed-s1-call-alignment-report-v1",
+  "report_id": "Q25_A5_S15B_OBSERVED_S1_CALL_ALIGNMENT_20261109",
+  "verdict": "PLUMBING_ONLY_OBSERVED_SIGNAL_TO_OPTION_PLAN_AND_VIRTUAL_ORDERBOOK_INGESTION",
+  "scope": "Validation-only replay of a natural StrategyHub S1 short-CALL signal, exact manifest-bound option identity resolution, observed H0IOASP0 orderbook ingestion, and VirtualRuntimeDataProvider handoff.",
+  "source_evidence": {
+    "trading_date": "20261021",
+    "raw_file_sha256": "54cf62fa97f07384b55536fb433f239851acc67f372b41d062705234bbd3e252",
+    "underlying_reference_payload_sha256": "2ae970c7768125648c9c02bb3cd5fb9b743cd1a7e17be24407a10aeaa6e640f3",
+    "underlying_signal_payload_sha256": "97acb742301c5ceb275aa546a46db2fc0d62d640c67c9edc5febdd511c5351d6",
+    "option_orderbook_payload_sha256": "99b91c1a7f0685ab21f2a0da7d87903bd408cf39555cd9202cd7fa4744c870fc",
+    "source_probe_sha256": "dc68dedd044221e4090f64e996b44482980c0f1e3993f55ff03dd8ad2a839e36",
+    "target_kis_master_sha256": "96912b73fcf0fa549cb67cd03299b13afcbaaf229d5c03fdafefa1b5646aaf9e",
+    "expiry_evidence_set_sha256": "ea61ae622cca57ad80ea068fc65d227b4ba0be46c0fe2c60703f5d945fb8dcad"
+  },
+  "derived_dataset": {
+    "path": "data/derived_scenario/q25_a5_s15b_observed_s1_call_alignment/events.jsonl",
+    "sha256": "490a780298c371b005c34dc0b3e9a5ef373d1800dc4fd547f4e551670f0c37ae",
+    "manifest_path": "config/validation_only/q25_a5_s15b_observed_s1_call_alignment/manifest.json",
+    "manifest_sha256": "509a05f6b15b5eb01e62c874f3c3ad4f1ebedb8aabe2b9093ebce79598c9a6ff",
+    "source_records": 3,
+    "scenario_records": 2
+  },
+  "signal_alignment": {
+    "observed_kospi200_open": "878.83",
+    "initial_reference_point": "880.0",
+    "reference_point_basis": "KIS probe nearest listed strike from observed 878.83 open",
+    "observed_kospi200_signal_price": "876.54",
+    "signal_received_at_kst": "2026-10-21T09:01:14.429652+09:00",
+    "strategy_id": "TRACK1_TAIL_DEFENSE",
+    "strategy_code_version": "1.2.0",
+    "strategy_hub_natural_signal_count": 1,
+    "proposal": {
+      "asset_type": "OPTION",
+      "side": "SELL",
+      "option_type": "CALL",
+      "strike": "887.50",
+      "quantity": 1,
+      "tag_id": "S1_SHORT_ACCUMULATION_CALL_000001"
+    },
+    "strike_rounding_changed_value": false
+  },
+  "contract_resolution": {
+    "scenario_contract_key": "S1_SHORT_CALL_887_5",
+    "symbol": "B01611887",
+    "option_type": "CALL",
+    "strike": "887.50",
+    "expiry": "20261112",
+    "product_class": "STANDARD",
+    "validation_only_multiplier_krw_per_point": "250000",
+    "plan_legs": 1,
+    "plan_side": "SELL",
+    "plan_quantity": 1
+  },
+  "observed_orderbook": {
+    "tr_id": "H0IOASP0",
+    "received_at_kst": "2026-10-21T09:01:16.106074+09:00",
+    "signal_to_orderbook_received_lag_ms": 1676,
+    "ask_levels": [
+      [
+        "37.65",
+        "1"
+      ],
+      [
+        "37.70",
+        "1"
+      ],
+      [
+        "38.75",
+        "2"
+      ],
+      [
+        "47.35",
+        "2"
+      ],
+      [
+        "64.95",
+        "10"
+      ]
+    ],
+    "bid_levels": [
+      [
+        "35.00",
+        "1"
+      ],
+      [
+        "34.60",
+        "2"
+      ],
+      [
+        "34.55",
+        "2"
+      ],
+      [
+        "8.18",
+        "10"
+      ],
+      [
+        "1.84",
+        "1"
+      ]
+    ],
+    "strict_five_level_completeness": "PASS",
+    "best_bid": "35.00",
+    "best_ask": "37.65",
+    "synthetic_mark_midpoint": "36.325",
+    "actual_last_trade_price": null
+  },
+  "freshness": {
+    "verdict": "FRESH",
+    "policy_version": "S15B_OBSERVED_COLLECTOR_RECEIVE_TIME_VALIDATION_ONLY",
+    "timestamp_basis": "COLLECTOR_RECEIVED_AT_ONLY",
+    "kis_h0ioasp0_observed_hour_semantics_verified": false,
+    "production_freshness_eligible": false
+  },
+  "virtual_runtime_data_provider": {
+    "option_orderbook_available": true,
+    "option_orderbook_fresh_validation_only": true,
+    "source": "OBSERVED_KIS_VTS:H0IOASP0:VALIDATION_ONLY",
+    "bid_quantity_levels": 5,
+    "ask_quantity_levels": 5
+  },
+  "verification": {
+    "focused_pytest": "25 passed / 0 failed",
+    "py_compile": "PASS",
+    "git_diff_check": "PASS",
+    "graphify": {
+      "status": "UPDATED",
+      "nodes": 7145,
+      "edges": 20278,
+      "communities": 372,
+      "existing_warning": "application/composition/virtual_composition_root.py syntax warning at line 54; 28 no-symbol files"
+    },
+    "generator_reproducible": "PASS"
+  },
+  "safety": {
+    "validation_only": true,
+    "production_runtime_eligible": false,
+    "orders_allowed": false,
+    "kis_api_called": false,
+    "real_vts_or_live_called": false,
+    "account_or_order_api_called": false,
+    "original_raw_data_modified": false,
+    "s15a_original_modified": false,
+    "production_common_logic_modified": false
+  },
+  "limitations": [
+    "The resolver is a separate validation-only module; automated_virtual_runtime_factory.resolve_track1 still handles FUTURES proposals only.",
+    "Only the short CALL 887.5 signal path is covered; base strangle legs and other contracts are not included.",
+    "Decision, RiskEngine, OMS/Router, Virtual Broker/Execution, Position/PnL and FAST/DETAILED equivalence have not been run.",
+    "The mark price is a synthetic midpoint, not an observed trade or fill.",
+    "Freshness is validation-only and based on collector receive time; H0IOASP0 source-time semantics remain unverified.",
+    "The KRX STANDARD multiplier is carried only as a validation-only product-class profile."
+  ],
+  "next_stage": "Connect this manifest-bound OPTION proposal plan to validation-only Decision/Risk/OMS/Virtual Execution, then verify Position/PnL and FAST/DETAILED equivalence without changing production factory behavior."
+}

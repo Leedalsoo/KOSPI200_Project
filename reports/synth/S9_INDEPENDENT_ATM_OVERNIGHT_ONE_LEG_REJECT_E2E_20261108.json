@@ -1,0 +1,61 @@
+{
+  "status": "PSB_PASS",
+  "scope": "S9 natural-signal Virtual runtime with deterministic synthetic CALL-leg rejection after PUT-leg fill",
+  "interpretation": "PASS only for detecting and fail-closing an unpaired position; automatic hedge/unwind policy remains unresolved and is not claimed",
+  "scenario_id": "S9_INDEPENDENT_ATM_OVERNIGHT_STOP_LOSS_001",
+  "run_id": "S9-ONE-LEG-REJECT-20261108",
+  "provenance": "SYNTHETIC/DERIVED_SCENARIO",
+  "events": 2,
+  "natural_signals": 1,
+  "route_attempts": 2,
+  "filled_quantity": 1,
+  "rejected_orders": 1,
+  "position_group_leg_status": {
+    "put": "FILLED",
+    "call": "REJECTED"
+  },
+  "strategy_state": "RECONCILIATION_REQUIRED",
+  "open_lots": [
+    {
+      "instrument_id": "SYNTHETIC_CONTRACT:S9-20261112-PUT-500",
+      "option_type": "PUT",
+      "remaining_quantity": 1,
+      "execution_id": "EXEC-000001",
+      "identity_source": "SYNTHETIC:DERIVED_SCENARIO"
+    }
+  ],
+  "position_flat": false,
+  "checks": {
+    "natural_signal": true,
+    "route_attempts": true,
+    "one_filled_leg": true,
+    "one_rejected_leg": true,
+    "put_filled_call_rejected": true,
+    "single_open_put_lot": true,
+    "strategy_fail_closed": true
+  },
+  "quantity_constraint": {
+    "max_quantity_per_leg": 1,
+    "partial_fill_note": "Current approved synthetic validation profile limits each leg to one indivisible contract; multi-fill partial quantity is not representable without changing the unresolved P1 quantity policy."
+  },
+  "official_data_status": {
+    "kis_live_order_access": "MISSING",
+    "official_contract_multiplier": "MISSING",
+    "official_next_session_open": "MISSING",
+    "official_option_quotes": "MISSING",
+    "official_previous_close": "MISSING",
+    "official_tradability": "MISSING",
+    "official_trading_calendar": "MISSING",
+    "official_virtual_account": "MISSING"
+  },
+  "synthetic_contract_multiplier": 100000,
+  "synthetic_tradeable": true,
+  "production_runtime_eligible": false,
+  "orders_allowed": false,
+  "kis_real_vts_live_or_real_account_used": false,
+  "fault_injection": "Reject CALL leg only; PUT leg delegated to the actual Virtual Broker",
+  "manifest_sha256": "a901ff355a3117a46448f3e75beefd973a454d0097f70960cc484702d410a047",
+  "dataset_sha256": "e6947156a17886615b901b03ce59c7c89f662e2b1b39410463ac1179e16b944b",
+  "contract_profile_sha256": "d7c7cb9be3383d033bdef10c27102f06946dc30b314fe2e92615658522b7f1bd",
+  "risk_profile_sha256": "cea09c560c3fd24ee3cb008a4191a3d6768f2d15c5e279269fa16184323379bf"
+}

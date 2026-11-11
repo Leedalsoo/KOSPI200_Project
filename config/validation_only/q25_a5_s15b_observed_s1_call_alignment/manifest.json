@@ -1,0 +1,95 @@
+{
+  "schema": "q25-a5-s15b-observed-s1-call-alignment-manifest-v1",
+  "dataset_id": "Q25_A5_S15B_OBSERVED_S1_CALL_ALIGNMENT_20261109",
+  "dataset_path": "data/derived_scenario/q25_a5_s15b_observed_s1_call_alignment/events.jsonl",
+  "dataset_sha256": "490a780298c371b005c34dc0b3e9a5ef373d1800dc4fd547f4e551670f0c37ae",
+  "event_count": 5,
+  "provenance": "DERIVED_SCENARIO",
+  "synthetic": true,
+  "validation_only": true,
+  "signal_generation_only": false,
+  "runtime_eligible": false,
+  "production_runtime_eligible": false,
+  "execution_enabled": false,
+  "orders_allowed": false,
+  "allow_kis_api": false,
+  "allow_live_orders": false,
+  "allow_real_account": false,
+  "original_source_mutated": false,
+  "s15a_mutated": false,
+  "target_kis_master_sha256": "96912b73fcf0fa549cb67cd03299b13afcbaaf229d5c03fdafefa1b5646aaf9e",
+  "expiry_evidence_set_sha256": "ea61ae622cca57ad80ea068fc65d227b4ba0be46c0fe2c60703f5d945fb8dcad",
+  "source_probe_path": "verification/evidence/kis_s5_option_contract_quote_probe_20261022.json",
+  "source_probe_sha256": "dc68dedd044221e4090f64e996b44482980c0f1e3993f55ff03dd8ad2a839e36",
+  "source_raw_file_date": "20261021",
+  "source_raw_file_sha256": "54cf62fa97f07384b55536fb433f239851acc67f372b41d062705234bbd3e252",
+  "source_record_payload_sha256s": {
+    "underlying_reference": "2ae970c7768125648c9c02bb3cd5fb9b743cd1a7e17be24407a10aeaa6e640f3",
+    "underlying_signal": "97acb742301c5ceb275aa546a46db2fc0d62d640c67c9edc5febdd511c5351d6",
+    "option_orderbook": "99b91c1a7f0685ab21f2a0da7d87903bd408cf39555cd9202cd7fa4744c870fc"
+  },
+  "source_tr_ids": [
+    "H0UPCNT0",
+    "H0IOASP0"
+  ],
+  "scenario_ids": [
+    "S15B_OBSERVED_S1_CALL_887_5"
+  ],
+  "scenario_contract_mapping": {
+    "S1_SHORT_CALL_887_5": {
+      "symbol": "B01611887",
+      "option_type": "CALL",
+      "strike": "887.50",
+      "expiry": "20261112",
+      "product_series": "MONTHLY",
+      "product_class": "STANDARD",
+      "master_sha256": "96912b73fcf0fa549cb67cd03299b13afcbaaf229d5c03fdafefa1b5646aaf9e"
+    }
+  },
+  "underlying_reference": {
+    "symbol": "2001",
+    "name": "KOSPI200",
+    "observed_open": "878.83",
+    "observed_open_received_at": "2026-10-21T00:00:30.582860+00:00",
+    "initial_reference_point": "880.0",
+    "reference_point_basis": "KIS_PROBE_NEAREST_LISTED_STRIKE_FROM_OBSERVED_OPEN_878.83",
+    "source_probe_selection_rule": "KIS official master monthly STANDARD CALL rows; ATM reference 878.83 -> nearest strike 880.0; compare 2nd/3rd OTM strikes 885.0 and 887.5"
+  },
+  "signal_observation": {
+    "underlying_price": "876.54",
+    "received_at": "2026-10-21T00:01:14.429652+00:00",
+    "signal_to_orderbook_received_lag_ms": 1676,
+    "expected_signal": "SELL CALL 887.50 x 1",
+    "strategy_code_version": "1.2.0",
+    "strategy_parameters_status": "VALIDATION_ONLY_TEST_INPUT; NOT_PRODUCTION_APPROVAL"
+  },
+  "freshness_policy": {
+    "version": "S15B_OBSERVED_COLLECTOR_RECEIVE_TIME_VALIDATION_ONLY",
+    "max_age_seconds": 600,
+    "timestamp_basis": "COLLECTOR_RECEIVED_AT_ONLY",
+    "kis_h0ioasp0_observed_hour_semantics_verified": false,
+    "production_freshness_eligible": false
+  },
+  "synthetic_mark_profile": {
+    "value": "36.325",
+    "basis": "midpoint_of_observed_best_bid_and_best_ask",
+    "actual_trade_price_available": false
+  },
+  "multiplier_profile": {
+    "value": "250000",
+    "unit": "KRW_PER_OPTION_POINT",
+    "product_class": "STANDARD",
+    "source": "KRX_KOSPI200_STANDARD_OPTION_PRODUCT_SPECIFICATION",
+    "source_url": "https://open.krx.co.kr/contents/OPN/01/01040202/OPN01040202.jsp",
+    "validation_only_non_authoritative_runtime_profile": true,
+    "production_runtime_eligible": false
+  },
+  "limitations": [
+    "The underlying reference point 880.0 is derived from the observed 878.83 open using the KIS probe's nearest-listed-strike selection rule.",
+    "The 876.54 index event and 887.5 CALL order book are preserved KIS VTS observations from 2026-10-21; this is historical offline replay only.",
+    "H0IOASP0 observed_hour is retained as an unverified candidate; validation freshness uses collector received_at only.",
+    "No option trade price was present in the H0IOASP0 record; the mark price is a synthetic midpoint, not an observed trade or fill.",
+    "Only the S1 short CALL 887.5 proposal is covered. Base strangle legs and other contracts remain outside this scenario.",
+    "S1 2.5-point step and 7.5-point offset are exercised as validation inputs; this does not approve production strategy policy."
+  ]
+}
