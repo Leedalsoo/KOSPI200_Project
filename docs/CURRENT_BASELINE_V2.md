@@ -4,7 +4,7 @@
 
 ## 최신 상태 갱신 — C1·C2 완료 (2026-11-12)
 
-- A7 C1 archive 통합은 완료됐다. 통합 브랜치 `integrate/q25-s2-20261111`, 현재 HEAD `d1aef6aab7ce49ec2ad83a837f93c199f2d7c23f`; 원격 `cleanup/p2-quarantine-20261026`과 일치한다.
+- A7 C1 archive 통합은 완료됐다. C1 merge commit은 `d1aef6aab7ce49ec2ad83a837f93c199f2d7c23f`이다. C1 push 당시 local/remote SHA가 일치했으며, C2 문서 복원 후 최신 통합 브랜치 SHA는 C2 종료 기록(No.1529)을 따른다.
 - C2 문서 복원 완료: `AGENTS.md` 최신 상태 안내와 `docs/CURRENT_BASELINE_V2.md` Notion SSOT mirror를 복원했다. 최종 저장소 커밋 SHA 및 문서 SHA-256은 C2 종료 기록에 연결한다.
 - 원본 작업폴더 HEAD `b060fa57d3801e8227e88c8e54df8d2f9ffe7407` 및 dirty/untracked 224건은 보존한다.
 - S2 판정은 `PSB_UNVERIFIED`로 유지한다.
@@ -99,7 +99,7 @@ Status: A1/A2/A3/B1/B2/B3/B4/C1/C2 completed. C3 is the next pending step; C2 do
 
 ## 7. A6 완료 및 A7 실행 순서
 
-A6 C01–C10 전체 완료(2026-11-10). C09 verification gate 및 C10 A5 진행표 동기화까지 완료되었다. A6 완료 자체는 S2 구현·Runtime 검증 승인을 의미하지 않는다. A7에 따라 S2 A1→A2→A3→B1→B2→B3→B4 순서로 진행하며, 각 단계는 사용자 승인 후 하나씩 수행한다. 현재 A1/A2/A3/B1/B2/B3/B4/C1 완료했고 다음 대기 단계는 C2다. C1 병합 커밋은 d1aef6aab7ce49ec2ad83a837f93c199f2d7c23f이며 원격 cleanup/p2-quarantine-20261026과 SHA가 일치한다. X+1 registry strategy\_ids 호환성 결함은 2026-11-11 ��밋 771894387adb1cbd6063495000ee9405f20b0fe2에서 해결했다. B4는 명시적 S2 strategy selection으로 실행했다. 전체 registry의 Track1 manifest/code version mismatch는 C1에서 manifest 1.2.0 정합 및 default registry 9개 전략 등록 확인으로 해소했다. 통합 마무리 C1–C5는 S2를 막지 않는 후속 트랙이다.
+A6 C01–C10 전체 완료(2026-11-10). C09 verification gate 및 C10 A5 진행표 동기화까지 완료되었다. A6 완료 자체는 S2 구현·Runtime 검증 승인을 의미하지 않는다. A7에 따라 S2 A1→A2→A3→B1→B2→B3→B4 순서로 진행하며, 각 단계는 사용자 승인 후 하나씩 수행한다. 현재 A1/A2/A3/B1/B2/B3/B4/C1 완료했고 다음 대기 단계는 C2다. C1 병합 커밋은 d1aef6aab7ce49ec2ad83a837f93c199f2d7c23f이며 원격 cleanup/p2-quarantine-20261026과 SHA가 일치한다. X+1 registry strategy\_ids 호환성 결함은 2026-11-11 커밋 771894387adb1cbd6063495000ee9405f20b0fe2에서 해결했다. B4는 명시적 S2 strategy selection으로 실행했다. 전체 registry의 Track1 manifest/code version mismatch는 C1에서 manifest 1.2.0 정합 및 default registry 9개 전략 등록 확인으로 해소했다. 통합 마무리 C1–C5는 S2를 막지 않는 후속 트랙이다.
 
 ## 8. 확인된 근거 페이지
 
@@ -247,3 +247,16 @@ A1 정합 완료 시점 SSOT 본문 SHA-256 (이 digest 행 자체 제외): `A7D
 - 원격 `cleanup/p2-quarantine-20261026`에 non-force fast-forward push 완료. local/remote SHA 동일 `d1aef6aab7ce49ec2ad83a837f93c199f2d7c23f`. `Project200` 및 `master` 미변경.
 - 상세 Q&A: [[No.1528 답변내용요약] Q25 A7 C1 archive 통합 (2026-11-12)](https://app.notion.com/p/4155f4f6eaa1818285f7cbfea4b569df). Repo report: `reports/synth/Q25_A7_C1_ARCHIVE_INTEGRATION_20261112.md`.
 - 다음 단계는 C2 문서 복원이며 사용자 별도 승인 전 시작하지 않는다.
+
+## 19. Q25 A7 C2 — Document restoration (2026-11-12)
+
+- 판정: C2 완료. `AGENTS.md`에 현재 A7 상태를 추가하고, Notion Current Baseline v2를 `docs/CURRENT_BASELINE_V2.md`로 저장소에 복원했다. 과거 문서 내용은 삭제하지 않고 역사 근거로 보존했다.
+- 통합 브랜치: `integrate/q25-s2-20261111`.
+- 최종 C2 commit: `baf45cd2e6c7336e9ceb75e7c211b773635da954`.
+- 원격 `cleanup/p2-quarantine-20261026` non-force fast-forward push 완료. local/remote SHA 동일: `baf45cd2e6c7336e9ceb75e7c211b773635da954`.
+- `docs/CURRENT_BASELINE_V2.md` SHA-256: `A1CED867375411F737BDF97992812089A4AC688C802FD11CDA98DC541CA3B81F`.
+- `AGENTS.md` SHA-256: `9120CC7060873B4209E8AB86631EDAAD22C6633F21B2E8F621A36C86506C597F`.
+- Repo report: `reports/synth/Q25_A7_C2_DOCUMENT_RESTORATION_20261112.md`.
+- 검증: `git diff --check` PASS; conflict marker 0; secret-pattern scan 0. 문서 전용 변경이므로 application pytest는 실행 대상이 아니다.
+- 원본 작업폴더 HEAD `b060fa57d3801e8227e88c8e54df8d2f9ffe7407` 및 dirty/untracked 224건 보존. `Project200`/`master` 미변경.
+- C3 dirty 224건 읽기 전용 분류는 다음 단계이며 별도 승인 전 시작하지 않는다.

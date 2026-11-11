@@ -8,7 +8,7 @@ C2 document restoration completed on the isolated integration worktree. No appli
 
 | Repository file | Purpose | SHA-256 |
 | --- | --- | --- |
-| `docs/CURRENT_BASELINE_V2.md` | Repository snapshot mirrored from Notion Current Baseline v2 | `A1CED867375411F737BDF97992812089A4AC688C802FD11CDA98DC541CA3B81F` |
+| `docs/CURRENT_BASELINE_V2.md` | Repository snapshot mirrored from Notion Current Baseline v2 | `5340338C067B77204D2B5EDB6BF362108229E6BEF75188591FB48B99E1A56EB7` |
 | `AGENTS.md` | Current A7 status header and link to the canonical SSOT mirror; historical instructions retained | `9120CC7060873B4209E8AB86631EDAAD22C6633F21B2E8F621A36C86506C597F` |
 
 ## Source of truth
