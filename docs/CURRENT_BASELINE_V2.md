@@ -2,7 +2,7 @@
 
 > Mirrored from Notion page `4135f4f6-eaa1-81f7-ac42-dea70e10fa42`. Notion remains the decision source; this file is the repository snapshot used for SHA-linked traceability.
 
-## 최신 상태 갱신 — C1·C2 완료 (2026-11-12)
+## 최신 상태 갱신 — C1·C2·C3 완료 (2026-11-12)
 
 - A7 C1 archive 통합은 완료됐다. C1 merge commit은 `d1aef6aab7ce49ec2ad83a837f93c199f2d7c23f`이다. C1 push 당시 local/remote SHA가 일치했으며, C2 문서 복원 후 최신 통합 브랜치 SHA는 C2 종료 기록(No.1529)을 따른다.
 - C2 문서 복원 완료: `AGENTS.md` 최신 상태 안내와 `docs/CURRENT_BASELINE_V2.md` Notion SSOT mirror를 복원했다. 최종 저장소 커밋 SHA 및 문서 SHA-256은 C2 종료 기록에 연결한다.
@@ -16,7 +16,7 @@
 기준 HEAD: `b060fa57d3801e8227e88c8e54df8d2f9ffe7407`
 작업 기준: 로컬 작업폴더 HEAD. S2 통합 작업 브랜치 `integrate/q25-s2-20261111`는 A2에서 생성했고, 현재 통합 HEAD는 `d1aef6aab7ce49ec2ad83a837f93c199f2d7c23f`이다.
 CB2 ID: `4135f4f6-eaa1-81f7-ac42-dea70e10fa42`
-Status: A1/A2/A3/B1/B2/B3/B4/C1/C2 completed. C3 is the next pending step; C2 document restoration and repository mirror are complete; B1/B2/B3/B4 and X+1 are complete. S2 remains PSB\\\_UNVERIFIED; no S2 natural-signal Runtime E2E PASS is claimed.
+Status: A1/A2/A3/B1/B2/B3/B4/C1/C2/C3 completed. C4 is the next pending step and requires separate user approval; C2 document restoration and C3 read-only dirty-tree classification are complete; B1/B2/B3/B4 and X+1 are complete. S2 remains PSB\\\_UNVERIFIED; no S2 natural-signal Runtime E2E PASS is claimed.
 
 ## 코드 근거 위치표 (A7, 2026-11-11)
 
@@ -252,9 +252,9 @@ A1 정합 완료 시점 SSOT 본문 SHA-256 (이 digest 행 자체 제외): `A7D
 
 - 판정: C2 완료. `AGENTS.md`에 현재 A7 상태를 추가하고, Notion Current Baseline v2를 `docs/CURRENT_BASELINE_V2.md`로 저장소에 복원했다. 과거 문서 내용은 삭제하지 않고 역사 근거로 보존했다.
 - 통합 브랜치: `integrate/q25-s2-20261111`.
-- 최종 C2 commit: `baf45cd2e6c7336e9ceb75e7c211b773635da954`.
-- 원격 `cleanup/p2-quarantine-20261026` non-force fast-forward push 완료. local/remote SHA 동일: `baf45cd2e6c7336e9ceb75e7c211b773635da954`.
-- `docs/CURRENT_BASELINE_V2.md` SHA-256: `A1CED867375411F737BDF97992812089A4AC688C802FD11CDA98DC541CA3B81F`.
+- C2 문서 복원 commit: `baf45cd2e6c7336e9ceb75e7c211b773635da954`; 후속 mirror sync commit: `bfa82036a781cb9c8d34ab81df20c9f2b032b216`. 최신 local/remote HEAD: `bfa82036a781cb9c8d34ab81df20c9f2b032b216`.
+- 원격 `cleanup/p2-quarantine-20261026` non-force fast-forward push 완료. 최종 local/remote SHA 동일: `bfa82036a781cb9c8d34ab81df20c9f2b032b216`.
+- `docs/CURRENT_BASELINE_V2.md` SHA-256: `5340338C067B77204D2B5EDB6BF362108229E6BEF75188591FB48B99E1A56EB7`.
 - `AGENTS.md` SHA-256: `9120CC7060873B4209E8AB86631EDAAD22C6633F21B2E8F621A36C86506C597F`.
 - Repo report: `reports/synth/Q25_A7_C2_DOCUMENT_RESTORATION_20261112.md`.
 - 검증: `git diff --check` PASS; conflict marker 0; secret-pattern scan 0. 문서 전용 변경이므로 application pytest는 실행 대상이 아니다.
