@@ -32,4 +32,3 @@ C2 document restoration completed on the isolated integration worktree. No appli
 ## Safety
 
 No KIS, REAL_VTS, Live, account, broker, or order API was called. No external order was submitted. No `.env`, production RiskConfig, scheduler, collector, or raw data was modified.
-
