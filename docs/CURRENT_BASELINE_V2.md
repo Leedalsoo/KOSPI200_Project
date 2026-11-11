@@ -260,3 +260,13 @@ A1 정합 완료 시점 SSOT 본문 SHA-256 (이 digest 행 자체 제외): `A7D
 - 검증: `git diff --check` PASS; conflict marker 0; secret-pattern scan 0. 문서 전용 변경이므로 application pytest는 실행 대상이 아니다.
 - 원본 작업폴더 HEAD `b060fa57d3801e8227e88c8e54df8d2f9ffe7407` 및 dirty/untracked 224건 보존. `Project200`/`master` 미변경.
 - C3 dirty 224건 읽기 전용 분류는 다음 단계이며 별도 승인 전 시작하지 않는다.
+
+## 21. Q25 A7 C4 — Synthetic asset regeneration and clean-checkout full pytest (2026-11-12)
+
+- C4 complete. The disposable clean checkout regenerated and validated the authoritative three-month DERIVED_SCENARIO dataset: 62 trading days, 53,550 events, `PASS_WITH_LIMITATION`; weekly identity coverage remains explicitly partial and KRX daily price-limit enforcement is not claimed.
+- The Q25 A5 S01D1E bootstrap restored/regenerated the P5, S7/S8 v1 and v2, S7 concurrent S05_3, and S8 v3 normal/high-volatility assets. Recorded inventory/payload/canonical-manifest hashes matched. Six protected validation-only profiles were unchanged; all generated assets remain `runtime_eligible=false`.
+- Complete clean-checkout pytest after asset regeneration: **697 passed, 1 skipped**. The preceding run's 29 failures were missing ignored synthetic datasets; after the documented bootstrap, the entire suite passed.
+- Original working folder remains read-only and unchanged: HEAD `b060fa57d3801e8227e88c8e54df8d2f9ffe7407`, branch `cleanup/p2-quarantine-20261026`, 224 Git status entries.
+- No KIS/Live/REAL_VTS/account/order API calls; no `.env`, production RiskConfig, scheduler, collector, or operating configuration changes. Generated datasets are disposable/ignored and were not committed.
+- Detailed report: `reports/synth/Q25_A7_C4_SYNTHETIC_ASSET_REGENERATION_AND_CLEAN_PYTEST_20261112.md`.
+- C5 (original-folder synchronization proposal) remains pending separate approval.
