@@ -6,7 +6,7 @@ from decimal import Decimal
 import inspect
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 from core.strategy.contracts import ConfiguredStrategyPlugin
 from core.strategy.definition import StrategyDefinition, load_strategy_manifest
@@ -105,8 +105,9 @@ def build_standard_strategy_registry(
     config_path: str | Path | None = None,
     *,
     expected_sha256: str | None = None,
+    strategy_ids: Iterable[str] | None = None,
 ) -> StrategyRegistry:
-    """Build strategies from a pinned manifest; code and config versions stay distinct."""
+    """Build all or an explicitly selected subset from a pinned strategy manifest."""
     manifest = load_strategy_manifest(config_path, expected_sha256=expected_sha256)
     definitions = manifest.by_id()
     code_ids = set(STANDARD_STRATEGY_TYPE_BY_ID)
@@ -117,8 +118,25 @@ def build_standard_strategy_registry(
             f"unknown_config={sorted(config_ids-code_ids)}"
         )
 
+    if strategy_ids is None:
+        selected_ids = code_ids
+    else:
+        if isinstance(strategy_ids, str):
+            raise ValueError("STRATEGY_SELECTION_MUST_BE_ITERABLE_OF_IDS")
+        requested_ids = tuple(strategy_ids)
+        if not requested_ids or any(
+            not isinstance(item, str) or not item.strip() for item in requested_ids
+        ):
+            raise ValueError("STRATEGY_SELECTION_EMPTY_OR_INVALID")
+        selected_ids = set(requested_ids)
+        unknown_ids = selected_ids - code_ids
+        if unknown_ids:
+            raise ValueError(f"STRATEGY_SELECTION_UNKNOWN_IDS:{sorted(unknown_ids)}")
+
     registry = StrategyRegistry()
     for strategy_type in STANDARD_STRATEGY_TYPES:
+        if strategy_type.strategy_id not in selected_ids:
+            continue
         definition = definitions[strategy_type.strategy_id]
         if definition.code_version != strategy_type.version:
             raise ValueError(

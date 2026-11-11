@@ -1,17 +1,17 @@
 # Graph Report - Q25_S2_INTEGRATE_20261111  (2026-11-11)
 
 ## Corpus Check
-- 954 files · ~889,023 words
+- 956 files · ~889,628 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 61 file(s) not represented in the graph (top: .sha256 28, .jsonl 14, .gz 5)
 
 ## Summary
-- 7032 nodes · 20038 edges · 347 communities (241 shown, 106 thin omitted)
+- 7045 nodes · 20060 edges · 351 communities (239 shown, 112 thin omitted)
 - Extraction: 87% EXTRACTED · 13% INFERRED · 0% AMBIGUOUS · INFERRED: 2604 edges (avg confidence: 0.88)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `3932d375`
+- Built from commit: `8e13ac90`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -20,15 +20,15 @@
 - pytest
 - RiskEngine
 - test_track2_validation_only_controls.py
-- typing
-- TradingCalendar
+- virtual_market.py
+- option_master.py
 - LiveRuntimeBootstrap
 - VirtualSecuritiesFirmRuntime
 - MarketConditionSensor
 - VirtualMultiLegExecutionBridge
 - types.py
 - AnalyticsSnapshot
-- P4 — Synthetic Market Data Generator Specification
+- ReferenceCanonicalMarketTick
 - automated_virtual_runtime_factory.py
 - Track9EventOvernightInsurance
 - test_track9_s1_put_insurance_policy.py
@@ -40,21 +40,21 @@
 - HistoricalReplayEngine
 - HistoricalObservationOptionSource
 - Track6ValidationStateStore
-- harness.py
-- Track9EventOvernightInsurance
+- Track7AuthoritativeSupportResistanceSource
+- strategy/contracts.py
 - S8ValidationOnlyRuntimeAdapter
 - Strategy 9 — S1 PUT insurance specification v0.6 (calibration update draft; runtime blocked)
 - live_runtime_authoritative_composition.py
 - automated_virtual_trading_loop.py
-- test_fresh11_provider_wiring_offline.py
-- virtual_multi_leg_execution.py
+- OptionInstrumentIdentity
+- LiveControlTowerRuntimeAPI
 - test_track2_u16_repair_lifecycle.py
 - test_track9_option_contract_source.py
 - kis_vts_websocket_collector_v2.py
 - parse_trading_date
 - test_track2_sequential_runtime_progression.py
 - SQLiteSettlementStore
-- StrategyContext
+- track4_gamma_scalping.py
 - kis_vts_weekday_collector.py
 - test_validation_only_syn_evt_scenarios.py
 - trading_state.py
@@ -103,31 +103,31 @@
 - Track6OptionContractSource
 - kis_subscription_planner.py
 - KISTrack3RuntimeInputSource
-- pipeline.py
+- argparse
 - test_track2_u18_exit_policy.py
-- pytest
+- HistoricalMarketStore
 - Strategy 9 — S1 PUT insurance specification v0.5 (user-approved scope; runtime blocked)
 - AnalyticsStatus
-- OptionInstrumentIdentity
+- OrderIntent
 - test_validation_only_track6_gates.py
 - RiskConfig Validation Contract
 - kis_vts_websocket_collector.py
 - common_runtime_input_assembler.py
-- export_s6_golden_baseline.py
+- KISFuturesMarketTransport
 - FreshnessVerdict
-- SubscriptionAckController
-- VirtualBrokerApi
+- verify_q25_s8_position_group_mtm_fast_detailed_v1_20261105.py
+- kis_index_option_master_source.py
 - virtual_composition_dependencies.py
-- .filled_quantity
+- validation_only_option_expiry_settlement.py
 - DataQuality
-- integration_fixtures.py
+- kis_websocket_option_identity_resolver.py
 - format_trading_date
 - PaperTradingAccount
 - R4 잔여 검증 영향 범위 및 테스트 계획 (2026-10-28)
 - OrderStateMachine
 - No.160 구현 — OptionProject KIS 인증·Calendar Composition 실제 경로 조사
-- VirtualBrokerApi
-- ReferenceCanonicalMarketTick
+- export_s6_golden_baseline.py
+- ProviderHealth
 - Track7ClassicPivotProvider
 - kis_option_master_identity_contract.md
 - valuation_time_convention.py
@@ -145,13 +145,13 @@
 - virtual_contract_mapping_contract.md
 - attach_standard_automated_loop
 - kis_info_type_option_type_mapping.md
-- Track1TailDefense
+- StrategyContext
 - validation_only_option_risk_budget.py
 - risk_order_intent_adapter.py
 - validation_only_track7_execution.py
 - Track3StatisticalArbitrage
 - Strategy 1
-- Track6SyntheticExecutionGate
+- R4 Replay Clock Injection — 실행 기록 (2026-10-28)
 - test_validation_only_option_expiry_settlement.py
 - OptionInstrumentIdentity
 - Standard instrument_id authoritative owner 후보 대조표
@@ -163,7 +163,7 @@
 - 2. 검증 단계
 - Control Tower UI
 - OPTION_IDENTITY_SUPPLY_CONTRACT.md
-- VirtualTrack9FeeLedger
+- virtual_multi_leg_execution.py
 - .run
 - HighSpeedEnvironmentBundle
 - Track8MacroRegimeMonthlyStrangle
@@ -174,29 +174,29 @@
 - VIRTUAL_CONTRACT_MAPPING_SOURCE.md
 - KRXDailyHistoricalNormalizer
 - 검증 결과
-- IOptionContractMaster
+- KISTrack6ATMVolatilitySource
 - TradingCalendar
-- contracts/risk_guard.py
+- test_kis_websocket_canonical_pipeline.py
 - KISTradingDayCalculator
 - kis_option_quote_experiment.py
-- ProductionTradingCalendar
-- KisOptionContractIdentity
+- FuturesInstrumentIdentity
+- .find_contract_identity
 - kis_instrument_identity_supply.md
-- evaluate_freshness
+- FreshnessStatus
 - KISTrack2OptionIVSource
 - test_track6_order_lifecycle.py
-- KISRestMarketObservationNormalizer
-- test_s1_validation_only_runtime_input.py
-- test_validation_only_track6_execution.py
+- FuturesTargetConfiguration
+- KisProductionOptionContractMaster
+- test_track8_runtime_retry_policy.py
 - Strategy 1~9 신규 명세 승인 인덱스 v0.3
 - HistoricalIndexPriceObservationReplay
-- kis_index_option_master_source.py
+- kis_option_expiry_source.py
 - position_pnl_exposure.py
 - PROJECT_STATUS.md
 - test_q25_s07_track7_exit_policy.py
 - ControlTowerHub
 - Q25 A5 S33 ? S2 group PnL / Runtime close wiring (2026-11-11)
-- FuturesMarketTransport
+- test_validation_only_s8_runtime_adapter.py
 - Strategy 1–9 scenario test plan — Strategy 2 delta v0.3
 - RiskGuardStatusSource
 - virtual_position.py
@@ -208,7 +208,7 @@
 - ENVIRONMENT_BUNDLE.md
 - .__init__
 - Strategy 1–9 integrated decision matrix — Strategy 2 delta v0.6
-- FreshnessStatus
+- instrument_master_provider.py
 - Strategy scenario and validation plans
 - Q25 A5 S25 — Strategy 2 시나리오 설계·생성 (2026-11-09)
 - Q25 A5 S26 — Strategy 2 validation-only code controls (2026-11-09)
@@ -220,19 +220,19 @@
 - Trading-day, expiry, calendar, and timestamp provenance
 - KISPaperBroker
 - optionproject
-- KISIndexFuturesMarketWebSocketAdapter
+- KisIndexFuturesMarketObservation
 - OptionExpirySource
 - order_router.py
 - SyntheticReplayAdapter
-- OrderIntent
+- ingest_kis_vts_websocket_canonical.py
 - Requirements–specification–code–test traceability
 - MutableClock
 - track9_option_contract_source.py
-- market_data_freshness.py
+- KISFuturesMarketDataProvider
 - Q25 A5 S25 ? S2 current scenario catalog (2026-11-10)
 - StrategyHub
 - KISAuthManager
-- FreshnessPolicy
+- InMemoryOptionContractMaster
 - HighSpeedReplayRunner
 - track2_option_contract_source.py
 - test_quote_only_strategy_evaluation.py
@@ -246,42 +246,44 @@
 - Track7CalendarSource
 - PASS까지의 필수 Gate
 - REAL_VTS 원본 프로파일링 — 부분 결과
-- LiveEnvironmentBundle
 - OptionProgramReadModel
 - REAL_VTS 관측치 ↔ Synthetic 데이터 현실성 비교
 - STATE_SYNC_20261028.md
 - live_execution_runtime_composition_factory.py
 - R1 — D1–D6 결정 반영 기록 (2026-10-28)
 - Strategy 1~9 신규 명세 승인 인덱스 v0.5
-- track2_execution_plan_adapter.py
 - track8.py
-- ExecutionMultiLegResolverRegistry
-- vssf_execution_adapter.py
+- KISRestMarketObservationCollector
+- track6.py
 - Q25 A2-1 — Strategy 6 SYN-EVT 생성 범위 제안
-- HistoricalMarketStore
+- simulator_runtime.py
 - option_contract.py
-- virtual_futures_execution.py
+- BrokerOrderResponse
 - Q25 A5 S04 — Strategy 7 명세-코드 Gap Matrix
 - Strategy 1~9 신규 명세 승인 인덱스 v0.4
-- KISOptionIdentityResolver
-- KISIndexFuturesMarketWebSocketAdapter
+- DeterministicScenario
+- Q25_A7_B3_U19_DURABLE_RECOVERY_VALIDATION_20261111.md
 - Q25 A5 S27 — Strategy 2 validation-only Runtime E2E preflight (2026-11-10)
 - live_runtime_risk_state_factory.py
 - Track4MarketHistoryProjection
 - OffsetFakeClock
 - OptionValuationInputInvalid
 - collections_abc
-- delta_to_mini_futures_qty
-- multi_leg_materializer.py
-- re
+- build_synthetic_missing_fields_20261021.py
+- generate_q25_strategy7_8_synthetic_datasets_v2_20261103.py
+- acquire_krx_daily_snapshot.py
 - market_observation_scenario.py
 - Q25 A2-2 — A1-3 종료 판정 초안 및 A2-4 대장 L-15~L-19
 - dataclasses
+- VMSClockController
 - .process_tick
+- CanonicalFuturesQuote
+- risk/risk.py
+- test_quote_only_event_uses_quote_consumer_and_never_legacy_tick_consumer
+- OptionIdentityLookup
 - contracts/track9_margin_read_model.py
 - Q25 A7 B2 ? U21 quote validity and U18 exit-policy validation matrix
 - LiveRuntimeLifecycleCoordinator
-- contracts/track2_option_iv_source.py
 - decision_arbiter_envelope_adapter.py
 - Market Data Freshness — File Scope and FRESH-01–14 Test Plan v0.3
 - Strategy 2
@@ -327,7 +329,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (347 total, 106 thin omitted)
+## Communities (351 total, 112 thin omitted)
 
 ### Community 0 - "test_track2_u19_recovery.py"
 Cohesion: 0.11
@@ -335,63 +337,59 @@ Nodes (37): ValidationOnlyTrack2U19RecoveryCoordinator, _aware(), _checkpoint_id
 
 ### Community 1 - "pytest"
 Cohesion: 0.13
-Nodes (24): Track2OptionContractSelection, Track2OptionContractSource, build_trap_plan(), U17 — exact monthly contract identity binding, identity(), Master, test_all_four_entry_legs_resolve_from_one_exact_monthly_standard_series(), test_four_leg_monthly_resolution_blocks_if_one_strike_is_missing() (+16 more)
+Nodes (24): Track2OptionContractSource, build_trap_plan(), KisOptionContractIdentity, A. S2 requirements and current code evidence, U17 — exact monthly contract identity binding, identity(), Master, test_all_four_entry_legs_resolve_from_one_exact_monthly_standard_series() (+16 more)
 
 ### Community 2 - "RiskEngine"
-Cohesion: 0.07
-Nodes (23): qty(), RiskApprovalToken, RiskEvaluationResult, position_aggregate_to_risk_input(), admit_multi_leg_intents(), MultiLegRiskApproval, MultiLegRiskError, MarginCalculator (+15 more)
+Cohesion: 0.06
+Nodes (26): qty(), RiskApprovalToken, RiskEvaluationResult, position_aggregate_to_risk_input(), admit_multi_leg_intents(), MultiLegRiskApproval, MultiLegRiskError, RiskConfig (+18 more)
 
 ### Community 3 - "test_track2_validation_only_controls.py"
-Cohesion: 0.17
-Nodes (22): load_track2_validation_profile(), Track2ValidationProfile, Track2ValidationProfileError, evaluate_track2_entry_progress(), Track2EntryProgress, Track2EntrySequenceError, validate_track2_entry_plan(), plan() (+14 more)
-
-### Community 4 - "typing"
-Cohesion: 0.06
-Nodes (9): EnvironmentLifecycle, RiskApprovalToken, RiskEvaluationResult, StandardEnvironmentBundle, DeterministicScenario, ScenarioEvent, VMSClockController, VirtualMarketConfig (+1 more)
-
-### Community 5 - "TradingCalendar"
 Cohesion: 0.12
-Nodes (13): _calculate_expiry(), calculate_krx_monthly_option_expiry(), calculate_krx_weekly_option_expiry(), _classify_kis_option_product(), _IdentityOptionContractMaster, KisMasterDownloadError, KisMasterParseError, KisMasterSourceError (+5 more)
+Nodes (26): load_track2_validation_profile(), Track2ValidationProfile, Track2ValidationProfileError, evaluate_track2_entry_progress(), Track2EntryProgress, Track2EntrySequenceError, validate_track2_entry_plan(), plan() (+18 more)
+
+### Community 5 - "option_master.py"
+Cohesion: 0.17
+Nodes (5): calculate_krx_monthly_option_expiry(), calculate_krx_weekly_option_expiry(), KisMasterDownloadError, KisMasterSourceError, parse_kis_fo_idx_mst()
 
 ### Community 6 - "LiveRuntimeBootstrap"
-Cohesion: 0.17
-Nodes (3): DefaultMarginCalculator, LiveRuntimeBootstrap, test_explicit_lifecycle_order_and_shared_settlement_state()
+Cohesion: 0.12
+Nodes (4): DefaultMarginCalculator, LiveRuntimeBootstrap, LiveRuntimeTickEntry, test_explicit_lifecycle_order_and_shared_settlement_state()
 
 ### Community 7 - "VirtualSecuritiesFirmRuntime"
 Cohesion: 0.13
 Nodes (4): VSSFExecutionFill, VSSFOrderResult, VirtualSecuritiesFirmRuntime, OrderBook
 
 ### Community 9 - "VirtualMultiLegExecutionBridge"
-Cohesion: 0.05
-Nodes (23): on_multi_leg_execution_result(), resolve_track2(), MultiLegExecutionResult, VirtualMultiLegExecutionBridge, LegStatus, PositionGroup, PositionGroupLeg, PositionGroupLegPnL (+15 more)
+Cohesion: 0.07
+Nodes (12): Strategy5RiskDiagnosticJsonl, MultiLegExecutionResult, VirtualMultiLegExecutionBridge, MultiLegExecutionPlan, confirmed_fill(), valid_fill(), fully_filled(), value() (+4 more)
 
 ### Community 10 - "types.py"
-Cohesion: 0.10
-Nodes (19): MarketAnalytics, MarketDataProvenance, MarketObservation, MarketOrderBook, MarketQuote, OrderBookLevel, RawMarketDataReference, HistoricalMarketStore (+11 more)
+Cohesion: 0.15
+Nodes (17): MarketAnalytics, MarketDataProvenance, MarketObservation, MarketOrderBook, MarketQuote, OrderBookLevel, RawMarketDataReference, KISRestMarketObservationNormalizer (+9 more)
 
 ### Community 11 - "AnalyticsSnapshot"
-Cohesion: 0.26
-Nodes (6): Track7OptionContractSource, _contract(), _OptionMaster, test_track7_selection_fails_closed_when_only_monthly_contracts_exist(), test_track7_selection_requires_weekly_series_and_standard_product(), test_generated_s7_s8_v2_contract_masters_resolve_strategy_pairs()
+Cohesion: 0.29
+Nodes (5): Track7OptionContractSource, _contract(), _OptionMaster, test_track7_selection_fails_closed_when_only_monthly_contracts_exist(), test_track7_selection_requires_weekly_series_and_standard_product()
 
-### Community 12 - "P4 — Synthetic Market Data Generator Specification"
-Cohesion: 0.11
-Nodes (18): 10. Implementation-phase entry criteria, 11.1 Event catalogue and invariants, 11.2 Monthly checkpoint and split equivalence, 11. v0.2 dataset profiles and event scenarios, 12. Validation-only Option Master and identity boundary, 13. High-resolution capacity and strategy interval scope, 14. Specification acceptance and implementation gate, 1. Purpose and boundaries (+10 more)
+### Community 12 - "ReferenceCanonicalMarketTick"
+Cohesion: 0.10
+Nodes (6): VMSMarketTickProjectionAdapter, HistoricalMarketDataProvider, CanonicalMarketTick, ReferenceCanonicalMarketTick, HistoricalReplayEngine, VirtualMarket
 
 ### Community 13 - "automated_virtual_runtime_factory.py"
-Cohesion: 0.09
-Nodes (12): resolve_current_futures_contract(), KisFuturesIdentitySource, FuturesTargetConfiguration, FuturesTargetConfigurationError, Track3HedgeIdentitySource, Track3MultiLegExecutionPlanAdapter, FuturesIdentitySourceError, FuturesIdentitySourcePort (+4 more)
+Cohesion: 0.17
+Nodes (6): Track3HedgeIdentitySource, Track3MultiLegExecutionPlanAdapter, FuturesIdentitySourceError, FuturesIdentitySourcePort, require_futures_identity(), test_track3_execution_plan_stays_blocked_until_tradable_spread_legs_are_defined()
 
 ### Community 14 - "Track9EventOvernightInsurance"
-Cohesion: 0.10
-Nodes (5): Track9EventOvernightInsurance, Track9State, _LegacyAnalytics, _Metric, test_s9_does_not_emit_legacy_overnight_pair_signal()
+Cohesion: 0.08
+Nodes (6): MarketSessionPolicy, Track9EventOvernightInsurance, Track9State, _LegacyAnalytics, _Metric, test_s9_does_not_emit_legacy_overnight_pair_signal()
 
 ### Community 15 - "test_track9_s1_put_insurance_policy.py"
 Cohesion: 0.14
 Nodes (27): check_same_instrument_rebuy(), D4Action, D4Result, evaluate_d4_boundary(), evaluate_lot_exit(), LotExitAction, LotExitResult, LotPolicyState (+19 more)
 
 ### Community 16 - "MarketCalendarHub"
-Cohesion: 0.06
-Nodes (27): MarketCalendarHub, Architecture Lint Specification, Collector evidence rule, Environment bundle boundary, Forbidden dependency directions, Layer rules, Market time and data boundary, Runtime boundary rules (+19 more)
+Cohesion: 0.09
+Nodes (11): ExecutionMultiLegResolverRegistry, MarketCalendarHub, Architecture Lint Specification, Collector evidence rule, Environment bundle boundary, Forbidden dependency directions, Layer rules, Market time and data boundary (+3 more)
 
 ### Community 17 - "KISHolidayProvider"
 Cohesion: 0.11
@@ -399,55 +397,55 @@ Nodes (6): HolidayProvider, KISHolidayError, KISHolidayParseError, KISHolidayPro
 
 ### Community 18 - "typing"
 Cohesion: 0.05
-Nodes (17): Track5OptionContractSelection, Track7OptionContractSelection, Track8OptionContractSelection, CanonicalOrderTransportError, CanonicalOrderTransportInput, validate_lossless_transport(), CanonicalOptionExpiry, CanonicalOptionExpiryError (+9 more)
+Nodes (19): Track2OptionContractSelection, Track5OptionContractSelection, Track7OptionContractSelection, Track8OptionContractSelection, CanonicalOrderTransportError, CanonicalOrderTransportInput, validate_lossless_transport(), MarketCalendarStatus (+11 more)
 
 ### Community 19 - "ExternalAuthoritativeOptionIdentityRecord"
-Cohesion: 0.13
+Cohesion: 0.12
 Nodes (8): AuthoritativeOptionIdentityRecordSource, AuthoritativeOptionIdentitySource, AuthoritativeOptionIdentityRecordError, ExternalAuthoritativeOptionIdentityRecord, OptionIdentitySelection, OptionIdentitySource, OptionIdentitySourceError, resolve_authoritative_option_identity()
 
 ### Community 20 - "contracts/canonical.py"
-Cohesion: 0.07
-Nodes (32): RuntimeDecisionResult, CancelPendingOrdersRequest, ArbitrationResult, CanonicalOrderCommandAdapter, CanonicalOrderCommandValidationError, _require_non_empty(), RuntimeSignalContext, signal_to_canonical() (+24 more)
+Cohesion: 0.05
+Nodes (42): account_snapshot_to_risk_input(), route_from_runtime_authoritative_sources(), RuntimeDecisionResult, CancelPendingOrdersRequest, ArbitrationResult, project_risk_effective_quantity(), RiskApprovedBrokerCommandError, CanonicalRiskCommandAdapter (+34 more)
 
 ### Community 22 - "HistoricalObservationOptionSource"
-Cohesion: 0.10
-Nodes (7): OptionOrderBookLevel, OptionOrderBookSnapshot, UnavailableOptionOrderBookSource, HistoricalObservationOptionSource, test_rest_hhmmss_remains_candidate_and_freshness_unknown(), test_websocket_hhmmss_and_receipt_time_do_not_verify_freshness(), test_historical_order_book_source_discards_invalid_levels_without_synthesis()
+Cohesion: 0.14
+Nodes (4): HistoricalObservationOptionSource, test_rest_hhmmss_remains_candidate_and_freshness_unknown(), test_websocket_hhmmss_and_receipt_time_do_not_verify_freshness(), test_historical_order_book_source_discards_invalid_levels_without_synthesis()
 
 ### Community 23 - "Track6ValidationStateStore"
-Cohesion: 0.22
+Cohesion: 0.19
 Nodes (11): Track6ValidationStateStore, Track6ValidationStateStoreError, Q25 A5 S02 — S6 4조합 VALIDATION_MATRIX, 결과, 안전 및 변경, 판정 근거 및 미해결 항목, test_track6_validation_state_store_appends_and_restores_latest_snapshot(), test_track6_validation_state_store_rejects_path_traversal() (+3 more)
 
-### Community 24 - "harness.py"
-Cohesion: 0.18
-Nodes (10): compare_plugins(), compare_traces(), ExecutionCallback, ParityDifference, ParityResult, ParityStep, plugin_snapshot(), run_trace() (+2 more)
+### Community 24 - "Track7AuthoritativeSupportResistanceSource"
+Cohesion: 0.10
+Nodes (5): Track7ClassicPivotProvider, Track7AuthoritativeSupportResistanceSource, HistoricalDailyOHLCProvider, Track7SupportResistanceObservation, Track7SupportResistanceProvider
 
-### Community 25 - "Track9EventOvernightInsurance"
+### Community 25 - "strategy/contracts.py"
 Cohesion: 0.06
-Nodes (18): estimate_round_trip_cost(), MarketSessionPolicy, ConfiguredStrategyPlugin, NonExecutionEvent, SignalKind, StrategyFeatureRequirement, StrategyPayload, StrategyPlugin (+10 more)
+Nodes (20): ConfiguredStrategyPlugin, Strategy, StrategyPayload, default_strategy_manifest_path(), load_strategy_manifest(), StrategyDefinition, StrategyManifest, StrategyRegistry (+12 more)
 
 ### Community 26 - "S8ValidationOnlyRuntimeAdapter"
-Cohesion: 0.08
-Nodes (20): S8ValidationEvidence, S8ValidationOnlyRuntimeAdapter, test_s8_validation_adapter_requires_manifest_bound_risk_profile(), quote(), build_rows(), json_bytes(), kst_timestamp(), main() (+12 more)
+Cohesion: 0.11
+Nodes (12): S8ValidationEvidence, S8ValidationOnlyRuntimeAdapter, test_s8_validation_adapter_requires_manifest_bound_risk_profile(), build_rows(), json_bytes(), kst_timestamp(), main(), sha256() (+4 more)
 
 ### Community 27 - "Strategy 9 — S1 PUT insurance specification v0.6 (calibration update draft; runtime blocked)"
 Cohesion: 0.07
 Nodes (28): 10. 이름 변경 후보 및 영향 범위 — 제안만, 11. 상태 및 승인 경계, 12. 사용자 결정 반영 — S9 lot별 청산·독립 보유 정책 (2026-10-12), 13. 검증 게이트 추가 — 거래일 캘린더·호가 신선도·재시작 대사 (2026-10-12), 1. 의도 변경 이력, 2. F01–F29 재분류, 3. 설정 스키마 초안 — PROVISIONAL, 4. 계약·수량·시점 규칙 (+20 more)
 
 ### Community 28 - "live_runtime_authoritative_composition.py"
-Cohesion: 0.05
-Nodes (26): AuthoritativeLiveRuntimeCompositionError, create_authoritative_kis_live_runtime_composition(), FuturesExecutionSymbolSourceError, KisFuturesExecutionSymbolSource, 목적, 연결 경계, 현재 책임, LiveBrokerAdapter (+18 more)
+Cohesion: 0.06
+Nodes (23): AuthoritativeLiveRuntimeCompositionError, create_authoritative_kis_live_runtime_composition(), FuturesExecutionSymbolSourceError, KisFuturesExecutionSymbolSource, 목적, 연결 경계, 현재 책임, LiveBrokerAdapter (+15 more)
 
 ### Community 29 - "automated_virtual_trading_loop.py"
+Cohesion: 0.04
+Nodes (20): AutomatedTickResult, AutomatedVirtualTradingLoop, summarize_pending_multi_leg_results(), RuntimeDecisionCommandAdapter, RuntimeStrategyEvaluation, RuntimeStrategyResultCollectionAdapter, RuntimeStrategyToDecisionAdapter, Track4RuntimeStrategySeam (+12 more)
+
+### Community 30 - "OptionInstrumentIdentity"
 Cohesion: 0.05
-Nodes (18): AutomatedTickResult, AutomatedVirtualTradingLoop, summarize_pending_multi_leg_results(), _VirtualBrokerAckAdapter, RuntimeDecisionCommandAdapter, RuntimeStrategyEvaluation, RuntimeStrategyResultCollectionAdapter, RuntimeStrategyToDecisionAdapter (+10 more)
+Nodes (23): resolve_track2(), OptionInstrumentIdentity, Track6SyntheticFreshnessProvider, KISOptionIdentityResolver, KRXKISOptionIdentityResolver, load_kis_index_option_master(), parse_kis_index_option_master(), FakeBroker (+15 more)
 
-### Community 30 - "test_fresh11_provider_wiring_offline.py"
-Cohesion: 0.10
-Nodes (6): FakeBroker, _Owner, FakeBroker, ReadModelSpy, RiskGateStub, test_fresh11_actual_bridge_execute_rejects_missing_provider_before_any_submit()
-
-### Community 31 - "virtual_multi_leg_execution.py"
-Cohesion: 0.13
-Nodes (10): account_snapshot_to_risk_input(), route_from_runtime_authoritative_sources(), project_risk_effective_quantity(), RiskApprovedBrokerCommandError, position_manager_to_risk_input(), CanonicalRiskCommandAdapter, OrderRouterLike, ReferenceExecutionResult (+2 more)
+### Community 31 - "LiveControlTowerRuntimeAPI"
+Cohesion: 0.12
+Nodes (5): ControlTowerCommand, LiveLifecycleCommand, RuntimeCommand, SafetyView, LiveControlTowerRuntimeAPI
 
 ### Community 32 - "test_track2_u16_repair_lifecycle.py"
 Cohesion: 0.14
@@ -458,48 +456,48 @@ Cohesion: 0.15
 Nodes (13): Track9OptionContractSource, _lot(), _PositionStore, _QuoteSource, _Resolver, _rows(), _source(), test_invalid_two_sided_quote_blocks_selection() (+5 more)
 
 ### Community 34 - "kis_vts_websocket_collector_v2.py"
-Cohesion: 0.14
-Nodes (25): _append_jsonl(), _append_subscription_event(), build_base_subscriptions(), build_orderbook_subscriptions(), build_subscriptions(), collect_day(), configure_logging(), _dispatch_next_subscription_request() (+17 more)
+Cohesion: 0.07
+Nodes (36): AckResult, AckSchema, Action, build_request_payload(), parse_ack_frame(), PendingRequest, _read_path(), State (+28 more)
 
 ### Community 35 - "parse_trading_date"
 Cohesion: 0.08
-Nodes (37): add_calendar_months(), calculate_synthetic_monthly_option_expiry(), calculate_synthetic_weekly_option_expiry(), Calendar, contract_multiplier_from_master_row(), generate(), latest_master_snapshot(), load_calendar() (+29 more)
+Nodes (38): normalize_option_expiry(), add_calendar_months(), calculate_synthetic_monthly_option_expiry(), calculate_synthetic_weekly_option_expiry(), Calendar, contract_multiplier_from_master_row(), generate(), latest_master_snapshot() (+30 more)
 
 ### Community 36 - "test_track2_sequential_runtime_progression.py"
-Cohesion: 0.18
-Nodes (19): _bridge(), _plan(), _real_zero_fill_guard_bridge(), _report(), test_runtime_progression_advances_after_confirmed_zero_fill_cancel(), test_runtime_progression_advances_only_after_predecessor_filled(), test_runtime_progression_blocks_partial_rejected_and_unknown_reports(), test_runtime_progression_blocks_zero_fill_cancel_without_position_reconciliation() (+11 more)
+Cohesion: 0.15
+Nodes (20): build_pair_plan(), _bridge(), _plan(), _real_zero_fill_guard_bridge(), _report(), test_runtime_progression_advances_after_confirmed_zero_fill_cancel(), test_runtime_progression_advances_only_after_predecessor_filled(), test_runtime_progression_blocks_partial_rejected_and_unknown_reports() (+12 more)
 
 ### Community 37 - "SQLiteSettlementStore"
 Cohesion: 0.12
 Nodes (9): encode_record(), _json_default(), SettlementStoreError, SQLiteSettlementStore, test_empty_database_is_fail_closed_until_authoritative_baseline_is_established(), test_live_position_composition_requires_and_shares_persistent_store(), test_order_state_is_not_mutated_when_durable_write_fails(), fail_write() (+1 more)
 
-### Community 38 - "StrategyContext"
-Cohesion: 0.08
-Nodes (15): StrategyContext, Track4GammaScalping, Track4State, OneShotSyntheticEntry, OneShotSyntheticEntry, _input(), test_track4_delta_hedge_blocks_when_configured_max_hedge_qty_is_missing(), test_track4_delta_hedge_respects_configured_max_hedge_qty() (+7 more)
+### Community 38 - "track4_gamma_scalping.py"
+Cohesion: 0.11
+Nodes (11): delta_to_mini_futures_qty(), round_to_strike_tick(), NonExecutionEvent, Track4GammaScalping, Track4State, _input(), test_track4_delta_hedge_blocks_when_configured_max_hedge_qty_is_missing(), test_track4_delta_hedge_respects_configured_max_hedge_qty() (+3 more)
 
 ### Community 39 - "kis_vts_weekday_collector.py"
-Cohesion: 0.15
-Nodes (17): authoritative_calendar_for_today(), _backup_day(), build_daily_targets(), collect_underlying_futures_observation(), daily_main(), _daily_run_id(), DailySessionOrchestrator, DateSessionManifest (+9 more)
+Cohesion: 0.10
+Nodes (32): format_trading_date(), CollectionTarget, authoritative_calendar_for_today(), _backup_day(), build_daily_targets(), build_plan(), build_plan_for_day(), _collect_day() (+24 more)
 
 ### Community 40 - "test_validation_only_syn_evt_scenarios.py"
 Cohesion: 0.20
 Nodes (10): _config_hash(), produce_syn_evt_scenarios(), SynEvtScenario, SynEvtValidation, validate_syn_evt_catalog(), test_catalogue_is_complete_deterministic_seeded_and_provenance_marked(), test_every_catalogue_case_has_structural_validation_evidence(), test_only_approved_strategy_scope_including_no_strategy_3_or_4() (+2 more)
 
 ### Community 41 - "trading_state.py"
-Cohesion: 0.09
-Nodes (13): KillSwitchState, SensorSnapshot, TradingHealthSnapshot, aggregate_sensors(), connection_sensor(), FreshnessPolicy, provider_health_sensor(), RiskGuard (+5 more)
+Cohesion: 0.07
+Nodes (17): VirtualRiskGuardStatusSource, RiskGuardStatusSnapshot, KillSwitchState, SensorLevel, SensorSnapshot, TradingHealthSnapshot, aggregate_sensors(), connection_sensor() (+9 more)
 
 ### Community 42 - "Track2AsymmetricTrap"
-Cohesion: 0.13
-Nodes (13): Track2AsymmetricTrap, 11. 코드 대조 결과 — 관찰 사실, 구현 승인 아님, _strategy_group_pnl_snapshot(), test_track2_group_exit_stays_blocked_until_cost_freshness_and_exit_policy_are_resolved(), test_track2_group_stop_exit_builds_trap_close_signal_when_test_policy_is_injected(), test_track2_does_not_use_underlying_price_as_option_group_pnl(), test_track2_execution_plan_fails_closed_without_verified_config_and_risk(), test_track2_short_switch_timeout_is_retired() (+5 more)
+Cohesion: 0.09
+Nodes (21): Track2ExecutionPlanAdapter, Track2AsymmetricTrap, 11. 코드 대조 결과 — 관찰 사실, 구현 승인 아님, 1. 판정, 2. 기준·작업 경계, 3. 기준 명세·문서 무결성, 4. 명세-코드 gap matrix, 5. 전용 테스트에서 확인된 범위 (+13 more)
 
 ### Community 43 - "KISFuturesExecutionRecoveryAdapter"
-Cohesion: 0.10
-Nodes (10): KISExecutionRecoveryContext, KISExecutionRecoveryInvalid, KISExecutionRecoveryQuery, KISFuturesExecutionRecoveryAdapter, KISExecutionRecoveryTransportError, ExecutionCorrelationProvider, LiveExecutionRecoveryService, context_for_order() (+2 more)
+Cohesion: 0.09
+Nodes (11): KISExecutionRecoveryContext, KISExecutionRecoveryInvalid, KISExecutionRecoveryQuery, KISFuturesExecutionRecoveryAdapter, KISExecutionRecoveryTransportError, KISFuturesExecutionRecoveryTransport, ExecutionCorrelationProvider, LiveExecutionRecoveryService (+3 more)
 
 ### Community 44 - "ExecutionReport"
-Cohesion: 0.05
-Nodes (12): BrokerAdapter, ExecutionProvider, ExecutionReport, LivePositionFillAdapter, VirtualBroker, ExecutionEventDeduplicator, ExecutionEventIdentity, ExecutionEventIdentityAdapter (+4 more)
+Cohesion: 0.04
+Nodes (20): FuturesExecutionResult, VirtualFuturesExecutionBridge, _AckAdapter, BrokerAdapter, ExecutionProvider, BrokerOrderCommand, ExecutionReport, Read-only order/fill observer (+12 more)
 
 ### Community 45 - "test_track2_u21_quote_policy.py"
 Cohesion: 0.22
@@ -510,12 +508,12 @@ Cohesion: 0.08
 Nodes (8): KISIndexOptionGreeksProvider, decimal_field(), Track4KisGreeksProvider, Track4KisGreeksSnapshot, Track4KisGreeksSourceInvalid, KISIndexOptionGreeksWebSocketAdapter, Track4KisWebSocketAdapterInvalid, KISTrack4GreeksRealtimeSource
 
 ### Community 47 - "standard_runtime_input_provider.py"
-Cohesion: 0.06
-Nodes (23): StandardRuntimeInputProvider, Track8OptionContractSource, RuntimeDataStatus, VirtualRuntimeData, VirtualRuntimeDataProvider, BasisSource, UnavailableBasisSource, KOSPI200DailySource (+15 more)
+Cohesion: 0.05
+Nodes (24): StandardRuntimeInputProvider, Track6OptionContractSelection, Track8OptionContractSource, RuntimeDataStatus, VirtualRuntimeData, VirtualRuntimeDataProvider, BasisSource, UnavailableBasisSource (+16 more)
 
 ### Community 48 - "json"
-Cohesion: 0.03
-Nodes (66): load_validation_only_trading_calendar(), PaperPositionSnapshot, ValidationOnlyExpirySettlementProfile, input_snapshot(), main(), sha(), input_snapshot(), main() (+58 more)
+Cohesion: 0.04
+Nodes (49): load_validation_only_trading_calendar(), ValidationOnlyCalendarResolution, ValidationOnlyTradingCalendar, write_group(), write_group(), _calendar(), test_calendar_counts_explicit_three_trading_day_retry_window(), test_calendar_rejects_weekend_and_unprovenanced_schedule() (+41 more)
 
 ### Community 49 - "virtual/clock.py"
 Cohesion: 0.14
@@ -523,7 +521,7 @@ Nodes (9): FakeVMSClock, test_fractional_sleep_uses_partial_final_tick(), test_i
 
 ### Community 50 - "Track7VolatilitySkewWeeklyInsurance"
 Cohesion: 0.13
-Nodes (24): Track7ExecutionInput, Track7State, Track7VolatilitySkewWeeklyInsurance, _proposal(), test_s7_pending_call_reconciliation_keeps_original_expiry_after_market_tick_rolls(), test_track7_blocks_new_entry_at_or_after_1500_cutoff(), _s7_fill(), _s7_pending_call() (+16 more)
+Nodes (23): StrategyExecutionProposal, Track7ExecutionInput, Track7State, Track7VolatilitySkewWeeklyInsurance, test_track7_blocks_new_entry_at_or_after_1500_cutoff(), _s7_fill(), _s7_pending_call(), _s7_proposal() (+15 more)
 
 ### Community 51 - "app.js"
 Cohesion: 0.20
@@ -531,11 +529,11 @@ Nodes (26): addAuditLog(), apiFetch(), fetchSummary(), fetchTabDetail(), formatT
 
 ### Community 52 - "track4_runtime_input_provider_factory.py"
 Cohesion: 0.25
-Nodes (4): Track4RuntimeInputProviderFactory, Track4AttributionProvider, Track4InputTimestampMismatch, MarketConditionSnapshot
+Nodes (3): Track4RuntimeInputProviderFactory, Track4AttributionProvider, MarketConditionSnapshot
 
 ### Community 53 - "Track9IVObservation"
-Cohesion: 0.10
-Nodes (5): Track9IVObservation, Track9IVTimeSeriesSource, UnavailableTrack9IVTimeSeriesSource, KISTrack9ATMIVSource, KISTrack9IVObservationHistoryStore
+Cohesion: 0.15
+Nodes (3): Track9IVObservation, UnavailableTrack9IVTimeSeriesSource, KISTrack9IVObservationHistoryStore
 
 ### Community 54 - "DataQuality"
 Cohesion: 0.20
@@ -546,20 +544,16 @@ Cohesion: 0.24
 Nodes (16): VSSFExecutionAdapter, _append_fill(), _command(), _CommandContext, _runtime(), test_cancel_race_after_all_quantity_filled_returns_filled_not_cancelled(), test_conflicting_duplicate_or_overfill_fails_closed(), test_duplicate_identical_execution_id_is_deduplicated() (+8 more)
 
 ### Community 56 - "FuturesProductType"
-Cohesion: 0.12
-Nodes (14): FuturesContractMasterError, KisCurrentFuturesContractSource, KisFuturesContractIdentity, parse_kis_futures_contracts(), _product_type(), select_current_futures_contract(), FuturesProductType, KRXFuturesContractSpec (+6 more)
+Cohesion: 0.15
+Nodes (10): FuturesContractMasterError, KisCurrentFuturesContractSource, KisFuturesContractIdentity, parse_kis_futures_contracts(), _product_type(), select_current_futures_contract(), FuturesProductType, KRXFuturesContractSpec (+2 more)
 
 ### Community 57 - "common_runtime_input_assembler.py"
-Cohesion: 0.18
-Nodes (3): CommonRuntimeInputAssembler, Track9FeeLedger, CommonStrategyInput
+Cohesion: 0.12
+Nodes (9): CommonRuntimeInputAssembler, RiskGuardStatusSource, Track9FeeLedger, CommonStrategyInput, canonical_market_state(), common_input(), contexts(), payloads() (+1 more)
 
 ### Community 58 - "StrategyExecutionProposal"
-Cohesion: 0.13
-Nodes (8): AnalyticsSnapshot, StrategyExecutionProposal, Track5GapDivergence, Track5State, _entry_proposal(), test_track5_does_not_create_new_futures_order_from_option_only_state(), test_track5_entry_plan_blocks_unverified_config_and_risk(), test_track5_new_entry_plan_is_two_options_without_futures()
-
-### Community 59 - "FuturesMarketTransport"
-Cohesion: 0.12
-Nodes (4): FuturesMarketTransport, AuthoritativeUnderlyingMarketState, KISUnderlyingMarketState, UnderlyingMarketStateError
+Cohesion: 0.10
+Nodes (10): AnalyticsSnapshot, StrategyFeatureRequirement, _unavailable_metric(), validate_strategy_features(), Track5GapDivergence, Track5State, _entry_proposal(), test_track5_does_not_create_new_futures_order_from_option_only_state() (+2 more)
 
 ### Community 60 - "futures_execution_transport.py"
 Cohesion: 0.10
@@ -569,13 +563,9 @@ Nodes (4): FuturesExecutionTransport, FuturesExecutionTransportError, KISFutures
 Cohesion: 0.24
 Nodes (4): RunContext, RunContextFactory, RunScenarioHub, RunSession
 
-### Community 62 - "Track4CompositeRuntimeInputProvider"
-Cohesion: 0.12
-Nodes (3): Track4RuntimeInputMaterializer, Track4CompositeRuntimeInputProvider, Track4RuntimeInputReadiness
-
 ### Community 63 - "s6_engine.py"
 Cohesion: 0.14
-Nodes (18): at_or_after(), in_window(), _as_date(), _as_time(), build_execution_plan(), _buy(), _close_proposal(), evaluate_s6() (+10 more)
+Nodes (20): Signal, SignalKind, at_or_after(), in_window(), _as_date(), _as_time(), build_execution_plan(), _buy() (+12 more)
 
 ### Community 65 - "Track7OrderTimeoutRuntimeSource"
 Cohesion: 0.13
@@ -586,16 +576,16 @@ Cohesion: 0.15
 Nodes (14): evaluate_track9_opening_move(), is_track9_entry_evaluation_time(), select_nearest_expiry_atm_pair(), Track9AtmPair, Track9OpeningDecision, Track9OptionCandidate, Track9PolicyBlocked, contract() (+6 more)
 
 ### Community 67 - "KisIndexOptionMarketObservation"
-Cohesion: 0.20
-Nodes (7): LiveOptionQuoteBridgeError, LiveOptionQuoteVirtualBridge, _decimal(), _decode_fields(), KisIndexOptionMarketObservation, KISIndexOptionMarketWebSocketAdapter, KISIndexOptionMarketWebSocketAdapterInvalid
+Cohesion: 0.11
+Nodes (11): LiveOptionQuoteBridgeError, LiveOptionQuoteVirtualBridge, _decimal(), _decode_fields(), KisIndexOptionMarketObservation, KISIndexOptionMarketWebSocketAdapter, KISIndexOptionMarketWebSocketAdapterInvalid, OptionOrderBookLevel (+3 more)
 
 ### Community 68 - "EnvironmentType"
-Cohesion: 0.06
-Nodes (11): RuntimeCommand, RuntimeControl, RuntimeStatus, EnvironmentType, PaperEnvironmentBundle, ControlTowerCommand, LiveLifecycleCommand, RuntimeCommand (+3 more)
+Cohesion: 0.09
+Nodes (8): build_live_bundle_from_components(), builder(), RuntimeCommand, RuntimeControl, RuntimeStatus, EnvironmentType, LiveEnvironmentBundle, ControlTowerRuntimeAPI
 
 ### Community 69 - ".replace"
-Cohesion: 0.10
-Nodes (19): Track6DailyTailInsurance, Track6OptionMark, test_track6_blocks_new_entry_at_or_after_1100_cutoff(), active_strategy(), context(), mark(), test_1510_force_close_waits_for_fresh_marks_for_each_open_leg(), test_entry_execution_plan_carries_selected_option_master_identities() (+11 more)
+Cohesion: 0.11
+Nodes (20): AnalyticsStatus, Track6DailyTailInsurance, Track6ExecutionInput, Track6OptionMark, test_track6_blocks_new_entry_at_or_after_1100_cutoff(), active_strategy(), context(), mark() (+12 more)
 
 ### Community 71 - "manifest.json"
 Cohesion: 0.08
@@ -606,32 +596,28 @@ Cohesion: 0.16
 Nodes (10): calculate_kis_monthly_option_expiry(), kis_option_contract_multiplier(), kis_option_price_tick(), TradingCalendarPort, _Calendar, test_kis_monthly_expiry_moves_to_previous_trading_day_when_second_thursday_is_holiday(), test_kis_monthly_expiry_rejects_unbound_or_invalid_month_labels(), test_kis_option_premium_tick_uses_kis_thresholds() (+2 more)
 
 ### Community 73 - "concrete_virtual_environment_builder.py"
-Cohesion: 0.08
-Nodes (11): ConcreteVirtualEnvironmentBuilder, ReferenceVirtualAuthoritativeScopeFactory, VirtualAuthoritativeScope, VirtualAuthoritativeScopeFactory, VirtualEnvironmentBuilder, VirtualCompositionDependencies, __call__(), create_virtual_composition_dependencies() (+3 more)
+Cohesion: 0.07
+Nodes (8): ConcreteVirtualEnvironmentBuilder, ReferenceVirtualAuthoritativeScopeFactory, VirtualAuthoritativeScope, VirtualAuthoritativeScopeFactory, build(), EnvironmentLifecycle, StandardEnvironmentBundle, VirtualEnvironmentBundle
 
 ### Community 74 - "bootstrap.py"
-Cohesion: 0.10
-Nodes (16): VirtualRuntimeBootstrap, create_live_runtime_controller(), LiveRuntimeTickEntry, create_virtual_runtime_controller(), create_virtual_environment_builder(), EnvironmentBundle, EnvironmentConfig, RuntimePolicy (+8 more)
+Cohesion: 0.12
+Nodes (14): VirtualRuntimeBootstrap, create_live_runtime_controller(), EnvironmentBundle, EnvironmentConfig, RuntimePolicy, EnvironmentFactory, EnvironmentHub, HistoricalMarketDailyOHLCProvider (+6 more)
 
 ### Community 75 - "Required Contracts"
 Cohesion: 0.12
 Nodes (16): AccountProvider, BrokerAdapter, BrokerOrderCommand 전달 규칙, ClockProvider, Contract ownership, Domain time and external-source boundary, Environment bundle boundary, Environment lifecycle and status boundary (+8 more)
 
 ### Community 76 - "VirtualTrack4AttributionSource"
-Cohesion: 0.23
+Cohesion: 0.26
 Nodes (3): VirtualTrack4AttributionSource, Track4AttributionSnapshot, Track4AttributionSourceUnavailable
 
 ### Community 77 - "test_sqlite_settlement_store.py"
-Cohesion: 0.10
-Nodes (14): ExecutionEventDeduplicator, LiveExecutionPositionBridge, LivePositionFillAdapter, LivePositionAggregate, PositionAggregate, _fill(), _prepared(), test_authoritative_late_fill_commits_and_resolves_pending_in_one_transaction() (+6 more)
+Cohesion: 0.12
+Nodes (12): ExecutionEventDeduplicator, LivePositionFillAdapter, LivePositionAggregate, PositionAggregate, _fill(), _prepared(), test_authoritative_late_fill_commits_and_resolves_pending_in_one_transaction(), test_duplicate_execution_after_restart_does_not_apply_position_twice() (+4 more)
 
 ### Community 78 - "analytics.py"
-Cohesion: 0.11
-Nodes (26): build_track2_analytics_snapshot(), build_track3_analytics_snapshot(), build_track4_analytics_snapshot(), build_track5_analytics_snapshot(), build_track6_analytics_snapshot(), build_track7_analytics_snapshot(), build_track8_analytics_snapshot(), build_track9_analytics_snapshot() (+18 more)
-
-### Community 79 - "VirtualMarketSimulatorRuntime"
-Cohesion: 0.06
-Nodes (4): CanonicalFuturesQuote, VirtualMarketSimulatorRuntime, test_replay_quote_store_preserves_each_synthetic_contract_identity(), test_quote_only_event_uses_quote_consumer_and_never_legacy_tick_consumer()
+Cohesion: 0.10
+Nodes (32): build_track2_analytics_snapshot(), build_track3_analytics_snapshot(), build_track4_analytics_snapshot(), build_track5_analytics_snapshot(), build_track6_analytics_snapshot(), build_track7_analytics_snapshot(), build_track8_analytics_snapshot(), build_track9_analytics_snapshot() (+24 more)
 
 ### Community 80 - "test_virtual_runtime_replay_quote_isolation.py"
 Cohesion: 0.22
@@ -642,16 +628,16 @@ Cohesion: 0.10
 Nodes (19): 10. Risk·preflight·provenance, 12. 미결 항목 및 진입 차단표, 13. 검증·승인 상태, 14. 근거, 1. 적용 우선순위와 상태, 2. 전략 구조 및 상품, 3.1 변동성 구조, 3.2 기존 진입 feature 집합 (+11 more)
 
 ### Community 82 - "SyntheticRuntimeSources"
-Cohesion: 0.10
-Nodes (8): Track9EventRiskSnapshot, SyntheticEventRiskSource, SyntheticRuntimeSources, SyntheticTrack6VolatilitySource, SyntheticTradingCalendar, test_synthetic_orderbook_does_not_fall_back_when_identity_quote_is_missing(), test_synthetic_orderbook_is_bound_to_exact_contract_identity(), tick()
+Cohesion: 0.08
+Nodes (11): Track2MarketMetrics, UnavailableTrack2MarketMetricsSource, Track9EventRiskSnapshot, SyntheticEventRiskSource, SyntheticOptionContractMaster, SyntheticRuntimeSources, SyntheticTrack6VolatilitySource, SyntheticTradingCalendar (+3 more)
 
 ### Community 83 - "attach_standard_automated_loop"
-Cohesion: 0.07
-Nodes (36): create_virtual_runtime_bootstrap(), attach_standard_automated_loop(), build_futures_single_leg_plan(), futures_identity_for_evaluation(), identity(), resolve_track1(), resolve_track3(), resolve_track4() (+28 more)
+Cohesion: 0.09
+Nodes (33): create_virtual_runtime_bootstrap(), attach_standard_automated_loop(), build_futures_single_leg_plan(), futures_identity_for_evaluation(), identity(), on_multi_leg_execution_result(), resolve_track1(), resolve_track3() (+25 more)
 
 ### Community 84 - "Track6OptionContractSource"
-Cohesion: 0.15
-Nodes (14): Track6OptionContractSelection, Track6OptionContractSource, Track6RankedOptionContractSelection, identity(), Master, test_ranked_contract_candidates_omit_unlisted_rank_instead_of_inventing_contracts(), test_ranked_contract_candidates_return_rank5_and_rank6_without_selecting_a_default(), test_synthetic_contract_selection_is_scoped_to_current_scenario_group() (+6 more)
+Cohesion: 0.16
+Nodes (13): Track6OptionContractSource, Track6RankedOptionContractSelection, identity(), Master, test_ranked_contract_candidates_omit_unlisted_rank_instead_of_inventing_contracts(), test_ranked_contract_candidates_return_rank5_and_rank6_without_selecting_a_default(), test_synthetic_contract_selection_is_scoped_to_current_scenario_group(), test_synthetic_contract_selection_rejects_empty_or_invalid_scope() (+5 more)
 
 ### Community 85 - "kis_subscription_planner.py"
 Cohesion: 0.24
@@ -661,29 +647,25 @@ Nodes (6): build_rotation_plan(), build_subscription_plan(), _contract_blockers(
 Cohesion: 0.23
 Nodes (3): _FuturesPoint, _IndexPoint, KISTrack3RuntimeInputSource
 
-### Community 87 - "pipeline.py"
-Cohesion: 0.47
-Nodes (3): CorePipeline, Decision, RiskResult
+### Community 87 - "argparse"
+Cohesion: 0.19
+Nodes (13): main(), run_strategy(), invalid_quote(), main(), read_rows(), sha256(), timestamp(), valid_price() (+5 more)
 
 ### Community 88 - "test_track2_u18_exit_policy.py"
 Cohesion: 0.21
 Nodes (16): evaluate_u18_exit(), U18ExitDecision, U18ExitPolicy, U18ExitResult, U18GroupPnlEvidence, evidence(), policy(), run() (+8 more)
-
-### Community 89 - "pytest"
-Cohesion: 0.31
-Nodes (12): _bridge_with_group(), _terminal_lot(), test_refresh_position_group_marks_fails_closed_without_mark_and_does_not_partially_update(), test_refresh_position_group_marks_reconciles_each_open_leg_to_current_vssf_marks(), test_refresh_position_group_marks_zeroes_flat_leg_and_preserves_realized_pnl(), test_terminal_close_accumulates_realized_pnl_and_preserves_entry_group_legs(), test_terminal_close_flat_state_zeroes_open_quantities_and_accumulates_realized_pnl_once(), test_terminal_reconciliation_fails_closed_when_position_lots_and_account_disagree() (+4 more)
 
 ### Community 90 - "Strategy 9 — S1 PUT insurance specification v0.5 (user-approved scope; runtime blocked)"
 Cohesion: 0.08
 Nodes (25): 10. 이름 변경 후보 및 영향 범위 — 제안만, 11. 상태 및 승인 경계, 12. 사용자 결정 반영 — S9 lot별 청산·독립 보유 정책 (2026-10-12), 13. 검증 게이트 추가 — 거래일 캘린더·호가 신선도·재시작 대사 (2026-10-12), 1. 의도 변경 이력, 2. F01–F29 재분류, 3. 설정 스키마 초안 — PROVISIONAL, 4. 계약·수량·시점 규칙 (+17 more)
 
 ### Community 91 - "AnalyticsStatus"
-Cohesion: 0.10
-Nodes (32): AnalyticsMetric, AnalyticsStatus, _bbw(), build_track2_evaluators(), _metric(), _obi(), _passthrough(), evaluator() (+24 more)
+Cohesion: 0.16
+Nodes (20): AnalyticsMetric, _bbw(), build_track2_evaluators(), _metric(), _obi(), _passthrough(), evaluator(), _volume_z() (+12 more)
 
-### Community 92 - "OptionInstrumentIdentity"
-Cohesion: 0.09
-Nodes (14): OptionInstrumentIdentity, IdentityResolutionError, OptionIdentityResolutionInput, OptionIdentityResolver, OrderIntentFactory, OrderIntentValidationError, Track6SyntheticFreshnessProvider, OptionIdentityLookup (+6 more)
+### Community 92 - "OrderIntent"
+Cohesion: 0.07
+Nodes (16): OrderIntent, CorePipeline, Decision, RiskResult, materialize_multi_leg_plan(), MultiLegExecutionSemantics, MultiLegMaterializationError, MultiLegSubmissionError (+8 more)
 
 ### Community 93 - "test_validation_only_track6_gates.py"
 Cohesion: 0.13
@@ -694,64 +676,76 @@ Cohesion: 0.14
 Nodes (13): Common numeric rules, Error-code layering, Field policy, Margin ratio upper bound, OptionProject 현재 계약과의 차이, Reference 계약, RiskConfig Validation Contract, Runtime boundary (+5 more)
 
 ### Community 95 - "kis_vts_websocket_collector.py"
-Cohesion: 0.12
-Nodes (23): acquire_process_lock(), market_data_root_from_env(), _append_jsonl(), _append_subscription_event(), build_base_subscriptions(), build_orderbook_subscriptions(), build_subscriptions(), collect_day() (+15 more)
+Cohesion: 0.09
+Nodes (24): acquire_process_lock(), market_data_root_from_env(), KISWebSocketIndexPriceSource, _append_jsonl(), _append_subscription_event(), build_base_subscriptions(), build_orderbook_subscriptions(), build_subscriptions() (+16 more)
 
 ### Community 96 - "common_runtime_input_assembler.py"
 Cohesion: 0.15
 Nodes (4): ExecutionEngine, AuthoritativeReconciliationEngine, SettlementEngine, StateRecoveryEngine
 
-### Community 98 - "FreshnessVerdict"
-Cohesion: 0.09
-Nodes (18): verdict(), verdict(), FreshnessVerdict, permits_group_risk_increase(), verdict(), verdict(), verdict(), freshness() (+10 more)
+### Community 97 - "KISFuturesMarketTransport"
+Cohesion: 0.16
+Nodes (6): FuturesMarketTransportError, KISFuturesMarketTransport, KISFuturesMarketTransportConfig, KISWebSocketApprovalKeyProvider, _approval_key(), _approval_key()
 
-### Community 99 - "SubscriptionAckController"
-Cohesion: 0.13
-Nodes (11): AckResult, AckSchema, Action, build_request_payload(), parse_ack_frame(), PendingRequest, _read_path(), State (+3 more)
+### Community 98 - "FreshnessVerdict"
+Cohesion: 0.08
+Nodes (19): verdict(), admits_freshness_verdict_for_identity(), verdict(), FreshnessVerdict, permits_group_risk_increase(), verdict(), verdict(), verdict() (+11 more)
+
+### Community 99 - "verify_q25_s8_position_group_mtm_fast_detailed_v1_20261105.py"
+Cohesion: 0.19
+Nodes (10): assert_pnl_reconciles(), main(), plain(), run_mode(), run_scenario(), sha256(), main(), plain() (+2 more)
+
+### Community 100 - "kis_index_option_master_source.py"
+Cohesion: 0.33
+Nodes (11): current_kospi200_futures_symbols(), current_monthly_option_symbols(), _decode_archive(), get_kis_index_master_snapshot(), KISIndexMasterError, KISIndexMasterUnavailable, load_kis_index_option_rows(), _now_utc() (+3 more)
 
 ### Community 101 - "virtual_composition_dependencies.py"
-Cohesion: 0.11
-Nodes (8): ContractKeyEvent, VirtualContractIdentityResolverAdapter, VirtualContractMappingConfigurationError, VirtualContractMappingLoader, OptionContractIdentityRegistry, VirtualContractMapping, VirtualContractResolutionError, VirtualContractResolver
+Cohesion: 0.07
+Nodes (15): create_virtual_runtime_controller(), VirtualEnvironmentBuilder, VirtualCompositionDependencies, __call__(), create_virtual_composition_dependencies(), create_virtual_environment_builder(), __init__(), ContractKeyEvent (+7 more)
 
-### Community 102 - ".filled_quantity"
-Cohesion: 0.22
-Nodes (4): confirmed_fill(), valid_fill(), KISFuturesExecutionAdapterInvalid, KISFuturesExecutionNotice
+### Community 102 - "validation_only_option_expiry_settlement.py"
+Cohesion: 0.21
+Nodes (5): ValidationOnlyExpirySettlementProfile, ValidationOnlyOptionExpiryCashSettlementAdapter, main(), run_scenario(), sha256()
 
-### Community 104 - "integration_fixtures.py"
-Cohesion: 0.13
-Nodes (10): Track3RuntimeInputProvider, Track3RuntimeInputSource, StrategyInput, UnavailableStrategyPayload, canonical_market_state(), common_input(), contexts(), payloads() (+2 more)
+### Community 103 - "DataQuality"
+Cohesion: 0.10
+Nodes (5): HistoricalCaptureSession, KISHistoricalMarketCapture, AuthoritativeUnderlyingMarketState, KISUnderlyingMarketState, UnderlyingMarketStateError
+
+### Community 104 - "kis_websocket_option_identity_resolver.py"
+Cohesion: 0.29
+Nodes (9): KISIndexMasterSnapshot, _option_row(), _identity_row_equal(), KISWebSocketIdentityResolutionError, _load_expiry_records_for_all_master_hashes(), load_kis_master_snapshot_by_hash(), load_kis_master_snapshot_for_date(), _read_snapshot_manifest() (+1 more)
 
 ### Community 105 - "format_trading_date"
-Cohesion: 0.07
-Nodes (10): format_trading_date(), parse_trading_date(), KISDailyTradingDayError, KISDailyTradingDayProvider, KISDailyTradingDaySnapshot, KISRealtimeCollector, RealtimeTransport, _collect_day() (+2 more)
+Cohesion: 0.10
+Nodes (4): parse_trading_date(), KISRealtimeCollector, RealtimeTransport, KISRealtimeRawStore
 
 ### Community 106 - "PaperTradingAccount"
 Cohesion: 0.10
-Nodes (6): track6_restart_reconciliation(), LedgerEngine, MarginEngine, PaperTradingAccount, PnLEngine, PositionManager
+Nodes (7): track6_restart_reconciliation(), LedgerEngine, MarginEngine, PaperTradingAccount, PnLEngine, PositionManager, CanonicalAccountSummary
 
 ### Community 107 - "R4 잔여 검증 영향 범위 및 테스트 계획 (2026-10-28)"
 Cohesion: 0.11
 Nodes (17): 1. 근거 및 제약, 2. 현재 코드 관찰, 3. 제안 영향 파일 범위, 4. Clock-independence test plan, 5. Positive Decision → Risk → OMS/Router → Fill test plan, 6. Test order and stop conditions, 7. Explicit non-goals, 8. Approval boundary (+9 more)
 
 ### Community 108 - "OrderStateMachine"
-Cohesion: 0.10
-Nodes (25): BrokerOrderCommand, OrderAckEvent, OrderState, OrderStateMachine, OrderStateTransitionError, run(), record(), transition() (+17 more)
+Cohesion: 0.07
+Nodes (32): OrderAckEvent, build_pair_plan(), build_trap_plan(), OrderState, OrderStateMachine, OrderStateTransitionError, input_snapshot(), main() (+24 more)
 
 ### Community 109 - "No.160 구현 — OptionProject KIS 인증·Calendar Composition 실제 경로 조사"
 Cohesion: 0.17
 Nodes (11): 1. Application composition, 2. KIS 인증/HTTP Adapter, 3. Runtime public entrypoint, No.160 구현 — OptionProject KIS 인증·Calendar Composition 실제 경로 조사, No.165 정합성 점검 반영, No.166 실행 검증 반영, 구현 판단, 다음 단계 (+3 more)
 
-### Community 110 - "VirtualBrokerApi"
-Cohesion: 0.17
-Nodes (17): canonical_json(), EventCollector, git_value(), install_observers(), observed_arbitrate(), observed_cancel(), observed_multi_execute(), observed_pending() (+9 more)
+### Community 110 - "export_s6_golden_baseline.py"
+Cohesion: 0.06
+Nodes (29): VirtualTestController, VirtualTestState, canonical_json(), EventCollector, git_value(), install_observers(), observed_arbitrate(), observed_cancel() (+21 more)
 
-### Community 111 - "ReferenceCanonicalMarketTick"
-Cohesion: 0.07
-Nodes (10): HistoricalMarketDataProvider, MarketDataHub, MarketDataProvider, CanonicalMarketTick, MarketState, ProviderHealth, 6. Runtime integration contract, KISFuturesMarketDataProvider (+2 more)
+### Community 111 - "ProviderHealth"
+Cohesion: 0.06
+Nodes (22): MarketDataHub, MarketDataProvider, ProviderHealth, 10. Implementation-phase entry criteria, 11.1 Event catalogue and invariants, 11.2 Monthly checkpoint and split equivalence, 11. v0.2 dataset profiles and event scenarios, 12. Validation-only Option Master and identity boundary (+14 more)
 
 ### Community 112 - "Track7ClassicPivotProvider"
-Cohesion: 0.06
-Nodes (9): Track7ClassicPivotProvider, Track7AuthoritativeSupportResistanceSource, HistoricalDailyStore, HistoricalDailyOHLC, HistoricalDailyOHLCProvider, Track7SupportResistanceObservation, Track7SupportResistanceProvider, KRXDailyHistoricalNormalizer (+1 more)
+Cohesion: 0.11
+Nodes (4): HistoricalDailyStore, HistoricalDailyOHLC, KRXDailyHistoricalNormalizer, KRXDailyNormalizationError
 
 ### Community 113 - "kis_option_master_identity_contract.md"
 Cohesion: 0.18
@@ -762,36 +756,36 @@ Cohesion: 0.24
 Nodes (3): TimeToExpirySnapshot, ValuationTimeConvention, ValuationTimeUnavailable
 
 ### Community 115 - "test_q25_a1_3_strategy6_risk_gate.py"
-Cohesion: 0.11
-Nodes (11): RiskConfig, _command(), _freshness(), _MarginEngine, _PositionSource, _RiskGuard, _RouterSpy, _run() (+3 more)
+Cohesion: 0.12
+Nodes (15): create_runtime_transport_composition(), create_standard_order_intent_composition(), RuntimeTransportComposition, StandardOrderIntentComposition, RiskRouterContext, _command(), _freshness(), _MarginEngine (+7 more)
 
 ### Community 116 - "kis_option_master_raw_format_and_acpr_safety.md"
 Cohesion: 0.18
 Nodes (10): acpr Decimal 안전 규칙, expiry, option_type, raw formatting에 대한 확정 범위, 구현 경계, 보류 사항, 원격 적용 상태, 책임 경계 (+2 more)
 
 ### Community 117 - "KISOptionHistoricalCapture"
-Cohesion: 0.11
-Nodes (3): KISOptionHistoricalCapture, OptionMarketWebSocketTransport, KISOptionOrderBookSource
+Cohesion: 0.09
+Nodes (4): KISOptionHistoricalCapture, OptionMarketWebSocketTransport, KISOptionHistoricalRecorder, OptionIdentityLookup
 
 ### Community 118 - "run_q25_a5_s10_s8_exit_e2e_20261107.py"
 Cohesion: 0.30
 Nodes (14): digest_bytes(), main(), plain(), report_summary(), run_once(), capture_callback(), capture_execute(), capture_expiry() (+6 more)
 
 ### Community 119 - "ReplayLogMode"
-Cohesion: 0.08
-Nodes (34): ReplayExecutionObserver, observed_submit(), ReplayLogMode, ReplayTraceController, _trace_value(), input_snapshot(), main(), run() (+26 more)
+Cohesion: 0.10
+Nodes (28): ReplayExecutionObserver, observed_submit(), ReplayLogMode, ReplayTraceController, _trace_value(), input_snapshot(), main(), run() (+20 more)
 
 ### Community 120 - "FallbackHolidayProvider"
-Cohesion: 0.07
-Nodes (9): _load_env_file_fallback(), ApprovedHolidayListProvider, FallbackHolidayProvider, fetch_krx_holidays(), HolidayCalendarUnavailableError, HolidayResolution, HolidayResolutionStatus, KRXHolidayProvider (+1 more)
+Cohesion: 0.11
+Nodes (6): ApprovedHolidayListProvider, FallbackHolidayProvider, HolidayCalendarUnavailableError, HolidayResolution, HolidayResolutionStatus, KRXHolidayProvider
 
 ### Community 121 - "zoneinfo"
-Cohesion: 0.12
-Nodes (5): Existing P5 scenario manifest evidence, Rules, ValidationOnlyFreshnessCase, ValidationOnlyFreshnessProducer, test_producer_is_deterministic_and_provenance_is_complete()
+Cohesion: 0.11
+Nodes (7): Existing P5 scenario manifest evidence, Rules, ValidationOnlyFreshnessCase, ValidationOnlyFreshnessProducer, _contract_evidence(), test_producer_is_deterministic_and_provenance_is_complete(), test_synthetic_scenarios_exercise_contract_edge_cases_only()
 
 ### Community 122 - "kis_vts_weekday_collector.py"
-Cohesion: 0.11
-Nodes (31): CollectionDiagnosticReport, _count_error_frames(), _count_reconnects(), diagnose_collection(), format_report(), _status(), _validate_manifest(), write_human_report() (+23 more)
+Cohesion: 0.19
+Nodes (18): CollectionDiagnosticReport, _count_error_frames(), _count_reconnects(), diagnose_collection(), format_report(), _status(), _validate_manifest(), write_human_report() (+10 more)
 
 ### Community 123 - "No.140 보강 — KIS 공식 Master 필드 정의 확인"
 Cohesion: 0.20
@@ -810,16 +804,16 @@ Cohesion: 0.20
 Nodes (9): Scenario 입력 규칙, Validation, 금지사항, 다음 구현 조건, 목적, 배치 위치, 최소 구조, 필드 의미 (+1 more)
 
 ### Community 127 - "attach_standard_automated_loop"
-Cohesion: 0.16
-Nodes (9): S7ValidationEvidence, S7ValidationOnlyRuntimeAdapter, test_s7_entry_risk_reserves_standard_reference_fee_with_premium(), _adapter(), _prepared_leg(), test_prime_option_quote_does_not_advance_runtime_tick_or_history(), test_s7_validation_gate_binds_manifest_and_keeps_operational_defaults_off(), test_s7_validation_gate_reserves_put_then_call_with_one_shared_group() (+1 more)
+Cohesion: 0.13
+Nodes (13): calculate_option_fee(), S7ValidationEvidence, S7ValidationOnlyRuntimeAdapter, test_s7_entry_risk_reserves_standard_reference_fee_with_premium(), _adapter(), _prepared_leg(), test_prime_option_quote_does_not_advance_runtime_tick_or_history(), test_s7_validation_gate_binds_manifest_and_keeps_operational_defaults_off() (+5 more)
 
 ### Community 128 - "kis_info_type_option_type_mapping.md"
 Cohesion: 0.20
 Nodes (9): Canonical, Fail-closed 규칙, KIS Master, Strike / Expiry 경계, 매핑 위치, 명시적 매핑, 목적, 현재 상태 (+1 more)
 
-### Community 129 - "Track1TailDefense"
-Cohesion: 0.11
-Nodes (16): round_to_strike_tick(), Track1State, Track1TailDefense, make_context(), test_track1_downward_crossings_use_previous_reference_for_call_strikes(), test_track1_dte4_or_inside_blocks_new_short_entries(), test_track1_full_short_cap_consumes_crossings_without_new_orders(), test_track1_invalid_exposure_snapshot_fails_closed() (+8 more)
+### Community 129 - "StrategyContext"
+Cohesion: 0.05
+Nodes (27): Track3RuntimeInputProvider, MarketState, StrategyContext, StrategyInput, StrategyPlugin, UnavailableStrategyPayload, Track1State, Track1TailDefense (+19 more)
 
 ### Community 130 - "validation_only_option_risk_budget.py"
 Cohesion: 0.36
@@ -830,28 +824,28 @@ Cohesion: 0.11
 Nodes (15): OrderIntentExecutionInput, PositionExecutionDecision, PositionExecutionPolicy, PositionExecutionPolicyError, PositionExecutionRequest, apply_risk_decision(), RiskDecisionLike, RiskDecisionMappingError (+7 more)
 
 ### Community 132 - "validation_only_track7_execution.py"
-Cohesion: 0.12
-Nodes (17): calculate_option_fee(), test_kospi200_fee_model_rejects_non_positive_fill_inputs(), test_kospi200_low_and_high_price_tiers_use_exchange_fixed_fee(), test_kospi200_standard_online_mid_price_fee_includes_broker_and_exchange_costs(), load_base_module(), main(), run_mode(), __init__() (+9 more)
+Cohesion: 0.19
+Nodes (13): load_base_module(), main(), run_mode(), __init__(), semantic_projection(), sha256(), apply_fee_accounting(), load_base_module() (+5 more)
 
 ### Community 133 - "Track3StatisticalArbitrage"
-Cohesion: 0.22
-Nodes (6): Track3MarketInput, Track3Result, Track3StatisticalArbitrage, test_track3_entry_is_blocked_until_enabled_and_capital_gate_are_set(), test_track3_exit_pending_does_not_read_regime_before_assignment(), test_track3_remains_blocked_even_with_capital_flag_without_authoritative_spread_identity()
+Cohesion: 0.17
+Nodes (7): estimate_round_trip_cost(), Track3MarketInput, Track3Result, Track3StatisticalArbitrage, test_track3_entry_is_blocked_until_enabled_and_capital_gate_are_set(), test_track3_exit_pending_does_not_read_regime_before_assignment(), test_track3_remains_blocked_even_with_capital_flag_without_authoritative_spread_identity()
 
 ### Community 134 - "Strategy 1"
 Cohesion: 0.12
 Nodes (33): Strategy 1~9 신규 명세 — 작업 인덱스, Strategy 1~9 신규 명세 — 작업 인덱스 v0.2, Strategy 1~9 신규 명세 통합 검토 보고서 v0.1, Strategy 1–9 integrated decision matrix — Strategy 2 delta v0.4, Strategy 1–9 integrated decision matrix — Strategy 2 delta v0.4, Strategy 1~9 통합설계표 — Strategy 5 갱신 초안 v0.4, Strategy 1~9 통합설계표 — Strategy 5 갱신 초안 v0.4, Strategy 1~9 통합설계표 — S9 변경 delta v0.5 (+25 more)
 
-### Community 135 - "Track6SyntheticExecutionGate"
-Cohesion: 0.19
-Nodes (4): Track6SyntheticExecutionEvidence, Track6SyntheticExecutionGate, test_track6_validation_gate_fails_closed_when_restored_group_exceeds_budget(), test_track6_validation_gate_restores_cumulative_group_budget_after_restart()
+### Community 135 - "R4 Replay Clock Injection — 실행 기록 (2026-10-28)"
+Cohesion: 0.12
+Nodes (16): Determinism comparison, Full-dataset clock independence, Full Strategy → Decision → resolver → Bridge path, Latest tests, Limitations / follow-up, Order-boundary tests, R4 continuation — integrated positive multi-leg path and full-dataset clock run (2026-10-28), R4 Replay Clock Injection — 실행 기록 (2026-10-28) (+8 more)
 
 ### Community 136 - "test_validation_only_option_expiry_settlement.py"
-Cohesion: 0.08
-Nodes (18): PositionLotCloseEvent, PositionLotProvenance, PositionRole, Track9PositionExecutionSnapshot, Track9InsurancePosition, Track9InsurancePositionReadModel, Track9OptionPositionAttribution, Track9OptionPositionAttributionReadModel (+10 more)
+Cohesion: 0.09
+Nodes (16): PositionLotCloseEvent, PositionLotProvenance, PositionRole, Track9PositionExecutionSnapshot, Track9InsurancePosition, Track9InsurancePositionReadModel, Track9OptionPositionAttribution, Track9OptionPositionAttributionReadModel (+8 more)
 
 ### Community 137 - "OptionInstrumentIdentity"
-Cohesion: 0.11
-Nodes (7): CollectionResult, CollectionTarget, KISRestMarketObservationCollector, KISRestMarketObservationTransport, ManualClock, RateLimiter, RestTransport
+Cohesion: 0.15
+Nodes (4): KISRestMarketObservationTransport, ManualClock, RateLimiter, RestTransport
 
 ### Community 138 - "Standard instrument_id authoritative owner 후보 대조표"
 Cohesion: 0.22
@@ -866,8 +860,8 @@ Cohesion: 0.22
 Nodes (8): No.162 실제 구현 반영, Reference 보존 원칙, 구현 대상 최소 API, 구현 전제, 목적, 이식 위치, 확정 책임, 후속 연결
 
 ### Community 142 - "Track3RuntimeInput"
-Cohesion: 0.19
-Nodes (3): VirtualTrack3RuntimeInputSource, Track3RuntimeInput, UnavailableTrack3RuntimeInputSource
+Cohesion: 0.15
+Nodes (4): VirtualTrack3RuntimeInputSource, Track3RuntimeInput, Track3RuntimeInputSource, UnavailableTrack3RuntimeInputSource
 
 ### Community 143 - "CANONICAL_DTO_SPEC.md"
 Cohesion: 0.25
@@ -885,13 +879,13 @@ Nodes (7): Control Tower UI, Legacy 보존 원칙, Local server security boundar
 Cohesion: 0.29
 Nodes (6): 공급 형태, 금지, 목적, 보존 규칙, 책임 경계, 최소 입력
 
-### Community 147 - "VirtualTrack9FeeLedger"
-Cohesion: 0.17
-Nodes (8): Track9FeeRecord, ExecutionFill, VirtualTrack9FeeLedger, _bridge(), _inputs(), test_bridge_applies_each_partial_execution_to_distinct_position_lots_and_fee_rows(), test_conflicting_reused_execution_id_fails_closed_without_new_lot(), test_repeated_cumulative_report_is_idempotent_by_execution_id()
+### Community 147 - "virtual_multi_leg_execution.py"
+Cohesion: 0.08
+Nodes (28): Track9FeeRecord, LegStatus, PositionGroup, PositionGroupLeg, PositionGroupLegPnL, PositionGroupRegistry, PositionGroupSnapshot, VirtualTrack9FeeLedger (+20 more)
 
 ### Community 148 - ".run"
-Cohesion: 0.18
-Nodes (11): Clock-independent semantic replay, Positive single-leg runtime lifecycle, R4 remainder validation after explicit approval (2026-10-28), Remaining blockers / limits, Test evidence, _make_dataset(), OffsetFakeClock, _semantic_replay() (+3 more)
+Cohesion: 0.25
+Nodes (7): Clock-independent semantic replay, _make_dataset(), OffsetFakeClock, _semantic_replay(), test_semantic_replay_trace_independent_of_wall_and_monotonic_origins(), test_synthetic_source_tickless_fallback_uses_injected_clock(), test_virtual_runtime_semantic_report_independent_of_clock_origins()
 
 ### Community 149 - "HighSpeedEnvironmentBundle"
 Cohesion: 0.12
@@ -899,19 +893,19 @@ Nodes (5): AcceleratedClock, AcceleratedClockConfig, ReplayEvent, ReplayStream, 
 
 ### Community 150 - "Track8MacroRegimeMonthlyStrangle"
 Cohesion: 0.13
-Nodes (24): Signal, Track8MacroRegimeMonthlyStrangle, block_entry(), Track8State, _context(), _metric(), _result(), test_track8_entry_result_group_mismatch_blocks_second_leg() (+16 more)
+Nodes (23): Track8MacroRegimeMonthlyStrangle, block_entry(), Track8State, _context(), _metric(), _result(), test_track8_entry_result_group_mismatch_blocks_second_leg(), test_track8_entry_submits_call_then_put_only_after_call_fill() (+15 more)
 
 ### Community 151 - "track5.py"
 Cohesion: 0.45
 Nodes (9): build_track5_evaluators(), _expected_move(), _gap(), _gap_pct(), _metric(), _passthrough(), evaluator(), _unavailable() (+1 more)
 
 ### Community 152 - "test_track2_product_spec_runtime_identity.py"
-Cohesion: 0.26
-Nodes (5): _bridge_for(), _Calendar, _Master, test_virtual_runtime_bridge_accepts_kis_product_spec_bound_monthly_standard_identity(), test_virtual_runtime_bridge_rejects_wrong_multiplier_or_expiry()
+Cohesion: 0.25
+Nodes (6): parse_kis_fo_idx_mst_result(), _bridge_for(), _Calendar, _Master, test_virtual_runtime_bridge_accepts_kis_product_spec_bound_monthly_standard_identity(), test_virtual_runtime_bridge_rejects_wrong_multiplier_or_expiry()
 
 ### Community 153 - "KISBasisSource"
 Cohesion: 0.17
-Nodes (3): BasisObservation, KISIndexPriceSource, KISBasisSource
+Nodes (4): BasisObservation, KISIndexPriceObservation, KISIndexPriceSource, KISBasisSource
 
 ### Community 154 - "Strategy 1–9 strategy specification set"
 Cohesion: 0.11
@@ -925,69 +919,61 @@ Nodes (6): composition 흐름, ownership, 금지, 목적, 지원 형식, 현재 
 Cohesion: 0.29
 Nodes (6): 1. KIS 공식 주문 API, 2. 원격 Exp_Detail_1의 KIS Master parser, 3. 동일성 판단, 검증 결과, 다음 연결 경계, 안전한 결론
 
-### Community 158 - "IOptionContractMaster"
-Cohesion: 0.20
-Nodes (5): create_production_option_master(), create_production_trading_calendar(), create_virtual_option_master(), create_default_option_master(), IOptionContractMaster
-
 ### Community 159 - "TradingCalendar"
-Cohesion: 0.15
-Nodes (4): TradingCalendar, InMemoryOptionContractMaster, KisOptionMasterLoader, KisOptionMasterParseResult
+Cohesion: 0.22
+Nodes (3): TradingCalendar, KisOptionMasterLoader, KisOptionMasterParseResult
 
-### Community 160 - "contracts/risk_guard.py"
-Cohesion: 0.21
-Nodes (3): VirtualRiskGuardStatusSource, RiskGuardStatusSnapshot, SensorLevel
+### Community 160 - "test_kis_websocket_canonical_pipeline.py"
+Cohesion: 0.28
+Nodes (9): KISOptionSeriesExpiryEvidence, KISWebSocketOptionIdentityResolver, _series_key(), _expiry_record(), _row(), _snapshot(), test_exact_expiry_series_join_requires_identical_official_master_rows(), test_expiry_series_conflict_fails_closed() (+1 more)
 
 ### Community 162 - "kis_option_quote_experiment.py"
 Cohesion: 0.17
 Nodes (21): candidate_plan(), digest(), find_active_collectors(), inspect_evidence(), main(), markdown_report(), now_kst(), run_with_args() (+13 more)
 
-### Community 163 - "ProductionTradingCalendar"
-Cohesion: 0.24
-Nodes (3): DailyTradingDayProvider, HolidayProvider, ProductionTradingCalendar
-
-### Community 164 - "KisOptionContractIdentity"
-Cohesion: 0.15
-Nodes (3): KisOptionContractIdentity, SyntheticOptionContractMaster, KRXKISOptionIdentityResolver
+### Community 163 - "FuturesInstrumentIdentity"
+Cohesion: 0.27
+Nodes (4): KisFuturesIdentitySource, Track3FuturesExecutionPlanAdapter, FuturesInstrumentIdentity, test_futures_identity_refuses_krx_derived_runtime_specification()
 
 ### Community 165 - "kis_instrument_identity_supply.md"
 Cohesion: 0.33
 Nodes (5): 금지, 다음 연결 조건, 목적, 실제 Exp_Detail_1 대조 결과, 안전한 Standard 연결 기준
 
-### Community 166 - "evaluate_freshness"
-Cohesion: 0.18
-Nodes (14): evaluate_freshness(), evidence_fingerprint(), FreshnessEvidence, evidence(), main(), _evidence(), test_fresh10_restart_after_gap_stays_unknown_until_source_reconciles(), test_fresh13_verdict_and_evidence_fingerprint_are_deterministic() (+6 more)
+### Community 166 - "FreshnessStatus"
+Cohesion: 0.10
+Nodes (41): AuthoritativeOptionQuoteFreshnessProvider, candidate_source_instant(), unknown(), evaluate_freshness(), evidence_fingerprint(), FreshnessEvidence, FreshnessPolicy, FreshnessStatus (+33 more)
 
 ### Community 167 - "KISTrack2OptionIVSource"
-Cohesion: 0.18
-Nodes (3): Track2OptionIVObservation, KISTrack2OptionIVObservationSink, KISTrack2OptionIVSource
+Cohesion: 0.10
+Nodes (5): Track2OptionIVObservation, Track9IVTimeSeriesSource, IOptionContractMaster, KISTrack2OptionIVObservationSink, KISTrack2OptionIVSource
 
 ### Community 168 - "test_track6_order_lifecycle.py"
-Cohesion: 0.09
-Nodes (35): Track6LifecycleAction, Track6LifecycleConfig, Track6LifecycleError, Track6LifecycleSnapshot, Track6LifecycleStatus, Track6OrderLifecycle, Equivalence criteria, High-Speed Replay Logging Contract v1 (+27 more)
+Cohesion: 0.05
+Nodes (50): Track6LifecycleAction, Track6LifecycleConfig, Track6LifecycleError, Track6LifecycleSnapshot, Track6LifecycleStatus, Track6OrderLifecycle, Track6RankCandidate, Equivalence criteria (+42 more)
 
-### Community 169 - "KISRestMarketObservationNormalizer"
-Cohesion: 0.23
-Nodes (3): KOSPI200DailyContext, KISKOSPI200DailySource, KISKOSPI200DailySourceError
+### Community 169 - "FuturesTargetConfiguration"
+Cohesion: 0.21
+Nodes (3): resolve_current_futures_contract(), FuturesTargetConfiguration, FuturesTargetConfigurationError
 
-### Community 170 - "test_s1_validation_only_runtime_input.py"
-Cohesion: 0.19
-Nodes (8): S1ValidationInputEvidence, S1ValidationOnlyRuntimeInputAdapter, _run_scenario(), test_strategy_hub_emits_natural_s1_short_signals_from_manifest_input(), test_validation_adapter_does_not_enable_non_s1_strategy(), test_validation_adapter_rejects_dataset_hash_mismatch(), test_validation_adapter_rejects_manifest_marked_runtime_eligible(), test_validation_input_rejects_market_price_mismatch()
+### Community 170 - "KisProductionOptionContractMaster"
+Cohesion: 0.29
+Nodes (5): _classify_kis_option_product(), KisMasterParseError, KisProductionOptionContractMaster, _require_calendar(), test_raw_kis_mst_virtual_option_master_resolves_four_monthly_legs_offline()
 
-### Community 171 - "test_validation_only_track6_execution.py"
-Cohesion: 0.32
-Nodes (11): gate(), plan(), prepared_leg(), test_synthetic_execution_gate_accepts_original_602500_pair_and_audits_operational_overage(), test_synthetic_execution_gate_accepts_pair_within_frozen_budget(), test_synthetic_execution_gate_admits_sequential_single_legs_with_cumulative_pair_budget(), test_synthetic_execution_gate_allows_idempotent_revalidation_of_same_sequential_leg(), test_synthetic_execution_gate_blocks_second_sequential_leg_if_cumulative_cap_exceeded() (+3 more)
+### Community 171 - "test_track8_runtime_retry_policy.py"
+Cohesion: 0.44
+Nodes (11): _calendar(), _cancel_result(), _context(), _metric(), _start(), test_manual_cancel_is_not_retryable(), test_put_leg_uses_same_retry_policy_after_call_is_filled(), test_retry_is_blocked_at_third_trading_day_1500_kst() (+3 more)
 
 ### Community 172 - "Strategy 1~9 신규 명세 승인 인덱스 v0.3"
 Cohesion: 0.33
 Nodes (5): 1. 승인된 명세 파일, 2. 승인 게이트 규칙, 3. 구현·검증 진행 기준, 4. 버전 메타데이터 이슈, Strategy 1~9 신규 명세 승인 인덱스 v0.3
 
 ### Community 173 - "HistoricalIndexPriceObservationReplay"
-Cohesion: 0.12
-Nodes (7): KISIndexPriceObservation, _decode_fields(), KISIndexPriceWebSocketAdapter, KISIndexPriceWebSocketAdapterInvalid, KisIndexPriceWebSocketObservation, HistoricalIndexPriceObservationReplay, KISWebSocketIndexPriceSource
+Cohesion: 0.14
+Nodes (5): _decode_fields(), KISIndexPriceWebSocketAdapter, KISIndexPriceWebSocketAdapterInvalid, KisIndexPriceWebSocketObservation, HistoricalIndexPriceObservationReplay
 
-### Community 174 - "kis_index_option_master_source.py"
-Cohesion: 0.07
-Nodes (35): resolve_expiry(), current_kospi200_futures_symbols(), current_monthly_option_symbols(), _decode_archive(), get_kis_index_master_snapshot(), KISIndexMasterError, KISIndexMasterSnapshot, KISIndexMasterUnavailable (+27 more)
+### Community 174 - "kis_option_expiry_source.py"
+Cohesion: 0.18
+Nodes (5): KISOptionExpiryRecord, KISOptionExpiryResolutionError, KISOptionExpiryResolver, _RateLimiter, test_stale_master_expiry_cache_is_not_reused()
 
 ### Community 175 - "position_pnl_exposure.py"
 Cohesion: 0.29
@@ -1005,9 +991,9 @@ Nodes (9): _evaluate(), _metric(), _strategy(), test_s07_call_50pct_stop_is_inde
 Cohesion: 0.20
 Nodes (9): process_pending_multi_leg(), Graphify, Implemented in this slice, KIS VTS source evidence, Q25 A5 S33 ? S2 group PnL / Runtime close wiring (2026-11-11), Remaining blockers, Scope and safety, Verdict (+1 more)
 
-### Community 180 - "FuturesMarketTransport"
-Cohesion: 0.32
-Nodes (3): Track1RuntimeInputProvider, Track1RuntimeInputResult, Track1Input
+### Community 180 - "test_validation_only_s8_runtime_adapter.py"
+Cohesion: 0.29
+Nodes (10): _adapter(), test_s8_validation_adapter_enables_only_instance_local_readiness(), test_s8_validation_expiry_pair_close_rejects_identity_expiry_mismatch(), test_s8_validation_freshness_requires_current_manifest_bound_quote(), test_s8_validation_option_marks_require_exact_manifest_bound_current_quotes(), quote(), test_s8_validation_risk_gate_accumulates_call_put_pair_and_deduplicates_retry(), test_s8_validation_risk_gate_allows_identity_checked_reduce_only_close() (+2 more)
 
 ### Community 181 - "Strategy 1–9 scenario test plan — Strategy 2 delta v0.3"
 Cohesion: 0.22
@@ -1033,9 +1019,9 @@ Nodes (3): Feature preservation, Isolation, Ownership
 Cohesion: 0.25
 Nodes (7): 1. 결정 register — U16~U21, 2. F01–F29 영향 행, 3. Cross-system and group gates, 4. Code and verification status, 5. Acceptance gates — all NOT RUN or BLOCKED, 6. Status, Strategy 1–9 integrated decision matrix — Strategy 2 delta v0.6
 
-### Community 193 - "FreshnessStatus"
-Cohesion: 0.39
-Nodes (12): AuthoritativeOptionQuoteFreshnessProvider, FreshnessStatus, _command(), _identity(), _OptionMaster, test_contract_identity_mismatch_returns_identity_conflict(), test_futures_quote_freshness_is_not_inferred_from_option_master(), test_injected_synthetic_evidence_can_exercise_freshness_path_without_runtime_activation() (+4 more)
+### Community 193 - "instrument_master_provider.py"
+Cohesion: 0.33
+Nodes (4): _decode_master_payload(), _download_bytes(), KisFuturesInstrumentMasterProvider, KisInstrumentMasterProviderError
 
 ### Community 195 - "Strategy scenario and validation plans"
 Cohesion: 0.15
@@ -1050,28 +1036,36 @@ Cohesion: 0.29
 Nodes (6): Q25 A5 S26 — Strategy 2 validation-only code controls (2026-11-09), 검증, 미해결 및 안전 경계, 변경 파일, 적용 기준 및 입력, 판정
 
 ### Community 214 - "KISTrack2MarketMetricsSource"
-Cohesion: 0.12
-Nodes (6): KisIndexFuturesMarketObservation, Track2MarketMetrics, UnavailableTrack2MarketMetricsSource, KISTrack2MarketMetricsSource, KISTrack2MarketObservationSink, KISVolumeProfileSource
+Cohesion: 0.14
+Nodes (3): KISTrack2MarketMetricsSource, KISTrack2MarketObservationSink, KISVolumeProfileSource
 
 ### Community 215 - "track7.py"
 Cohesion: 0.46
 Nodes (6): build_track7_evaluators(), _metric(), _passthrough(), evaluator(), _skew(), _unavailable()
 
+### Community 216 - "ScenarioEngine"
+Cohesion: 0.19
+Nodes (3): ScenarioAdjustment, ScenarioEngine, ScenarioAdjustment
+
 ### Community 221 - "3. 다음 수정 순서 제안"
 Cohesion: 0.18
 Nodes (10): 1. 현재 확인된 공통 결함/제약, 1순위 — 공통 input admission/freshness·provenance, 2. 전략별 준비도 표, 2순위 — S5/S7/S9의 합성 입력·상태전이 감사, 3. 다음 수정 순서 제안, 3순위 — S1/S2/S6/S8 명세 미결정값 목록 확정, 4. 다음 단계 및 승인 경계, 4순위 — S3/S4 identity blocker (+2 more)
+
+### Community 223 - "Track4RuntimeInputProvider"
+Cohesion: 0.14
+Nodes (3): Track4InputTimestampMismatch, Track4RuntimeInputProvider, Track4RuntimeInputReadiness
 
 ### Community 226 - "Trading-day, expiry, calendar, and timestamp provenance"
 Cohesion: 0.15
 Nodes (15): KIS 수집기 구조 정의서 v1, KIS 관측 기반 프로토콜 규칙 v0, KIS WebSocket 수집기 명세 v1.0, KIS Option Timestamp / REAL_VTS Freshness Measurement Report v0.1, KRX exact expiry master loader — source policy and limitations, Runtime Market-Data Timestamp Provenance Evidence Index v0.1, Runtime Timestamp/Calendar and VTS WebSocket Evidence Reconciliation v0.1, Runtime Timestamp/Calendar and VTS WebSocket Evidence Reconciliation v0.2 (+7 more)
 
 ### Community 240 - "KISPaperBroker"
-Cohesion: 0.19
+Cohesion: 0.21
 Nodes (5): KISPaperBroker, PaperCredential, PaperExecutionReport, PaperMarketTick, KISPaperMarketData
 
-### Community 266 - "KISIndexFuturesMarketWebSocketAdapter"
-Cohesion: 0.20
-Nodes (4): _decode_fields(), KISIndexFuturesMarketWebSocketAdapter, KISIndexFuturesWebSocketAdapterInvalid, KISIndexFuturesMarketConsumer
+### Community 266 - "KisIndexFuturesMarketObservation"
+Cohesion: 0.14
+Nodes (5): _decode_fields(), KisIndexFuturesMarketObservation, KISIndexFuturesMarketWebSocketAdapter, KISIndexFuturesWebSocketAdapterInvalid, HistoricalFuturesObservationReplay
 
 ### Community 267 - "OptionExpirySource"
 Cohesion: 0.17
@@ -1082,12 +1076,12 @@ Cohesion: 0.24
 Nodes (6): Track5OptionContractSource, _Books, _Master, test_track5_blocks_one_sided_or_empty_top_of_book(), test_track5_blocks_when_authoritative_two_sided_quote_is_unavailable(), test_track5_selects_exact_atm_not_second_or_third_otm()
 
 ### Community 269 - "SyntheticReplayAdapter"
-Cohesion: 0.13
-Nodes (24): SyntheticReplayAdapter, _adapter(), test_s8_v3_scenarios_have_isolated_contract_identity_and_manifest(), test_s8_validation_adapter_enables_only_instance_local_readiness(), test_s8_validation_expiry_pair_close_rejects_identity_expiry_mismatch(), test_s8_validation_freshness_requires_current_manifest_bound_quote(), test_s8_validation_option_marks_require_exact_manifest_bound_current_quotes(), test_s8_validation_risk_gate_accumulates_call_put_pair_and_deduplicates_retry() (+16 more)
+Cohesion: 0.20
+Nodes (15): SyntheticReplayAdapter, test_s8_v3_scenarios_have_isolated_contract_identity_and_manifest(), test_generated_s7_s8_v2_manifests_are_accepted_by_synthetic_replay_adapter(), make_dataset(), test_adapter_derives_future_expiry_dte_only_from_explicit_synthetic_calendar(), test_adapter_keeps_synthetic_id_separate_and_namespaced(), test_adapter_refuses_conflicting_instrument_id(), test_adapter_refuses_real_vts_manifest() (+7 more)
 
-### Community 270 - "OrderIntent"
-Cohesion: 0.18
-Nodes (5): OrderIntent, MultiLegSubmissionError, submit_multi_leg_intents(), LeggingPlan, Track3LeggingCoordinator
+### Community 270 - "ingest_kis_vts_websocket_canonical.py"
+Cohesion: 0.35
+Nodes (6): _kis_option_resolver_for_day(), format_trading_date(), ingest_day(), _latest_underlying_context(), main(), parse_trading_date()
 
 ### Community 271 - "Requirements–specification–code–test traceability"
 Cohesion: 0.24
@@ -1097,33 +1091,25 @@ Nodes (14): S5 추적성 갱신 초안 v0.3, S5 추적성 갱신 초안 v0.3, �
 Cohesion: 0.19
 Nodes (3): Track9OptionCandidate, candidate_for(), Track9OptionSelection
 
-### Community 274 - "market_data_freshness.py"
-Cohesion: 0.18
-Nodes (7): admits_freshness_verdict_for_identity(), candidate_source_instant(), unknown(), SourceTimestampCandidate, TimestampStatus, test_candidate_date_invalid_timezone_invalid_and_session_boundary_are_unknown(), test_fresh01_missing_zero_malformed_or_ambiguous_source_time_is_unknown()
-
 ### Community 275 - "Q25 A5 S25 ? S2 current scenario catalog (2026-11-10)"
 Cohesion: 0.33
 Nodes (6): ???, ??? ??, ??, Implementation addendum ? 2026-11-10, Q25 A5 S25 ? S2 current scenario catalog (2026-11-10), ?? ?? SHA-256
 
 ### Community 276 - "StrategyHub"
 Cohesion: 0.04
-Nodes (8): StrategyHubPort, StrategySelection, Strategy, StrategyEvaluationSeam, StrategyOrchestrator, StrategyRunFailure, StrategyRunResult, StrategyRegistry
+Nodes (18): Track1RuntimeInputProvider, Track1RuntimeInputResult, StrategyHubPort, StrategySelection, StrategyHub, StrategyEvaluationSeam, StrategyOrchestrator, StrategyRunFailure (+10 more)
 
 ### Community 277 - "KISAuthManager"
-Cohesion: 0.08
-Nodes (9): KISAuthError, KISAuthManager, KISAuthToken, FuturesMarketTransportError, KISFuturesMarketTransport, KISFuturesMarketTransportConfig, KISWebSocketApprovalKeyProvider, _approval_key() (+1 more)
-
-### Community 278 - "FreshnessPolicy"
-Cohesion: 0.30
-Nodes (11): FreshnessPolicy, permits_risk_increasing_order(), _evidence(), test_candidate_time_join_is_candidate_only_and_timezone_aware(), test_capability_conflict_and_disabled_age_policy_never_admit(), test_fingerprint_is_deterministic_and_changes_with_source_evidence(), test_fresh02_approved_age_policy_marks_old_source_stale(), test_fresh03_future_source_skew_is_unknown_not_clamped() (+3 more)
+Cohesion: 0.05
+Nodes (19): create_production_option_master(), resolve_expiry(), create_production_trading_calendar(), create_virtual_option_master(), KOSPI200DailyContext, create_default_option_master(), KISAuthError, KISAuthManager (+11 more)
 
 ### Community 279 - "HighSpeedReplayRunner"
-Cohesion: 0.06
-Nodes (27): ClockProvider, HighSpeedReplayRunner, main(), ReplayReport, _SystemClockProvider, Clock / deterministic replay, Determinism comparison, Full-dataset clock independence (+19 more)
+Cohesion: 0.08
+Nodes (9): ClockProvider, ReplayReport, _SystemClockProvider, Clock / deterministic replay, FakeClock, test_infinite_speed_does_not_sleep(), test_non_positive_speed_fails_closed_with_injected_clock(), test_replay_pacing_uses_injected_clock_without_system_sleep() (+1 more)
 
 ### Community 280 - "track2_option_contract_source.py"
-Cohesion: 0.33
-Nodes (5): A. S2 requirements and current code evidence, B. Test mapping and evidence state, C. Required future evidence (not authorization), D. Safety and status, Requirements–spec–code–test traceability — Strategy 2 delta v0.3
+Cohesion: 0.40
+Nodes (4): B. Test mapping and evidence state, C. Required future evidence (not authorization), D. Safety and status, Requirements–spec–code–test traceability — Strategy 2 delta v0.3
 
 ### Community 281 - "test_quote_only_strategy_evaluation.py"
 Cohesion: 0.40
@@ -1149,10 +1135,6 @@ Nodes (11): Gate 1 — 명세/정책 잔여값 확정, Gate 2 — Authoritative 
 Cohesion: 0.25
 Nodes (7): REAL_VTS 원본 프로파일링 — 부분 결과, 관측된 저장 구조, 다음 조치, 무결성 증거의 범위, 분류 원칙, 통계 산출 상태, 표본에서 관찰한 필드·품질 제한
 
-### Community 292 - "LiveEnvironmentBundle"
-Cohesion: 0.20
-Nodes (3): build_live_bundle_from_components(), builder(), LiveEnvironmentBundle
-
 ### Community 294 - "REAL_VTS 관측치 ↔ Synthetic 데이터 현실성 비교"
 Cohesion: 0.29
 Nodes (6): 1. 비교표, 2. Synthetic P5 dataset evidence, 3. Required metrics still missing, 4. Restrictions / interpretation, 5. Next execution, REAL_VTS 관측치 ↔ Synthetic 데이터 현실성 비교
@@ -1162,8 +1144,8 @@ Cohesion: 0.29
 Nodes (6): P1 / P2 / P3 증거 상태, 실데이터 위치·무결성 관찰, 안전 경계, 요약, 위험·제한, 합성 정책·실행 경로 기록 확인
 
 ### Community 296 - "live_execution_runtime_composition_factory.py"
-Cohesion: 0.07
-Nodes (12): create_live_execution_position_composition(), LiveExecutionPositionComposition, create_live_execution_recovery_composition(), create_live_execution_runtime_composition(), LiveExecutionRuntimeComposition, OMSCommandRegisteringBroker, ExecutionCorrelation, KISFuturesExecutionContext (+4 more)
+Cohesion: 0.06
+Nodes (15): create_live_execution_position_composition(), LiveExecutionPositionComposition, create_live_execution_recovery_composition(), create_live_execution_runtime_composition(), LiveExecutionRuntimeComposition, OMSCommandRegisteringBroker, ExecutionCorrelation, KISFuturesExecutionAdapterInvalid (+7 more)
 
 ### Community 297 - "R1 — D1–D6 결정 반영 기록 (2026-10-28)"
 Cohesion: 0.33
@@ -1177,21 +1159,25 @@ Nodes (7): 1. 승인된 명세 파일, 2. 승인 게이트 규칙, 3. S9 v0.5 sc
 Cohesion: 0.47
 Nodes (7): build_track8_evaluators(), _metric(), _moneyness(), _net_pnl(), _passthrough(), evaluate(), _unavailable()
 
+### Community 302 - "track6.py"
+Cohesion: 0.43
+Nodes (5): build_track6_evaluators(), _metric(), _passthrough(), evaluator(), _unavailable()
+
 ### Community 303 - "Q25 A2-1 — Strategy 6 SYN-EVT 생성 범위 제안"
 Cohesion: 0.33
 Nodes (5): Q25 A2-1 — Strategy 6 SYN-EVT 생성 범위 제안, 경로·파일·백업·롤백, 승인 게이트, 케이스 범위, 해상도·용량 추정 (계획값, 미확정)
 
-### Community 304 - "HistoricalMarketStore"
-Cohesion: 0.06
-Nodes (11): VMSMarketTickProjectionAdapter, ReferenceCanonicalMarketTick, VMSClockController, VirtualBrokerConfig, VirtualBrokerControlInterface, HistoricalReplayEngine, VMSStateManager, KISOptionHistoricalRecorder (+3 more)
+### Community 304 - "simulator_runtime.py"
+Cohesion: 0.15
+Nodes (4): VMSClockController, VirtualBrokerConfig, VirtualBrokerControlInterface, VMSStateManager
 
 ### Community 305 - "option_contract.py"
 Cohesion: 0.43
 Nodes (3): calculate_dte(), OptionContract, TradingCalendar
 
-### Community 306 - "virtual_futures_execution.py"
-Cohesion: 0.06
-Nodes (25): create_runtime_transport_composition(), create_standard_order_intent_composition(), RuntimeTransportComposition, StandardOrderIntentComposition, RiskRouterContext, _AckAdapter, FuturesExecutionResult, VirtualFuturesExecutionBridge (+17 more)
+### Community 306 - "BrokerOrderResponse"
+Cohesion: 0.07
+Nodes (13): _VirtualBrokerAckAdapter, _AckAdapter, OrderAckBoundaryError, to_order_ack_event(), BrokerOrderResponse, OrderRouterError, StandardOrderRouter, KisOrderTransportError (+5 more)
 
 ### Community 307 - "Q25 A5 S04 — Strategy 7 명세-코드 Gap Matrix"
 Cohesion: 0.25
@@ -1201,29 +1187,41 @@ Nodes (7): 1. 기준 및 해석 경계, 2. 현행 구현 및 증거 인벤토리
 Cohesion: 0.29
 Nodes (6): 1. 승인된 명세 파일, 2. 승인 게이트 규칙, 3. S9 v0.5 scope approval and implementation gate (2026-10-21), 3. 구현·검증 진행 기준, 4. 버전 메타데이터 이슈, Strategy 1~9 신규 명세 승인 인덱스 v0.4
 
+### Community 310 - "Q25_A7_B3_U19_DURABLE_RECOVERY_VALIDATION_20261111.md"
+Cohesion: 0.29
+Nodes (6): Conservative boundaries / unresolved policy, Git and preservation, Implementation, Next, Policy basis, Verification
+
 ### Community 311 - "Q25 A5 S27 — Strategy 2 validation-only Runtime E2E preflight (2026-11-10)"
 Cohesion: 0.29
 Nodes (6): Q25 A5 S27 — Strategy 2 validation-only Runtime E2E preflight (2026-11-10), 다음 진입 조건, 안전 경계, 차단 사유, 판정, 확인 결과
 
+### Community 314 - "OffsetFakeClock"
+Cohesion: 0.33
+Nodes (3): main(), OffsetFakeClock, semantic()
+
 ### Community 316 - "collections_abc"
-Cohesion: 0.15
+Cohesion: 0.14
 Nodes (4): PositionAggregate, PositionAggregateSource, LivePositionAggregateRiskSource, VSSFPositionAggregateAdapter
 
-### Community 319 - "multi_leg_materializer.py"
-Cohesion: 0.47
-Nodes (3): materialize_multi_leg_plan(), MultiLegExecutionSemantics, MultiLegMaterializationError
+### Community 318 - "build_synthetic_missing_fields_20261021.py"
+Cohesion: 0.48
+Nodes (5): main(), positive(), sha(), stamp(), top()
 
-### Community 320 - "re"
-Cohesion: 0.08
-Nodes (12): _safe_run_id(), reset_virtual_bootstrap_for_tests(), acquire_snapshot(), fetch_daily(), KRXAcquisitionError, load_auth_key(), main(), parse_response() (+4 more)
+### Community 319 - "generate_q25_strategy7_8_synthetic_datasets_v2_20261103.py"
+Cohesion: 0.52
+Nodes (4): _build(), main(), _row(), _sha()
+
+### Community 320 - "acquire_krx_daily_snapshot.py"
+Cohesion: 0.26
+Nodes (7): acquire_snapshot(), fetch_daily(), KRXAcquisitionError, load_auth_key(), main(), parse_response(), sha256_bytes()
 
 ### Community 322 - "Q25 A2-2 — A1-3 종료 판정 초안 및 A2-4 대장 L-15~L-19"
 Cohesion: 0.29
 Nodes (6): A1-3 종료 기준, A1-3 증거 매핑, A2-2 timer baseline 증거, Q25 A2-2 — A1-3 종료 판정 초안 및 A2-4 대장 L-15~L-19, 대장 후보 L-15~L-19, 운영/안전 제한
 
 ### Community 323 - "dataclasses"
-Cohesion: 0.05
-Nodes (37): HighSpeedVirtualReplayReport, HighSpeedVirtualRuntimeReplayRunner, mark_positions(), publish(), main(), PaperAccountSnapshot, main(), semantic() (+29 more)
+Cohesion: 0.04
+Nodes (35): main(), HighSpeedVirtualReplayReport, HighSpeedVirtualRuntimeReplayRunner, mark_positions(), publish(), main(), PaperAccountSnapshot, fetch_krx_holidays() (+27 more)
 
 ### Community 325 - ".process_tick"
 Cohesion: 0.18
@@ -1240,10 +1238,6 @@ Nodes (3): Safety boundary, U18 — net group PnL exit-policy matrix, U21 — qu
 ### Community 339 - "LiveRuntimeLifecycleCoordinator"
 Cohesion: 0.09
 Nodes (6): create_live_runtime_bootstrap(), create_live_control_tower_runtime_api(), LiveRuntimeLifecycleCoordinator, create_live_control_tower_runtime(), create_live_runtime_lifecycle_coordinator(), _LiveExecutionTransportOwnershipRegistry
-
-### Community 358 - "contracts/track2_option_iv_source.py"
-Cohesion: 0.13
-Nodes (11): UnavailableTrack2OptionIVSource, 1. 판정, 2. 기준·작업 경계, 3. 기준 명세·문서 무결성, 4. 명세-코드 gap matrix, 5. 전용 테스트에서 확인된 범위, 6. 미결 정책·증거 항목, 7. 후속 단계 진입 조건 (+3 more)
 
 ### Community 443 - "decision_arbiter_envelope_adapter.py"
 Cohesion: 0.21
@@ -1295,23 +1289,23 @@ Nodes (40): 10. 현재 Filled → Position → Trade P/L → UI 기준, 11. 3개
 
 ## Knowledge Gaps
 - **30 isolated node(s):** `optionproject`, `Strategy 1–9 Current Code Mapping`, `Phase 2 — Strategy Evaluation Parity + S6 Candidate Engine`, `Project200 — KIS VTS collection coverage check for strategy strike rules`, `AWS EC2 서울 리전 무인 운영 이전 설계안` (+25 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 2034 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **106 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 2041 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **112 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `StrategyContext` connect `StrategyContext` to `Track1TailDefense`, `FreshnessVerdict`, `Track3StatisticalArbitrage`, `.replace`, `integration_fixtures.py`, `Track2AsymmetricTrap`, `test_s1_validation_only_runtime_input.py`, `Track9EventOvernightInsurance`, `standard_runtime_input_provider.py`, `Track7VolatilitySkewWeeklyInsurance`, `attach_standard_automated_loop`, `StrategyHub`, `Track8MacroRegimeMonthlyStrangle`, `Track9EventOvernightInsurance`, `StrategyExecutionProposal`, `automated_virtual_trading_loop.py`, `s6_engine.py`?**
+- **Why does `StrategyContext` connect `StrategyContext` to `FreshnessVerdict`, `Track3StatisticalArbitrage`, `track4_gamma_scalping.py`, `.replace`, `Track2AsymmetricTrap`, `analytics.py`, `standard_runtime_input_provider.py`, `Track9EventOvernightInsurance`, `Track7VolatilitySkewWeeklyInsurance`, `attach_standard_automated_loop`, `StrategyHub`, `Track8MacroRegimeMonthlyStrangle`, `strategy/contracts.py`, `StrategyExecutionProposal`, `common_runtime_input_assembler.py`, `automated_virtual_trading_loop.py`, `s6_engine.py`?**
   _High betweenness centrality (0.024) - this node is a cross-community bridge._
 - **What connects `optionproject`, `Strategy 1–9 Current Code Mapping`, `Phase 2 — Strategy Evaluation Parity + S6 Candidate Engine` to the rest of the system?**
   _30 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `test_track2_u19_recovery.py` be split into smaller, more focused modules?**
   _Cohesion score 0.11369645690111052 - nodes in this community are weakly interconnected._
-- **Why does `ExecutionReport` connect `ExecutionReport` to `test_track2_validation_only_controls.py`, `VirtualMultiLegExecutionBridge`, `VirtualTrack9FeeLedger`, `automated_virtual_trading_loop.py`, `virtual_multi_leg_execution.py`, `test_track2_sequential_runtime_progression.py`, `live_execution_runtime_composition_factory.py`, `test_track6_order_lifecycle.py`, `KISFuturesExecutionRecoveryAdapter`, `vssf_execution_adapter.py`, `json`, `virtual_futures_execution.py`, `test_s8_retry_timeout_reconciliation.py`, `virtual_position.py`, `test_sqlite_settlement_store.py`, `attach_standard_automated_loop`, `VirtualBrokerApi`, `.filled_quantity`, `OrderStateMachine`, `ReferenceCanonicalMarketTick`, `ReplayLogMode`?**
-  _High betweenness centrality (0.024) - this node is a cross-community bridge._
+- **Why does `ExecutionReport` connect `ExecutionReport` to `test_track2_validation_only_controls.py`, `test_track2_sequential_runtime_progression.py`, `live_execution_runtime_composition_factory.py`, `VirtualMultiLegExecutionBridge`, `test_validation_only_option_expiry_settlement.py`, `KISFuturesExecutionRecoveryAdapter`, `OrderStateMachine`, `test_sqlite_settlement_store.py`, `typing`, `virtual_multi_leg_execution.py`, `ReplayLogMode`, `attach_standard_automated_loop`, `BrokerOrderResponse`, `test_s8_retry_timeout_reconciliation.py`, `virtual_position.py`, `automated_virtual_trading_loop.py`?**
+  _High betweenness centrality (0.022) - this node is a cross-community bridge._
 - **Should `pytest` be split into smaller, more focused modules?**
-  _Cohesion score 0.12624584717607973 - nodes in this community are weakly interconnected._
-- **Why does `OrderStateMachine` connect `OrderStateMachine` to `SQLiteSettlementStore`, `live_execution_runtime_composition_factory.py`, `VirtualMultiLegExecutionBridge`, `KISFuturesExecutionRecoveryAdapter`, `ExecutionReport`, `automated_virtual_runtime_factory.py`, `test_sqlite_settlement_store.py`, `OptionInstrumentIdentity`, `json`, `virtual_futures_execution.py`, `ReplayLogMode`, `FuturesProductType`, `live_runtime_authoritative_composition.py`, `automated_virtual_trading_loop.py`, `virtual_multi_leg_execution.py`?**
+  _Cohesion score 0.12727272727272726 - nodes in this community are weakly interconnected._
+- **Why does `OrderStateMachine` connect `OrderStateMachine` to `RiskEngine`, `FuturesInstrumentIdentity`, `SQLiteSettlementStore`, `live_execution_runtime_composition_factory.py`, `VirtualMultiLegExecutionBridge`, `KISFuturesExecutionRecoveryAdapter`, `ExecutionReport`, `test_sqlite_settlement_store.py`, `BrokerOrderResponse`, `virtual_multi_leg_execution.py`, `ReplayLogMode`, `FuturesProductType`, `live_runtime_authoritative_composition.py`, `automated_virtual_trading_loop.py`, `OptionInstrumentIdentity`?**
   _High betweenness centrality (0.022) - this node is a cross-community bridge._
 - **Should `RiskEngine` be split into smaller, more focused modules?**
-  _Cohesion score 0.06559356136820925 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05574229691876751 - nodes in this community are weakly interconnected._
