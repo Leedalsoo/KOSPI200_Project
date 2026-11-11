@@ -2,7 +2,7 @@
 
 - Current SSOT: [Notion Current Baseline v2](https://app.notion.com/p/4135f4f6eaa181f7ac42dea70e10fa42) and its repository mirror `docs/CURRENT_BASELINE_V2.md`.
 - A7 Track 1 (A1/A2/A3/B1/B2/B3/B4) and C1 archive integration are complete. C1 commit: `d1aef6aab7ce49ec2ad83a837f93c199f2d7c23f`.
-- C2 document restoration is in progress. C3–C5 and Tracks 3–4 remain pending separate stage approvals.
+- C2 document restoration is complete. C3–C5 and Tracks 3–4 remain pending separate stage approvals.
 - S2 remains `PSB_UNVERIFIED`; no natural-signal Runtime E2E PASS is claimed.
 - The historical dated status notes below are retained as evidence. They do not override the current SSOT or A7 progress table.
 - Original working-folder HEAD `b060fa57d3801e8227e88c8e54df8d2f9ffe7407` and its 224 dirty/untracked items remain protected.

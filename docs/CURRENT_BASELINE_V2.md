@@ -2,10 +2,10 @@
 
 > Mirrored from Notion page `4135f4f6-eaa1-81f7-ac42-dea70e10fa42`. Notion remains the decision source; this file is the repository snapshot used for SHA-linked traceability.
 
-## 최신 상태 갱신 — C1 완료 / C2 진행 중 (2026-11-12)
+## 최신 상태 갱신 — C1·C2 완료 (2026-11-12)
 
 - A7 C1 archive 통합은 완료됐다. 통합 브랜치 `integrate/q25-s2-20261111`, 현재 HEAD `d1aef6aab7ce49ec2ad83a837f93c199f2d7c23f`; 원격 `cleanup/p2-quarantine-20261026`과 일치한다.
-- C2 문서 복원 및 Notion/repository SHA 정합 작업을 진행 중이다. C2 종료 후 저장소 문서 커밋 SHA와 문서 SHA-256을 이 페이지에 기록한다.
+- C2 문서 복원 완료: `AGENTS.md` 최신 상태 안내와 `docs/CURRENT_BASELINE_V2.md` Notion SSOT mirror를 복원했다. 최종 저장소 커밋 SHA 및 문서 SHA-256은 C2 종료 기록에 연결한다.
 - 원본 작업폴더 HEAD `b060fa57d3801e8227e88c8e54df8d2f9ffe7407` 및 dirty/untracked 224건은 보존한다.
 - S2 판정은 `PSB_UNVERIFIED`로 유지한다.
 
@@ -16,7 +16,7 @@
 기준 HEAD: `b060fa57d3801e8227e88c8e54df8d2f9ffe7407`
 작업 기준: 로컬 작업폴더 HEAD. S2 통합 작업 브랜치 `integrate/q25-s2-20261111`는 A2에서 생성했고, 현재 통합 HEAD는 `d1aef6aab7ce49ec2ad83a837f93c199f2d7c23f`이다.
 CB2 ID: `4135f4f6-eaa1-81f7-ac42-dea70e10fa42`
-Status: A1/A2/A3/B1/B2/B3/B4/C1 completed. C2 document restoration is in progress; C3 is the next pending step after C2; B1/B2/B3/B4 and X+1 are complete. S2 remains PSB\\\_UNVERIFIED; no S2 natural-signal Runtime E2E PASS is claimed.
+Status: A1/A2/A3/B1/B2/B3/B4/C1/C2 completed. C3 is the next pending step; C2 document restoration and repository mirror are complete; B1/B2/B3/B4 and X+1 are complete. S2 remains PSB\\\_UNVERIFIED; no S2 natural-signal Runtime E2E PASS is claimed.
 
 ## 코드 근거 위치표 (A7, 2026-11-11)
 
@@ -99,7 +99,7 @@ Status: A1/A2/A3/B1/B2/B3/B4/C1 completed. C2 document restoration is in progres
 
 ## 7. A6 완료 및 A7 실행 순서
 
-A6 C01–C10 전체 완료(2026-11-10). C09 verification gate 및 C10 A5 진행표 동기화까지 완료되었다. A6 완료 자체는 S2 구현·Runtime 검증 승인을 의미하지 않는다. A7에 따라 S2 A1→A2→A3→B1→B2→B3→B4 순서로 진행하며, 각 단계는 사용자 승인 후 하나씩 수행한다. 현재 A1/A2/A3/B1/B2/B3/B4/C1 완료했고 다음 대기 단계는 C2다. C1 병합 커밋은 d1aef6aab7ce49ec2ad83a837f93c199f2d7c23f이며 원격 cleanup/p2-quarantine-20261026과 SHA가 일치한다. X+1 registry strategy\_ids 호환성 결함은 2026-11-11 커밋 771894387adb1cbd6063495000ee9405f20b0fe2에서 해결했다. B4는 명시적 S2 strategy selection으로 실행했다. 전체 registry의 Track1 manifest/code version mismatch는 C1에서 manifest 1.2.0 정합 및 default registry 9개 전략 등록 확인으로 해소했다. 통합 마무리 C1–C5는 S2를 막지 않는 후속 트랙이다.
+A6 C01–C10 전체 완료(2026-11-10). C09 verification gate 및 C10 A5 진행표 동기화까지 완료되었다. A6 완료 자체는 S2 구현·Runtime 검증 승인을 의미하지 않는다. A7에 따라 S2 A1→A2→A3→B1→B2→B3→B4 순서로 진행하며, 각 단계는 사용자 승인 후 하나씩 수행한다. 현재 A1/A2/A3/B1/B2/B3/B4/C1 완료했고 다음 대기 단계는 C2다. C1 병합 커밋은 d1aef6aab7ce49ec2ad83a837f93c199f2d7c23f이며 원격 cleanup/p2-quarantine-20261026과 SHA가 일치한다. X+1 registry strategy\_ids 호환성 결함은 2026-11-11 ��밋 771894387adb1cbd6063495000ee9405f20b0fe2에서 해결했다. B4는 명시적 S2 strategy selection으로 실행했다. 전체 registry의 Track1 manifest/code version mismatch는 C1에서 manifest 1.2.0 정합 및 default registry 9개 전략 등록 확인으로 해소했다. 통합 마무리 C1–C5는 S2를 막지 않는 후속 트랙이다.
 
 ## 8. 확인된 근거 페이지
 
