@@ -270,3 +270,12 @@ A1 정합 완료 시점 SSOT 본문 SHA-256 (이 digest 행 자체 제외): `A7D
 - No KIS/Live/REAL_VTS/account/order API calls; no `.env`, production RiskConfig, scheduler, collector, or operating configuration changes. Generated datasets are disposable/ignored and were not committed.
 - Detailed report: `reports/synth/Q25_A7_C4_SYNTHETIC_ASSET_REGENERATION_AND_CLEAN_PYTEST_20261112.md`.
 - C5 (original-folder synchronization proposal) remains pending separate approval.
+
+## 22. Q25 A7 C5 — Original working-folder synchronization decision card (2026-11-12)
+
+- C5 proposal complete; no synchronization or mutation of the original working folder was performed. Actual migration requires a user A/B/C choice and separate execution approval.
+- Rechecked original state: branch `cleanup/p2-quarantine-20261026`, HEAD `b060fa57d3801e8227e88c8e54df8d2f9ffe7407`, Git status 224 entries (23 tracked modified, 201 untracked status entries; expanded untracked inventory 311 files).
+- C3 inventory categories: 21 tracked source modifications, 2 tracked Graphify artifacts, 141 verification status paths, 80 report/run artifacts, 41 Caddy MCP files, 4 nested worktrees, 7 validation/config paths, plus generated Graphify/technical docs. Category counts include nested/expanded inventory and are not additive to 224.
+- Recommended: phased selective migration. Per-file source review first; KIS REST collector and WS canonical ingestion remain a separate approval batch. Split tests/fixtures from generated results/logs/patch scripts. Treat Caddy OAuth/tunnel state as sensitive and exclude from Git; preserve nested worktrees independently; regenerate Graphify after accepted source migration.
+- User decision choices: A phased selective migration; B evidence archive only; C keep original folder frozen. The choice itself does not authorize file mutation, commit or push. Exact files/batches must be approved before execution.
+- Detailed decision card: `reports/synth/Q25_A7_C5_ORIGINAL_WORKTREE_SYNC_DECISION_CARD_20261112.md`.
