@@ -2,11 +2,9 @@
 
 - Current SSOT: [Notion Current Baseline v2](https://app.notion.com/p/4135f4f6eaa181f7ac42dea70e10fa42) and its repository mirror `docs/CURRENT_BASELINE_V2.md`.
 - A7 Track 1 (A1/A2/A3/B1/B2/B3/B4) and C1 archive integration are complete. C1 commit: `d1aef6aab7ce49ec2ad83a837f93c199f2d7c23f`.
-- C2 document restoration, C3 read-only dirty-tree classification, and C4 synthetic asset regeneration plus clean-checkout full pytest are complete. C5 decision card is complete; actual original-folder synchronization remains pending the user A/B/C choice and separate execution approval. Tracks 3-4 remain pending separate stage approvals.
+- C2 document restoration, C3 read-only dirty-tree classification, and C4 synthetic asset regeneration plus clean-checkout full pytest are complete. C5 and Tracks 3-4 remain pending separate stage approvals.
 - S2 remains `PSB_UNVERIFIED`; no natural-signal Runtime E2E PASS is claimed.
-- C4 final clean-checkout pytest: 697 passed, 1 skipped. Report: eports/synth/Q25_A7_C4_SYNTHETIC_ASSET_REGENERATION_AND_CLEAN_PYTEST_20261112.md; commit/push: 372bcbde247d0d90951e2ade84445cdd35440646.
-- C5 original-folder synchronization decision card is complete; no original-folder synchronization was performed. The user must choose A/B/C and separately approve any migration batch.
-- The historical dated status notes below are retained as evidence. They do not override the current SSOT or A7 progress table.
+- C4 final clean-checkout pytest: 697 passed, 1 skipped. C4 report: `reports/synth/Q25_A7_C4_SYNTHETIC_ASSET_REGENERATION_AND_CLEAN_PYTEST_20261112.md`. C4 report commit/push is recorded in the A7 progress page.\n- The historical dated status notes below are retained as evidence. They do not override the current SSOT or A7 progress table.
 - Original working-folder HEAD `b060fa57d3801e8227e88c8e54df8d2f9ffe7407` and its 224 dirty/untracked items remain protected.
 
 ---
