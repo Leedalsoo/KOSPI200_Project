@@ -213,7 +213,7 @@ class KISRestMarketObservationCollector:
         self.transport = transport
         self.store = store
         self.clock = clock or ManualClock()
-        self.limiter = limiter or RateLimiter(1.0, self.clock)
+        self.limiter = limiter or RateLimiter(1.25, self.clock)
         self.normalizer = normalizer or KISRestMarketObservationNormalizer(self)
     
     @staticmethod
