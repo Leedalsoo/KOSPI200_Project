@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
+
+import infrastructure.kis.kis_websocket_option_identity_resolver as resolver_module
 
 from contracts.kis_index_option_market_ws_adapter import KISIndexOptionMarketWebSocketAdapter
 from contracts.types import OptionInstrumentIdentity
@@ -303,3 +305,64 @@ def test_quote_only_event_uses_quote_consumer_and_never_legacy_tick_consumer() -
     assert tick_events == []
     assert quote_events == [tick]
     assert runtime.last_tick is tick
+
+
+def test_h0iocnt0_uses_exchange_event_time_and_unique_record_ids() -> None:
+    normalizer = KISWebSocketMarketObservationNormalizer(_IdentityLookup())
+    fields_a = ["0"] * 58
+    fields_b = ["0"] * 58
+    for fields, price in ((fields_a, "12.30"), (fields_b, "12.35")):
+        fields[0] = "B01611835"
+        fields[1] = "091501"
+        fields[2] = price
+        fields[10] = "1"
+        fields[33] = "10.0"
+        fields[41] = "12.40"
+        fields[42] = "12.20"
+    frame = "0|H0IOCNT0|2|" + "^".join(fields_a + fields_b)
+    received_at = datetime(2026, 10, 12, 0, 15, 2, tzinfo=timezone.utc)
+
+    observations = normalizer.normalize_frame(
+        frame,
+        received_at=received_at,
+        run_id="trade-time-id-test",
+        raw_id="20261012:7:line-9:frame-hash",
+        raw_content_hash="f" * 64,
+        session_date=date(2026, 10, 12),
+    )
+
+    assert len(observations) == 2
+    assert observations[0].observation_id != observations[1].observation_id
+    assert observations[0].observed_at.isoformat() == "2026-10-12T09:15:01+09:00"
+    assert observations[1].observed_at == observations[0].observed_at
+    assert all(item.collected_at == received_at for item in observations)
+    assert [dict(item.provenance.metadata)["frame_record_index"] for item in observations] == ["0", "1"]
+    assert all(dict(item.provenance.metadata)["received_at"] == received_at.isoformat() for item in observations)
+
+
+def test_historical_master_override_is_explicit_and_date_scoped(monkeypatch, tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    trading_day = date(2026, 10, 12)
+    selected_snapshot_day = date(2026, 10, 14)
+    target_hash = "a" * 64
+    snapshot = replace(
+        _snapshot(target_hash, (_row("B01611835", target_hash),)),
+        archive_path=Path("fo_idx_code_mts_20261014_test.json"),
+    )
+    requested_dates: list[date] = []
+
+    def load_snapshot(day: date, *, cache_dir: Path):
+        requested_dates.append(day)
+        return snapshot
+
+    monkeypatch.setattr(resolver_module, "load_kis_master_snapshot_for_date", load_snapshot)
+    monkeypatch.setattr(resolver_module, "_load_expiry_records_for_all_master_hashes", lambda cache_dir: ({}, ()))
+
+    resolver = KISWebSocketOptionIdentityResolver.for_trading_date(
+        trading_day, project_root=tmp_path, target_master_snapshot_date=selected_snapshot_day
+    )
+
+    assert requested_dates == [selected_snapshot_day]
+    assert resolver.summary(["B01611835"])["target_master_snapshot_date"] == "20261014"
+    assert resolver.provenance_metadata("B01611835")[1] == ("master_snapshot_date", "20261014")

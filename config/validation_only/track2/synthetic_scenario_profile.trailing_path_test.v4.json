@@ -1,0 +1,108 @@
+{
+  "schema_version": "1.0.0",
+  "profile_id": "S2-MARKET-CALIBRATED-TRAILING-PATH-TEST-v4",
+  "profile_type": "SYNTHETIC_SCENARIO_ONLY",
+  "strategy_id": "track2_asymmetric_trap",
+  "status": "NON_AUTHORITATIVE_MARKET_CALIBRATED_VALIDATION_FIXTURE_NOT_APPROVED_FOR_LIVE_OR_REAL_VTS",
+  "execution_enabled": false,
+  "order_submission_enabled": false,
+  "live_api_enabled": false,
+  "real_vts_api_enabled": false,
+  "risk_limits": {
+    "account_capital_krw": 100000000,
+    "account_max_premium_krw": 20000000,
+    "account_max_loss_krw": 5000000,
+    "max_margin_utilization_ratio": 0.5,
+    "max_concurrent_risk_budget_krw": 20000000,
+    "strategy_max_premium_krw": 10000000,
+    "strategy_max_loss_krw": 2500000,
+    "max_concurrent_groups": 4,
+    "group_max_loss_krw": 625000,
+    "fee_model_version": "SYNTHETIC_FLAT_FEE_1000KRW_PER_LEG_v1",
+    "slippage_model_version": "SYNTHETIC_ONE_TICK_0.05_v1",
+    "margin_model_version": "SYNTHETIC_PREMIUM_CAP_ONLY_v1"
+  },
+  "U16_quote_policy": {
+    "validated": true,
+    "side_to_book_rule": "BUY_ASK_SELL_BID",
+    "max_quote_age_seconds": 5,
+    "max_spread": "4.70",
+    "spread_unit": "PRICE",
+    "fallback_formula": "CONSERVATIVE_EXECUTABLE_SIDE",
+    "fallback_priority": "ALTERNATE_SOURCE_ONLY",
+    "tick_rounding_rule": "BUY_CEILING_SELL_FLOOR",
+    "retry_schedule_seconds_after_t0": [
+      30,
+      60,
+      90
+    ],
+    "deadline_seconds": 120,
+    "max_additional_retries": 3
+  },
+  "U17_contract_selection": {
+    "atm_tie_break": "LOWER_STRIKE_AT_OR_BELOW_UNDERLYING",
+    "identity_source": "SYNTHETIC_SCENARIO_CONTRACT_FIXTURE_ONLY"
+  },
+  "U18_exit_policy": {
+    "stop_loss_ratio": "-0.90",
+    "trailing_activation_ratio": "0.40",
+    "trailing_pullback_ratio": "0.25",
+    "pnl_basis": "FOUR_LEG_NET_PNL_AFTER_FEES_AND_SLIPPAGE_OVER_INITIAL_NET_PREMIUM"
+  },
+  "U19_recovery_policy": {
+    "broker_position_source": "VALIDATION_ONLY:BROKER_EXCHANGE",
+    "ledger_source": "VALIDATION_ONLY:EXECUTION_LEDGER",
+    "resume_requires_time_aligned_complete_matching_snapshots": true,
+    "pending_orders_block_resume": true,
+    "mismatch_auto_adjustment": false
+  },
+  "U20_entry_policy": {
+    "sequence": [
+      "inner_put",
+      "inner_call",
+      "outer_put",
+      "outer_call"
+    ],
+    "advance_after": "PREVIOUS_LEG_FULL_FILL_OR_CONFIRMED_ZERO_FILL_CANCEL_AND_FLAT_POSITION",
+    "partial_unknown_or_pending_blocks": true
+  },
+  "U21_quote_policy": {
+    "approved_for_synthetic_scenarios_only": true,
+    "max_age_seconds": "5",
+    "max_spread": "4.70",
+    "spread_measure": "ABSOLUTE",
+    "fallback_formula": "CONSERVATIVE_EXECUTABLE_SIDE",
+    "fallback_priority": "ALTERNATE_SOURCE_ONLY",
+    "tick_size": "0.05",
+    "tick_rounding": "BUY_CEILING_SELL_FLOOR"
+  },
+  "synthetic_cost_models": {
+    "fee_krw_per_leg": 1000,
+    "slippage_ticks_per_leg": 1,
+    "tick_size": "0.05",
+    "margin_model": "PREMIUM_CAP_ONLY_NO_EXCHANGE_MARGIN_CLAIM"
+  },
+  "limitations": [
+    "Every numeric risk cap and U16/U18/U21 threshold is an illustrative test fixture, not an approved user risk appetite or market rule.",
+    "Contract identity and ATM selection in this profile do not replace an authoritative KIS option master.",
+    "Synthetic broker and ledger snapshots validate reconciliation logic only; they are not real account evidence.",
+    "This profile must never be loaded by the production Track2 validation profile loader or used to authorize orders.",
+    "No real broker, KIS Live, REAL_VTS, account, order, cancellation, or margin API is permitted.",
+    "U16/U21 spread 4.70 is derived from accepted market-data spread p95 plus one tick for validation-only scenarios; it is not approved production policy.",
+    "U18 stop_loss_ratio -0.90 and trailing path scenario are test-only values for exercising the trailing close route; not approved production policy."
+  ],
+  "market_calibration": {
+    "source": "ACCEPTED_KIS_H0IOCNT0_L1_BID_ASK",
+    "observed_spread_quantile": 0.95,
+    "validation_max_spread_rule": "SAME_DATASET_SPREAD_P95_PLUS_ONE_TICK",
+    "max_source_anchor_age_seconds": 900,
+    "pricing_model": "BLACK_SCHOLES_ZERO_RATE_EMPIRICAL_IV_V1",
+    "production_policy_approval": false
+  },
+  "trailing_path_test": {
+    "purpose": "FORCE_TRAILING_ACTIVATION_AND_PULLBACK_ROUTE_VALIDATION_ONLY",
+    "activation_ratio": "0.40",
+    "pullback_ratio": "0.25",
+    "production_policy_approval": false
+  }
+}

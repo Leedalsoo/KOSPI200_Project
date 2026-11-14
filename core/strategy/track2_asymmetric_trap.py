@@ -339,13 +339,19 @@ class Track2AsymmetricTrap:
             return ()
         active_vol = float(values["volatility.active"])
         base_vol = float(values["volatility.base"])
+        trap = self.build_asymmetric_trap(tick.price, active_vol, base_vol)
+        preflight = getattr(self, "validation_only_entry_plan_preflight", None)
+        if callable(preflight) and not preflight(
+            current_price=Decimal(str(tick.price)), active_vol=active_vol,
+            base_vol=base_vol, observed_at=now,
+        ):
+            return ()
         self._entry_pending = True
         self._trap_active = False
         self._entry_price = tick.price
         self._entry_instrument = tick.instrument_id
         self._high_pnl_ratio = Decimal("0")
         self._daily_entry_count += 1
-        trap = self.build_asymmetric_trap(tick.price, active_vol, base_vol)
         short_put = trap["signals"][0]["strikes"]["put"]
         self._entry_strike = short_put
         proposal = StrategyExecutionProposal(

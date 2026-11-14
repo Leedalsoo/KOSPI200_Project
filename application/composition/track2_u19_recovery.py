@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from core.oms.track2_u19_recovery import (
     U19BrokerPositionSnapshot,
@@ -29,3 +29,25 @@ class ValidationOnlyTrack2U19RecoveryCoordinator:
         )
         self.store.save(decision.to_checkpoint())
         return decision
+
+    def recover_and_restore_u16_runtime(
+        self,
+        *,
+        group_id: str,
+        broker_snapshot: U19BrokerPositionSnapshot | None,
+        ledger_snapshot: U19ExecutionLedgerSnapshot | None,
+        u16_runtime: object,
+    ) -> tuple[U19RecoveryDecision, bool]:
+        """Persist U19 evidence first; restore U16 retry state only on verified resume."""
+        decision = self.recover(
+            group_id=group_id,
+            broker_snapshot=broker_snapshot,
+            ledger_snapshot=ledger_snapshot,
+        )
+        if decision.status.value != "RESTORE_ALLOWED":
+            return decision, False
+        restore = getattr(u16_runtime, "restore_after_u19_recovery", None)
+        if not callable(restore):
+            raise ValueError("U16_RUNTIME_RECOVERY_RESTORE_PORT_REQUIRED")
+        restored = bool(restore(group_id, decision))
+        return decision, restored

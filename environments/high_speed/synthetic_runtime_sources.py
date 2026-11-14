@@ -98,6 +98,8 @@ class SyntheticRuntimeSources:
                     "bid": bid, "ask": ask, "last": last,
                     "timestamp": observed,
                     "volume": max(1, int(getattr(tick, "volume", 1) or 1)),
+                    "bid_quantity": max(1, int(getattr(tick, "bid_quantity", 0) or 1)),
+                    "ask_quantity": max(1, int(getattr(tick, "ask_quantity", 0) or 1)),
                     "source": "SYNTHETIC:DERIVED_SCENARIO",
                 }
         except (AttributeError, TypeError, ValueError):
@@ -123,6 +125,8 @@ class SyntheticRuntimeSources:
                         "last": last,
                         "timestamp": observed,
                         "volume": max(1, int(getattr(tick, "volume", 1) or 1)),
+                        "bid_quantity": max(1, int(getattr(tick, "bid_quantity", 0) or 1)),
+                        "ask_quantity": max(1, int(getattr(tick, "ask_quantity", 0) or 1)),
                         "source": "SYNTHETIC:DERIVED_SCENARIO",
                     }
             except (AttributeError, TypeError, ValueError):
@@ -215,11 +219,12 @@ class SyntheticRuntimeSources:
                     or current.tzinfo is None or observed > current
                     or current - observed > timedelta(seconds=5)):
                 return None
-            qty = Decimal(str(quote.get("volume", 1)))
+            bid_qty = Decimal(str(quote.get("bid_quantity", quote.get("volume", 1))))
+            ask_qty = Decimal(str(quote.get("ask_quantity", quote.get("volume", 1))))
             bid = Decimal(str(quote["bid"]))
             ask = Decimal(str(quote["ask"]))
-            asks = tuple(OptionOrderBookLevel(ask + Decimal("0.01") * i, qty + Decimal(i * 2)) for i in range(5))
-            bids = tuple(OptionOrderBookLevel(max(Decimal("0.01"), bid - Decimal("0.01") * i), qty + Decimal(i * 2)) for i in range(5))
+            asks = tuple(OptionOrderBookLevel(ask + Decimal("0.01") * i, ask_qty + Decimal(i * 2)) for i in range(5))
+            bids = tuple(OptionOrderBookLevel(max(Decimal("0.01"), bid - Decimal("0.01") * i), bid_qty + Decimal(i * 2)) for i in range(5))
             return OptionOrderBookSnapshot(str(symbol), observed.strftime("%H:%M:%S"), asks, bids,
                                             f"{SYNTHETIC_SOURCE}:identity-bound")
         # Non-synthetic symbols retain the legacy modelled book used by other

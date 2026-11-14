@@ -47,5 +47,12 @@ class CanonicalStrategySignal:
 
  def __post_init__(self):
   if self.asset_type == CanonicalAssetType.OPTION:
+   if self.identity_source in {
+    "MULTI_LEG_PLAN_IDENTITY_RESOLVED_BY_PLAN_RESOLVER",
+    "MULTI_LEG_CLOSE_IDENTITY_RESOLVED_BY_OPEN_LOTS",
+   }:
+    if self.option_type is not None or self.expiry or self.instrument_id or self.symbol or self.contract_multiplier is not None:
+     raise ValueError("MULTI_LEG_SIGNAL_MARKER_MUST_NOT_CARRY_SINGLE_CONTRACT_IDENTITY")
+    return
    try: object.__setattr__(self, "expiry", require_exact_option_expiry(self.expiry))
    except CanonicalOptionExpiryError as exc: raise ValueError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc

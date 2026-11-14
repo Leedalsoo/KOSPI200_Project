@@ -138,6 +138,12 @@ def load_kis_master_snapshot_by_hash(master_sha256: str, *, cache_dir: Path) -> 
     return _read_snapshot_manifest(matches[0][1], expected_hash=master_sha256)
 
 
+
+def _snapshot_market_date(snapshot: KISIndexMasterSnapshot) -> str:
+    match = re.search(r"_(\d{8})_", snapshot.archive_path.stem)
+    return match.group(1) if match else "UNKNOWN"
+
+
 def rows_from_snapshot(snapshot: KISIndexMasterSnapshot) -> tuple[dict[str, object], ...]:
     rows: list[dict[str, object]] = []
     for line in snapshot.raw_content.splitlines():
@@ -270,10 +276,17 @@ class KISWebSocketOptionIdentityResolver:
             self._series_evidence_sha256[key] = hashlib.sha256(material.encode("utf-8")).hexdigest()
 
     @classmethod
-    def for_trading_date(cls, day: date, *, project_root: Path) -> "KISWebSocketOptionIdentityResolver":
+    def for_trading_date(
+        cls, day: date, *, project_root: Path, target_master_snapshot_date: date | None = None
+    ) -> "KISWebSocketOptionIdentityResolver":
         master_cache = project_root / "data" / "reference" / "kis" / "index_master"
         expiry_cache = project_root / "data" / "reference" / "kis" / "option_expiry"
-        target_snapshot = load_kis_master_snapshot_for_date(day, cache_dir=master_cache)
+        # Historical fallback is opt-in: the selected official snapshot date is explicit
+        # and its date/hash are retained in resolver provenance.
+        selected_snapshot_date = target_master_snapshot_date or day
+        target_snapshot = load_kis_master_snapshot_for_date(
+            selected_snapshot_date, cache_dir=master_cache
+        )
         target_rows = rows_from_snapshot(target_snapshot)
         evidence_snapshots, expiry_records = _load_expiry_records_for_all_master_hashes(expiry_cache)
         return cls(
@@ -332,9 +345,13 @@ class KISWebSocketOptionIdentityResolver:
     def provenance_metadata(self, symbol: str) -> tuple[tuple[str, str], ...]:
         record = self.get_expiry_record(symbol)
         if record is None:
-            return (("master_snapshot_sha256", self.target_snapshot.archive_sha256),)
+            return (
+                ("master_snapshot_sha256", self.target_snapshot.archive_sha256),
+                ("master_snapshot_date", _snapshot_market_date(self.target_snapshot)),
+            )
         return (
             ("master_snapshot_sha256", self.target_snapshot.archive_sha256),
+            ("master_snapshot_date", _snapshot_market_date(self.target_snapshot)),
             ("expiry_evidence_master_hashes", ",".join(record.evidence_master_hashes)),
             ("expiry_resolution_method", "KIS_MASTER_EXACT_ROW_SERIES_JOIN"),
             ("expiry_evidence_symbol_count", str(len(record.evidence_symbols))),
@@ -348,6 +365,7 @@ class KISWebSocketOptionIdentityResolver:
         return {
             "target_master_sha256": self.target_snapshot.archive_sha256,
             "target_master_fetched_at": self.target_snapshot.fetched_at.isoformat(),
+            "target_master_snapshot_date": _snapshot_market_date(self.target_snapshot),
             "candidate_symbols": len(candidates),
             "resolved_symbols": len(resolved),
             "unresolved_symbols": len(unresolved),

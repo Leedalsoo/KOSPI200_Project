@@ -254,3 +254,93 @@ def test_track2_runtime_tick_processor_refreshes_group_pnl_before_strategy_evalu
     assert "refresh_position_group_marks" in calls
     assert "update_group_pnl_snapshot" in calls
     assert "update_group_pnl_status" in calls
+
+
+
+def test_track2_group_trailing_exit_builds_trap_close_signal_when_test_policy_is_injected():
+    strategy = Track2AsymmetricTrap()
+    strategy._trap_active = True
+    # Validation-only values exercise the U18 trailing state machine; production policy remains unresolved.
+    strategy.STOP_LOSS_RATIO = Decimal("-0.50")
+    strategy.TRAILING_ACTIVATION_RATIO = Decimal("0.40")
+    strategy.TRAILING_PULLBACK_RATIO = Decimal("0.25")
+
+    strategy.update_group_pnl_snapshot(_strategy_group_pnl_snapshot(net_pnl=50.0))
+    assert strategy.evaluate_trap(Decimal("885.93"), datetime.fromisoformat(OBSERVED_AT)) == ()
+    assert strategy._high_pnl_ratio == Decimal("0.5")
+
+    strategy.update_group_pnl_snapshot(_strategy_group_pnl_snapshot(net_pnl=37.5))
+    signals = strategy.evaluate_trap(Decimal("885.93"), datetime.fromisoformat(OBSERVED_AT))
+
+    assert len(signals) == 1
+    assert signals[0].execution_proposal.tag_id == "TRAP_CLOSE"
+    assert "TRAILING_EXIT" in signals[0].reason
+
+
+def test_track2_initial_net_premium_uses_absolute_value_for_debit_and_credit():
+    plan_legs = tuple(SimpleNamespace(leg_id=leg_id, side=side) for leg_id, side in (
+        ("inner_put", "BUY"), ("inner_call", "BUY"),
+        ("outer_put", "SELL"), ("outer_call", "SELL"),
+    ))
+    group_plan = SimpleNamespace(legs=plan_legs)
+    prices = {
+        "inner_put": 41.50, "inner_call": 43.00,
+        "outer_put": 37.10, "outer_call": 39.45,
+    }
+    pnl_legs = tuple(SimpleNamespace(
+        leg_id=leg_id, quantity=1, contract_multiplier=250000,
+        avg_price=price,
+    ) for leg_id, price in prices.items())
+    snapshot = SimpleNamespace(complete=True, legs=pnl_legs)
+
+    # BUY inner / SELL outer produces a net debit of KRW 1,987,500.
+    assert VirtualMultiLegExecutionBridge._track2_initial_net_premium(
+        group_plan, snapshot
+    ) == pytest.approx(1_987_500)
+
+    # Reversing only the test-side signs models a net credit; denominator stays positive.
+    credit_plan = SimpleNamespace(legs=tuple(
+        SimpleNamespace(leg_id=item.leg_id, side=("SELL" if item.side == "BUY" else "BUY"))
+        for item in plan_legs
+    ))
+    assert VirtualMultiLegExecutionBridge._track2_initial_net_premium(
+        credit_plan, snapshot
+    ) == pytest.approx(1_987_500)
+
+
+def test_track2_initial_net_premium_fails_closed_for_incomplete_or_zero_net_group():
+    plan = SimpleNamespace(legs=tuple(SimpleNamespace(leg_id=f"leg-{i}", side=side)
+        for i, side in enumerate(("BUY", "BUY", "SELL", "SELL"))))
+    legs = tuple(SimpleNamespace(leg_id=f"leg-{i}", quantity=1,
+        contract_multiplier=250000, avg_price=10.0) for i in range(4))
+    assert VirtualMultiLegExecutionBridge._track2_initial_net_premium(
+        plan, SimpleNamespace(complete=False, legs=legs)
+    ) is None
+    assert VirtualMultiLegExecutionBridge._track2_initial_net_premium(
+        plan, SimpleNamespace(complete=True, legs=legs)
+    ) is None
+
+
+def test_track2_trap_close_canonical_signal_is_group_level_without_single_contract_identity():
+    from core.strategy.canonical_signal_adapter import RuntimeSignalContext, signal_to_canonical
+    from core.strategy.contracts import Signal
+    from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
+
+    signal = Signal(
+        STRATEGY_ID, "EXIT", 1.0, "TRAP_GROUP_STOP_LOSS",
+        execution_proposal=StrategyExecutionProposal(
+            proposed_quantity=1, asset_type="OPTION", requested_price=None,
+            side="SELL", track_id=STRATEGY_ID, tag_id="TRAP_CLOSE",
+            option_type="PUT", strike=Decimal("1035.0"),
+        ),
+    )
+    canonical = signal_to_canonical(
+        signal,
+        RuntimeSignalContext("signal-close", STRATEGY_ID, 1.0, OBSERVED_AT),
+        instrument_identity=None,
+    )
+
+    assert canonical.tag_id == "TRAP_CLOSE"
+    assert canonical.instrument_id == ""
+    assert canonical.option_type is None
+    assert canonical.identity_source == "MULTI_LEG_CLOSE_IDENTITY_RESOLVED_BY_OPEN_LOTS"

@@ -39,15 +39,30 @@ def signal_to_canonical(signal: Signal, runtime: RuntimeSignalContext, instrumen
         symbol, instrument_id = identity.symbol, identity.instrument_id
         multiplier, identity_source = float(identity.contract_multiplier), identity.identity_source
     if asset_type == CanonicalAssetType.OPTION:
-        if not isinstance(identity, OptionInstrumentIdentity): raise ValueError("OPTION_IDENTITY_REQUIRED")
-        if not identity.instrument_id or not identity.symbol or not identity.expiry or identity.option_type is None or identity.strike is None:
-            raise ValueError("OPTION_IDENTITY_INCOMPLETE")
-        try:
-            exact_expiry = require_exact_option_expiry(identity.expiry)
-        except CanonicalOptionExpiryError as exc:
-            raise ValueError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
-        if proposal.option_type is not None and str(proposal.option_type) != str(identity.option_type): raise ValueError("OPTION_TYPE_IDENTITY_MISMATCH")
-        if proposal.strike is not None and proposal.strike != identity.strike: raise ValueError("STRIKE_IDENTITY_MISMATCH")
-        option_type = CanonicalOptionType(str(identity.option_type)); strike = float(identity.strike); symbol = identity.symbol; expiry = exact_expiry; instrument_id = identity.instrument_id
-        multiplier = float(identity.contract_multiplier) if identity.contract_multiplier is not None else None; identity_source = identity.identity_source or ""
+        if (identity is None and track_id == "track2_asymmetric_trap"
+                and str(proposal.tag_id or "").upper() in {"TRAP_PLAN", "TRAP_CLOSE"}):
+            # Both entry and close are group-level intents. Entry resolves four new
+            # identities; close resolves every authoritative open lot. Neither signal
+            # may be reduced to one listed contract identity at this boundary.
+            tag_id = str(proposal.tag_id or "").upper()
+            if tag_id == "TRAP_PLAN" and (proposal.option_type not in {"PUT", "CALL"} or proposal.strike is None):
+                raise ValueError("TRACK2_MULTI_LEG_SIGNAL_ANCHOR_INVALID")
+            strike = float(proposal.strike) if proposal.strike is not None else 0.0
+            identity_source = (
+                "MULTI_LEG_PLAN_IDENTITY_RESOLVED_BY_PLAN_RESOLVER"
+                if tag_id == "TRAP_PLAN"
+                else "MULTI_LEG_CLOSE_IDENTITY_RESOLVED_BY_OPEN_LOTS"
+            )
+        else:
+            if not isinstance(identity, OptionInstrumentIdentity): raise ValueError("OPTION_IDENTITY_REQUIRED")
+            if not identity.instrument_id or not identity.symbol or not identity.expiry or identity.option_type is None or identity.strike is None:
+                raise ValueError("OPTION_IDENTITY_INCOMPLETE")
+            try:
+                exact_expiry = require_exact_option_expiry(identity.expiry)
+            except CanonicalOptionExpiryError as exc:
+                raise ValueError("OPTION_EXPIRY_EXACT_DATE_REQUIRED") from exc
+            if proposal.option_type is not None and str(proposal.option_type) != str(identity.option_type): raise ValueError("OPTION_TYPE_IDENTITY_MISMATCH")
+            if proposal.strike is not None and proposal.strike != identity.strike: raise ValueError("STRIKE_IDENTITY_MISMATCH")
+            option_type = CanonicalOptionType(str(identity.option_type)); strike = float(identity.strike); symbol = identity.symbol; expiry = exact_expiry; instrument_id = identity.instrument_id
+            multiplier = float(identity.contract_multiplier) if identity.contract_multiplier is not None else None; identity_source = identity.identity_source or ""
     return CanonicalStrategySignal(signal_id=signal_id, track_id=track_id, asset_type=asset_type, side=side, qty=proposal.proposed_quantity, price=float(runtime.price), option_type=option_type, strike=strike, tag_id=str(proposal.tag_id) if proposal.tag_id is not None else "", reason=signal.reason, timestamp=runtime.timestamp, symbol=symbol, expiry=expiry, instrument_id=instrument_id, contract_multiplier=multiplier, identity_source=identity_source)

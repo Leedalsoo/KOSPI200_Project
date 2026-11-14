@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from contracts.types import ExecutionReport
 from core.oms.multi_leg_plan import build_trap_plan
 from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
+from application.composition.automated_virtual_trading_loop import _track2_entry_progress_is_pending
 
 
 def _plan():
@@ -271,3 +272,27 @@ def test_track2_entry_plan_is_not_terminal_execution_plan():
     bridge = VirtualMultiLegExecutionBridge.__new__(VirtualMultiLegExecutionBridge)
     plan = SimpleNamespace(strategy_id="track2_asymmetric_trap", purpose="ASYMMETRIC_TRAP_WIDE")
     assert bridge._is_terminal_execution_plan(plan) is False
+
+
+def test_incomplete_but_sequentially_ready_track2_group_is_not_counted_as_rejected():
+    plan = _plan()
+    result = SimpleNamespace(reports=(_report("inner_put", "FILLED"),))
+    assert _track2_entry_progress_is_pending(plan, result) is True
+
+
+def test_blocked_or_complete_track2_group_is_not_misclassified_as_progress():
+    plan = _plan()
+    rejected = SimpleNamespace(reports=(_report("inner_put", "REJECTED", 0, 1),))
+    complete = SimpleNamespace(reports=tuple(_report(leg.leg_id, "FILLED") for leg in plan.legs))
+    close_plan = SimpleNamespace(strategy_id=plan.strategy_id, purpose="TRAP_CLOSE")
+    assert _track2_entry_progress_is_pending(plan, rejected) is False
+    assert _track2_entry_progress_is_pending(plan, complete) is False
+    assert _track2_entry_progress_is_pending(close_plan, complete) is False
+
+
+def test_runtime_entry_progression_stops_after_terminal_group_close(monkeypatch):
+    bridge, calls, plan = _bridge(monkeypatch)
+    bridge._track2_entry_progress_disabled_groups = {plan.group_id}
+
+    assert bridge.process_track2_entry_progress() == ()
+    assert calls == []

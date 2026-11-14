@@ -38,6 +38,7 @@ class U16QuotePolicy:
     fallback_formula: str | None = None
     fallback_priority: str | None = None
     tick_rounding_rule: str | None = None
+    retry_interval_seconds: int | None = None
 
     def is_resolved(self) -> bool:
         return bool(
@@ -50,6 +51,8 @@ class U16QuotePolicy:
             and self.fallback_formula
             and self.fallback_priority
             and self.tick_rounding_rule
+            and self.retry_interval_seconds is not None
+            and self.retry_interval_seconds > 0
         )
 
 
@@ -72,6 +75,8 @@ class U16RepairInput:
     quote_present: bool = False
     quote_fresh: bool = False
     quote_spread_within_policy: bool = False
+    group_position_quantity: int | None = None
+    group_position_confirmed: bool = False
 
 
 @dataclass(frozen=True)
@@ -165,16 +170,23 @@ def evaluate_u16_repair(data: U16RepairInput) -> U16RepairEvaluation:
                 "THREE_ADDITIONAL_RETRIES_EXHAUSTED",
                 filled, missing, data.additional_retry_count,
             )
-        due_slot = max(0, int(elapsed // 30) - 1)
+        retry_interval = data.quote_policy.retry_interval_seconds
+        if retry_interval is None or retry_interval <= 0:
+            return _blocked(
+                U16RepairState.POLICY_INPUT_BLOCKED,
+                "RETRY_INTERVAL_POLICY_UNRESOLVED",
+                filled, missing, data.additional_retry_count,
+            )
+        due_slot = max(0, int(elapsed // retry_interval) - 1)
         if due_slot > data.additional_retry_count:
-            next_at = data.first_repair_submitted_at + timedelta(seconds=30 * (data.additional_retry_count + 1))
+            next_at = data.first_repair_submitted_at + timedelta(seconds=retry_interval * (data.additional_retry_count + 1))
             return _blocked(
                 U16RepairState.REPAIR_WAITING,
                 "MISSED_RETRY_SLOT_NOT_DEFERRED",
                 filled, missing, data.additional_retry_count, next_at,
             )
-        if elapsed < 30 * (data.additional_retry_count + 1):
-            next_at = data.first_repair_submitted_at + timedelta(seconds=30 * (data.additional_retry_count + 1))
+        if elapsed < retry_interval * (data.additional_retry_count + 1):
+            next_at = data.first_repair_submitted_at + timedelta(seconds=retry_interval * (data.additional_retry_count + 1))
             return _blocked(
                 U16RepairState.REPAIR_WAITING,
                 "FIXED_T0_RETRY_SCHEDULE",
