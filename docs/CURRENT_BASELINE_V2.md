@@ -5,7 +5,7 @@
 ## 최신 상태 갱신 — Project200 정식 브랜치 동기화 (2026-11-15)
 
 - 사용자의 2026-11-15 명시 지시에 따라 `Project200`을 최신 통합 코드의 정식 작업 브랜치로 지정했다. 기존 Project200/master 보호 문구 중 Project200 push/merge 금지 부분은 이번 명시 승인으로 대체한다. `master`는 변경하지 않았다.
-- 작업폴더 branch `Project200`, local HEAD 및 `origin/Project200` HEAD 모두 `40134312eb84aa7ffbc3b67cc6b227ff03e1567d`로 일치한다.
+- 동기화 시점의 통합 코드 baseline은 `40134312eb84aa7ffbc3b67cc6b227ff03e1567d`이며, 문서 정합 commit은 `b631ec59f24f274ed6c6ae76323f316ddb31622c`이다. 현재 branch tip은 이후 문서 전용 커밋을 포함하므로 매 작업 시작 시 Git에서 live SHA를 확인한다.
 - 통합은 원격 `cleanup/p2-quarantine-20261026` (`dac1daa`)와 `sync/q25-a7-batch1-integration-20261112` (`3551374`)의 변경을 merge commit `91b61727`로 결합했고, KIS safety test EOF stray escape 수정 commit `40134312`를 추가했다. 이전 Project200 `657b573`에서 86개 커밋 전진했으며 non-force fast-forward push 및 원격 SHA 확인을 완료했다.
 - 전체 pytest **753 passed, 1 skipped**; Track2/Runtime/KIS 집중 테스트 **254 passed**; compileall 및 diff check PASS. 전체 테스트용 validation-only synthetic assets는 임시 격리 worktree에서만 생성했고 commit하지 않았다.
 - 기존 tracked 변경 24개 파일은 외부 patch 백업 후 최신 Project200 파일로 동기화했다. 기존 untracked 311개는 그대로 보존했고 현재 tracked diff는 0건이다. Patch SHA-256: `913D0383764C371459F8AD202EF94C021472BE18FF21BF1127A5523B9C5F1E3F`.
