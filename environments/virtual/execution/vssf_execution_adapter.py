@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from decimal import Decimal
 from typing import Protocol
@@ -23,6 +23,7 @@ class VSSFExecutionAdapter:
 
     command_context: VSSFCommandContextProvider
     vssf_runtime: VSSFRuntime
+    _order_metadata: dict[str, tuple[str | None, str | None]] = field(default_factory=dict, compare=False, repr=False)
 
     def _map(self, result: object) -> ExecutionReport:
         if isinstance(result, CanonicalExecutionReport):
@@ -61,20 +62,31 @@ class VSSFExecutionAdapter:
             )
         raise RuntimeError("VSSF_ORDER_RESULT_INVALID")
 
+    def _attach_order_metadata(self, report: ExecutionReport, client_order_id: str) -> ExecutionReport:
+        metadata = self._order_metadata.get(client_order_id)
+        if metadata is None:
+            return report
+        group_id, leg_id = metadata
+        return replace(
+            report,
+            group_id=report.group_id or group_id,
+            leg_id=report.leg_id or leg_id,
+        )
+
     def execute(self, order: BrokerOrderCommand) -> ExecutionReport:
+        self._order_metadata[order.client_order_id] = (order.group_id, order.leg_id)
         result = self.vssf_runtime.process_order(self.command_context.build_command(order))
         if result is None:
             raise RuntimeError("VSSF_ORDER_NOT_ACCEPTED")
         if isinstance(result, CanonicalExecutionReport):
             lifecycle = self.vssf_runtime.query_order(result.client_order_id)
             if lifecycle is not None:
-                return self._map(lifecycle)
-        return self._map(result)
+                return self._attach_order_metadata(self._map(lifecycle), order.client_order_id)
+        return self._attach_order_metadata(self._map(result), order.client_order_id)
 
     def query(self, client_order_id: str) -> ExecutionReport | None:
         result = self.vssf_runtime.query_order(client_order_id)
-        return None if result is None else self._map(result)
-
+        return None if result is None else self._attach_order_metadata(self._map(result), client_order_id)
     def cancel(self, client_order_id: str, *, lifecycle_reason: str = "MANUAL") -> ExecutionReport:
         cancel_result = self.vssf_runtime.cancel_order(
             client_order_id, lifecycle_reason=lifecycle_reason
@@ -89,4 +101,4 @@ class VSSFExecutionAdapter:
             raise RuntimeError("VSSF_CANCEL_TERMINAL_CONFIRMATION_REQUIRED")
         if cancel_result is None and status != "FILLED":
             raise RuntimeError("VSSF_CANCEL_REQUEST_UNCONFIRMED")
-        return self._map(confirmed)
+        return self._attach_order_metadata(self._map(confirmed), client_order_id)

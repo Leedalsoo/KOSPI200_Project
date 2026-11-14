@@ -1,5 +1,6 @@
 """Compose Strategy 5's canonical AnalyticsSnapshot."""
 from __future__ import annotations
+from dataclasses import replace
 
 from contracts.analytics import AnalyticsProvenance, AnalyticsRequest, MarketSnapshot
 from core.analytics.engine import AnalyticsEngine
@@ -38,6 +39,13 @@ def build_track5_analytics_snapshot(data, *, run_id: str, as_of, common_snapshot
         for key, dependencies in keys
     )
     common_keys = set(COMMON_METRIC_CONTRACTS) if common_snapshot is not None else set()
+    if common_snapshot is not None:
+        # Track5 price.last is the KOSPI200 underlying, not the option premium
+        # carried by the shared option-tick common snapshot.
+        common_metrics = dict(common_snapshot.metrics)
+        common_metrics.pop("price.last", None)
+        common_snapshot = replace(common_snapshot, metrics=common_metrics)
+        common_keys.discard("price.last")
     requests = tuple(request for request in requests if request.metric_key not in common_keys)
     if not requests:
         return common_snapshot

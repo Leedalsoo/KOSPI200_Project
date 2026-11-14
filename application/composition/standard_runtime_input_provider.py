@@ -5,6 +5,7 @@ payload is available. Missing authoritative data is represented explicitly by
 UnavailableStrategyPayload and never by a numeric/boolean placeholder.
 """
 from __future__ import annotations
+from dataclasses import replace
 from contracts.trading_date import format_trading_date
 
 from datetime import datetime, timedelta
@@ -53,6 +54,12 @@ from application.composition.track8_option_contract_source import Track8OptionCo
 from application.composition.track2_analytics_provider import build_track2_analytics_snapshot
 from application.composition.track4_analytics_provider import build_track4_analytics_snapshot
 from application.composition.track5_analytics_provider import build_track5_analytics_snapshot
+
+def _track5_common_input(common, underlying_price):
+    if common is None:
+        return None
+    current_price = Decimal(str(underlying_price)) if underlying_price is not None else None
+    return replace(common, current_price=current_price)
 from application.composition.track6_analytics_provider import build_track6_analytics_snapshot
 from application.composition.track7_analytics_provider import build_track7_analytics_snapshot
 from application.composition.track8_analytics_provider import build_track8_analytics_snapshot
@@ -494,10 +501,11 @@ class StandardRuntimeInputProvider:
                 "TRACK5_REQUIRED_EXECUTION_SOURCES_UNAVAILABLE",
             )
         else:
+            track5_common = _track5_common_input(common, d.underlying_price)
             contexts["track5_gap_divergence"] = StrategyContext(
                 market_state,
                 "track5_gap_divergence",
-                StrategyInput(common, track5_execution_input),
+                StrategyInput(track5_common, track5_execution_input),
                 analytics=build_track5_analytics_snapshot(
                     d, run_id=self.run_id or "virtual", as_of=d.as_of,
                     common_snapshot=common_analytics,
