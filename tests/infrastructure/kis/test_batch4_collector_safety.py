@@ -88,5 +88,3 @@ def test_ws_raw_manifest_rejects_sha256_mismatch(tmp_path: Path):
     raw_path.write_text('{"sequence":2}\n', encoding="utf-8")
     with pytest.raises(RuntimeError, match="WS_RAW_FILE_HASH_MISMATCH"):
         _load_raw_manifest(raw_path, date(2026, 10, 21))
-
-\n
