@@ -101,6 +101,6 @@
 
 ## Current Git baseline (2026-11-15)
 - Canonical working branch: `Project200`.
-- At the 2026-11-15 synchronization, the integrated code baseline is `40134312eb84aa7ffbc3b67cc6b227ff03e1567d` and the documentation alignment commit is `b631ec59f24f274ed6c6ae76323f316ddb31622c`. Verify the live `Project200` HEAD against `origin/Project200` at each task start; do not rely on a static SHA.
+- At the start of each task, fetch and verify that the local `Project200` HEAD matches `origin/Project200`; do not rely on a static SHA. The latest code baseline and validation evidence are recorded in `docs/CURRENT_BASELINE_V2.md` and Notion `Current Baseline v2`.
 - `cleanup/p2-quarantine-20261026` and `sync/q25-a7-batch1-integration-20261112` are historical integration-source branches; `integrate/q25-*` and Q25 A5 branches are retained as development/validation history, not as competing canonical branches.
 - `master` is unchanged and remains protected. New feature work should use isolated worktrees; integrate into `Project200` only after explicit user approval.

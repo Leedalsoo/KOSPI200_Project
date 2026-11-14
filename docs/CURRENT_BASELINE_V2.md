@@ -2,11 +2,23 @@
 
 > Mirrored from Notion page `4135f4f6-eaa1-81f7-ac42-dea70e10fa42`. Notion remains the decision source; this file is the repository snapshot used for SHA-linked traceability.
 
+## 최신 상태 추가 — S5 그룹 청산·Runtime 코드 통합 (2026-11-15)
+
+- `q25-a5-s22-s5-group-close-20261109` 브랜치의 15개 독자 커밋을 전부 병합하지 않고, Project200에 누락된 S5 관련 코드·테스트만 선별 통합했다. 이전 S2 snapshot, 생성 데이터, 보고서, Graphify 산출물은 가져오지 않았다.
+- `1743f8a` — Track5 청산 proposal 수량을 실행 수량이 아닌 trigger marker로 제한하고, 직접 close plan 생성을 차단한다. 실제 청산 수량·계약 identity는 authoritative open lots에서 resolver가 산출한다.
+- `c66f766` — Track5의 `price.last`와 `CommonStrategyInput.current_price`가 옵션 premium이 아닌 기초자산 가격을 사용하도록 정합했다. VSSF ExecutionAdapter가 group_id/leg_id를 보존하며, S5 synthetic seed adapter는 validation-only·fail-closed로 기존 position 복구를 검증한다.
+- 검증: S5 집중 테스트 **20 passed**; Track2/Runtime/KIS 회귀 **254 passed**; 전체 pytest **766 passed, 1 skipped**; 전체 compileall 및 diff check PASS. Graphify AST 갱신: **7,975 nodes / 22,800 edges / 395 communities** (기존 syntax warning 1건, no-symbol 30건 유지).
+- `Project200_First`의 오래된 volume snapshot 수정은 병합하지 않았다. 현재 Project200의 후속 commit `9f5163e`가 누적 거래량 감소를 stale observation으로 보수적으로 무시하도록 이미 대체했다.
+- 최신 코드 통합 tip: `{sha}`. 이전 `Project200` 기준 `657b573`에서 90개 커밋 전진. Local root worktree와 `origin/Project200` 일치. `master` 미변경.
+- S2는 계속 `PSB_UNVERIFIED`; S5 synthetic seed 및 전체 합성 검증 자산은 production runtime eligible이 아니다.
+
+---
+
 ## 최신 상태 갱신 — Project200 정식 브랜치 동기화 (2026-11-15)
 
 - 사용자의 2026-11-15 명시 지시에 따라 `Project200`을 최신 통합 코드의 정식 작업 브랜치로 지정했다. 기존 Project200/master 보호 문구 중 Project200 push/merge 금지 부분은 이번 명시 승인으로 대체한다. `master`는 변경하지 않았다.
-- 동기화 시점의 통합 코드 baseline은 `40134312eb84aa7ffbc3b67cc6b227ff03e1567d`이며, 문서 정합 commit은 `b631ec59f24f274ed6c6ae76323f316ddb31622c`이다. 현재 branch tip은 이후 문서 전용 커밋을 포함하므로 매 작업 시작 시 Git에서 live SHA를 확인한다.
-- 통합은 원격 `cleanup/p2-quarantine-20261026` (`dac1daa`)와 `sync/q25-a7-batch1-integration-20261112` (`3551374`)의 변경을 merge commit `91b61727`로 결합했고, KIS safety test EOF stray escape 수정 commit `40134312`를 추가했다. 이전 Project200 `657b573`에서 86개 커밋 전진했으며 non-force fast-forward push 및 원격 SHA 확인을 완료했다.
+- 동기화 시점의 통합 코드 baseline은 `c66f766ee181d776110f3dcb935f9800d03e5c56`이며, 문서 정합 commit은 `b631ec59f24f274ed6c6ae76323f316ddb31622c`이다. 현재 branch tip은 이후 문서 전용 커밋을 포함하므로 매 작업 시작 시 Git에서 live SHA를 확인한다.
+- 통합은 원격 `cleanup/p2-quarantine-20261026` (`dac1daa`)와 `sync/q25-a7-batch1-integration-20261112` (`3551374`)의 변경을 merge commit `91b61727`로 결합했고, KIS safety test EOF stray escape 수정 commit `40134312`를 추가했다. 이전 Project200 `657b573`에서 90개 커밋 전진했으며 non-force fast-forward push 및 원격 SHA 확인을 완료했다.
 - 전체 pytest **753 passed, 1 skipped**; Track2/Runtime/KIS 집중 테스트 **254 passed**; compileall 및 diff check PASS. 전체 테스트용 validation-only synthetic assets는 임시 격리 worktree에서만 생성했고 commit하지 않았다.
 - 기존 tracked 변경 24개 파일은 외부 patch 백업 후 최신 Project200 파일로 동기화했다. 기존 untracked 311개는 그대로 보존했고 현재 tracked diff는 0건이다. Patch SHA-256: `913D0383764C371459F8AD202EF94C021472BE18FF21BF1127A5523B9C5F1E3F`.
 - `cleanup` 및 `sync`는 통합 선행 브랜치, `integrate/q25-*` 및 Q25 A5 branches는 단계별 개발·검증 이력으로 보존한다. `Project200`만 정식 최신 작업 브랜치로 사용한다. `master`는 미변경.
@@ -26,7 +38,7 @@
 
 기준일: 2026-11-15 (KST)
 기준 브랜치: `Project200`
-기준 HEAD: `40134312eb84aa7ffbc3b67cc6b227ff03e1567d`
+기준 HEAD: `c66f766ee181d776110f3dcb935f9800d03e5c56`
 작업 기준: 로컬 작업폴더 HEAD. S2 통합 작업 브랜치 `integrate/q25-s2-20261111`는 A2에서 생성했고, C3 종료 후 현재 통합 HEAD는 `916fd4feadd36f7dcbc63aeb86a65e24cf0bc400`이다.
 CB2 ID: `4135f4f6-eaa1-81f7-ac42-dea70e10fa42`
 Status: A1/A2/A3/B1/B2/B3/B4/C1/C2/C3 completed. C4 is the next pending step and requires separate user approval; C2 document restoration and C3 read-only dirty-tree classification are complete; B1/B2/B3/B4 and X+1 are complete. S2 remains PSB\\\_UNVERIFIED; no S2 natural-signal Runtime E2E PASS is claimed.
@@ -64,7 +76,7 @@ Status: A1/A2/A3/B1/B2/B3/B4/C1/C2/C3 completed. C4 is the next pending step and
 
 ## 3. 현재 기준선 및 검증 원칙
 
-- 현재 기준 HEAD: `40134312eb84aa7ffbc3b67cc6b227ff03e1567d` on `Project200` (2026-11-15). No.1515의 `b060fa57d3801e8227e88c8e54df8d2f9ffe7407`은 과거 작업 시작 기준으로 역사 보존한다.
+- 현재 기준 HEAD: `c66f766ee181d776110f3dcb935f9800d03e5c56` on `Project200` (2026-11-15 S5 code reconciliation). No.1515의 `b060fa57d3801e8227e88c8e54df8d2f9ffe7407`은 과거 작업 시작 기준으로 역사 보존한다.
 - S2 통합 명세 v0.5 및 지원 문서 3종은 No.1500에서 사용자 승인되었다. 승인은 명세/정책 기준에 한정되며 코드 구현, Runtime/OMS 연결, Runtime E2E, Replay 또는 주문 실행 승인이 아니다.
 - S28 baseline verdict remains COMPLETED\_WITH\_BLOCKERS / PSB\_UNVERIFIED; not production-ready. After S32, full pytest is 546 passed / 29 failed / 1 skipped; the 29 failures remain existing S5/S7/S8 synthetic dataset/manifest failures.
 - S5 신규 진입은 BLOCKED. No.1168의 OPTION BUY 2-only 진입안은 폐기 상태이며 재사용하지 않는다. 이미 열린 포지션의 close lifecycle은 보존한다.
