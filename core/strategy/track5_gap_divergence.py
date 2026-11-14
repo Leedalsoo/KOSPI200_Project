@@ -63,8 +63,11 @@ class Track5GapDivergence:
     # already-open positions; no replacement entry policy is currently approved.
     CURRENT_EXECUTION_POLICY_APPROVED = False
     CURRENT_EXECUTION_POLICY_STATUS = "UNAPPROVED_REPLACEMENT_REQUIRED"
-    ENTRY_QUANTITY = 2  # legacy open-position reconciliation only
-    MINI_FUTURES_QUANTITY = 5  # legacy close/reconciliation only; never used for new entry
+    ENTRY_QUANTITY = 2  # retired entry compatibility only
+    MINI_FUTURES_QUANTITY = 5  # retired manifest compatibility only; never used to size a close
+    # Signal quantity is a positive trigger marker; executable close quantity and identity
+    # MUST come from authoritative remaining open lots in the runtime resolver.
+    EXIT_PROPOSAL_QUANTITY = 1
     # Counts evaluate_mean_reversion calls while a position is open, not elapsed minutes or bars.
     MAX_OPEN_EVALUATIONS = 30
     CONFIGURABLE_PARAMETERS = ("ENTRY_QUANTITY", "MINI_FUTURES_QUANTITY", "MAX_OPEN_EVALUATIONS")
@@ -255,11 +258,11 @@ class Track5GapDivergence:
             self.strategy_id,
             "CLOSE_FUTURES",
             1.0,
-            f"{reason};PRICE:{current_price};ENTRY:{state.entry_price};MINI_FUTURES_QTY:{self.MINI_FUTURES_QUANTITY}",
+            f"{reason};PRICE:{current_price};ENTRY:{state.entry_price};CLOSE_QTY_FROM_AUTHORITATIVE_OPEN_LOTS",
             kind=SignalKind.EXECUTION,
             execution_proposal=self._proposal(
                 asset_type="FUTURES", side=futures_close_side,
-                quantity=self.MINI_FUTURES_QUANTITY,
+                quantity=self.EXIT_PROPOSAL_QUANTITY,
                 tag_id=(
                     "GAP_DIVERGENCE_FUTURES_FIRST_EXIT"
                     if reason == "GAP_FILL_STARTED"
@@ -412,7 +415,7 @@ class Track5GapDivergence:
                 f"MEAN_REVERSION_TARGET:{state.target_price};EXTREME:{state.gap_extreme_price};PNL:{pnl}",
                 kind=SignalKind.EXECUTION,
                 execution_proposal=self._proposal(
-                    asset_type="OPTION", side="SELL", quantity=self.ENTRY_QUANTITY,
+                    asset_type="OPTION", side="SELL", quantity=self.EXIT_PROPOSAL_QUANTITY,
                     tag_id="GAP_DIVERGENCE_OPTION_SECOND_EXIT",
                     option_type=state.option_type, strike=state.selected_strike,
                 ),
@@ -432,7 +435,7 @@ class Track5GapDivergence:
                 f"DYNAMIC_STOP:{state.stop_loss_price};PNL:{pnl}",
                 kind=SignalKind.EXECUTION,
                 execution_proposal=self._proposal(
-                    asset_type="OPTION", side="SELL", quantity=self.ENTRY_QUANTITY,
+                    asset_type="OPTION", side="SELL", quantity=self.EXIT_PROPOSAL_QUANTITY,
                     tag_id="GAP_DIVERGENCE_OPTION_STOP_EXIT",
                     option_type=state.option_type, strike=state.selected_strike,
                 ),
@@ -447,7 +450,7 @@ class Track5GapDivergence:
                 f"TIMEOUT_{self.MAX_OPEN_EVALUATIONS}_EVALUATIONS;PNL:{pnl}",
                 kind=SignalKind.EXECUTION,
                 execution_proposal=self._proposal(
-                    asset_type="OPTION", side="SELL", quantity=self.ENTRY_QUANTITY,
+                    asset_type="OPTION", side="SELL", quantity=self.EXIT_PROPOSAL_QUANTITY,
                     tag_id="GAP_DIVERGENCE_OPTION_TIMEOUT_EXIT",
                     option_type=state.option_type, strike=state.selected_strike,
                 ),
@@ -464,7 +467,7 @@ class Track5GapDivergence:
                 f"TRAILING_LOCK;PEAK:{state.peak_pnl};REVERSAL:{effective_reversal};PNL:{pnl}",
                 kind=SignalKind.EXECUTION,
                 execution_proposal=self._proposal(
-                    asset_type="OPTION", side="SELL", quantity=self.ENTRY_QUANTITY,
+                    asset_type="OPTION", side="SELL", quantity=self.EXIT_PROPOSAL_QUANTITY,
                     tag_id="GAP_DIVERGENCE_OPTION_TRAILING_EXIT",
                     option_type=state.option_type, strike=state.selected_strike,
                 ),
@@ -491,41 +494,12 @@ class Track5GapDivergence:
                     ExecutionLeg("OPTION_ENTRY", "BUY", self.ENTRY_QUANTITY, proposal.option_type, proposal.strike, position_role="NONE"),
                 ),
             )
-        if proposal.asset_type == "FUTURES":
-            if (
-                not self.state.is_active or self.state.futures_closed
-                or not self.state.futures_close_requested
-                or proposal.tag_id not in {"GAP_DIVERGENCE_FUTURES_FIRST_EXIT", "GAP_DIVERGENCE_TERMINAL_EXIT"}
-            ):
-                raise ValueError("TRACK5_FUTURES_CLOSE_NOT_REQUESTED_OR_UNSUPPORTED")
-            expected_side = "BUY" if self.state.futures_side == "SELL" else "SELL" if self.state.futures_side == "BUY" else None
-            if proposal.side != expected_side:
-                raise ValueError("TRACK5_FUTURES_CLOSE_SIDE_MISMATCH")
-            return MultiLegExecutionPlan(
-                group_id=group_id,
-                strategy_id=self.strategy_id,
-                purpose="TRACK5_GAP_HEDGE_FUTURES_EXIT",
-                legs=(ExecutionLeg("MINI_FUTURES_EXIT", proposal.side or "", self.MINI_FUTURES_QUANTITY, position_role="NONE"),),
-            )
-        if proposal.asset_type == "OPTION" and proposal.side == "SELL":
-            if (
-                not self.state.is_active or not self.state.option_close_requested
-                or proposal.tag_id not in {
-                    "GAP_DIVERGENCE_OPTION_SECOND_EXIT", "GAP_DIVERGENCE_OPTION_STOP_EXIT",
-                    "GAP_DIVERGENCE_OPTION_TIMEOUT_EXIT", "GAP_DIVERGENCE_OPTION_TRAILING_EXIT",
-                }
-                or proposal.option_type != self.state.option_type
-                or proposal.strike != self.state.selected_strike
-            ):
-                raise ValueError("TRACK5_OPTION_CLOSE_NOT_REQUESTED_OR_IDENTITY_MISMATCH")
-            if proposal.option_type not in {"CALL", "PUT"} or proposal.strike is None:
-                raise ValueError("TRACK5_OPTION_EXIT_PROPOSAL_REQUIRED")
-            return MultiLegExecutionPlan(
-                group_id=group_id,
-                strategy_id=self.strategy_id,
-                purpose="TRACK5_GAP_HEDGE_OPTION_EXIT",
-                legs=(ExecutionLeg("OPTION_EXIT", "SELL", self.ENTRY_QUANTITY, proposal.option_type, proposal.strike, position_role="NONE"),),
-            )
+        if proposal.asset_type == "FUTURES" or (
+            proposal.asset_type == "OPTION" and proposal.side == "SELL"
+        ):
+            # Close plans must be built by the runtime resolver from authoritative
+            # open lots. Strategy proposal quantities and cached state are not positions.
+            raise ValueError("TRACK5_CLOSE_REQUIRES_AUTHORITATIVE_OPEN_LOT_RESOLVER")
         raise ValueError("TRACK5_EXECUTION_PROPOSAL_UNSUPPORTED")
 
     def evaluate(self, context: StrategyContext) -> Sequence[Signal]:
