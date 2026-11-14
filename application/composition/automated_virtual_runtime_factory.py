@@ -38,6 +38,10 @@ from application.strategy_hub.hub import StrategyHub
 from application.composition.track2_execution_plan_adapter import Track2ExecutionPlanAdapter
 from application.composition.market_calendar_hub import MarketCalendarHub
 from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
+from application.composition.track2_u16_runtime_coordinator import ValidationOnlyU16RuntimeCoordinator
+from application.composition.track2_u16_virtual_bridge_ports import ValidationOnlyU16VirtualBridgePorts
+from environments.virtual.position.track2_u16_runtime_store import SqliteTrack2U16RuntimeStore
+from core.strategy.track2_u16_repair_lifecycle import U16QuotePolicy, U16RepairState
 from application.composition.authoritative_option_quote_freshness_provider import AuthoritativeOptionQuoteFreshnessProvider
 from application.composition.execution_multi_leg_resolver_registry import ExecutionMultiLegResolverRegistry
 from contracts.types import MultiLegExecutionPlan, ExecutionLeg
@@ -60,12 +64,35 @@ from environments.high_speed.track6_validation_state_store import Track6Validati
 logger = logging.getLogger(__name__)
 
 
-def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=None, strategy_keys=None, track9_iv_history_path=None, run_id=None, historical_observation_option_source=None, risk_guard_status_source: RiskGuardStatusSource | None = None, synthetic_runtime_sources=None, track4_greeks_provider=None, market_calendar_hub=None, validation_only_track6_signal_mode: bool = False, validation_only_track6_execution_gate=None, validation_only_s8_runtime_adapter=None, validation_only_s7_runtime_adapter: S7ValidationOnlyRuntimeAdapter | None = None, validation_only_s9_runtime_adapter=None, validation_only_track6_lifecycle_config: Track6LifecycleConfig | None = None):
+def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=None, strategy_keys=None, track9_iv_history_path=None, run_id=None, historical_observation_option_source=None, risk_guard_status_source: RiskGuardStatusSource | None = None, synthetic_runtime_sources=None, track4_greeks_provider=None, market_calendar_hub=None, validation_only_track6_signal_mode: bool = False, validation_only_track6_execution_gate=None, validation_only_s8_runtime_adapter=None, validation_only_s7_runtime_adapter: S7ValidationOnlyRuntimeAdapter | None = None, validation_only_s9_runtime_adapter=None, validation_only_track2_runtime_adapter=None, validation_only_track6_lifecycle_config: Track6LifecycleConfig | None = None, validation_only_u16_quote_policy: U16QuotePolicy | None = None, validation_only_u16_repair_price_resolver=None):
     """Attach all nine Standard strategies to the RuntimeController-owned VMS."""
     selected_keys = tuple(strategy_keys) if strategy_keys else STANDARD_STRATEGY_KEYS
     selected_ids = {key[0] if isinstance(key, tuple) else str(key) for key in selected_keys}
     run_id = run_id or getattr(getattr(bootstrap, "run_context", None), "run_id", "")
+    if (validation_only_u16_quote_policy is None) != (validation_only_u16_repair_price_resolver is None):
+        raise ValueError("U16_VALIDATION_POLICY_AND_PRICE_RESOLVER_MUST_BE_INJECTED_TOGETHER")
+    if validation_only_u16_quote_policy is not None:
+        if not isinstance(validation_only_u16_quote_policy, U16QuotePolicy) or not validation_only_u16_quote_policy.is_resolved():
+            raise ValueError("U16_VALIDATION_QUOTE_AND_RETRY_POLICY_UNRESOLVED")
+        if not callable(validation_only_u16_repair_price_resolver):
+            raise ValueError("U16_VALIDATION_REPAIR_PRICE_RESOLVER_REQUIRED")
+        if validation_only_track2_runtime_adapter is None:
+            raise ValueError("U16_VALIDATION_TRACK2_SIDECAR_REQUIRED")
     registry = build_standard_strategy_registry(strategy_ids=selected_ids)
+    if validation_only_track2_runtime_adapter is not None:
+        if synthetic_runtime_sources is None or selected_ids != {"track2_asymmetric_trap"}:
+            raise ValueError("TRACK2_VALIDATION_REQUIRES_ISOLATED_SYNTHETIC_RUNTIME_AND_STRATEGY")
+        if any(item is not None for item in (
+            validation_only_s8_runtime_adapter, validation_only_s7_runtime_adapter,
+            validation_only_s9_runtime_adapter, validation_only_track6_execution_gate,
+            validation_only_track6_lifecycle_config,
+        )):
+            raise ValueError("TRACK2_VALIDATION_ADAPTER_CANNOT_SHARE_OTHER_STRATEGY_GATES")
+        validation_only_track2_runtime_adapter.bind_run_id(run_id)
+        validation_only_track2_runtime_adapter.apply_to_strategy(
+            registry.get("track2_asymmetric_trap", "1.0"),
+            synthetic_sources=synthetic_runtime_sources,
+        )
     if validation_only_s9_runtime_adapter is not None:
         if synthetic_runtime_sources is None or selected_ids != {"track9_event_overnight_insurance"}:
             raise ValueError("S9_VALIDATION_REQUIRES_ISOLATED_SYNTHETIC_RUNTIME_AND_STRATEGY")
@@ -133,7 +160,10 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         )
     strategy_hub = StrategyHub(registry, selected_keys)
     expiry_source = KisOptionMasterExpirySource(bootstrap.bundle.option_master)
-    track2_option_iv_source = historical_observation_option_source or KISTrack2OptionIVSource(bootstrap.bundle.option_master)
+    track2_option_iv_source = historical_observation_option_source or (
+        synthetic_runtime_sources if synthetic_runtime_sources is not None
+        else KISTrack2OptionIVSource(bootstrap.bundle.option_master)
+    )
     track9_iv_history_source = (
         KISTrack9IVObservationHistoryStore(track9_iv_history_path)
         if track9_iv_history_path else None
@@ -233,6 +263,19 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         proposal = evaluation.result.execution_proposal
         if proposal is None:
             return None
+        # Track2's approved signal is a four-leg plan. Its four contract identities
+        # are bound by resolve_track2 from the manifest-local synthetic Option Master;
+        # a single tick identity must not be mistaken for the whole group.
+        if (validation_only_track2_runtime_adapter is not None
+                and getattr(evaluation.context, "strategy_id", None) == "track2_asymmetric_trap"):
+            tag_id = str(getattr(proposal, "tag_id", "") or "").upper()
+            if tag_id == "TRAP_CLOSE":
+                # TRAP_CLOSE is a group-level intent; resolve_track2 builds its plan
+                # from every authoritative open lot, not a representative tick identity.
+                return None
+            # TRAP_PLAN is a four-leg intent; its identities are bound only by
+            # resolve_track2 and must not be reduced to the current tick identity.
+            return None
         if str(getattr(proposal, "tag_id", "")) == "DAILY_TAIL_INSURANCE_FORCE_CLOSE":
             # Canonical arbitration needs one concrete identity; the resolver below
             # still builds the complete close plan from every open S6 PositionLot.
@@ -329,7 +372,7 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
             option_type=identity.option_type,
             strike=identity.strike,
             contract_multiplier=identity.contract_multiplier,
-            identity_source=("SYNTHETIC:DERIVED_SCENARIO" if validation_only_s9_runtime_adapter is not None else "OPTION_MASTER"),
+            identity_source=("SYNTHETIC:DERIVED_SCENARIO" if any(item is not None for item in (validation_only_s7_runtime_adapter, validation_only_s8_runtime_adapter, validation_only_s9_runtime_adapter)) else "OPTION_MASTER"),
         )
 
     def context_builder(tick, state):
@@ -354,7 +397,17 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
             metrics_source=track2_metrics_source,
             volume_profile_source=track2_volume_profile_source,
         )
-    track2_option_contract_source = Track2OptionContractSource(bootstrap.bundle.option_master)
+    track2_option_contract_source = (
+        validation_only_track2_runtime_adapter.create_option_contract_source(bootstrap.bundle.option_master)
+        if validation_only_track2_runtime_adapter is not None
+        else Track2OptionContractSource(bootstrap.bundle.option_master)
+    )
+    if validation_only_track2_runtime_adapter is not None:
+        validation_only_track2_runtime_adapter.bind_entry_plan_preflight(
+            strategy=registry.get("track2_asymmetric_trap", "1.0"),
+            contract_source=track2_option_contract_source,
+            market=bootstrap.bundle.market,
+        )
     track3_plan_adapter = Track3MultiLegExecutionPlanAdapter()
     futures_identity_source = None
     if synthetic_runtime_sources is None:
@@ -421,6 +474,8 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         ),
     )
     def validation_freshness_verdict(plan, leg, identity, command):
+        if validation_only_track2_runtime_adapter is not None and plan.strategy_id == "track2_asymmetric_trap":
+            return validation_only_track2_runtime_adapter.freshness_verdict(plan=plan, leg=leg, identity=identity, command=command, option_master=bootstrap.bundle.option_master, market=bootstrap.bundle.market, synthetic_sources=synthetic_runtime_sources)
         if validation_only_s8_runtime_adapter is not None and plan.strategy_id == "track8_macro_regime_monthly_strangle":
             return validation_only_s8_runtime_adapter.freshness_verdict(plan=plan, identity=identity, command=command, option_master=bootstrap.bundle.option_master, market=bootstrap.bundle.market, synthetic_sources=synthetic_runtime_sources)
         if validation_only_s9_runtime_adapter is not None and plan.strategy_id == "track9_event_overnight_insurance":
@@ -441,6 +496,21 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         risk_guard_status_source=(risk_guard_status_source or synthetic_runtime_sources),
         execution_result_callback=on_multi_leg_execution_result,
         freshness_verdict_provider=freshness_verdict_provider,
+        validation_only_track2_identity_validator=(
+            validation_only_track2_runtime_adapter.validate_execution_identity
+            if validation_only_track2_runtime_adapter is not None
+            and bool(getattr(validation_only_track2_runtime_adapter, "quote_scenario_rows", ()))
+            else None
+        ),
+        validation_only_track2_pnl_evidence_provider=(
+            (lambda **kwargs: validation_only_track2_runtime_adapter.pnl_evidence(
+                **kwargs, market=bootstrap.bundle.market,
+                synthetic_sources=synthetic_runtime_sources,
+            ))
+            if validation_only_track2_runtime_adapter is not None
+            and bool(getattr(validation_only_track2_runtime_adapter, "quote_scenario_rows", ()))
+            else None
+        ),
         validation_order_gate=(
             validation_only_track6_execution_gate.validate_group
             if validation_only_track6_execution_gate is not None
@@ -453,6 +523,30 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
             else None
         ),
     )
+    u16_bridge_ports = None
+    u16_runtime_coordinator = None
+    u16_runtime_store = None
+    if validation_only_track2_runtime_adapter is not None and validation_only_u16_quote_policy is not None:
+        import hashlib
+        state_dir = Path("data/validation_state")
+        state_dir.mkdir(parents=True, exist_ok=True)
+        run_key = hashlib.sha256(str(run_id).encode("utf-8")).hexdigest()[:20]
+        u16_runtime_store = SqliteTrack2U16RuntimeStore(
+            state_dir / f"track2_u16_{run_key}.sqlite3"
+        )
+        u16_bridge_ports = ValidationOnlyU16VirtualBridgePorts(
+            validation_only=True,
+            bridge=multi_leg_bridge,
+            entry_plan_provider=multi_leg_bridge.get_group_plan,
+            quote_policy=validation_only_u16_quote_policy,
+            repair_price_resolver=validation_only_u16_repair_price_resolver,
+        )
+        u16_runtime_coordinator = ValidationOnlyU16RuntimeCoordinator(
+            validation_only=True,
+            submit_repair=u16_bridge_ports.submit_repair,
+            submit_flatten=u16_bridge_ports.submit_flatten,
+            state_store=u16_runtime_store,
+        )
 
     def track1_fence_type_source():
         # Strategy 1 v1.2.0 is direction-agnostic and no longer stores the
@@ -560,7 +654,7 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
                     option_type=identity.option_type,
                     strike=identity.strike,
                     contract_multiplier=Decimal(str(identity.contract_multiplier)),
-                    identity_source="OPTION_MASTER",
+                    identity_source=("SYNTHETIC:DERIVED_SCENARIO" if validation_only_track2_runtime_adapter is not None else "OPTION_MASTER"),
                 ),
             ))
         return replace(plan, legs=tuple(bound_legs))
@@ -823,11 +917,90 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
                         strategy7.cancel_reconciliation_retry()
                         logger.warning("S7_CALL_CANCEL_RECONCILIATION_PENDING: %s", action7.client_order_id, exc_info=True)
         pending_results = list(multi_leg_bridge.process_pending_quotes())
+        if u16_runtime_coordinator is not None and u16_bridge_ports is not None and tick is not None:
+            now = datetime.fromisoformat(str(tick.timestamp))
+            for group_plan in multi_leg_bridge.group_plans_for_strategy("track2_asymmetric_trap"):
+                group_reports = tuple(multi_leg_bridge.groups.get(group_plan.group_id, ()))
+                for leg in group_plan.legs:
+                    if not any(item.leg_id == leg.leg_id for item in group_reports):
+                        continue
+                    try:
+                        repair_input = u16_bridge_ports.build_repair_input(
+                            group_id=group_plan.group_id, leg_id=leg.leg_id, now=now,
+                            quote_policy=validation_only_u16_quote_policy,
+                        )
+                        quote_usable = (repair_input.quote_present and repair_input.quote_fresh
+                                        and repair_input.quote_spread_within_policy)
+                        original_identity = multi_leg_bridge.identity_for_leg(group_plan, leg)
+                        original_client_id = multi_leg_bridge._client_order_id(
+                            group_plan, leg, original_identity,
+                        )
+                        if original_client_id in multi_leg_bridge.pending_legs and not quote_usable:
+                            multi_leg_bridge.cancel_pending_order(
+                                original_client_id, reason="U16_ORIGINAL_QUOTE_EXPIRED_OR_INVALID",
+                            )
+                            repair_input = u16_bridge_ports.build_repair_input(
+                                group_id=group_plan.group_id, leg_id=leg.leg_id, now=now,
+                                quote_policy=validation_only_u16_quote_policy,
+                            )
+                        prior_state = u16_runtime_coordinator.snapshot().get(
+                            f"{group_plan.group_id}|{leg.leg_id}", {},
+                        )
+                        repair_client_id = prior_state.get("last_client_order_id")
+                        if repair_client_id in multi_leg_bridge.pending_legs and not quote_usable:
+                            evidence = u16_bridge_ports.cancel_repair_and_reconcile(
+                                group_plan.group_id, leg.leg_id, repair_client_id,
+                                reason="U16_REPAIR_QUOTE_EXPIRED_OR_INVALID",
+                            )
+                            u16_runtime_coordinator.record_repair_reconciliation(
+                                group_plan.group_id, leg.leg_id,
+                                terminal=evidence.terminal, reconciled=evidence.reconciled,
+                            )
+                            repair_input = u16_bridge_ports.build_repair_input(
+                                group_id=group_plan.group_id, leg_id=leg.leg_id, now=now,
+                                quote_policy=validation_only_u16_quote_policy,
+                            )
+                        flatten_id = prior_state.get("flatten_client_order_id")
+                        flatten_ids = tuple(prior_state.get("flatten_client_order_ids", ()))
+                        if flatten_id and flatten_ids:
+                            flatten_evidence = u16_bridge_ports.reconcile_group_flatten(
+                                group_plan.group_id, flatten_id, flatten_ids,
+                            )
+                            u16_runtime_coordinator.record_flatten_reconciliation(
+                                group_plan.group_id, leg.leg_id,
+                                terminal=flatten_evidence.terminal,
+                                reconciled=flatten_evidence.reconciled,
+                            )
+                        result = u16_runtime_coordinator.process(repair_input)
+                        if result.evaluation.state in {
+                            U16RepairState.RECONCILIATION_REQUIRED,
+                            U16RepairState.REPAIR_FAILED_GROUP_BLOCKED,
+                        }:
+                            multi_leg_bridge.block_track2_entry_progress(
+                                group_plan.group_id, f"U16_{result.evaluation.state.value}:{result.evaluation.reason}",
+                            )
+                    except Exception as exc:
+                        multi_leg_bridge.block_track2_entry_progress(
+                            group_plan.group_id, f"U16_RUNTIME_FAIL_CLOSED:{type(exc).__name__}:{exc}",
+                        )
+                        logger.warning("U16_VALIDATION_RUNTIME_BLOCKED: %s/%s", group_plan.group_id, leg.leg_id, exc_info=True)
         if validation_only_s9_runtime_adapter is not None and tick is not None:
             now = datetime.fromisoformat(str(tick.timestamp))
             pending_results.extend(multi_leg_bridge.process_s9_entry_retries(now, strategy=registry.get("track9_event_overnight_insurance", "3.0")))
         if "track2_asymmetric_trap" in selected_ids:
-            pending_results.extend(multi_leg_bridge.process_track2_entry_progress())
+            if (validation_only_track2_runtime_adapter is not None
+                    and bool(getattr(validation_only_track2_runtime_adapter, "quote_scenario_rows", ()))):
+                # In the isolated sidecar replay, all four current-time quotes are
+                # already published for this event. Advance one leg at a time, but
+                # finish the sequential chain within this same market timestamp so
+                # U21 freshness is not bypassed or weakened between legs.
+                for _ in range(4):
+                    progressed = multi_leg_bridge.process_track2_entry_progress()
+                    if not progressed:
+                        break
+                    pending_results.extend(progressed)
+            else:
+                pending_results.extend(multi_leg_bridge.process_track2_entry_progress())
             strategy2 = registry.get("track2_asymmetric_trap", "1.0")
             try:
                 multi_leg_bridge.refresh_position_group_marks(
@@ -874,6 +1047,9 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
     loop.s9_strategy = (registry.get("track9_event_overnight_insurance", "3.0")
                         if validation_only_s9_runtime_adapter is not None else None)
     loop.track6_validation_gate_evidence = track6_validation_gate_evidence
+    loop.u16_runtime_coordinator = u16_runtime_coordinator
+    loop.u16_runtime_store = u16_runtime_store
+    loop.u16_virtual_bridge_ports = u16_bridge_ports
     bootstrap.bundle.market.subscribe(loop.on_tick)
     subscribe_quote_only = getattr(bootstrap.bundle.market, "subscribe_quote_only", None)
     if callable(subscribe_quote_only):

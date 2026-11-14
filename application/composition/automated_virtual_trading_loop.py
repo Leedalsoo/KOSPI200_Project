@@ -31,6 +31,16 @@ from core.domain.market_models import MarketState
 from interfaces.control_tower.ui_adapter import ControlTowerUIAdapter
 
 
+def _track2_entry_progress_is_pending(plan: MultiLegExecutionPlan, result: object) -> bool:
+    """A sequentially filled predecessor is progress, not a rejected group."""
+    if (getattr(plan, "strategy_id", None) != "track2_asymmetric_trap"
+            or str(getattr(plan, "purpose", "") or "").upper() == "TRAP_CLOSE"):
+        return False
+    from core.strategy.track2_entry_sequence import evaluate_track2_entry_progress
+    progress = evaluate_track2_entry_progress(plan, getattr(result, "reports", ()) or ())
+    return progress.status == "READY" and bool(progress.next_leg_id)
+
+
 @dataclass(frozen=True)
 class AutomatedTickResult:
     tick_sequence: int
@@ -342,6 +352,7 @@ class AutomatedVirtualTradingLoop:
                 if (
                     not getattr(executed, "group_complete", False)
                     and getattr(executed, "pending_legs", 0) == 0
+                    and not _track2_entry_progress_is_pending(multi_leg_plan, executed)
                 ):
                     rejected += 1
 

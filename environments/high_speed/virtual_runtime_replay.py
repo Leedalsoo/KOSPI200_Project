@@ -127,6 +127,9 @@ class HighSpeedVirtualRuntimeReplayRunner:
                   validation_only_s9_risk_profile: str | Path | None = None,
                   validation_only_s9_restart_snapshot_path: str | Path | None = None,
                   validation_only_s7_risk_profile: str | Path | None = None,
+                  validation_only_track2_manifest: str | Path | None = None,
+                  validation_only_track2_risk_profile: str | Path | None = None,
+                   validation_only_track2_quote_scenario_manifest: str | Path | None = None,
                  validation_only_track6_signal_mode: bool = False,
                  validation_only_track6_execution_mode: bool = False,
                  validation_only_track6_lifecycle_config: Track6LifecycleConfig | None = None,
@@ -154,6 +157,21 @@ class HighSpeedVirtualRuntimeReplayRunner:
         if self.validation_only_s9_restart_snapshot_path is not None and self.validation_only_s9_risk_profile is None:
             raise ValueError("S9_RESTART_REQUIRES_VALIDATION_ONLY_S9_RUNTIME")
         self.validation_only_s7_risk_profile = validation_only_s7_risk_profile
+        self.validation_only_track2_manifest = validation_only_track2_manifest
+        self.validation_only_track2_risk_profile = validation_only_track2_risk_profile
+        self.validation_only_track2_quote_scenario_manifest = validation_only_track2_quote_scenario_manifest
+        if self.validation_only_track2_quote_scenario_manifest is not None and self.validation_only_track2_risk_profile is None:
+            raise ValueError("TRACK2_QUOTE_SCENARIO_REQUIRES_VALIDATION_ONLY_TRACK2_ADAPTER")
+        if (self.validation_only_track2_manifest is None) != (self.validation_only_track2_risk_profile is None):
+            raise ValueError("TRACK2_VALIDATION_MANIFEST_AND_PROFILE_REQUIRED_TOGETHER")
+        if self.validation_only_track2_risk_profile is not None:
+            if not self.validation_only_synthetic:
+                raise ValueError("TRACK2_VALIDATION_REQUIRES_SYNTHETIC_MODE")
+            selected_ids = {key[0] if isinstance(key, tuple) else str(key) for key in (strategy_keys or ())}
+            if selected_ids != {"track2_asymmetric_trap"}:
+                raise ValueError("TRACK2_VALIDATION_RUN_MUST_SELECT_ONLY_STRATEGY2")
+            if self.validation_only_synthetic_manifest is not None or validation_only_track6_execution_mode:
+                raise ValueError("TRACK2_VALIDATION_CANNOT_SHARE_OTHER_SYNTHETIC_GATES")
         if self.validation_only_s7_risk_profile is not None and (not self.validation_only_synthetic or self.validation_only_synthetic_manifest is None):
             raise ValueError("S7_VALIDATION_RISK_PROFILE_REQUIRES_SYNTHETIC_MANIFEST")
         if self.validation_only_s8_risk_profile is not None and (not self.validation_only_synthetic or self.validation_only_synthetic_manifest is None):
@@ -186,6 +204,7 @@ class HighSpeedVirtualRuntimeReplayRunner:
         self.s9_runtime_provider = None
         self.s9_strategy = None
         self.s7_validation_runtime_adapter = None
+        self.track2_validation_runtime_adapter = None
 
     def run(self, *, start: str | None = None, end: str | None = None,
             speed: float = float("inf"), max_events: int | None = None) -> HighSpeedVirtualReplayReport:
@@ -198,8 +217,19 @@ class HighSpeedVirtualRuntimeReplayRunner:
         )
         # P5 requires an explicit validation-only mode. Legacy replay keeps its existing
         # input contract and is never silently reinterpreted as a synthetic-ID dataset.
+        if self.validation_only_track2_risk_profile is not None:
+            from environments.high_speed.validation_only_track2_runtime_adapter import Track2ValidationOnlyRuntimeAdapter
+            self.track2_validation_runtime_adapter = Track2ValidationOnlyRuntimeAdapter(
+                dataset=self.dataset,
+                manifest_path=self.validation_only_track2_manifest,
+                profile_path=self.validation_only_track2_risk_profile,
+                quote_scenario_manifest_path=self.validation_only_track2_quote_scenario_manifest,
+            )
+            self.track2_validation_runtime_adapter.bind_run_id(self.run_id)
         synthetic_adapter = (
-            SyntheticReplayAdapter(
+            self.track2_validation_runtime_adapter
+            if self.track2_validation_runtime_adapter is not None
+            else SyntheticReplayAdapter(
                 self.dataset,
                 manifest_path=self.validation_only_synthetic_manifest,
             )
@@ -226,6 +256,9 @@ class HighSpeedVirtualRuntimeReplayRunner:
                         adapted_record = synthetic_adapter.adapt_record(json.loads(line))
                         quote_tick = SimpleNamespace(**adapted_record["tick"])
                         quote_batches[str(quote_tick.timestamp)].append(quote_tick)
+            if self.track2_validation_runtime_adapter is not None:
+                for quote_tick in self.track2_validation_runtime_adapter.quote_scenario_ticks():
+                    quote_batches[str(quote_tick.timestamp)].append(quote_tick)
             synthetic_quote_batches = {key: tuple(value) for key, value in quote_batches.items()}
         synthetic_sources = SyntheticRuntimeSources(
             track5_opening_gap_points=self.track5_opening_gap_points,
@@ -273,6 +306,8 @@ class HighSpeedVirtualRuntimeReplayRunner:
             option_master = build_synthetic_option_master(
                 self.dataset, validation_only_adapter=synthetic_adapter
             )
+        if self.track2_validation_runtime_adapter is not None:
+            self.track2_validation_runtime_adapter.register_quote_scenario_contracts(option_master)
         bootstrap = create_virtual_runtime_bootstrap(
             option_master=option_master,
             initial_capital=self.initial_capital,
@@ -296,6 +331,7 @@ class HighSpeedVirtualRuntimeReplayRunner:
             validation_only_s8_runtime_adapter=self.s8_validation_runtime_adapter,
             validation_only_s9_runtime_adapter=self.s9_validation_runtime_adapter,
             validation_only_s7_runtime_adapter=self.s7_validation_runtime_adapter,
+            validation_only_track2_runtime_adapter=self.track2_validation_runtime_adapter,
             validation_only_track6_lifecycle_config=self.validation_only_track6_lifecycle_config,
         )
         self.s9_runtime_provider = getattr(loop, "standard_runtime_input_provider", None)
@@ -577,6 +613,9 @@ def main() -> None:
     )
     parser.add_argument("--validation-only-synthetic-manifest", help="Explicit external manifest for a validation-only synthetic dataset.")
     parser.add_argument("--validation-only-s8-risk-profile", help="Manifest-bound validation-only S8 risk profile; requires Strategy 8 only.")
+    parser.add_argument("--validation-only-track2-manifest", help="Accepted-market-data-v2 manifest for isolated Track2 validation-only replay.")
+    parser.add_argument("--validation-only-track2-risk-profile", help="Synthetic-only Track2 scenario profile; requires Strategy 2 only.")
+    parser.add_argument("--validation-only-track2-quote-scenario-manifest", help="Manifest-bound synthetic four-leg quote sidecar; Track2 validation-only only.")
     parser.add_argument("--validation-only-s9-contract-profile", help="Synthetic S9 contract profile; validation-only and S9-only.")
     parser.add_argument("--validation-only-s9-risk-profile", help="Manifest-bound synthetic S9 Virtual risk profile; validation-only and S9-only.")
     parser.add_argument("--validation-only-track6-execution-mode", action="store_true", help="Enable isolated Strategy 6 synthetic entry lifecycle validation; never Live/KIS.")
@@ -585,10 +624,13 @@ def main() -> None:
         args.dataset, validation_only_synthetic=args.validation_only_synthetic,
         validation_only_synthetic_manifest=args.validation_only_synthetic_manifest,
         validation_only_s8_risk_profile=args.validation_only_s8_risk_profile,
+        validation_only_track2_manifest=args.validation_only_track2_manifest,
+        validation_only_track2_risk_profile=args.validation_only_track2_risk_profile,
+        validation_only_track2_quote_scenario_manifest=args.validation_only_track2_quote_scenario_manifest,
         validation_only_s9_contract_profile=args.validation_only_s9_contract_profile,
         validation_only_s9_risk_profile=args.validation_only_s9_risk_profile,
         validation_only_track6_execution_mode=args.validation_only_track6_execution_mode,
-        strategy_keys=(("track6_daily_tail_insurance", "1.0"),) if args.validation_only_track6_execution_mode else None,
+        strategy_keys=(("track6_daily_tail_insurance", "1.0"),) if args.validation_only_track6_execution_mode else (("track2_asymmetric_trap", "1.0"),) if args.validation_only_track2_risk_profile else None,
         log_mode=args.log_mode, trace_output=args.trace_output,
     ).run(
         start=args.start, end=args.end, speed=args.speed, max_events=args.max_events,

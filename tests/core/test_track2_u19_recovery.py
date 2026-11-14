@@ -283,3 +283,99 @@ def test_group_identity_mismatch_blocks():
         ledger_snapshot=ledger(group_id="different-group"),
     )
     assert result.status is U19RecoveryStatus.LEDGER_SNAPSHOT_UNVERIFIED
+
+
+def test_four_leg_open_group_then_flat_close_survives_u19_restart_checkpoint(tmp_path):
+    path = tmp_path / "u19-four-leg-restart.sqlite3"
+    positions = (
+        U19Position("SYNTHETIC_CONTRACT:S2:inner-put", Decimal("1")),
+        U19Position("SYNTHETIC_CONTRACT:S2:inner-call", Decimal("1")),
+        U19Position("SYNTHETIC_CONTRACT:S2:outer-put", Decimal("-1")),
+        U19Position("SYNTHETIC_CONTRACT:S2:outer-call", Decimal("-1")),
+    )
+    events = tuple(
+        U19ExecutionEvent(f"synthetic-exec-{index}", f"fill-fingerprint-{index}")
+        for index in range(1, 5)
+    )
+
+    first_store = SqliteTrack2U19RecoveryStore(path)
+    first_coordinator = ValidationOnlyTrack2U19RecoveryCoordinator(first_store)
+    open_decision = first_coordinator.recover(
+        group_id=GROUP,
+        broker_snapshot=broker(positions=positions, snapshot_id="broker-open-four-leg"),
+        ledger_snapshot=ledger(
+            positions=positions, snapshot_id="ledger-open-four-leg", events=events,
+        ),
+    )
+    assert open_decision.status is U19RecoveryStatus.RESTORE_ALLOWED
+    assert open_decision.position_basis == "BROKER_EXCHANGE"
+    assert open_decision.new_entry_enabled is False
+    assert open_decision.order_submission_enabled is False
+    assert open_decision.runtime_restore_performed is False
+
+    # Simulate a process restart by reopening the durable SQLite store.
+    restarted = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(path)
+    )
+    persisted_open = restarted.store.load_latest(GROUP)
+    assert persisted_open["status"] == U19RecoveryStatus.RESTORE_ALLOWED.value
+    assert len(persisted_open["positions"]) == 4
+
+    flat_as_of = AS_OF + timedelta(seconds=30)
+    flat_decision = restarted.recover(
+        group_id=GROUP,
+        broker_snapshot=broker(
+            positions=(), as_of=flat_as_of, snapshot_id="broker-flat-after-close", digest="c",
+        ),
+        ledger_snapshot=ledger(
+            positions=(), as_of=flat_as_of, snapshot_id="ledger-flat-after-close",
+            digest="d", events=events,
+        ),
+    )
+    assert flat_decision.status is U19RecoveryStatus.FLAT_CONFIRMED
+    assert flat_decision.positions == ()
+    assert flat_decision.new_entry_enabled is False
+    assert flat_decision.order_submission_enabled is False
+    assert flat_decision.runtime_restore_performed is False
+
+    final_restart = SqliteTrack2U19RecoveryStore(path)
+    persisted_flat = final_restart.load_latest(GROUP)
+    assert persisted_flat["status"] == U19RecoveryStatus.FLAT_CONFIRMED.value
+    assert persisted_flat["positions"] == []
+    assert persisted_flat["broker_positions"] == []
+    assert persisted_flat["ledger_positions"] == []
+
+
+def test_u19_recovery_gates_u16_persistent_runtime_restore(tmp_path):
+    from types import SimpleNamespace
+    from application.composition.track2_u16_runtime_coordinator import ValidationOnlyU16RuntimeCoordinator
+    from environments.virtual.position.track2_u16_runtime_store import SqliteTrack2U16RuntimeStore
+
+    u16_store = SqliteTrack2U16RuntimeStore(tmp_path / "u16.sqlite3")
+    u16 = ValidationOnlyU16RuntimeCoordinator(
+        validation_only=True,
+        submit_repair=lambda *args: None,
+        submit_flatten=lambda *args: None,
+        state_store=u16_store,
+    )
+    u16.restore({f"{GROUP}|inner_put": {"first_repair_submitted_at": AS_OF,
+                                         "additional_retry_count": 0}})
+    u16_store.save(GROUP, u16.snapshot())
+    u19 = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(tmp_path / "u19.sqlite3")
+    )
+
+    decision, restored = u19.recover_and_restore_u16_runtime(
+        group_id=GROUP, broker_snapshot=broker(), ledger_snapshot=ledger(), u16_runtime=u16,
+    )
+    assert decision.status is U19RecoveryStatus.RESTORE_ALLOWED
+    assert restored is True
+
+    blocked, restored = u19.recover_and_restore_u16_runtime(
+        group_id=GROUP,
+        broker_snapshot=broker(positions=(U19Position("OPT-CALL-1", Decimal("2")),)),
+        ledger_snapshot=ledger(positions=(U19Position("OPT-CALL-1", Decimal("1")),)),
+        u16_runtime=u16,
+    )
+    assert blocked.status is U19RecoveryStatus.POSITION_LEDGER_MISMATCH
+    assert restored is False

@@ -17,6 +17,9 @@ class ReferenceCanonicalMarketTick:
     # Missing trade fields stay missing; quote prices/quantities are not trades.
     last_price: float | None = None
     volume: int | None = None
+    # Synthetic validation replay may carry explicitly generated top-of-book quantities.
+    bid_quantity: int | None = None
+    ask_quantity: int | None = None
     seq_id: int = 0
     expiry: str = ""
     symbol: str = ""

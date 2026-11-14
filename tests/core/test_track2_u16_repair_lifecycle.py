@@ -41,6 +41,7 @@ def resolved_policy():
         fallback_formula="EXPLICIT_VALIDATION_ONLY_FORMULA",
         fallback_priority="EXPLICIT_VALIDATION_ONLY_PRIORITY",
         tick_rounding_rule="EXPLICIT_VALIDATION_ONLY_TICK",
+        retry_interval_seconds=30,
     )
 
 
@@ -165,11 +166,12 @@ def test_first_repair_deadline_is_fixed_from_t0():
         (90, 2, U16RepairState.POLICY_INPUT_BLOCKED),
     ],
 )
-def test_retry_schedule_is_fixed_at_t0(elapsed, retry_count, expected):
+def test_retry_schedule_uses_explicit_policy_interval(elapsed, retry_count, expected):
     result = evaluate_u16_repair(base(
         first_repair_submitted_at=T0,
         now=T0 + timedelta(seconds=elapsed),
         additional_retry_count=retry_count,
+        quote_policy=resolved_policy(),
     ))
     assert result.state == expected
 
@@ -179,6 +181,7 @@ def test_missed_retry_slot_is_not_deferred():
         first_repair_submitted_at=T0,
         now=T0 + timedelta(seconds=60),
         additional_retry_count=0,
+        quote_policy=resolved_policy(),
     ))
     assert result.state == U16RepairState.REPAIR_WAITING
     assert result.reason == "MISSED_RETRY_SLOT_NOT_DEFERRED"
@@ -275,3 +278,21 @@ def test_client_order_id_is_deterministic_and_attempt_scoped_without_submission(
     assert first.client_order_id != retry.client_order_id
     assert first.order_submission_enabled is False
     assert retry.order_submission_enabled is False
+
+
+
+def test_retry_interval_must_be_explicit_not_a_hardcoded_default():
+    policy = resolved_policy()
+    policy = U16QuotePolicy(
+        validated=policy.validated, side_to_book_rule=policy.side_to_book_rule,
+        max_quote_age_seconds=policy.max_quote_age_seconds, max_spread=policy.max_spread,
+        spread_unit=policy.spread_unit, fallback_formula=policy.fallback_formula,
+        fallback_priority=policy.fallback_priority, tick_rounding_rule=policy.tick_rounding_rule,
+        retry_interval_seconds=None,
+    )
+    result = evaluate_u16_repair(base(
+        first_repair_submitted_at=T0, now=T0 + timedelta(seconds=30),
+        quote_policy=policy, **{k: v for k, v in valid_quote().items() if k != "quote_policy"},
+    ))
+    assert result.state == U16RepairState.POLICY_INPUT_BLOCKED
+    assert result.reason == "RETRY_INTERVAL_POLICY_UNRESOLVED"

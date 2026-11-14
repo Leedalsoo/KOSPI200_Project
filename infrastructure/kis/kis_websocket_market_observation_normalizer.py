@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 from decimal import Decimal
 from hashlib import sha256
 from typing import Protocol
@@ -55,6 +56,8 @@ class KISWebSocketMarketObservationNormalizer:
         run_id: str,
         raw_id: str,
         raw_content_hash: str | None = None,
+        frame_record_index: int = 0,
+        session_date: date | None = None,
         underlying: WebSocketUnderlyingContext | None = None,
     ) -> tuple[MarketObservation, ...]:
         if received_at.tzinfo is None:
@@ -65,6 +68,8 @@ class KISWebSocketMarketObservationNormalizer:
         tr_id = parts[1]
         if tr_id == "H0IOCNT0":
             market_records = self._market_adapter.adapt_many(frame, source="KIS:H0IOCNT0")
+            if session_date is None:
+                raise ValueError("KIS_H0IOCNT0_SESSION_DATE_REQUIRED")
             greek_records = self._greeks_adapter.adapt_many(
                 frame,
                 observed_at=received_at.isoformat(),
@@ -88,17 +93,29 @@ class KISWebSocketMarketObservationNormalizer:
             raise ValueError(f"KIS_WS_OPTION_TR_UNSUPPORTED:{tr_id}")
 
         observations: list[MarketObservation] = []
-        for market, greeks, observed_hour in zip(market_records, greek_records, observed_hours):
+        for record_index, (market, greeks, observed_hour) in enumerate(zip(market_records, greek_records, observed_hours)):
+            observed_at = received_at
+            if tr_id == "H0IOCNT0":
+                if len(observed_hour) != 6 or not observed_hour.isdigit():
+                    raise ValueError(f"KIS_H0IOCNT0_BSOP_HOUR_INVALID:{observed_hour}")
+                try:
+                    observed_at = datetime.strptime(
+                        f"{session_date:%Y%m%d}{observed_hour}", "%Y%m%d%H%M%S"
+                    ).replace(tzinfo=ZoneInfo("Asia/Seoul"))
+                except ValueError as exc:
+                    raise ValueError(f"KIS_H0IOCNT0_BSOP_HOUR_INVALID:{observed_hour}") from exc
             observations.append(
                 self._normalize_one(
                     market,
                     greeks,
                     observed_hour=observed_hour,
+                    observed_at=observed_at,
                     timestamp_semantics=timestamp_semantics,
                     received_at=received_at,
                     run_id=run_id,
                     raw_id=raw_id,
                     raw_content_hash=raw_content_hash,
+                    record_index=frame_record_index + record_index,
                     underlying=underlying,
                 )
             )
@@ -110,11 +127,13 @@ class KISWebSocketMarketObservationNormalizer:
         greeks,
         *,
         observed_hour: str,
+        observed_at: datetime,
         timestamp_semantics: str,
         received_at: datetime,
         run_id: str,
         raw_id: str,
         raw_content_hash: str | None,
+        record_index: int,
         underlying: WebSocketUnderlyingContext | None,
     ) -> MarketObservation:
         identity = self._identity_lookup.get_contract_identity(market.shrn_iscd)
@@ -122,8 +141,8 @@ class KISWebSocketMarketObservationNormalizer:
             raise ValueError(f"AUTHORITATIVE_OPTION_IDENTITY_REQUIRED:{market.shrn_iscd}")
 
         observation_seed = (
-            f"{run_id}|{raw_id}|{market.source}|{market.shrn_iscd}|"
-            f"{observed_hour}|{received_at.isoformat()}"
+            f"{run_id}|{raw_id}|{record_index}|{market.source}|{market.shrn_iscd}|"
+            f"{observed_hour}|{observed_at.isoformat()}|{received_at.isoformat()}"
         )
         observation_id = sha256(observation_seed.encode("utf-8")).hexdigest()[:24]
 
@@ -178,12 +197,14 @@ class KISWebSocketMarketObservationNormalizer:
         metadata = (
             ("transport", "websocket"),
             ("source_timestamp_semantics", timestamp_semantics),
+            ("frame_record_index", str(record_index)),
+            ("received_at", received_at.isoformat()),
             ("order_book_depth", "5" if market.order_book is not None else "1"),
         ) + identity_metadata
 
         return MarketObservation(
             observation_id=observation_id,
-            observed_at=received_at,
+            observed_at=observed_at,
             collected_at=received_at,
             source=self.SOURCE,
             provider=self.PROVIDER,

@@ -90,7 +90,7 @@ def _scan_source(
 ) -> tuple[dict[str, int], dict[str, int], set[str]]:
     frame_counts: Counter[str] = Counter()
     quality: Counter[str] = Counter()
-    quote_symbols: set[str] = set()
+    option_symbols: set[str] = set()
     underlying_source = _new_underlying_source(day)
     latest_underlying: WebSocketUnderlyingContext | None = None
     latest_underlying_received_at: datetime | None = None
@@ -140,8 +140,8 @@ def _scan_source(
                 continue
 
             instrument = str(record.get("instrument") or "")
+            option_symbols.add(instrument)
             if tr_id == "H0IOASP0":
-                quote_symbols.add(instrument)
                 quality["quote_frames_seen"] += 1
             else:
                 quality["trade_frames_seen"] += 1
@@ -156,8 +156,13 @@ def _scan_source(
                 payload,
                 received_at=received_at,
                 run_id=run_id,
-                raw_id=f"{format_trading_date(day)}:{record['sequence']}",
+                raw_id=(
+                    f"{format_trading_date(day)}:{record['sequence']}:"
+                    f"{line_number}:{record.get('payload_sha256') or hashlib.sha256(payload.encode('utf-8')).hexdigest()}"
+                ),
                 raw_content_hash=record.get("payload_sha256"),
+                frame_record_index=0,
+                session_date=day,
                 underlying=context,
             )
             for observation in observations:
@@ -181,7 +186,7 @@ def _scan_source(
                     quality["any_depth_quantity_positive"] += 1
                 if not any(level.price is not None for level in (*bids, *asks)):
                     quality["empty_price_ladder"] += 1
-    return dict(frame_counts), dict(quality), quote_symbols
+    return dict(frame_counts), dict(quality), option_symbols
 
 
 def ingest_day(
@@ -189,6 +194,7 @@ def ingest_day(
     *,
     raw_filename: str = RAW_FILENAME,
     output_base: str | None = None,
+    target_master_snapshot_date: date | None = None,
 ) -> dict[str, Any]:
     data_root = ROOT / "data" / "kis_market_data_restart"
     canonical_day_dir = data_root / format_trading_date(day)
@@ -202,24 +208,26 @@ def ingest_day(
         raise FileNotFoundError(raw_path)
 
     raw_manifest = _load_raw_manifest(raw_path, day)
-    resolver = KISWebSocketOptionIdentityResolver.for_trading_date(day, project_root=ROOT)
+    resolver = KISWebSocketOptionIdentityResolver.for_trading_date(
+        day, project_root=ROOT, target_master_snapshot_date=target_master_snapshot_date
+    )
     normalizer = KISWebSocketMarketObservationNormalizer(resolver)
     raw_hash = str(raw_manifest["file_sha256"])
     run_id = f"vts-ws-canonical-{format_trading_date(day)}-{raw_hash[:8]}"
 
     # Preflight every source frame before creating a canonical output file.
-    frame_counts, quality, quote_symbols = _scan_source(
+    frame_counts, quality, option_symbols = _scan_source(
         raw_path, day, normalizer, resolver, run_id=run_id
     )
-    if not quote_symbols:
+    if not option_symbols:
         raise RuntimeError("WS_QUOTE_SYMBOL_COVERAGE_EMPTY")
-    identity_summary = resolver.summary(sorted(quote_symbols))
-    if identity_summary["resolved_symbols"] != len(quote_symbols):
+    identity_summary = resolver.summary(sorted(option_symbols))
+    if identity_summary["resolved_symbols"] != len(option_symbols):
         raise RuntimeError("WS_EXACT_EXPIRY_IDENTITY_COVERAGE_INCOMPLETE")
 
-    output_dir = canonical_day_dir
+    output_dir = canonical_day_dir / "canonical_v2_h0iocnt0_identity_timefix"
     output_dir.mkdir(parents=True, exist_ok=True)
-    base_name = output_base or f"kis_vts_websocket_canonical_{format_trading_date(day)}_{raw_hash[:8]}"
+    base_name = output_base or f"kis_vts_websocket_canonical_v2_{format_trading_date(day)}_{raw_hash[:8]}"
     store = HistoricalMarketStore(output_dir / base_name)
     observation_path = store.observation_path
     existing_manifest_matches = list(
@@ -308,8 +316,13 @@ def ingest_day(
                 payload,
                 received_at=received_at,
                 run_id=run_id,
-                raw_id=f"{format_trading_date(day)}:{record['sequence']}",
+                raw_id=(
+                    f"{format_trading_date(day)}:{record['sequence']}:"
+                    f"{line_number}:{record.get('payload_sha256') or hashlib.sha256(payload.encode('utf-8')).hexdigest()}"
+                ),
                 raw_content_hash=record.get("payload_sha256"),
+                frame_record_index=0,
+                session_date=day,
                 underlying=context,
             )
             for observation in observations:
@@ -347,6 +360,7 @@ def ingest_day(
         "canonical_source": KISWebSocketMarketObservationNormalizer.SOURCE,
         "canonical_tr_ids": ["H0IOASP0", "H0IOCNT0"],
         "target_master_sha256": resolver.target_snapshot.archive_sha256,
+        "target_master_snapshot_date": identity_summary["target_master_snapshot_date"],
         "target_master_fetched_at": resolver.target_snapshot.fetched_at.isoformat(),
         "identity_summary": identity_summary,
         "frame_counts": frame_counts,
@@ -380,7 +394,8 @@ def ingest_day(
         "quality": quality,
         "identity_summary": identity_summary,
         "limitations": [
-            "H0IOASP0 HHMMSS is retained as an unverified candidate source timestamp; collected_at remains the authoritative replay ordering timestamp.",
+            "H0IOCNT0 observed_at is derived from the KIS BSOP_HOUR field and trading date; collected_at preserves WebSocket receive time.",
+            "H0IOASP0 HHMMSS remains an unverified candidate source timestamp; collected_at preserves WebSocket receive time.",
             "Contract multiplier is not populated from the observed KIS index master.",
             "Strategy replay has not yet been run.",
         ],
@@ -394,11 +409,13 @@ def main() -> int:
     parser.add_argument("--date", required=True)
     parser.add_argument("--raw-file", default=RAW_FILENAME)
     parser.add_argument("--output-base")
+    parser.add_argument("--target-master-snapshot-date", help="Explicit KIS master snapshot date YYYYMMDD; default requires exact trading-date snapshot")
     args = parser.parse_args()
     report = ingest_day(
         parse_trading_date(args.date),
         raw_filename=args.raw_file,
         output_base=args.output_base,
+        target_master_snapshot_date=(parse_trading_date(args.target_master_snapshot_date) if args.target_master_snapshot_date else None),
     )
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0

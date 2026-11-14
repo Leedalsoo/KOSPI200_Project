@@ -111,7 +111,7 @@ class _AckAdapter:
 class VirtualMultiLegExecutionBridge:
     """Preserve group/leg identity while routing every leg through Risk -> OMS -> VSSF."""
 
-    def __init__(self, *, bundle: Any, run_id: str, option_master: IOptionContractMaster | None = None, futures_identity_source: FuturesIdentitySourcePort | None = None, option_expiry_source: Any | None = None, risk_config: RiskConfig | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None, execution_result_callback: Callable[[MultiLegExecutionPlan, MultiLegExecutionResult], None] | None = None, freshness_verdict_provider: Callable[..., FreshnessVerdict | None] | None = None, validation_order_gate: Callable[[MultiLegExecutionPlan, list[tuple]], None] | None = None) -> None:
+    def __init__(self, *, bundle: Any, run_id: str, option_master: IOptionContractMaster | None = None, futures_identity_source: FuturesIdentitySourcePort | None = None, option_expiry_source: Any | None = None, risk_config: RiskConfig | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None, execution_result_callback: Callable[[MultiLegExecutionPlan, MultiLegExecutionResult], None] | None = None, freshness_verdict_provider: Callable[..., FreshnessVerdict | None] | None = None, validation_order_gate: Callable[[MultiLegExecutionPlan, list[tuple]], None] | None = None, validation_only_track2_identity_validator: Callable[[MultiLegExecutionPlan, OptionInstrumentIdentity, Any], bool] | None = None, validation_only_track2_pnl_evidence_provider: Callable[..., dict[str, Any]] | None = None) -> None:
         self.bundle = bundle
         self.option_master = option_master or getattr(bundle, "option_master", None)
         self.futures_identity_source = futures_identity_source
@@ -132,12 +132,15 @@ class VirtualMultiLegExecutionBridge:
         # Strategy 8 submits CALL then PUT as separate plans under one entry group.
         # Retain the group-level plan so PositionGroup/PnL reconciliation sees both legs.
         self._group_plans: dict[str, MultiLegExecutionPlan] = {}
+        self._track2_entry_progress_disabled_groups: set[str] = set()
         if not run_id.strip():
             raise ValueError("MULTI_LEG_RUN_ID_REQUIRED")
         self.run_id = run_id
         self.execution_result_callback = execution_result_callback
         self.freshness_verdict_provider = freshness_verdict_provider
         self.validation_order_gate = validation_order_gate
+        self.validation_only_track2_identity_validator = validation_only_track2_identity_validator
+        self.validation_only_track2_pnl_evidence_provider = validation_only_track2_pnl_evidence_provider
         self.position_lot_store = VirtualPositionLotStore()
         self.fee_ledger = VirtualTrack9FeeLedger()
         self.option_position_attribution = Track9OptionPositionAttributionReadModel(self.position_lot_store)
@@ -224,6 +227,30 @@ class VirtualMultiLegExecutionBridge:
                 total += Decimal(str(fee))
                 seen.add(key)
         return total
+
+    @staticmethod
+    def _track2_initial_net_premium(group_plan: Any, snapshot: PositionGroupSnapshot) -> float | None:
+        """Return absolute initial group premium for both debit and credit entries."""
+        if not snapshot.complete or len(snapshot.legs) != 4:
+            return None
+        side_by_leg = {item.leg_id: str(item.side).upper() for item in group_plan.legs}
+        premium = Decimal("0")
+        seen: set[str] = set()
+        for pnl_leg in snapshot.legs:
+            side = side_by_leg.get(pnl_leg.leg_id)
+            if side not in {"BUY", "SELL"} or pnl_leg.leg_id in seen:
+                return None
+            quantity = Decimal(str(pnl_leg.quantity))
+            multiplier = Decimal(str(pnl_leg.contract_multiplier))
+            price = Decimal(str(pnl_leg.avg_price))
+            if quantity <= 0 or multiplier <= 0 or price < 0:
+                return None
+            leg_premium = price * quantity * multiplier
+            premium += leg_premium if side == "SELL" else -leg_premium
+            seen.add(pnl_leg.leg_id)
+        if len(seen) != 4 or premium == 0:
+            return None
+        return float(abs(premium))
 
     @staticmethod
     def _track2_net_pnl(realized: Decimal, unrealized: Decimal, fees: float | None, slippage: float | None) -> Decimal | None:
@@ -428,7 +455,7 @@ class VirtualMultiLegExecutionBridge:
             close_fees = self._track2_fee_total(reports)
             fees = (float(Decimal(str(previous.fees)) + close_fees)
                     if previous.fees is not None and close_fees is not None else None)
-            slippage = None
+            slippage = previous.slippage
             net_pnl = None
         return replace(
             previous,
@@ -521,15 +548,19 @@ class VirtualMultiLegExecutionBridge:
                 Decimal("0"),
             )
             realized_pnl = Decimal(str(snapshot.realized_pnl))
-            pending_updates.append(
-                replace(
-                    snapshot,
-                    legs=tuple(refreshed_legs),
-                    unrealized_pnl=float(unrealized_pnl),
-                    total_pnl=float(realized_pnl + unrealized_pnl),
-                    net_pnl=None if is_track2 else snapshot.net_pnl,
-                )
+            updated_snapshot = replace(
+                snapshot,
+                legs=tuple(refreshed_legs),
+                unrealized_pnl=float(unrealized_pnl),
+                total_pnl=float(realized_pnl + unrealized_pnl),
+                net_pnl=None if is_track2 else snapshot.net_pnl,
             )
+            if is_track2 and getattr(self, "validation_only_track2_pnl_evidence_provider", None) is not None:
+                evidence = self.validation_only_track2_pnl_evidence_provider(
+                    snapshot=updated_snapshot, reports=(), is_entry=False,
+                )
+                updated_snapshot = replace(updated_snapshot, **evidence)
+            pending_updates.append(updated_snapshot)
 
         # Validate every group before publishing any snapshot update.
         for snapshot in pending_updates:
@@ -669,6 +700,29 @@ class VirtualMultiLegExecutionBridge:
             )
         return False
 
+    def get_group_plan(self, group_id: str) -> MultiLegExecutionPlan | None:
+        """Read the authoritative execution plan retained for a group."""
+        return self._group_plans.get(str(group_id))
+
+    def group_plans_for_strategy(self, strategy_id: str) -> tuple[MultiLegExecutionPlan, ...]:
+        return tuple(plan for plan in self._group_plans.values()
+                     if plan.strategy_id == strategy_id)
+
+    def block_track2_entry_progress(self, group_id: str, reason: str) -> None:
+        """Fail closed against further sequential entry after U16 group failure."""
+        if not str(group_id).strip() or not str(reason).strip():
+            raise ValueError("TRACK2_ENTRY_PROGRESS_BLOCK_IDENTITY_REQUIRED")
+        blocked = getattr(self, "_track2_entry_progress_disabled_groups", None)
+        if blocked is None:
+            blocked = set()
+            self._track2_entry_progress_disabled_groups = blocked
+        blocked.add(str(group_id))
+        reasons = getattr(self, "_track2_entry_progress_block_reasons", None)
+        if reasons is None:
+            reasons = {}
+            self._track2_entry_progress_block_reasons = reasons
+        reasons[str(group_id)] = str(reason)
+
     def identity_for_leg(self, plan: MultiLegExecutionPlan, leg) -> OptionInstrumentIdentity | FuturesInstrumentIdentity:
         stored_identity = getattr(leg, "instrument_identity", None)
         if stored_identity is not None:
@@ -677,7 +731,11 @@ class VirtualMultiLegExecutionBridge:
             if isinstance(stored_identity, OptionInstrumentIdentity):
                 if stored_identity.option_type not in {"CALL", "PUT"} or stored_identity.strike is None or not stored_identity.expiry:
                     raise ValueError("MULTI_LEG_STORED_OPTION_IDENTITY_INVALID")
-                if plan.strategy_id == "track2_asymmetric_trap":
+                if (plan.strategy_id == "track2_asymmetric_trap"
+                        and getattr(self, "validation_only_track2_identity_validator", None) is not None):
+                    if not getattr(self, "validation_only_track2_identity_validator")(plan, stored_identity, self.option_master.get_contract_identity(stored_identity.instrument_id)):
+                        raise ValueError("TRACK2_VALIDATION_ONLY_SYNTHETIC_IDENTITY_NOT_MANIFEST_BOUND")
+                elif plan.strategy_id == "track2_asymmetric_trap":
                     master_identity = (
                         self.option_master.get_contract_identity(stored_identity.instrument_id)
                         if self.option_master is not None else None
@@ -1333,6 +1391,11 @@ class VirtualMultiLegExecutionBridge:
             ) for leg in group_plan.legs
         )
         terminal_execution = self._is_terminal_execution_plan(plan)
+        if terminal_execution and group_plan.strategy_id == "track2_asymmetric_trap":
+            disabled = getattr(self, "_track2_entry_progress_disabled_groups", None)
+            if disabled is None:
+                self._track2_entry_progress_disabled_groups = set()
+            self._track2_entry_progress_disabled_groups.add(group_plan.group_id)
         existing_group = self.position_groups.all().get(group_plan.group_id)
         if terminal_execution and existing_group is None:
             raise ValueError("POSITION_GROUP_TERMINAL_ENTRY_GROUP_REQUIRED")
@@ -1501,22 +1564,7 @@ class VirtualMultiLegExecutionBridge:
         )
         if not terminal_execution and group_plan.strategy_id == "track2_asymmetric_trap":
             fees = self._track2_fee_total(merged_reports)
-            initial_net_premium = None
-            if snapshot.complete:
-                side_by_leg = {item.leg_id: str(item.side).upper() for item in group_plan.legs}
-                premium = Decimal("0")
-                for pnl_leg in snapshot.legs:
-                    side = side_by_leg.get(pnl_leg.leg_id)
-                    if side not in {"BUY", "SELL"}:
-                        continue
-                    leg_premium = (
-                        Decimal(str(pnl_leg.avg_price))
-                        * Decimal(str(pnl_leg.quantity))
-                        * Decimal(str(pnl_leg.contract_multiplier))
-                    )
-                    premium += leg_premium if side == "SELL" else -leg_premium
-                if premium > 0:
-                    initial_net_premium = float(premium)
+            initial_net_premium = self._track2_initial_net_premium(group_plan, snapshot)
             snapshot = replace(
                 snapshot,
                 fees=float(fees) if fees is not None else None,
@@ -1525,6 +1573,12 @@ class VirtualMultiLegExecutionBridge:
                 initial_net_premium_received=initial_net_premium,
                 quote_freshness_verified=None,
             )
+        if (group_plan.strategy_id == "track2_asymmetric_trap"
+                and getattr(self, "validation_only_track2_pnl_evidence_provider", None) is not None):
+            evidence = self.validation_only_track2_pnl_evidence_provider(
+                snapshot=snapshot, reports=(tuple(reports) if terminal_execution else tuple(merged_reports)), is_entry=not terminal_execution,
+            )
+            snapshot = replace(snapshot, **evidence)
         self.position_groups.update_snapshot(snapshot)
         result = MultiLegExecutionResult(
             group_id=group_plan.group_id,
@@ -1703,6 +1757,8 @@ class VirtualMultiLegExecutionBridge:
         results: list[MultiLegExecutionResult] = []
         for group_id, group_plan in tuple(self._group_plans.items()):
             if group_plan.strategy_id != "track2_asymmetric_trap":
+                continue
+            if group_id in getattr(self, "_track2_entry_progress_disabled_groups", set()):
                 continue
             if any(
                 pending_plan.group_id == group_id
