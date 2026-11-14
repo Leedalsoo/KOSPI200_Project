@@ -72,7 +72,7 @@
 - Windows Python 명령은 py를 사용한다. 실제 실행 명령, 종료 코드, 테스트 결과 및 제한사항을 기록한다.
 - 사용 가능한 경우 Graphify를 코드 탐색·영향 분석에 활용한다. 코드 변경 후 graphify update를 실행하되, Graphify 산출물은 별도 검토 없이 커밋에 포함하지 않는다.
 - 커밋은 검증된 관련 파일만 포함한다. 무관한 변경, 원본 데이터, runtime output, cache, log, credential은 커밋하지 않는다.
-- commit과 push는 별도 단계다. 사용자의 명시 승인을 받은 범위와 대상 branch만 사용하고 non-force 방식으로 수행한다. Project200/master 등 지정되지 않은 branch에 임의 push/merge하지 않는다.
+- commit과 push는 별도 단계다. 정식 통합 브랜치는 `Project200`이다. `Project200` push/merge는 사용자의 명시 승인을 받은 경우에만 수행하고, push 전 fetch 및 fast-forward 조상 관계를 확인한 뒤 non-force 방식으로 반영한다. `master`는 별도 보호 브랜치이며 사용자가 명시하지 않으면 변경하지 않는다.
 
 ## 7. 검증 및 완료 판정
 
@@ -98,3 +98,9 @@
 - 현재 상태와 실행 결과는 해당 작업의 Notion 질문과답변 페이지 및 검증 보고서에 기록한다.
 - 과거 기록은 삭제하거나 현재 기준으로 위장하지 않는다. 역사적 기록은 역사적 자료로 남기고, 현재 판단에는 최신 증거를 사용한다.
 - 이 문서 변경 후 로컬 원본 작업폴더, 격리 후보 작업폴더 및 지정된 원격 branch의 내용이 동일한지 확인한다.
+
+## Current Git baseline (2026-11-15)
+- Canonical working branch: `Project200`.
+- Local working folder and `origin/Project200` are synchronized at `40134312eb84aa7ffbc3b67cc6b227ff03e1567d`.
+- `cleanup/p2-quarantine-20261026` and `sync/q25-a7-batch1-integration-20261112` are historical integration-source branches; `integrate/q25-*` and Q25 A5 branches are retained as development/validation history, not as competing canonical branches.
+- `master` is unchanged and remains protected. New feature work should use isolated worktrees; integrate into `Project200` only after explicit user approval.

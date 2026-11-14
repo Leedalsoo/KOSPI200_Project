@@ -2,6 +2,19 @@
 
 > Mirrored from Notion page `4135f4f6-eaa1-81f7-ac42-dea70e10fa42`. Notion remains the decision source; this file is the repository snapshot used for SHA-linked traceability.
 
+## 최신 상태 갱신 — Project200 정식 브랜치 동기화 (2026-11-15)
+
+- 사용자의 2026-11-15 명시 지시에 따라 `Project200`을 최신 통합 코드의 정식 작업 브랜치로 지정했다. 기존 Project200/master 보호 문구 중 Project200 push/merge 금지 부분은 이번 명시 승인으로 대체한다. `master`는 변경하지 않았다.
+- 작업폴더 branch `Project200`, local HEAD 및 `origin/Project200` HEAD 모두 `40134312eb84aa7ffbc3b67cc6b227ff03e1567d`로 일치한다.
+- 통합은 원격 `cleanup/p2-quarantine-20261026` (`dac1daa`)와 `sync/q25-a7-batch1-integration-20261112` (`3551374`)의 변경을 merge commit `91b61727`로 결합했고, KIS safety test EOF stray escape 수정 commit `40134312`를 추가했다. 이전 Project200 `657b573`에서 86개 커밋 전진했으며 non-force fast-forward push 및 원격 SHA 확인을 완료했다.
+- 전체 pytest **753 passed, 1 skipped**; Track2/Runtime/KIS 집중 테스트 **254 passed**; compileall 및 diff check PASS. 전체 테스트용 validation-only synthetic assets는 임시 격리 worktree에서만 생성했고 commit하지 않았다.
+- 기존 tracked 변경 24개 파일은 외부 patch 백업 후 최신 Project200 파일로 동기화했다. 기존 untracked 311개는 그대로 보존했고 현재 tracked diff는 0건이다. Patch SHA-256: `913D0383764C371459F8AD202EF94C021472BE18FF21BF1127A5523B9C5F1E3F`.
+- `cleanup` 및 `sync`는 통합 선행 브랜치, `integrate/q25-*` 및 Q25 A5 branches는 단계별 개발·검증 이력으로 보존한다. `Project200`만 정식 최신 작업 브랜치로 사용한다. `master`는 미변경.
+- S2는 계속 `PSB_UNVERIFIED`. Live/REAL_VTS/실계좌/KIS 주문 API 호출, collector/scheduler/.env/운영 RiskConfig/raw/canonical 변경 없음.
+- 상세 기록: [No.1544 Project200 브랜치 통합 및 작업폴더 최신화](https://app.notion.com/p/4185f4f6eaa18184a3cfd728c080e34e).
+
+---
+
 ## 최신 상태 갱신 — C1·C2·C3 완료 (2026-11-12)
 
 - A7 C1 archive 통합은 완료됐다. C1 merge commit은 `d1aef6aab7ce49ec2ad83a837f93c199f2d7c23f`이다. C1 push 당시 local/remote SHA가 일치했으며, C2 문서 복원 후 최신 통합 브랜치 SHA는 C2 종료 기록(No.1529)을 따른다.
@@ -11,9 +24,9 @@
 
 ---
 
-기준일: 2026-11-12 (KST)
-기준 브랜치: `cleanup/p2-quarantine-20261026`
-기준 HEAD: `b060fa57d3801e8227e88c8e54df8d2f9ffe7407`
+기준일: 2026-11-15 (KST)
+기준 브랜치: `Project200`
+기준 HEAD: `40134312eb84aa7ffbc3b67cc6b227ff03e1567d`
 작업 기준: 로컬 작업폴더 HEAD. S2 통합 작업 브랜치 `integrate/q25-s2-20261111`는 A2에서 생성했고, C3 종료 후 현재 통합 HEAD는 `916fd4feadd36f7dcbc63aeb86a65e24cf0bc400`이다.
 CB2 ID: `4135f4f6-eaa1-81f7-ac42-dea70e10fa42`
 Status: A1/A2/A3/B1/B2/B3/B4/C1/C2/C3 completed. C4 is the next pending step and requires separate user approval; C2 document restoration and C3 read-only dirty-tree classification are complete; B1/B2/B3/B4 and X+1 are complete. S2 remains PSB\\\_UNVERIFIED; no S2 natural-signal Runtime E2E PASS is claimed.
@@ -45,13 +58,13 @@ Status: A1/A2/A3/B1/B2/B3/B4/C1/C2/C3 completed. C4 is the next pending step and
 - A6 C01–C10 기준 정리는 2026-11-10 완료했다. A7에 따라 S2 트랙(A1→A2→A3→B1→B2→B3→B4)을 먼저 진행하고, 통합 마무리 C1–C5는 S2를 막지 않는 후속 트랙으로 둔다. 단계별 사용자 승인 없이 자동 재개·연속 실행하지 않는다.
 - KIS Live, REAL\_VTS, 실계좌, 실주문·정정·취소·잔고·증거금 API 호출 금지.
 - 운영 설정, .env/비밀정보, 권한, 스케줄러, collector 및 원본 데이터 변경 금지. 원본 작업폴더의 기존 dirty/untracked 항목은 보존한다.
-- 작업은 로컬 HEAD `b060fa57d3801e8227e88c8e54df8d2f9ffe7407`에서 만든 격리 worktree의 `integrate/q25-s2-20261111`에서 수행한다. 원본 작업폴더에서 pull/checkout/reset/clean/stash/merge를 하지 않는다. archive는 읽기·cherry-pick만 허용하고, 임시 worktree 변경은 자체 브랜치에 먼저 커밋해 보존한 뒤 필요한 파일만 선별 이식한다.
-- 검증 후 로컬 커밋하고, A7 진행표에서 푸시 단계로 지정된 경우에만 동일 커밋을 `cleanup/p2-quarantine-20261026`에 non-force fast-forward 푸시한다. `Project200`/`master` push/merge, force push, history rewrite 금지.
+- 2026-11-15 사용자 명시 승인에 따라 원본 작업폴더를 `Project200` 최신 HEAD로 동기화했다. 기존 tracked 변경은 외부 patch로 보존했고 311개 untracked 파일은 삭제·이동·커밋하지 않았다. 이후 기능 개발은 격리 worktree에서 수행하고, 원본 작업폴더의 미추적 산출물은 계속 보호한다.
+- 정식 통합 대상은 `Project200`이다. 해당 브랜치 push/merge는 사용자의 명시 승인을 받은 경우에만 수행하며, fetch 후 fast-forward 조상 관계를 확인하고 non-force push한다. `master`는 사용자가 명시하지 않으면 변경하지 않는다.
 - 삭제 금지. Notion 역사 기록의 상태 배너·이동·대체 표시는 C04 승인 또는 사용자 명시 승인 범위에서만 수행한다.
 
 ## 3. 현재 기준선 및 검증 원칙
 
-- 기준 HEAD: `b060fa57d3801e8227e88c8e54df8d2f9ffe7407` (No.1515에서 확정한 로컬 작업폴더 HEAD). `3cc0e677848f99315e002b448c771ca2ffc72813`는 과거 SSOT 헤더 기준으로만 보존한다. S28 통합 회귀 보고서 SHA-256은 `593CDB1851C1F888ECF1DDCE80550966C9C441A726BA9ED22A038643C210E79A`이다.
+- 현재 기준 HEAD: `40134312eb84aa7ffbc3b67cc6b227ff03e1567d` on `Project200` (2026-11-15). No.1515의 `b060fa57d3801e8227e88c8e54df8d2f9ffe7407`은 과거 작업 시작 기준으로 역사 보존한다.
 - S2 통합 명세 v0.5 및 지원 문서 3종은 No.1500에서 사용자 승인되었다. 승인은 명세/정책 기준에 한정되며 코드 구현, Runtime/OMS 연결, Runtime E2E, Replay 또는 주문 실행 승인이 아니다.
 - S28 baseline verdict remains COMPLETED\_WITH\_BLOCKERS / PSB\_UNVERIFIED; not production-ready. After S32, full pytest is 546 passed / 29 failed / 1 skipped; the 29 failures remain existing S5/S7/S8 synthetic dataset/manifest failures.
 - S5 신규 진입은 BLOCKED. No.1168의 OPTION BUY 2-only 진입안은 폐기 상태이며 재사용하지 않는다. 이미 열린 포지션의 close lifecycle은 보존한다.
