@@ -1,306 +1,97 @@
 # Current Baseline v2 — SSOT
 
-> Mirrored from Notion page `4135f4f6-eaa1-81f7-ac42-dea70e10fa42`. Notion remains the decision source; this file is the repository snapshot used for SHA-linked traceability.
+> Notion decision source: `4135f4f6-eaa1-81f7-ac42-dea70e10fa42`. This repository file is the synchronized state snapshot. Detailed chronological updates are maintained separately in the A8 update log; the pre-rewrite SSOT is preserved in the linked archive.
 
-## 최신 상태 추가 — S5 그룹 청산·Runtime 코드 통합 (2026-11-15)
+## 기준 헤더 — 2026-11-15 (KST)
 
-- `q25-a5-s22-s5-group-close-20261109` 브랜치의 15개 독자 커밋을 전부 병합하지 않고, Project200에 누락된 S5 관련 코드·테스트만 선별 통합했다. 이전 S2 snapshot, 생성 데이터, 보고서, Graphify 산출물은 가져오지 않았다.
-- `1743f8a` — Track5 청산 proposal 수량을 실행 수량이 아닌 trigger marker로 제한하고, 직접 close plan 생성을 차단한다. 실제 청산 수량·계약 identity는 authoritative open lots에서 resolver가 산출한다.
-- `c66f766` — Track5의 `price.last`와 `CommonStrategyInput.current_price`가 옵션 premium이 아닌 기초자산 가격을 사용하도록 정합했다. VSSF ExecutionAdapter가 group_id/leg_id를 보존하며, S5 synthetic seed adapter는 validation-only·fail-closed로 기존 position 복구를 검증한다.
-- 검증: S5 집중 테스트 **20 passed**; Track2/Runtime/KIS 회귀 **254 passed**; 전체 pytest **766 passed, 1 skipped**; 전체 compileall 및 diff check PASS. Graphify AST 갱신: **7,975 nodes / 22,800 edges / 395 communities** (기존 syntax warning 1건, no-symbol 30건 유지).
-- `Project200_First`의 오래된 volume snapshot 수정은 병합하지 않았다. 현재 Project200의 후속 commit `9f5163e`가 누적 거래량 감소를 stale observation으로 보수적으로 무시하도록 이미 대체했다.
-- 최신 코드 통합 tip: `{sha}`. 이전 `Project200` 기준 `657b573`에서 90개 커밋 전진. Local root worktree와 `origin/Project200` 일치. `master` 미변경.
-- S2는 계속 `PSB_UNVERIFIED`; S5 synthetic seed 및 전체 합성 검증 자산은 production runtime eligible이 아니다.
+- CB2 ID: `4135f4f6-eaa1-81f7-ac42-dea70e10fa42`.
+- 유일한 활성 개발 기준 브랜치: `Project200`.
+- 시작 시마다 `AGENTS.md`, 이 SSOT, `git status`, 현재 브랜치, 로컬 HEAD 및 live `origin/Project200` HEAD를 확인한다. SHA는 고정 기준으로 사용하지 않는다.
+- A8 진행표: [No.1546 Q25 A8 로드맵](https://app.notion.com/p/4195f4f6eaa1811a9da1d2072a9b3fd1).
+- 변경 이력: [A8 SSOT 갱신 로그](https://app.notion.com/p/4195f4f6eaa181869a49c12e5aa83076).
+- 변경 전 SSOT 전체 보존본: [A8 pre-rewrite archive](https://app.notion.com/p/4195f4f6eaa181d1858ff03dca454fee).
 
----
+## 1. Git 기준 및 작업 규칙
 
-## 최신 상태 갱신 — Project200 정식 브랜치 동기화 (2026-11-15)
+- `Project200`만 정식 개발·통합 기준이다. 단계 작업은 live `origin/Project200`에서 만든 격리 worktree의 `work/q25-a8-<단계>` 브랜치에서 수행한다.
+- A8에서 `푸시`로 표시된 단계는 사용자의 A8 명시 지시에 따라 Project200으로 non-force fast-forward push할 수 있다. push 직전 fetch 및 조상 관계를 재확인하고, push 후 local/remote SHA 일치를 확인한다.
+- `master`는 GitHub 기본 브랜치이며 변경·삭제 금지. `Project200_First`(고유 커밋 1개)와 `archive/remote-head-before-local-sync-20261111`(고유 커밋 14개)는 보존한다.
+- 2026-11-15 사용자 승인으로 원격 정리 후보 5개를 삭제했다: `KOSPI200_BASE`, `Project200_Second`, `baseline/current-implementation-20261011`, `cleanup/p2-quarantine-20261026`, `sync/q25-a7-batch1-integration-20261112`. 로컬 브랜치·worktree·사용자 파일은 별도 승인 없이 삭제하지 않는다. 상세는 No.1545.
+- 원본 작업폴더의 untracked 파일, Graphify 산출물, nested worktree 및 기타 사용자 자료는 삭제·이동·stage·커밋하지 않는다. `clean/reset/stash` 금지. 원본 폴더 동기화가 필요한 경우 `git pull --ff-only`만 허용하고 충돌 시 중단한다.
+- 2026-11-15 A8 P1 시작 전 실제 확인: 원본 작업폴더는 `Project200`, local HEAD와 live remote HEAD 모두 `d70b27cd845bf5dce89318afb39187186e109321`. 기존 Graphify tracked 파일 2개가 modified이고 다수의 untracked 항목이 확인됐다. 모두 그대로 보존했다. A8 지시서의 tracked diff 0 표기와 달라 실제 관측 상태를 우선 기록한다.
+- Windows Python 실행은 `py`를 사용한다. 검증 결과는 실행 명령·종료 코드·범위와 함께 기록한다.
 
-- 사용자의 2026-11-15 명시 지시에 따라 `Project200`을 최신 통합 코드의 정식 작업 브랜치로 지정했다. 기존 Project200/master 보호 문구 중 Project200 push/merge 금지 부분은 이번 명시 승인으로 대체한다. `master`는 변경하지 않았다.
-- 동기화 시점의 통합 코드 baseline은 `c66f766ee181d776110f3dcb935f9800d03e5c56`이며, 문서 정합 commit은 `b631ec59f24f274ed6c6ae76323f316ddb31622c`이다. 현재 branch tip은 이후 문서 전용 커밋을 포함하므로 매 작업 시작 시 Git에서 live SHA를 확인한다.
-- 통합은 원격 `cleanup/p2-quarantine-20261026` (`dac1daa`)와 `sync/q25-a7-batch1-integration-20261112` (`3551374`)의 변경을 merge commit `91b61727`로 결합했고, KIS safety test EOF stray escape 수정 commit `40134312`를 추가했다. 이전 Project200 `657b573`에서 90개 커밋 전진했으며 non-force fast-forward push 및 원격 SHA 확인을 완료했다.
-- 전체 pytest **753 passed, 1 skipped**; Track2/Runtime/KIS 집중 테스트 **254 passed**; compileall 및 diff check PASS. 전체 테스트용 validation-only synthetic assets는 임시 격리 worktree에서만 생성했고 commit하지 않았다.
-- 기존 tracked 변경 24개 파일은 외부 patch 백업 후 최신 Project200 파일로 동기화했다. 기존 untracked 311개는 그대로 보존했고 현재 tracked diff는 0건이다. Patch SHA-256: `913D0383764C371459F8AD202EF94C021472BE18FF21BF1127A5523B9C5F1E3F`.
-- `cleanup` 및 `sync`는 통합 선행 브랜치, `integrate/q25-*` 및 Q25 A5 branches는 단계별 개발·검증 이력으로 보존한다. `Project200`만 정식 최신 작업 브랜치로 사용한다. `master`는 미변경.
-- S2는 계속 `PSB_UNVERIFIED`. Live/REAL_VTS/실계좌/KIS 주문 API 호출, collector/scheduler/.env/운영 RiskConfig/raw/canonical 변경 없음.
-- 상세 기록: [No.1544 Project200 브랜치 통합 및 작업폴더 최신화](https://app.notion.com/p/4185f4f6eaa18184a3cfd728c080e34e).
+## 2. 데이터 인정·보존 정책 (No.1535 확정)
 
----
+- 기존 REST·WebSocket 원본 수집 데이터는 프로젝트 검증 입력으로 인정한다.
+- 기존 수집 데이터를 기반으로 생성한 합성·보완 데이터도 프로젝트의 공식 검증 입력으로 인정한다. 합성·보완이라는 이유로 별도 격리하거나 검증 자격에서 배제하지 않는다.
+- provenance, 원본 연결, 생성 근거, 모델·변환 규칙, manifest 및 SHA-256은 추적 가능하게 보존한다. 생성값을 원본 관측값 또는 Production authoritative 값으로 표기하지 않는다.
+- 신규 REST·WebSocket 수집은 중단 상태를 유지한다. 수집기 재시작 및 예약작업 재활성화 금지. 기존 Raw, Canonical, Manifest, accepted dataset 및 synthetic tree는 삭제·덮어쓰기 금지.
+- 통합 인정 인벤토리: `data/accepted_market_data/registry_20261114.json`, 9개 그룹, SHA-256 `9e31f8a63b8df515b2c491934617e88f4c3d7f72f6feda545054ae498c3768f6`.
+- 10/12·10/13 Canonical v2는 686건 + 1,386건 = 2,072건. 생성 경로는 `data/kis_market_data_restart/{date}/canonical_v2_h0iocnt0_identity_timefix/`. H0IOCNT0 `observed_at`은 거래일과 `BSOP_HOUR`로 만들고 `collected_at`은 WebSocket 수신시각을 보존한다. 해당 생성 결과에서 ID collision 0건.
+- Canonical v2 코드 근거는 `scripts/ingest_kis_vts_websocket_canonical.py`, `infrastructure/kis/kis_websocket_market_observation_normalizer.py` 및 `tests/infrastructure/kis/test_kis_websocket_canonical_pipeline.py`에 존재한다. 코드에 frame 내 record index 기반 식별 보조와 관측/수신 시각 분리가 확인됐다.
+- Canonical sidecar 자체 SHA와 상위 날짜 manifest 기대 SHA 사이 불일치는 미해결 provenance 항목이다. 이를 정합 완료로 주장하지 않는다.
+- Registry에 연결된 accepted Runtime v2는 10/12·10/13 2,072 events를 처리했다. 이 결과는 데이터 입력·Runtime 경로 검증이며 S2 전략 성능 PASS가 아니다.
+- 기존 synthetic market data tree는 약 10.744 GiB이며 복사 없이 원본 위치를 참조한다. 2026-11-14 기준 C: 여유 공간은 약 9.8 GiB로 기록됐다. 백업 단일본 위험은 P3에서 재확인한다.
 
-## 최신 상태 갱신 — C1·C2·C3 완료 (2026-11-12)
+## 3. 정책 충돌 결정 카드
 
-- A7 C1 archive 통합은 완료됐다. C1 merge commit은 `d1aef6aab7ce49ec2ad83a837f93c199f2d7c23f`이다. C1 push 당시 local/remote SHA가 일치했으며, C2 문서 복원 후 최신 통합 브랜치 SHA는 C2 종료 기록(No.1529)을 따른다.
-- C2 문서 복원 완료. C3 원본 dirty 작업폴더 읽기 전용 분류 완료: 원본 224 status entries, HEAD 및 파일 상태 보존. 상세는 No.1530 및 C3 repo report 참조.
-- 원본 작업폴더 HEAD `b060fa57d3801e8227e88c8e54df8d2f9ffe7407` 및 dirty/untracked 224건은 보존한다.
-- S2 판정은 `PSB_UNVERIFIED`로 유지한다.
+### K-1 — anchor 없는 계약의 UNAVAILABLE와 accepted synthetic contract의 관계
 
----
-
-기준일: 2026-11-15 (KST)
-기준 브랜치: `Project200`
-기준 HEAD: `c66f766ee181d776110f3dcb935f9800d03e5c56`
-작업 기준: 로컬 작업폴더 HEAD. S2 통합 작업 브랜치 `integrate/q25-s2-20261111`는 A2에서 생성했고, C3 종료 후 현재 통합 HEAD는 `916fd4feadd36f7dcbc63aeb86a65e24cf0bc400`이다.
-CB2 ID: `4135f4f6-eaa1-81f7-ac42-dea70e10fa42`
-Status: A1/A2/A3/B1/B2/B3/B4/C1/C2/C3 completed. C4 is the next pending step and requires separate user approval; C2 document restoration and C3 read-only dirty-tree classification are complete; B1/B2/B3/B4 and X+1 are complete. S2 remains PSB\\\_UNVERIFIED; no S2 natural-signal Runtime E2E PASS is claimed.
-
-## 코드 근거 위치표 (A7, 2026-11-11)
-
-| 작업 구간 | 근거 위치 | 상태 |
-| --- | --- | --- |
-| S26 | archive commit `46bc639bb87e5d69e72d94abcd2d24892d5d1f1c` | commit object 확인 |
-| S27 | archive commit `f1638baf0bfd0592547dbb2eb3e2d2ed7fcfa4be` | commit object 확인 |
-| S28 | archive commit `3cc0e677848f99315e002b448c771ca2ffc72813` | commit object 확인 |
-| S30–S33 | `C:\Users\white\AppData\Local\Temp\Q25_A5_S22_S5_GROUP_CLOSE_20261109`, branch `q25-a5-s22-s5-group-close-20261109`, preservation commit `fdda3617604e4007638fddeb3088727f09171ee9` | 56개 파일 자체 브랜치에 보존 커밋 완료; S2 관련 38개 파일을 `integrate/q25-s2-20261111`의 `c526b9a5f5465828372a99862b0c7a9c6fb637c0`에 선별 이식 |
-
-## 1. 권위 및 적용 순서
-
-1. 사용자의 직접 지시
-2. 본 문서 Current Baseline v2
-3. 본 문서 §8에 연결된 사용자 확정 Decision Log 및 승인 명세 (No.1491–1505)
-4. 기준 브랜치의 `AGENTS.md`
-5. 현재 코드·데이터
-6. 신규 검증 결과
-
-과거 Q&A, 구 Current Baseline, 승인되지 않은 초안·이전 지시문은 역사 참고 자료다. 본 문서와 충돌하면 본 문서를 우선하며, 확정 Decision Log의 충돌은 임의 변경하지 않고 C04 결정 카드로 올린다.
-
-## 2. 프로젝트 범위 및 안전 경계
-
-- Q25 검증은 PSB(가상·검증 전용) 기준이다. `PSB_PASS`는 해당 validation-only 범위의 통과이며 Production/실거래 준비 완료를 뜻하지 않는다.
-- 전략 대상 범위: S1, S2, S5, S6, S7, S8, S9. S3/S4는 현재 대상에서 제외한다.
-- A6 C01–C10 기준 정리는 2026-11-10 완료했다. A7에 따라 S2 트랙(A1→A2→A3→B1→B2→B3→B4)을 먼저 진행하고, 통합 마무리 C1–C5는 S2를 막지 않는 후속 트랙으로 둔다. 단계별 사용자 승인 없이 자동 재개·연속 실행하지 않는다.
-- KIS Live, REAL\_VTS, 실계좌, 실주문·정정·취소·잔고·증거금 API 호출 금지.
-- 운영 설정, .env/비밀정보, 권한, 스케줄러, collector 및 원본 데이터 변경 금지. 원본 작업폴더의 기존 dirty/untracked 항목은 보존한다.
-- 2026-11-15 사용자 명시 승인에 따라 원본 작업폴더를 `Project200` 최신 HEAD로 동기화했다. 기존 tracked 변경은 외부 patch로 보존했고 311개 untracked 파일은 삭제·이동·커밋하지 않았다. 이후 기능 개발은 격리 worktree에서 수행하고, 원본 작업폴더의 미추적 산출물은 계속 보호한다.
-- 정식 통합 대상은 `Project200`이다. 해당 브랜치 push/merge는 사용자의 명시 승인을 받은 경우에만 수행하며, fetch 후 fast-forward 조상 관계를 확인하고 non-force push한다. `master`는 사용자가 명시하지 않으면 변경하지 않는다.
-- 삭제 금지. Notion 역사 기록의 상태 배너·이동·대체 표시는 C04 승인 또는 사용자 명시 승인 범위에서만 수행한다.
-
-## 3. 현재 기준선 및 검증 원칙
-
-- 현재 기준 HEAD: `c66f766ee181d776110f3dcb935f9800d03e5c56` on `Project200` (2026-11-15 S5 code reconciliation). No.1515의 `b060fa57d3801e8227e88c8e54df8d2f9ffe7407`은 과거 작업 시작 기준으로 역사 보존한다.
-- S2 통합 명세 v0.5 및 지원 문서 3종은 No.1500에서 사용자 승인되었다. 승인은 명세/정책 기준에 한정되며 코드 구현, Runtime/OMS 연결, Runtime E2E, Replay 또는 주문 실행 승인이 아니다.
-- S28 baseline verdict remains COMPLETED\_WITH\_BLOCKERS / PSB\_UNVERIFIED; not production-ready. After S32, full pytest is 546 passed / 29 failed / 1 skipped; the 29 failures remain existing S5/S7/S8 synthetic dataset/manifest failures.
-- S5 신규 진입은 BLOCKED. No.1168의 OPTION BUY 2-only 진입안은 폐기 상태이며 재사용하지 않는다. 이미 열린 포지션의 close lifecycle은 보존한다.
-- Synthetic/derived 입력은 명시적인 유효 KIS anchor, provenance, manifest 및 validation-only 경계가 있을 때만 보완 검증에 사용한다. `SYNTHETIC:DERIVED_SCENARIO`를 Production authoritative input으로 승격하지 않는다. anchor 없는 계약은 `UNAVAILABLE`.
-- KIS-only authoritative runtime data rule remains. Use the KIS official product specification for multiplier, monthly expiry rule and option tick rules with explicit source URL and master-hash binding. Never substitute unsupported constants, KRX data or another product.
-- PSB 결과는 전략·시나리오·입력·런타임 범위를 구분해 기록한다. Scenario catalog 생성 PASS, plumbing PASS, natural-signal Runtime E2E PASS는 서로 대체할 수 없다.
-- FAST/DETAILED 동등성은 해당 실행에서 명시적으로 검증된 경우에만 PASS로 기록한다.
+- 충돌 근거: Decision Log No.1469는 유효 anchor가 없는 계약을 `UNAVAILABLE`로 유지한다. No.1535는 실제 수집 데이터를 기반으로 생성·보완한 합성 데이터도 공식 프로젝트 검증 입력으로 인정한다. 11/14 S2 sidecar는 `SYNTHETIC_CONTRACT:S2:` namespace를 사용한다.
+- 상태: 사용자 결정 대기. No.1469 또는 No.1535의 확정 상태를 임의 변경하지 않는다.
+- 선택 A (추천): No.1535를 프로젝트 검증 데이터 자격에 우선 적용한다. 합성 계약은 명시적인 `SYNTHETIC_CONTRACT:` namespace와 provenance를 유지한 validation input으로 허용하되, 실제 KIS 계약 identity 또는 Production authoritative로 승격하지 않는다. No.1469의 anchor 요건은 실제 KIS authoritative identity/production 경계에 유지한다.
+- 선택 B: No.1469의 anchor 없는 계약 `UNAVAILABLE`를 합성 계약에도 동일 적용한다. No.1535의 일반 데이터 인정은 계약 identity 생성에 적용하지 않는다.
+- 선택 C: 계약 identity와 market observation 보완을 별도 정책으로 분리해 추가 Decision Log로 확정한다.
+- 추천 사유: No.1535의 검증 데이터 인정 결정을 보존하면서 No.1469의 실제 KIS 계약 권위·Production 안전 경계를 약화시키지 않는다.
+- 주의: A8 P1의 사용자 승인은 이 결정 카드의 선택을 대신하지 않는다.
 
 ## 4. 전략별 현재 상태
 
-| 전략 | 기준 및 확인된 상태 | 제한·미완료 |
+| 전략 | 현재 판정 | 검증 범위 및 잔여 제한 |
 | --- | --- | --- |
-| S1 | S28 최종 판정 PLUMBING\_ONLY. S15b 단일 short CALL 자연신호 validation-only E2E 및 FAST/DETAILED parity 범위. | Base strangle/multi-leg/exit/fee-inclusive PnL/Production OPTION route 미검증. |
-| S2 | No.1500 approved S2 spec v0.5. U17 monthly STANDARD 4-leg identity binding and U20 sequential validation-only progression implemented. S33 adds BID/ASK MID group marks, quote provenance, Runtime PnL snapshot feed, and S2 TRAP\_CLOSE terminal group accounting; 115 targeted tests across 12 files PASS. KIS master/product spec resolve all four identities, expiry 20261112 and multiplier 250000. | PSB\_UNVERIFIED. Net PnL/exit remains blocked by fee/slippage and quote-freshness evidence plus numeric stop/trailing ratios. U16 retry schedule/repricing and validation-only fail-closed repair state machine are implemented; actual order submission/flatten remains unapproved. U19 validation-only durable restart-recovery gate and U21/U18 validation-only evaluators are implemented. Production quote age/spread/fallback/tick rules, current tradability/volatility boundary, broker snapshot provider and automatic Runtime restore remain unverified. B4 Runtime E2E and FAST/DETAILED parity executed on 2026-11-12; no natural signals were observed across 7 trading dates, so no natural-signal PASS is claimed. S2 remains PSB\_UNVERIFIED. |
-| S5 | S28 최종 판정 PSB\_PASS\_VALIDATION\_ONLY\_SYNTHETIC (close-only). StrategyHub natural exit → Virtual close fill → PositionLot flat 및 FAST/DETAILED parity, focused 51 tests. | Seed는 synthetic이며 실제 과거 fill이 아니다. 신규 진입은 계속 BLOCKED. |
-| S6 | S28 PSB\_PASS (S03 검증 범위). first\_rank=5 / per\_order 조건의 take-profit·trailing·15:10 force-close 검증. | Rank 6 및 나머지 matrix 조합, authoritative contract identity/calendar/운영 설정 미검증. |
-| S7 | S28 PSB\_PASS (validation-only synthetic). 자연 StrategyHub 신호 8건, FAST/DETAILED parity, 월·목 만기별 Position/PnL 대사. | Synthetic identity/expiry/calendar 및 fee 범위 한정. Production 승격 아님. |
-| S8 | S28 PSB\_PASS (validation-only synthetic subset). STOP/TRAILING/EXPIRY exit 및 No.1397 정책 기반 자연신호 retry E2E. | No.1398 multi-contract partial-fill은 PLUMBING\_ONLY. 일부 정책 및 계약 데이터 미확인. |
-| S9 | S28 PSB\_PASS (validation-only synthetic subset). 독립형 ATM PUT+CALL STOP\_LOSS, cold-start 복구, 5분 timeout/retry natural-signal E2E 및 73 tests. | Retry timer의 프로세스 재시작 복원, 비대칭 fill/reject 후 repair/flatten, 공식 KIS 계약·시장 데이터 미확인. |
+| S1 | `PLUMBING_ONLY` | 단일 short CALL plumbing만. base strangle, multi-leg, exit, fee-inclusive PnL 미완료. |
+| S2 | `PSB_UNVERIFIED` | 11/14 synthetic sidecar-backed validation-only Virtual Runtime에서 4-leg 순차 진입·가상체결 4/4 확인. 정책 fixture는 승인값이 아니다. U17 volatility boundary, U18 numeric stop/trailing ratios 및 net-premium denominator, U19 mismatch handling, U21 age/spread/fallback/tick, fee/slippage/margin 모델 미결. 12개 운영 위험한도 null 유지. 자연 신호·전략 성능·Production/Live 인증 아님. |
+| S5 | `PSB_PASS_VALIDATION_ONLY_SYNTHETIC` (close-only) | 기존 포지션 close lifecycle 검증 범위. 신규 진입 BLOCKED. |
+| S6 | `PSB_PASS` (rank 5 범위) | rank 6 및 나머지 matrix 조합 미완료. |
+| S7 | `PSB_PASS` (validation-only synthetic) | 승인된 검증 subset 범위만. Production 승격 아님. |
+| S8 | `PSB_PASS` (subset) | No.1398 다중계약 partial-fill 승격 미완료. |
+| S9 | `PSB_PASS` (subset) | retry timer 재시작 복원 및 비대칭 체결 repair/flatten 미완료. |
 
-## 5. 데이터·계약·시간 기준
+### S2 11/14 검증 사실과 한계
 
-- WS 원본은 provenance를 유지한 원본 증거로 취급한다. REST 성공은 WS 지원 또는 동시시점 tick 대체의 증거가 아니다. REST, WS, REAL\_VTS, SYNTHETIC, DERIVED\_SCENARIO를 서로 다른 source/provenance로 구분한다.
-- No.1424의 2026-11-06 WS raw: 223,609행, manifest record\_count 및 SHA-256 일치. H0IOASP0 200,302건, H0UPCNT0 23,307건, 고유 instrument 87개(지수 1 + 표준 옵션 86개). 해당 파티션에는 H0IOCNT0 프레임이 없다.
-- No.1424의 REST option probe는 응답/필드 존재 확인에는 유효하나 source timestamp/freshness가 부족한 사례가 있어 runtime/replay fresh quote로 승격하지 않는다. REST minute bars는 확인된 미니 옵션 데이터이므로 표준 옵션 WS tick의 대체 자료로 사용하지 않는다.
-- Canonical 관측 데이터의 observation\_id 중복 및 observed\_at/received\_at 시간 의미 문제는 해결된 것으로 간주하지 않는다. replay eligibility는 별도 증거 전까지 미확인이다.
-- 표준 옵션과 Mini 옵션, Mini Futures, KOSPI200 지수는 서로 다른 instrument identity다. 정확한 KIS contract identity·expiry·multiplier·tradability·source timestamp를 확인할 수 없으면 BLOCKED/UNAVAILABLE로 둔다.
-- 거래일·휴장일·공식 시가/종가의 authoritative source와 자동화 적용 여부는 미확인 항목으로 남긴다. 추정 달력·가격을 authoritative input으로 사용하지 않는다.
+- Market-calibrated synthetic sidecar v2: 21 candidate snapshots, 84 quote rows, 48 synthetic contract IDs.
+- Validation-only Runtime 결과: signals 1, approved 1, routed 4, filled 4, rejected 0, runtime failures 0. 판정은 synthetic sidecar-backed Virtual Runtime 4-leg lifecycle에 한정한다.
+- 다른 validation fixture의 quote age 5초, spread 0.20 및 12개 위험한도 등은 테스트 입력이며 사용자 승인 정책값이 아니다.
+- Production `risk_profile.v1.json`의 12개 위험한도는 null로 유지하고 fail-closed 한다. 실제 주문 제출·flatten, KIS Live, REAL_VTS, 실계좌 API 호출은 금지한다.
+- U18 Runtime exit lifecycle은 NOT_CERTIFIED. 순프리미엄 분모 의미, 수수료·슬리피지 및 quote freshness 증거가 해결되지 않았다.
 
-## 6. Runtime·Risk·OMS 공통 경계
+## 5. Runtime·Risk·OMS 안전 경계
 
-- 주문/체결/포지션/손익의 authoritative linkage는 contract/leg/order/group/quantity 및 execution provenance를 대조해야 한다.
-- Partial fill, cancel race, late fill, unknown terminal state는 대사 전 신규 주문·blind retry를 차단하고 fail-closed 한다.
-- S8 retry 정책은 No.1397 확정 범위만 적용한다. S9의 BUY/BUY timeout·복구 정책은 별도 S9 최신 승인·구현 기록을 따른다. 두 전략의 retry 정책을 혼용하지 않는다.
-- 운영 RiskConfig, runtime\_config\_verified, risk\_limits\_available의 fail-closed 기본값을 임의 완화하지 않는다.
-- Virtual Runtime의 validation-only synthetic calendar/quote/orderbook은 검증 입력이며 Production data source가 아니다.
-- S2 승인 명세의 4-leg 진입 순서는 PUT BUY → CALL BUY → PUT SELL → CALL SELL이다. 그룹은 4개 레그의 목표 수량이 모두 체결되고 대사된 뒤에만 ACTIVE가 된다.
-- S2-U16: 부분체결/거절/취소 경합 시 원주문 취소·종료 상태, 체결 및 포지션을 먼저 대사하고 확인된 실제 체결량 기준으로 부족 수량만 보정한다. 상태 불명은 RECONCILIATION\_REQUIRED로 차단한다. 보정 가격은 BID/ASK 기반 지정가, 최초 보정 주문 이후 추가 재시도 최대 3회, 최초 보정 제출부터 최대 120초를 함께 적용한다. 재시도 전 재대사하며, 최종 실패 시 기체결 레그 전체 청산 정책 및 그룹 차단을 적용한다. 실제 청산 주문 제출은 승인되지 않았다.
-- S2-U17: ATM tie selects the lower listed strike at or below index price. Four-leg identities must be unique STANDARD/MONTHLY contracts with exact expiry/type/strike and KIS standard multiplier. KIS official product specification defines monthly expiry as the second Thursday (previous trading day if holiday), standard multiplier 250000, and premium tick 0.05 for premiums >=10. The four current contracts resolve to expiry 20261112; all four strikes are on the near-month 2.5-point grid. Current tradability and volatility-boundary evidence remain unverified.
-- S2-U18: Option-group PnL uses BID/ASK MID and initial group net premium received as denominator; fees and slippage must be included in realized and unrealized PnL. S33 wires MID marks, quote provenance, Runtime group-PnL feed, and TRAP\_CLOSE terminal path. Fee/slippage evidence, quote-freshness verification, and numeric stop-loss/trailing ratios remain unresolved; production net PnL and exit stay BLOCKED.
-- S2-U19: 재시작 시 브로커/거래소 보유 포지션이 authoritative이며 저장 execution ledger는 보조 근거다. 실제 포지션과 ledger 불일치 시 조정·중단·재개 절차는 미확정이다.
-- S2-U20: Runtime tick processor invokes sequential progression after pending-order reconciliation. Advance only after the previous leg is fully FILLED and reconciled; CANCELLED zero-fill requires terminal cancel, no pending order, no group lot and flat VSSF account position. Partial/reject/unknown/mixed terminal states fail closed. The final zero-fill does not complete the group.
-- S2-U21: Use conservative fallback when BID/ASK is missing, stale, or spread exceeds the approved limit; block if no valid fallback exists. S33 stores raw BID/ASK and quote timestamp for MID marks but does not assert freshness. Maximum quote age, spread limit/unit, fallback formula/priority, and tick rounding remain unresolved.
-- S2 U16 보정 재시도 간격 및 가격 재산정 시점은 확정됐다(T0 기준 T+30/T+60/T+90초, deadline T+120초; 각 재시도 직전 최신 유효 BID/ASK로 재산정). 미확정 quote 정책 입력이 누락되면 운영 기본값 null로 주문 경로를 차단한다. 정책 결정은 구현·테스트·Runtime/OMS 연결 또는 실제 주문 실행을 승인하지 않는다.
+- 주문/체결/포지션/PnL의 identity·수량·group/leg/order/execution provenance를 대조한다. 상태 불명, partial fill, cancel race, late fill, mismatch는 fail-closed.
+- Validation-only fixture는 테스트 입력으로 주입할 수 있으나 운영 기본값이나 production risk profile에 복사·승격하지 않는다.
+- 운영 risk limits null, Live/REAL_VTS/order submission flags false를 유지한다. 실제 repair/flatten order submission은 별도 명시 승인 전 금지.
+- KIS Live, REAL_VTS, 실계좌, 주문·정정·취소·잔고·증거금 API 호출 금지.
+- 운영 설정, 권한, scheduler, `.env`, credential/token cache 변경·출력·커밋 금지.
+- 신규 REST/WS 수집, collector 재시작, 예약작업 활성화 금지.
+- Raw/Canonical/manifest/accepted dataset/synthetic tree는 read-only 입력으로 취급한다. 신규 산출물은 versioned 신규 경로만 사용한다.
 
-## 7. A6 완료 및 A7 실행 순서
+## 6. 미해결 및 후속 단계
 
-A6 C01–C10 전체 완료(2026-11-10). C09 verification gate 및 C10 A5 진행표 동기화까지 완료되었다. A6 완료 자체는 S2 구현·Runtime 검증 승인을 의미하지 않는다. A7에 따라 S2 A1→A2→A3→B1→B2→B3→B4 순서로 진행하며, 각 단계는 사용자 승인 후 하나씩 수행한다. 현재 A1/A2/A3/B1/B2/B3/B4/C1 완료했고 다음 대기 단계는 C2다. C1 병합 커밋은 d1aef6aab7ce49ec2ad83a837f93c199f2d7c23f이�� 원격 cleanup/p2-quarantine-20261026과 SHA가 일치한다. X+1 registry strategy\_ids 호환성 결함은 2026-11-11 커밋 771894387adb1cbd6063495000ee9405f20b0fe2에서 해결했다. B4는 명시적 S2 strategy selection으로 실행했다. 전체 registry의 Track1 manifest/code version mismatch는 C1에서 manifest 1.2.0 정합 및 default registry 9개 전략 등록 확인으로 해소했다. 통합 마무리 C1–C5는 S2를 막지 않는 후속 트랙이다.
+- K-1 정책 충돌: No.1469와 No.1535의 적용 범위에 대한 사용자 결정 필요.
+- Canonical v2: 10/12·10/13의 ID 충돌 0 및 BSOP_HOUR/receive-time 분리는 산출물과 코드 경로에서 확인. 상위 manifest와 sidecar SHA 불일치는 여전히 미해결.
+- S2: U17 volatility boundary, U18 stop/trailing ratios 및 net-premium denominator, U19 mismatch recovery, U21 quote age/spread/fallback/tick, fee/slippage/margin 모델 및 12개 위험한도.
+- S2 실제 4-leg 데이터 후보 21건은 실제 동시·신선한 네 레그 호가 커버리지가 충분하지 않다. 합성 quote를 실제 quote로 주장하지 않는다.
+- 백업·재생성 가능성, 단일본 데이터, C: 저장공간 위험은 P3에서 read-only로 확인하고 K-2를 제출한다.
+- A8 후속 단계는 No.1546 진행표만 기준으로 한다. A5(No.1415), A6(No.1476), A7(No.1517)은 역사 참고다.
 
-## 8. 확인된 근거 페이지
+## 7. 확인된 근거
 
-- [No.1490 S28 통합 회귀 및 최종 판정](https://app.notion.com/p/4145f4f6eaa181b3a60afebfc43c6172)
-- [No.1500 S2 통합 명세 v0.5 사용자 승인](https://app.notion.com/p/4145f4f6eaa181a0b13bc0b1772566b7)
-- [No.1491 S2-U16 부분체결·거절·취소 경합](https://app.notion.com/p/4145f4f6eaa1818fbba7c50fc36a87d2)
-- [No.1492 S2-U17 ATM 행사가 동률](https://app.notion.com/p/4145f4f6eaa1817e895cc03765ad2d9c)
-- [No.1493 S2-U18 MID 평가가격](https://app.notion.com/p/4145f4f6eaa1811b9231fc2089a72fcf)
-- [No.1494 S2-U18 순비용 분모](https://app.notion.com/p/4145f4f6eaa181e3a6fcec17365f29d3)
-- [No.1495 S2-U18 수수료·슬리피지](https://app.notion.com/p/4145f4f6eaa181dda024e87aeb1c53e7)
-- [No.1496 S2-U18 손절·트레일링 구조](https://app.notion.com/p/4145f4f6eaa18114aaa9f7c2ca3f1ed3)
-- [No.1497 S2-U19 재시작 복구 기준](https://app.notion.com/p/4145f4f6eaa18147ac20e69e4fcbe587)
-- [No.1498 S2-U20 0체결 취소 후 레그 진행](https://app.notion.com/p/4145f4f6eaa1817c8857d9fa3b3cba2e)
-- [No.1499 S2-U21 호가 유효성·주문가격](https://app.notion.com/p/4145f4f6eaa181e58455eee3be0e5a20)
-- [No.1501 U16 보정 실패 시 전체 청산](https://app.notion.com/p/4145f4f6eaa181f8b05ff3b991aed47c)
-- [No.1502 U16 재시도 한도·실패 판정](https://app.notion.com/p/4145f4f6eaa1812ab61af69d78fbf8b5)
-- [No.1503 U16 최대 3회 추가 재시도](https://app.notion.com/p/4145f4f6eaa181d7bef1c0d6e939568d)
-- [No.1504 U16 최대 120초 처리시간](https://app.notion.com/p/4145f4f6eaa181009e25e377b8d2129a)
-- [No.1505 U16 BID/ASK 기반 보완 지정가](https://app.notion.com/p/4145f4f6eaa1816289d9f43ee2babeca)
-- [No.1511 S2 U17/U20 validation-only implementation and KIS source audit](https://app.notion.com/p/4145f4f6eaa18113bf97ee10f0d282e4)
-- [No.1512 S2 KIS product specification expiry and multiplier resolution](https://app.notion.com/p/4145f4f6eaa181b88968de6dc8e2df59)
-- [No.1513 S2 group PnL MID marks and Runtime terminal close wiring](https://app.notion.com/p/4145f4f6eaa181a78f06e227aae77427)
-- [No.1424 VTS WS 부족 데이터의 REST 보완 가능성 재검증](https://app.notion.com/p/4105f4f6eaa181f29d5ad6f1b5582305)
-- [No.1397 S8 10분 간격·최대 3회 Runtime 재시도](https://app.notion.com/p/40e5f4f6eaa18132a8c6d16b8a769af7)
-- [No.1439 S9 독립형 전략 명세 v0.3 사용자 승인](https://app.notion.com/p/4115f4f6eaa181c88075f52d6cd57bc0)
-- [No.1473 S5 명세-코드 Gap Matrix](https://app.notion.com/p/4135f4f6eaa18140ad65fefdcf46eaeb)
-- [No.1474 S5 최신 정책 코드 정렬 및 validation-only 입력 검증](https://app.notion.com/p/4135f4f6eaa18154b762eb3e98624981)
-- [No.1475 S5 시나리오 설계·생성](https://app.notion.com/p/4135f4f6eaa1818dbe9cedf4d48f5d18)
-- [No.1415 Q25 A5 단계 진행표](https://app.notion.com/p/4105f4f6eaa181e2aa67dfa7ec9612af)
-- [No.1476 Q25 A6 기준 정리 진행표](https://app.notion.com/p/4135f4f6eaa1817fb644c2280e813de1)
-- [No.1521 Q25 A7 A2 S2 코드 이식](https://app.notion.com/p/4155f4f6eaa18113a0f0ea99271f711b)
-- [No.1522 Q25 A7 A3 S2 이식 후 기준선 테스트](https://app.notion.com/p/4155f4f6eaa1819ca1bfdae7601311da)
-
-## 9. 미확인 및 별도 결정 필요
-
-- KIS official MTS master plus KIS official product specification bind all four STANDARD/MONTHLY contract identities, exact monthly expiry 20261112 and multiplier 250000. KIS VTS WS historical frames show same-time two-sided quotes for all four symbols; current tradability and freshness are not proven. Official product specification: [https://m.koreainvestment.com/main/bond/domestic/\_static/TF03bd010100.jsp](https://m.koreainvestment.com/main/bond/domestic/_static/TF03bd010100.jsp).
-- Canonical observation identity/time semantics 및 replay eligibility.
-- S2 remaining policy inputs: U17 volatility boundary; U18 stop-loss/trailing ratios; U19 position/ledger mismatch handling; U21 maximum quote age/spread and fallback formula/priority/tick rounding. U16 retry timing/repricing is resolved; quote-policy inputs remain unresolved and must be injected explicitly (operating defaults null, therefore fail-closed). Current tradability evidence is also required.
-- S2 U17 contract binding and U20 sequential progression are integrated. A2 adds validation-only group PnL MID marks, cost/freshness evidence fields, Runtime snapshot feed and TRAP\\\_CLOSE terminal wiring; A3 regression: S2 focused 75 passed, adjacent 152 passed/8 failed, with 1 net improvement against identical base-HEAD adjacent tests. X+1 registry strategy\_ids compatibility was fixed in commit 771894387adb1cbd6063495000ee9405f20b0fe2; full-registry Track1 manifest/code mismatch remains separate and does not block explicit S2 selection. U16 validation-only repair lifecycle (B1) and U21/U18 validation evaluators (B2) are integrated; actual repair/flatten order submission remains unimplemented, and U19 validation-only durable recovery gate is integrated; production restart recovery remains unverified. B4 actual-data Runtime E2E and FAST/DETAILED parity were executed on 7 trading dates; natural signals were 0, so S2 remains PSB\_UNVERIFIED and no natural-signal PASS is claimed. evaluate\_trap() remains fail-closed while quote freshness, fee/slippage and exit-policy evidence remain unresolved. Status: PSB\_UNVERIFIED.
-- S1 multi-leg/base strangle·exit·fee-inclusive PnL·Production OPTION route, S5 신규 진입·hedge·re-entry, S8 일부 partial-fill 정책, S9 미확정 운영 계약/시장 데이터는 각 전략의 최신 승인 명세와 검증 근거에 따라 별도 관리한다.
-- Calendar authoritative source 및 3개월 자동화·scheduler·Control Tower·Calendar/휴장일 자동화의 현재 유효성. scheduler 변경은 별도 명시 승인 전 금지.
-
-## 10. S2 validation-only implementation progress (2026-11-11)
-
-상세 기록은 [No.1518 S2 S33 Runtime group-PnL 진행 기록](https://app.notion.com/p/4155f4f6eaa181a39c86c62ef962a36b)으로 이동했다. 기존 기록은 해당 페이지에 보존한다.
-
-## 11. 2026-11-11 사용자 확정 Git 작업 기준 — §2 Git 절차 우선 적용
-
-사용자의 직접 지시에 따라 기존 §2의 Git 작업 방식 중 기준 HEAD 및 작업 위치에 관한 내용은 다음 원칙으로 보정한다. 이 절은 해당 Git 운영 항목에 대해 기존 문구보다 우선한다.
-
-- 개발 기준은 원격 HEAD가 아니라 로컬 작업폴더의 HEAD와 로컬 작업 내용이다.
-- 작업폴더: `C:\Users\white\Desktop\MovingProject\KOSPI200_Project`
-- 기준 브랜치: `cleanup/p2-quarantine-20261026`
-- 2026-11-11 동기화 기준 HEAD: `b060fa57d3801e8227e88c8e54df8d2f9ffe7407`
-- 이 HEAD는 로컬과 원격 대상 브랜치에서 동일하며 ahead/behind는 0/0이다.
-- 기존 원격 HEAD `1ea0129131370109344548827780a1e15b2ab414`는 `archive/remote-head-before-local-sync-20261111` 백업 브랜치에 보존했다.
-- 이후 변경은 로컬 작업폴더에서 진행하고, 검증 후 로컬 커밋 → 동일 커밋 원격 푸시 → 양쪽 HEAD SHA 일치 확인 순서로 처리한다.
-- 기존 로컬 modified/untracked 항목은 보존하며, 원격 전용 이력이 새로 생기면 백업과 사용자 승인 없이 덮어쓰지 않는다.
-- 기존 §2의 안전 경계, 금지 작업, validation-only 한계 및 원본 데이터 보존 원칙은 계속 유효하다.
-
-세부 결정 및 동기화 증거: [[No.1515 답변내용요약] 로컬 작업폴더 기준 및 원격 동기화 원칙 확정 (2026-11-11)](https://app.notion.com/p/4155f4f6eaa1816394b8cb6ee774b1ed).
-
-## 12. 2026-11-11 로컬 기준 작업폴더 재점검 및 S2 다음 단계
-
-상세 기록은 [No.1519 S2 로컬 기준선 및 U16 정책 확정 기록](https://app.notion.com/p/4155f4f6eaa181049825dc61f24d7b69)으로 이동했다. 기존 기록은 해당 페이지에 보존한다.
-
-## 13. S2 U16 구현 전 상태 머신 설계 — 2026-11-11
-
-상세 설계 및 검증 시나리오는 [No.1520 S2 U16 fail-closed 상태 머신 설계 기록](https://app.notion.com/p/4155f4f6eaa18154bc7cd5800e6f8478)으로 이동했다. 기존 기록은 해당 페이지에 보존한다.
-
-## 14. Q25 A7 로드맵 및 진행표
-
-단일 진행표: [No.1517 Q25 A7 로드맵 진행표 (2026-11-11)](https://app.notion.com/p/4155f4f6eaa18119b8b1de27a62c5ea4). A1부터 단계별 승인 및 종료 보고를 이 페이지에서 관리한다.
-
-A1 정합 완료 시점 SSOT 본문 SHA-256 (이 digest 행 자체 제외): `A7D9C628EC24F1D011F877F9A941099B5D395517F64FBB0770D0BEA5A337B290`
-
-## 15. Q25 A7 B1 — U16 validation-only lifecycle 구현 완료 (2026-11-11)
-
-- 구현 커밋: `5ab5f3b224e28a433b324943ad383480bf181d5d` (통합 브랜치 `integrate/q25-s2-20261111`). 원격 `cleanup/p2-quarantine-20261026`에 non-force fast-forward push 완료, 로컬/원격 HEAD SHA 일치.
-- U16 전용 fail-closed lifecycle과 테스트 추가. 원주문 terminal/reconciliation, fills/position/중복 execution ID 대사, 부족 수량 계산, T0 기준 30/60/90초 재시도 슬롯 및 120초 deadline, missed slot 건너뜀, 최대 3회 추가 재시도, 4-leg 전체 체결·대사 조건 구현.
-- quote policy는 미확정 시 null/미검증으로 차단. deterministic client\_order\_id는 validation-only 식별자로만 산출. 실제 repair/flatten 주문 제출 경로는 없으며 submission flags는 false.
-- S2 관련 테스트 9개 파일 106 passed; compileall, diff check, secret scan PASS. Graphify AST 갱신.
-- 원본 작업폴더 HEAD `b060fa57d3801e8227e88c8e54df8d2f9ffe7407` 및 dirty/untracked 224건 보존.
-- 상세: [[No.1523 답변내용요약] Q25 A7 B1 U16 validation-only 구현 및 검증 (2026-11-11)](https://app.notion.com/p/4155f4f6eaa18145b437e0939f4352c5).
-- S2 전체 판정은 `PSB_UNVERIFIED`. B4 Runtime E2E 및 Fast/Detailed parity 검증 완료. 자연 신호 미관측으로 PSB\_UNVERIFIED 유지. 다음 C1 archive integration은 사용자 별도 승인 전 실행하지 않는다. X+2는 별도 후속 유지.
-
-## 16. Q25 A7 B2 — U21 quote validity + U18 exit validation (2026-11-11)
-
-- 통합 커밋 3932d3757803696b7901302356acef49e3dc05c1, branch integrate/q25-s2-20261111. B2는 로컬 커밋 완료, 원격 push 없음.
-- U21 validation-only evaluator는 contract identity, BID/ASK, source-time/capability/provenance, age/spread, alternate-source fallback 및 보수적 BUY ASK / SELL BID tick rounding 검증. 정책 입력 미확정/null이면 차단.
-- U18 validation-only evaluator는 complete four-leg MID, fees/slippage, quote freshness, initial net premium denominator 기반 손절/트레일링 경계 평가. 수치 미확정/null이면 차단.
-- 모든 결과 주문 제출 disabled. Track2AsymmetricTrap의 STOP\_LOSS\_RATIO, TRAILING\_ACTIVATION\_RATIO, TRAILING\_PULLBACK\_RATIO는 None 유지. Runtime/OMS wiring 변경 없음.
-- 후보 매트릭스: reports/synth/Q25\_A7\_B2\_U21\_U18\_VALIDATION\_MATRIX\_[20261111.md](http://20261111.md).
-- 12개 S2 관련 테스트 파일 160 passed; compileall, diff check, secret scan PASS. Graphify 갱신. 기존 경고: virtual\_composition\_[root.py](http://root.py) line 54 syntax error 1건 및 무심볼 파일 29개.
-- 원격 cleanup/p2-quarantine-20261026은 B1 SHA 5ab5f3b224e28a433b324943ad383480bf181d5d 유지. 원본 작업폴더 HEAD b060fa57d3801e8227e88c8e54df8d2f9ffe7407 및 dirty/untracked 224건 보존.
-- 상세: [[No.1524 답변내용요약] Q25 A7 B2 U21 호가 유효성·U18 손절 트레일링 검증 (2026-11-11)](https://app.notion.com/p/4155f4f6eaa1812992a6d8655c07b209).
-- 다음 단계 B3 — U19 재시작 복구 + 그룹 PnL/종결 배선. 별도 승인 전 진행하지 않는다. S2 전체 상태 PSB\_UNVERIFIED.
-
-## 16. Q25 A7 B3 — U19 validation-only restart recovery (2026-11-11)
-
-- 로컬 커밋: 8e13ac90220df05ffc124507e9ca40baee60cb17, branch integrate/q25-s2-20261111. B3는 push 단계가 아니므로 원격 cleanup/p2-quarantine-20261026는 B1 SHA 5ab5f3b224e28a433b324943ad383480bf181d5d 유지.
-- No.1497 결정: broker/exchange-held positions primary, persisted execution ledger secondary. Broker/ledger positions exact match and same as\_of only then recovery gate passes. Missing/unverified source, timestamp mismatch, pending/unknown order, conflicting duplicate execution ID, invalid quantity or position mismatch blocks. Both sources empty required for FLAT\_CONFIRMED.
-- Added core/oms/track2\_u19\_[recovery.py](http://recovery.py), environments/virtual/position/track2\_u19\_recovery\_[store.py](http://store.py), application/composition/track2\_u19\_[recovery.py](http://recovery.py), tests/core/test\_track2\_u19\_[recovery.py](http://recovery.py). SQLite schema v1 append-only checkpoint includes both position views, snapshot IDs/hashes, execution IDs/fingerprints, pending order IDs and verdict; SHA-256 integrity check.
-- No automatic mismatch adjustment, runtime restore, new entry or order submission. Only injected VALIDATION\_ONLY snapshots accepted. Real broker/account API, Live and REAL\_VTS not used. Timestamp tolerance and mismatch adjustment policy remain unresolved and fail-closed.
-- Existing S33 group PnL MID and TRAP\_CLOSE terminal wiring unchanged; covered by B3 regression tests.
-- 12 S2-focused test files 186 passed; compileall, diff check, secret scan PASS; Graphify refreshed. Existing warning: virtual\_composition\_[root.py](http://root.py) line 54 and 29 no-symbol files.
-- Original work folder HEAD b060fa57d3801e8227e88c8e54df8d2f9ffe7407 and dirty/untracked 224 items preserved. Integrated worktree clean.
-- Detailed report: [[No.1525 답변내용요약] Q25 A7 B3 U19 재시작 복구 validation-only 구현 및 검증 (2026-11-11)](https://app.notion.com/p/4155f4f6eaa181958177c2eab633740c).
-- B4 Runtime E2E 및 Fast/Detailed parity 검증 완료. 자연 신호 미관측으로 S2는 PSB\_UNVERIFIED 유지. 다음 C1은 사용자 승인 대기.
-
-## 17. Q25 A7 X+1 — strategy\_ids Registry compatibility (2026-11-11)
-
-- X+1 완료. build\_standard\_strategy\_registry now accepts optional strategy\_ids: Iterable\[str\] \| None. None preserves all-strategy behavior; explicit selection registers only requested strategy IDs and validates selected code versions. Full manifest/code ID-set consistency check remains. Empty/invalid/unknown selections fail-closed.
-- Cause: application/composition/automated\_virtual\_runtime\_[factory.py](http://factory.py) passed strategy\_ids=selected\_ids to a registry builder that did not accept the keyword, causing TypeError before selected strategy registration.
-- S2-only selection (track2\_asymmetric\_trap v1.0) succeeds against the current manifest. 13 focused S2 test files: 193 passed; compileall, diff check and secret scan PASS. Graphify refreshed; pre-existing extraction warnings remain.
-- Separate existing baseline issue: default all-strategy registry still exposes Track1 manifest 1.1.0 vs code 1.2.0 mismatch, already recorded in A3. Not changed as part of X+1.
-- Local commit 771894387adb1cbd6063495000ee9405f20b0fe2 on integrate/q25-s2-20261111; clean worktree. No push because X+1 is not an A7 push stage. Remote cleanup branch remains 5ab5f3b224e28a433b324943ad383480bf181d5d. Original working folder HEAD b060fa57d3801e8227e88c8e54df8d2f9ffe7407 and 224 dirty/untracked items preserved.
-- Detailed Q&A: [[No.1526 답변내용요약] Q25 A7 X+1 strategy_ids Registry 호환성 수정 (2026-11-11)](https://app.notion.com/p/4155f4f6eaa181f0ba81dd3555888a92).
-- Next: C1 archive integration, pending explicit user approval. B4 completed with PSB\_UNVERIFIED; no natural signal was observed.
-
-## 17. A7 B4 Runtime E2E / Fast-Detailed parity (2026-11-12)
-
-- 판정: B4 검증·판정·푸시 완료. S2는 PSB\_UNVERIFIED 유지. 7개 실제 거래일 replay에서 자연 진입 신호가 0건이므로 자연 신호 PASS는 주장하지 않는다.
-- 통합 브랜치 integrate/q25-s2-20261111, HEAD 400267909b2277e0339787f220c6bacf3e9f7f5f. 원격 cleanup/p2-quarantine-20261026과 SHA 동일.
-- 최신 사용 마스터 fo\_idx\_code\_mts\_[20261014.zip](http://20261014.zip), SHA-256 f0205b443b0680bcfc93d310a30636d4fa4a08ebc2a63c3742ad59cf38bf557e. Identity 6,510개, expiry cache 23건, 관측 계약 심볼 26/26 정합.
-- 2026-10-14 Runtime E2E: 6,840 ticks; projection errors 463; 선물 replay 225,351 events 및 지수 replay 23,320 events 전량 소비. 전략 입력 AVAILABLE 5,807, BASIS unavailable 633, option orderbook unavailable 382, POC unavailable 18.
-- 자연 조건 첫 차단: BBW 5,538, volume z-score 260, OBI 9. 모든 진입 조건 동시 통과 0건. 2026-10-02, 10-06, 10-07, 10-08, 10-12, 10-13, 10-14 모두 자연 신호 0건.
-- 2026-10-15\~2026-11-11의 존재하는 raw WS 파일은 H0IOASP0/H0UPCNT0는 있으나 H0IFCNT0가 없어 동일 거래일 basis·BBW·volume·POC 구성이 불가. 날짜 간 데이터 혼합은 금지했다.
-- FAST/DETAILED validation-only replay 100 events씩 실행, semantic fields 동일. 양쪽 신호/승인/라우팅/체결 0, execution IDs empty, PnL 0. S2 14개 파일 197 passed, S9 인접 4개 파일 46 passed, 합계 18개 파일 243 passed. compileall/diff check/secret scan PASS, Graphify 갱신.
-- 기본 gate false를 메모리 내 관찰 전용으로만 활성화. signal\_observation\_only=true, broker orders 0, 외부 네트워크 차단, KIS API 미호출, 실주문 미제출. 원본 데이터 해시 전후 동일.
-- 코드 변경: Virtual bootstrap/High-Speed Replay에 명시적 strategy\_keys 전달, 미지원 StandardRuntimeInputProvider 인자 제거, S2 FAST/DETAILED parity 테스트 추가. 전체 registry Track1 version mismatch는 별도 이슈로 유지하되 S2 단독 검증을 중단시키지 않았다.
-- 상세 Q&A: [[No.1527 답변내용요약] Q25 A7 B4 자연 Runtime E2E 및 Fast/Detailed parity (2026-11-12)](https://app.notion.com/p/4155f4f6eaa1818d8f5ceb68804e9336).
-- 당시 C1은 사용자 별도 승인 대기였으며, 2026-11-12 별도 승인 후 완료했다.
-
-## 18. Q25 A7 C1 — Remaining archive integration (2026-11-12)
-
-- 판정: C1 완료. A5 S1/S5/S7/S8/S9/S15b archive 코드·validation-only 자료·검증 보고서를 S2 A7 통합 브랜치에 병합했다.
-- 통합 브랜치: `integrate/q25-s2-20261111`. 병합 커밋: `d1aef6aab7ce49ec2ad83a837f93c199f2d7c23f`. 부모: B4 `400267909b2277e0339787f220c6bacf3e9f7f5f`, archive `4bd9d67c24ccd4c450e735031b60809b6a6c4f1a`.
-- 8개 충돌 영역은 S2 최신 Runtime/Registry 변경을 보존하는 방식으로 판단·통합했다. S9 policy runtime DTO를 fail-closed policy kernel에 결합했고 Graphify는 merge tree 기준으로 재생성했다. 미해결 conflict marker 0건, tracked deletion 0건.
-- 132 files: 32 modified, 100 added. 새 tracked data는 신규 `data/derived_scenario/` 경로에만 추가됐다.
-- 집중 회귀 424 passed: S1/S5/S7/S8 112, S9/S15b 104, S2 197, registry/Track6 4, R4 lifecycle 7. compileall/diff check/secret scan PASS.
-- 기본 Strategy Registry 9개 전략 등록 확인. Track1 manifest/code version 1.2.0 정합으로 A3에서 별도 이슈였던 전체 registry mismatch 해소.
-- validation-only asset bootstrap은 격리 candidate worktree에서만 수행. 보호 profile 6개 SHA 동일, 데이터셋 inventory 및 manifest 검증 PASS, 모든 자산 `runtime_eligible=false`. KRX fixture 입력 5개는 해당 disposable worktree에만 생성했다.
-- 기존 원본 작업폴더 HEAD `b060fa57d3801e8227e88c8e54df8d2f9ffe7407` 및 dirty/untracked 224건 보존. KIS/REAL\_VTS/Live/실계좌/주문 API 미호출, 외부 주문 0건. `.env`, 운영 RiskConfig, scheduler, collector 변경 없음.
-- 원격 `cleanup/p2-quarantine-20261026`에 non-force fast-forward push 완료. local/remote SHA 동일 `d1aef6aab7ce49ec2ad83a837f93c199f2d7c23f`. `Project200` 및 `master` 미변경.
-- 상세 Q&A: [[No.1528 답변내용요약] Q25 A7 C1 archive 통합 (2026-11-12)](https://app.notion.com/p/4155f4f6eaa1818285f7cbfea4b569df). Repo report: `reports/synth/Q25_A7_C1_ARCHIVE_INTEGRATION_20261112.md`.
-- 다음 단계는 C2 문서 복원이며 사용자 별도 승인 전 시작하지 않는다.
-
-## 19. Q25 A7 C2 — Document restoration (2026-11-12)
-
-- 판정: C2 완료. `AGENTS.md`에 현재 A7 상태를 추가하고, Notion Current Baseline v2를 `docs/CURRENT_BASELINE_V2.md`로 저장소에 복원했다. 과거 문서 내용은 삭제하지 않고 역사 근거로 보존했다.
-- 통합 브랜치: `integrate/q25-s2-20261111`.
-- C2 문서 복원 commit: `baf45cd2e6c7336e9ceb75e7c211b773635da954`; 후속 mirror sync commit: `bfa82036a781cb9c8d34ab81df20c9f2b032b216`. 최신 local/remote HEAD: `bfa82036a781cb9c8d34ab81df20c9f2b032b216`.
-- 원격 `cleanup/p2-quarantine-20261026` non-force fast-forward push 완료. 최종 local/remote SHA 동일: `bfa82036a781cb9c8d34ab81df20c9f2b032b216`.
-- `docs/CURRENT_BASELINE_V2.md` SHA-256: `5340338C067B77204D2B5EDB6BF362108229E6BEF75188591FB48B99E1A56EB7`.
-- `AGENTS.md` SHA-256: `9120CC7060873B4209E8AB86631EDAAD22C6633F21B2E8F621A36C86506C597F`.
-- Repo report: `reports/synth/Q25_A7_C2_DOCUMENT_RESTORATION_20261112.md`.
-- 검증: `git diff --check` PASS; conflict marker 0; secret-pattern scan 0. 문서 전용 변경이므로 application pytest는 실행 대상이 아니다.
-- 원본 작업폴더 HEAD `b060fa57d3801e8227e88c8e54df8d2f9ffe7407` 및 dirty/untracked 224건 보존. `Project200`/`master` 미변경.
-- C3 dirty 224건 읽기 전용 분류는 다음 단계이며 별도 승인 전 시작하지 않는다.
-
-## 21. Q25 A7 C4 — Synthetic asset regeneration and clean-checkout full pytest (2026-11-12)
-
-- C4 complete. The disposable clean checkout regenerated and validated the authoritative three-month DERIVED_SCENARIO dataset: 62 trading days, 53,550 events, `PASS_WITH_LIMITATION`; weekly identity coverage remains explicitly partial and KRX daily price-limit enforcement is not claimed.
-- The Q25 A5 S01D1E bootstrap restored/regenerated the P5, S7/S8 v1 and v2, S7 concurrent S05_3, and S8 v3 normal/high-volatility assets. Recorded inventory/payload/canonical-manifest hashes matched. Six protected validation-only profiles were unchanged; all generated assets remain `runtime_eligible=false`.
-- Complete clean-checkout pytest after asset regeneration: **697 passed, 1 skipped**. The preceding run's 29 failures were missing ignored synthetic datasets; after the documented bootstrap, the entire suite passed.
-- Original working folder remains read-only and unchanged: HEAD `b060fa57d3801e8227e88c8e54df8d2f9ffe7407`, branch `cleanup/p2-quarantine-20261026`, 224 Git status entries.
-- No KIS/Live/REAL_VTS/account/order API calls; no `.env`, production RiskConfig, scheduler, collector, or operating configuration changes. Generated datasets are disposable/ignored and were not committed.
-- Detailed report: `reports/synth/Q25_A7_C4_SYNTHETIC_ASSET_REGENERATION_AND_CLEAN_PYTEST_20261112.md`.
-- C5 (original-folder synchronization proposal) remains pending separate approval.
-
-## 22. Q25 A7 C5 — Original working-folder synchronization decision card (2026-11-12)
-
-- C5 proposal complete; no synchronization or mutation of the original working folder was performed. Actual migration requires a user A/B/C choice and separate execution approval.
-- Rechecked original state: branch `cleanup/p2-quarantine-20261026`, HEAD `b060fa57d3801e8227e88c8e54df8d2f9ffe7407`, Git status 224 entries (23 tracked modified, 201 untracked status entries; expanded untracked inventory 311 files).
-- C3 inventory categories: 21 tracked source modifications, 2 tracked Graphify artifacts, 141 verification status paths, 80 report/run artifacts, 41 Caddy MCP files, 4 nested worktrees, 7 validation/config paths, plus generated Graphify/technical docs. Category counts include nested/expanded inventory and are not additive to 224.
-- Recommended: phased selective migration. Per-file source review first; KIS REST collector and WS canonical ingestion remain a separate approval batch. Split tests/fixtures from generated results/logs/patch scripts. Treat Caddy OAuth/tunnel state as sensitive and exclude from Git; preserve nested worktrees independently; regenerate Graphify after accepted source migration.
-- User decision choices: A phased selective migration; B evidence archive only; C keep original folder frozen. The choice itself does not authorize file mutation, commit or push. Exact files/batches must be approved before execution.
-- Detailed decision card: `reports/synth/Q25_A7_C5_ORIGINAL_WORKTREE_SYNC_DECISION_CARD_20261112.md`.
+- No.1469: [anchor 없는 계약 UNAVAILABLE 및 validation-only synthetic 원칙](https://app.notion.com/p/4125f4f6eaa181d29441f757645d1ca9)
+- No.1535: [기존 수집·합성 데이터 인정 및 추가 수집 중단 결정](https://app.notion.com/p/4185f4f6eaa18106ac1cc19962c109a7)
+- No.1537: [S2 10/12·10/13 실제 4-leg 데이터 커버리지 검증](https://app.notion.com/p/4185f4f6eaa18177861be9960ef72097)
+- No.1538: [S2 시장보정형 합성 4-leg 데이터 및 Runtime 검증](https://app.notion.com/p/4185f4f6eaa181689b07c6e919b30fc4)
+- No.1544: [Project200 브랜치 통합 및 작업폴더 최신화](https://app.notion.com/p/4185f4f6eaa18184a3cfd728c080e34e)
+- No.1545: [Project200 단일 기준 및 브랜치 보존·정리 원칙](https://app.notion.com/p/4185f4f6eaa1816b80c9ce740c8ba37d)
+- A8 진행: [No.1546](https://app.notion.com/p/4195f4f6eaa1811a9da1d2072a9b3fd1)
+- A8 변경 로그: [Current Baseline v2 update log](https://app.notion.com/p/4195f4f6eaa181869a49c12e5aa83076)
