@@ -2,7 +2,7 @@
 
 > Notion decision source: `4135f4f6-eaa1-81f7-ac42-dea70e10fa42`. This repository file is the synchronized state snapshot. Detailed chronological updates are maintained separately in the A8 update log; the pre-rewrite SSOT is preserved in the linked archive.
 
-## 기준 헤더 — 2026-11-15 (KST)
+## 기준 헤더 — 2026-11-17 (KST)
 
 - CB2 ID: `4135f4f6-eaa1-81f7-ac42-dea70e10fa42`.
 - 유일한 활성 개발 기준 브랜치: `Project200`.
@@ -23,6 +23,8 @@
 
 ## 2. 데이터 인정·보존 정책 (No.1535 확정)
 
+- Mandatory No.1534 inventory/reuse-first rule: when data sources disagree, compare the relevant confirmed Notion decisions and existing Raw/Canonical/manifest/Master/REST/expiry lineage first; then try crosswalk, independent replay, schema/contract validation or provenance-preserving deterministic fixtures. Do not immediately label a mismatch BLOCKED. Use BLOCKED/UNAVAILABLE only if critical identity, event-time, provenance or required validation evidence remains unresolved.
+
 - 기존 REST·WebSocket 원본 수집 데이터는 프로젝트 검증 입력으로 인정한다.
 - 기존 수집 데이터를 기반으로 생성한 합성·보완 데이터도 프로젝트의 공식 검증 입력으로 인정한다. 합성·보완이라는 이유로 별도 격리하거나 검증 자격에서 배제하지 않는다.
 - provenance, 원본 연결, 생성 근거, 모델·변환 규칙, manifest 및 SHA-256은 추적 가능하게 보존한다. 생성값을 원본 관측값 또는 Production authoritative 값으로 표기하지 않는다.
@@ -36,35 +38,50 @@
 
 ## 3. 정책 충돌 결정 카드
 
-### K-1 — anchor 없는 계약의 UNAVAILABLE와 accepted synthetic contract의 관계
+### K-1 - Synthetic contract identity vs authoritative KIS identity
 
-- 충돌 근거: Decision Log No.1469는 유효 anchor가 없는 계약을 `UNAVAILABLE`로 유지한다. No.1535는 실제 수집 데이터를 기반으로 생성·보완한 합성 데이터도 공식 프로젝트 검증 입력으로 인정한다. 11/14 S2 sidecar는 `SYNTHETIC_CONTRACT:S2:` namespace를 사용한다.
-- 상태: 사용자 결정 대기. No.1469 또는 No.1535의 확정 상태를 임의 변경하지 않는다.
-- 선택 A (추천): No.1535를 프로젝트 검증 데이터 자격에 우선 적용한다. 합성 계약은 명시적인 `SYNTHETIC_CONTRACT:` namespace와 provenance를 유지한 validation input으로 허용하되, 실제 KIS 계약 identity 또는 Production authoritative로 승격하지 않는다. No.1469의 anchor 요건은 실제 KIS authoritative identity/production 경계에 유지한다.
-- 선택 B: No.1469의 anchor 없는 계약 `UNAVAILABLE`를 합성 계약에도 동일 적용한다. No.1535의 일반 데이터 인정은 계약 identity 생성에 적용하지 않는다.
-- 선택 C: 계약 identity와 market observation 보완을 별도 정책으로 분리해 추가 Decision Log로 확정한다.
-- 추천 사유: No.1535의 검증 데이터 인정 결정을 보존하면서 No.1469의 실제 KIS 계약 권위·Production 안전 경계를 약화시키지 않는다.
-- 주의: A8 P1의 사용자 승인은 이 결정 카드의 선택을 대신하지 않는다.
+- Status: RESOLVED - option A confirmed by No.1554 on 2026-11-16.
+- Provenance-preserving synthetic contracts and complementary observations are accepted as validation-only inputs under explicit SYNTHETIC_CONTRACT: / SYNTHETIC:DERIVED_SCENARIO namespaces, source anchors where available, generation rules, manifests and SHA-256.
+- Synthetic identities/values must not be promoted to actual KIS contract identity, account/broker facts, Production or Live. No.1469 authoritative-anchor requirements remain in force for real KIS identity and Production.
+- Until a separately connected and approved real-account investment API exists, use existing observations and provenance-preserving synthetic/complementary inputs for software and Virtual Runtime validation. No.1554 does not authorize API calls, orders or Live activation.
 
 ## 4. 전략별 현재 상태
 
 | 전략 | 현재 판정 | 검증 범위 및 잔여 제한 |
 | --- | --- | --- |
 | S1 | `PLUMBING_ONLY` | 단일 short CALL plumbing만. base strangle, multi-leg, exit, fee-inclusive PnL 미완료. |
-| S2 | `PSB_UNVERIFIED` | 11/14 synthetic sidecar-backed validation-only Virtual Runtime에서 4-leg 순차 진입·가상체결 4/4 확인. 정책 fixture는 승인값이 아니다. U17 volatility boundary, U18 numeric stop/trailing ratios 및 net-premium denominator, U19 mismatch handling, U21 age/spread/fallback/tick, fee/slippage/margin 모델 미결. 12개 운영 위험한도 null 유지. 자연 신호·전략 성능·Production/Live 인증 아님. |
+| S2 | PSB_UNVERIFIED | Q3 completed four validation-only 4-leg E2E scenarios and Fast/Detailed parity: full-fill baseline, group-close/exit, U16 partial-fill repair + U19 evidence-gated recovery, and zero-fill cancel -> group-flat. Q4 residuals: U17 IV basis BLOCKED_INPUT/fail-closed; U18/U19/U21 validation-only checks pass but operating values/providers/Runtime wiring remain unverified; actual fee/tax/slippage/margin and KIS/account identity mapping remain unverified. All 12 operating risk limits remain null/fail-closed. No natural-signal, account, Production or Live certification. |
 | S5 | `PSB_PASS_VALIDATION_ONLY_SYNTHETIC` (close-only) | 기존 포지션 close lifecycle 검증 범위. 신규 진입 BLOCKED. |
 | S6 | `PSB_PASS` (rank 5 범위) | rank 6 및 나머지 matrix 조합 미완료. |
 | S7 | `PSB_PASS` (validation-only synthetic) | 승인된 검증 subset 범위만. Production 승격 아님. |
 | S8 | `PSB_PASS` (subset) | No.1398 다중계약 partial-fill 승격 미완료. |
 | S9 | `PSB_PASS` (subset) | retry timer 재시작 복원 및 비대칭 체결 repair/flatten 미완료. |
 
-### S2 11/14 검증 사실과 한계
+### S2 Q3 validation-only 4-leg evidence (2026-11-16)
 
-- Market-calibrated synthetic sidecar v2: 21 candidate snapshots, 84 quote rows, 48 synthetic contract IDs.
-- Validation-only Runtime 결과: signals 1, approved 1, routed 4, filled 4, rejected 0, runtime failures 0. 판정은 synthetic sidecar-backed Virtual Runtime 4-leg lifecycle에 한정한다.
-- 다른 validation fixture의 quote age 5초, spread 0.20 및 12개 위험한도 등은 테스트 입력이며 사용자 승인 정책값이 아니다.
-- Production `risk_profile.v1.json`의 12개 위험한도는 null로 유지하고 fail-closed 한다. 실제 주문 제출·flatten, KIS Live, REAL_VTS, 실계좌 API 호출은 금지한다.
-- U18 Runtime exit lifecycle은 NOT_CERTIFIED. 순프리미엄 분모 의미, 수수료·슬리피지 및 quote freshness 증거가 해결되지 않았다.
+- Accepted Runtime v2: 2,072 rows (2026-10-12 to 13), manifest SHA-256 7657C90F13A81A7F98A8CCD075A259C8EC9795477A2A0541366094CD87E0360F.
+- Original four-leg sidecar: 21 candidates / 84 quote rows, manifest SHA-256 13580E010C34C74A1787BFFB6B6B72ADEBDC4964F848937C0894BFA0FD4918B7. Synthetic identities and synchronized quotes are validation-only, not listed contracts or actual simultaneous market observations.
+- Full-fill baseline: 2,072 events, four legs FILLED, validation-only PnL -787,500.0; trace SHA-256 39EA44475B56D962F5B7DC866AEBAD29A2B234AD78312A54A3010D82E62DF007.
+- Group-close/exit: 2,072 events, 3 signals/approvals, 12 routed/filled, rejected 0; realized -1,575,000.0, unrealized -750,000.0, net -2,325,000.0; Fast/Detailed parity PASS. Trace SHA-256 FF8F1071B6187AEF8C778FE94A86DA5FFA9AAC363CF5B437BE1E4234EEE25FBB.
+- Partial-fill repair + evidence-gated recovery: 86 events; final quantity 3 per leg; outer-call original 1/3 partial fill then cancel and repair quantity 2; broker snapshot, execution ledger and expected manifest reconciled. Validation-only recovery RESTORE_ALLOWED; U16 REPAIR_COMPLETE/NO_SUBMISSION. Fast/Detailed parity PASS; validation-only PnL -2,362,500.0; trace SHA-256 037B75F88AB15CD6ED808DE4EF7E39019264A23B8AD1E314A6ED7E78F3E2B244.
+- Zero-fill cancel to group-flat: 2,072 market events, 4 entry routed, 3 fills + 1 zero-fill CANCELLED, 3 close fills; open lots/pending/account positions all zero. Group-flat and Fast/Detailed parity PASS; validation-only PnL -1,137,500.0; trace SHA-256 59A6EF144EA91C8DCA877D1407CB154C79F42C3F230311C775EE0A3E5CE530E0.
+- Track2 focused regression: 271 passed, 531 deselected; compileall and git diff --check PASS.
+
+### S2 Q4 residual decision table (2026-11-17)
+
+| Item | Current verdict | Remaining limitation |
+| --- | --- | --- |
+| U17 IV basis | BLOCKED_INPUT / fail-closed | No sufficient evidence to approve a general-session IV metric/source/window/threshold. Do not adopt 0.85 as an operating threshold. |
+| U18 exit policy | VALIDATION_ONLY_PASS | Operating stop-loss/activation/pullback values are not approved; actual fee/tax/slippage and freshness criteria remain unresolved. |
+| U19 recovery | VALIDATION_ONLY_PASS | Actual broker provider, late-fill/timestamp tolerance, operational persistence and automatic Runtime restore are not connected. |
+| U21 quote policy | VALIDATION_ONLY_PASS | Evaluator boundary tests pass; Runtime/OMS wiring and authoritative quote provider are not connected. |
+| Cost and margin | VALIDATION_ONLY | Actual KIS fee/tax, empirical fill slippage and official KRX/KIS margin formula remain unverified. Fixture values are not operating values. |
+| KIS contract/account identity | UNVERIFIED | Actual account API and authoritative contract/multiplier/tick/tradability standards are not connected. |
+
+- All 12 operating risk limits remain null/fail-closed. Quote-age/spread, stop/trailing, fee/slippage and margin fixtures must not be promoted to operating standards.
+- Overall S2 verdict remains PSB_UNVERIFIED. Q1/Q2/Q3 validation-only PASS does not mean account, Production or Live approval.
+- After a separately connected and approved real-account investment API, reconcile contract code/product type/CP/strike/exact expiry/multiplier/tick/tradability, quote source/time, order/fill, fee/tax, balance/margin, risk and lifecycle fields across the full codebase against official KIS/account definitions.
+- Until then, use existing observations and provenance-preserving synthetic/complementary data for validation-only work. No Live/REAL_VTS/account/order API calls, new collection or collector restart.
 
 ## 5. Runtime·Risk·OMS 안전 경계
 
@@ -78,9 +95,9 @@
 
 ## 6. 미해결 및 후속 단계
 
-- K-1 정책 충돌: No.1469와 No.1535의 적용 범위에 대한 사용자 결정 필요.
+- K-1 conflict resolved by No.1554: option A allows provenance-preserving synthetic inputs for validation-only use while retaining No.1469 real-KIS/Production authority boundaries.
 - Canonical v2: 10/12·10/13의 ID 충돌 0 및 BSOP_HOUR/receive-time 분리는 산출물과 코드 경로에서 확인. 상위 manifest와 sidecar SHA 불일치는 여전히 미해결.
-- S2: U17 volatility boundary, U18 stop/trailing ratios 및 net-premium denominator, U19 mismatch recovery, U21 quote age/spread/fallback/tick, fee/slippage/margin 모델 및 12개 위험한도.
+- S2 residuals: U17 IV metric/source/window/threshold; U18 operating exit values; U19 real broker/persistence/automatic restore; U21 Runtime/OMS and authoritative provider wiring; actual fee/tax/slippage/margin; and KIS/account identity field mapping. The 12 operating risk limits remain null/fail-closed.
 - S2 실제 4-leg 데이터 후보 21건은 실제 동시·신선한 네 레그 호가 커버리지가 충분하지 않다. 합성 quote를 실제 quote로 주장하지 않는다.
 - 백업·재생성 가능성, 단일본 데이터, C: 저장공간 위험은 P3에서 read-only로 확인하고 K-2를 제출한다.
 - A8 후속 단계는 No.1546 진행표만 기준으로 한다. A5(No.1415), A6(No.1476), A7(No.1517)은 역사 참고다.
@@ -88,6 +105,9 @@
 ## 7. 확인된 근거
 
 - No.1469: [anchor 없는 계약 UNAVAILABLE 및 validation-only synthetic 원칙](https://app.notion.com/p/4125f4f6eaa181d29441f757645d1ca9)
+- No.1534: [Full source-data inventory and reuse baseline](https://app.notion.com/p/4175f4f6eaa181268573ea21a5aef01f)
+- No.1554: [K-1 validation-only synthetic identity and real-account API boundary](https://app.notion.com/p/41a5f4f6eaa18188aac6dc511b1f87a5)
+- No.1559: [Q4 S2 final verdict and remaining blockers](https://app.notion.com/p/41a5f4f6eaa18129ac88e4cfcdce4f2b)
 - No.1535: [기존 수집·합성 데이터 인정 및 추가 수집 중단 결정](https://app.notion.com/p/4185f4f6eaa18106ac1cc19962c109a7)
 - No.1537: [S2 10/12·10/13 실제 4-leg 데이터 커버리지 검증](https://app.notion.com/p/4185f4f6eaa18177861be9960ef72097)
 - No.1538: [S2 시장보정형 합성 4-leg 데이터 및 Runtime 검증](https://app.notion.com/p/4185f4f6eaa181689b07c6e919b30fc4)
