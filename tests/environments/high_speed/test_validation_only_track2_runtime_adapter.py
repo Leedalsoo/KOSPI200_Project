@@ -124,6 +124,7 @@ def test_entry_identity_validator_rejects_sidecar_role_mismatch():
     instrument_id = SYNTHETIC_ID_PREFIX + "role-test"
     row = {
         "instrument_id": instrument_id,
+        "leg_role": "inner_put",
         "contract_multiplier_provenance": "KIS_OFFICIAL_PRODUCT_SPEC",
         "contract_multiplier_source": KIS_OPTION_PRODUCT_SPEC_URL,
     }
@@ -151,6 +152,17 @@ def test_entry_identity_validator_rejects_sidecar_role_mismatch():
     )
     assert adapter.validate_execution_identity(matching_plan, stored, master) is True
     assert adapter.validate_execution_identity(mismatching_plan, stored, master) is False
+    repair_plan = SimpleNamespace(
+        strategy_id="track2_asymmetric_trap", purpose="TRAP_REPAIR",
+        legs=(SimpleNamespace(leg_id="inner_put", option_type="PUT", strike=Decimal("100")),),
+    )
+    adapter._active_candidate_role_by_instrument_id = {}
+    assert adapter.validate_execution_identity(repair_plan, stored, master) is True
+    wrong_repair_plan = SimpleNamespace(
+        strategy_id="track2_asymmetric_trap", purpose="TRAP_REPAIR",
+        legs=(SimpleNamespace(leg_id="outer_put", option_type="PUT", strike=Decimal("100")),),
+    )
+    assert adapter.validate_execution_identity(wrong_repair_plan, stored, master) is False
 
 
 

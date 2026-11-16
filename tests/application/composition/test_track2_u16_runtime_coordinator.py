@@ -320,8 +320,88 @@ def test_virtual_bridge_repair_uses_authoritative_leg_side_identity_and_missing_
     assert routed_plan.legs[0].side == "BUY"
     assert routed_plan.legs[0].instrument_identity == identity
     assert routed_plan.attempt_id == "u16-repair-1"
+    assert routed_plan.purpose == "TRAP_REPAIR"
     assert original_group is plan
     assert evidence.terminal and evidence.reconciled
+
+
+
+def test_real_bridge_repair_gate_requires_terminal_partial_and_exact_missing_quantity():
+    from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
+
+    identities = (
+        FakeIdentity("SYNTHETIC_CONTRACT:PUT300", "PUT", Decimal("300")),
+        FakeIdentity("SYNTHETIC_CONTRACT:CALL310", "CALL", Decimal("310")),
+        FakeIdentity("SYNTHETIC_CONTRACT:PUT290", "PUT", Decimal("290")),
+        FakeIdentity("SYNTHETIC_CONTRACT:CALL320", "CALL", Decimal("320")),
+    )
+    legs = tuple(
+        ExecutionLeg(leg_id, side, 3, option_type=identity.option_type,
+                    strike=identity.strike, position_role=role,
+                    instrument_identity=identity)
+        for (leg_id, side, role), identity in zip((
+            ("inner_put", "BUY", "LONG"), ("inner_call", "BUY", "LONG"),
+            ("outer_put", "SELL", "SHORT"), ("outer_call", "SELL", "SHORT"),
+        ), identities)
+    )
+    group_plan = MultiLegExecutionPlan(
+        "g1", "track2_asymmetric_trap", legs, purpose="ASYMMETRIC_TRAP_NARROW",
+    )
+    target = legs[-1]
+    original_id = VirtualMultiLegExecutionBridge._client_order_id(
+        group_plan, target, target.instrument_identity,
+    )
+    original = SimpleNamespace(
+        client_order_id=original_id, leg_id="outer_call", status="CANCELLED",
+        filled_quantity=1, remaining_quantity=2, execution_id="partial-fill-1",
+    )
+    bridge = object.__new__(VirtualMultiLegExecutionBridge)
+    bridge._group_plans = {"g1": group_plan}
+    bridge.groups = {"g1": [original]}
+    bridge.pending_legs = {}
+    bridge.identity_for_leg = lambda supplied_plan, leg: leg.instrument_identity
+    support = FakeBridge([FakeLot("validation-run", group_plan.strategy_id, "g1", target.instrument_identity.instrument_id, 1, side="SELL")])
+    support.bundle.execution._authoritative_execute.__self__.vssf_runtime.account.positions[target.instrument_identity.instrument_id] = {"qty": -1}
+    bridge.run_id = support.run_id
+    bridge.position_lot_store = support.position_lot_store
+    bridge.bundle = support.bundle
+    repair_leg = __import__("dataclasses").replace(target, quantity=2)
+    repair_plan = MultiLegExecutionPlan(
+        "g1", "track2_asymmetric_trap", (repair_leg,),
+        purpose="TRAP_REPAIR", attempt_id="u16-repair-attempt-1",
+    )
+    bridge._validate_track2_repair_plan(repair_plan, group_plan)
+
+    wrong_quantity = MultiLegExecutionPlan(
+        "g1", "track2_asymmetric_trap",
+        (__import__("dataclasses").replace(target, quantity=1),),
+        purpose="TRAP_REPAIR", attempt_id="u16-repair-attempt-2",
+    )
+    with pytest.raises(ValueError, match="MISSING_QUANTITY_MISMATCH"):
+        bridge._validate_track2_repair_plan(wrong_quantity, group_plan)
+
+    pending_bridge = object.__new__(VirtualMultiLegExecutionBridge)
+    pending_bridge._group_plans = {"g1": group_plan}
+    pending_bridge.groups = {"g1": [original]}
+    pending_bridge.pending_legs = {"pending": (group_plan, target, object())}
+    pending_bridge.identity_for_leg = lambda supplied_plan, leg: leg.instrument_identity
+    pending_bridge.run_id = support.run_id
+    pending_bridge.position_lot_store = support.position_lot_store
+    pending_bridge.bundle = support.bundle
+    mismatch_bridge = object.__new__(VirtualMultiLegExecutionBridge)
+    mismatch_bridge._group_plans = {"g1": group_plan}
+    mismatch_bridge.groups = {"g1": [original]}
+    mismatch_bridge.pending_legs = {}
+    mismatch_bridge.identity_for_leg = lambda supplied_plan, leg: leg.instrument_identity
+    mismatch_bridge.run_id = support.run_id
+    mismatch_bridge.position_lot_store = support.position_lot_store
+    mismatch_bridge.bundle = support.bundle
+    mismatch_bridge.bundle.execution._authoritative_execute.__self__.vssf_runtime.account.positions[target.instrument_identity.instrument_id] = {"qty": -2}
+    with pytest.raises(ValueError, match="FILL_POSITION_NOT_RECONCILED"):
+        mismatch_bridge._validate_track2_repair_plan(repair_plan, group_plan)
+    mismatch_bridge.bundle.execution._authoritative_execute.__self__.vssf_runtime.account.positions[target.instrument_identity.instrument_id] = {"qty": -1}
+    with pytest.raises(ValueError, match="GROUP_ORDERS_PENDING"):
+        pending_bridge._validate_track2_repair_plan(repair_plan, group_plan)
 
 
 def test_virtual_bridge_flatten_requires_exactly_one_authoritative_target_leg():
@@ -567,3 +647,102 @@ def test_virtual_bridge_repair_refuses_to_submit_without_explicit_limit_price_re
         entry_plan_provider=lambda group: plan, quote_policy=POLICY)
     with pytest.raises(ValueError, match="PRICE_RESOLVER_REQUIRED"):
         ports.submit_repair("g1", "inner_put", 1, "u16-repair-1", T0)
+
+
+def test_integrated_zero_fill_cancel_flattens_entire_four_leg_group():
+    from contracts.types import ExecutionLeg, MultiLegExecutionPlan
+    from application.composition.track2_u16_virtual_bridge_ports import ValidationOnlyU16VirtualBridgePorts
+    from core.strategy.track2_asymmetric_trap import Track2AsymmetricTrap
+
+    identities = (
+        FakeIdentity("SYNTHETIC_CONTRACT:S2:INNER_PUT", "PUT", Decimal("495")),
+        FakeIdentity("SYNTHETIC_CONTRACT:S2:INNER_CALL", "CALL", Decimal("505")),
+        FakeIdentity("SYNTHETIC_CONTRACT:S2:OUTER_PUT", "PUT", Decimal("490")),
+        FakeIdentity("SYNTHETIC_CONTRACT:S2:OUTER_CALL", "CALL", Decimal("510")),
+    )
+    legs = tuple(
+        ExecutionLeg(
+            leg_id, side, 1, option_type=identity.option_type,
+            strike=identity.strike,
+            position_role="LONG" if side == "BUY" else "SHORT",
+            instrument_identity=identity,
+        )
+        for (leg_id, side), identity in zip(
+            (("inner_put", "BUY"), ("inner_call", "BUY"),
+             ("outer_put", "SELL"), ("outer_call", "SELL")), identities
+        )
+    )
+    plan = MultiLegExecutionPlan(
+        "g1", "track2_asymmetric_trap", legs, purpose="TRAP_ENTRY"
+    )
+    open_lots = [
+        FakeLot("validation-run", plan.strategy_id, plan.group_id,
+                identity.instrument_id, 1, side=leg.side)
+        for leg, identity in zip(legs[:3], identities[:3])
+    ]
+    bridge = FakeBridge(open_lots)
+    positions = bridge.bundle.execution._authoritative_execute.__self__.vssf_runtime.account.positions
+    for identity in identities:
+        positions[identity.instrument_id] = {
+            "qty": 1 if identity in identities[:3] else 0
+        }
+    bridge.groups["g1"] = [
+        SimpleNamespace(client_order_id=f"entry-{leg.leg_id}", leg_id=leg.leg_id,
+                        status="FILLED", filled_quantity=1, remaining_quantity=0,
+                        execution_id=f"fill-{leg.leg_id}")
+        for leg in legs[:3]
+    ] + [
+        SimpleNamespace(client_order_id="entry-outer_call", leg_id="outer_call",
+                        status="CANCELLED", filled_quantity=0, remaining_quantity=1,
+                        execution_id=None)
+    ]
+    ports = ValidationOnlyU16VirtualBridgePorts(
+        validation_only=True, bridge=bridge,
+        entry_plan_provider=lambda group_id: plan if group_id == plan.group_id else None,
+        quote_policy=POLICY,
+    )
+    coordinator = ValidationOnlyU16RuntimeCoordinator(
+        validation_only=True,
+        submit_repair=lambda *args: pytest.fail("zero-fill cancel must not repair"),
+        submit_flatten=lambda group, leg, quantity, client_id:
+            ports.submit_flatten(group, leg, quantity, client_id),
+    )
+    coordinator.restore({"g1|outer_call": {
+        "first_repair_submitted_at": T0,
+        "additional_retry_count": 3,
+        "previous_repair_terminal": True,
+        "previous_repair_reconciled": True,
+    }})
+    strategy = Track2AsymmetricTrap(runtime_config_verified=True, risk_limits_available=True)
+    strategy._trap_active = True
+    strategy._exit_pending = True
+    strategy._pending_exit_reason = "U16_ZERO_FILL_CANCEL"
+
+    result = coordinator.process(data(
+        leg_id="outer_call", target_quantity=1, fills=(), position_quantity=0,
+        original_order_status="CANCELLED", original_order_terminal=True,
+        original_order_cancelled_or_closed=True,
+        now=T0 + timedelta(seconds=120),
+        group_position_quantity=3, group_position_confirmed=True,
+    ))
+    assert result.action == "FLATTEN_SUBMITTED"
+    assert result.terminal and result.reconciled
+    snapshot = coordinator.snapshot()["g1|outer_call"]
+    reconciled = ports.reconcile_group_flatten(
+        "g1", result.client_order_id, tuple(snapshot["flatten_client_order_ids"])
+    )
+    assert reconciled.terminal and reconciled.reconciled
+    assert reconciled.status == "GROUP_FLAT"
+    assert not bridge.position_lot_store.open_lots()
+    assert not bridge.pending_legs
+    assert all(positions[item.instrument_id]["qty"] == 0 for item in identities)
+    assert all(
+        report.status == "FILLED"
+        for report in bridge.groups["g1"]
+        if report.client_order_id in snapshot["flatten_client_order_ids"]
+    )
+    strategy.on_execution_result(
+        "TRAP_CLOSE", SimpleNamespace(group_complete=True, position_flat=True)
+    )
+    assert strategy._trap_active is False
+    assert strategy._exit_pending is False

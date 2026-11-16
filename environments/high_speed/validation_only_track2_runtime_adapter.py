@@ -681,9 +681,8 @@ class Track2ValidationOnlyRuntimeAdapter:
         ]
         if not matching_quote_rows:
             return False
-        if str(getattr(plan, "purpose", "") or "").upper() in {
-            "ASYMMETRIC_TRAP_WIDE", "ASYMMETRIC_TRAP_NARROW",
-        }:
+        purpose = str(getattr(plan, "purpose", "") or "").upper()
+        if purpose in {"ASYMMETRIC_TRAP_WIDE", "ASYMMETRIC_TRAP_NARROW", "TRAP_REPAIR"}:
             matching_plan_legs = [
                 leg for leg in tuple(getattr(plan, "legs", ()) or ())
                 if str(getattr(leg, "option_type", "")).upper()
@@ -694,7 +693,17 @@ class Track2ValidationOnlyRuntimeAdapter:
             if len(matching_plan_legs) != 1:
                 return False
             plan_role = str(getattr(matching_plan_legs[0], "leg_id", "") or "")
-            if self._active_candidate_role_by_instrument_id.get(instrument_id) != plan_role:
+            if purpose == "TRAP_REPAIR":
+                # A repair can occur after the original market candidate has aged out
+                # of the adapter's active tick. Reconcile its role against the exact
+                # manifest-bound synthetic identity rows, not the latest candidate.
+                if not any(
+                    str(row.get("instrument_id")) == instrument_id
+                    and str(row.get("leg_role")) == plan_role
+                    for row in matching_quote_rows
+                ):
+                    return False
+            elif self._active_candidate_role_by_instrument_id.get(instrument_id) != plan_role:
                 return False
         return True
 

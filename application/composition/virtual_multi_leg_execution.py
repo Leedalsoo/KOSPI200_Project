@@ -952,6 +952,77 @@ class VirtualMultiLegExecutionBridge:
             VirtualPositionFillAdapter(leg_position).apply(broker_command, fill_report)
             self._applied_execution_fingerprints[execution_id] = fingerprint
 
+    def _validate_track2_repair_plan(
+        self, plan: MultiLegExecutionPlan, group_plan: MultiLegExecutionPlan,
+    ) -> None:
+        """Allow only a reconciled U16 missing-quantity repair to bypass entry sequencing."""
+        if (plan.strategy_id != "track2_asymmetric_trap"
+                or str(plan.purpose or "").upper() != "TRAP_REPAIR"
+                or group_plan.strategy_id != plan.strategy_id
+                or group_plan.group_id != plan.group_id
+                or str(group_plan.purpose or "").upper() == "TRAP_CLOSE"
+                or len(plan.legs) != 1
+                or not str(plan.attempt_id or "").strip()):
+            raise ValueError("TRACK2_U16_REPAIR_PLAN_IDENTITY_INVALID")
+        stored = self._group_plans.get(group_plan.group_id)
+        if stored is None or stored.strategy_id != group_plan.strategy_id:
+            raise ValueError("TRACK2_U16_REPAIR_ORIGINAL_GROUP_PLAN_REQUIRED")
+        repair_leg = plan.legs[0]
+        targets = [leg for leg in group_plan.legs if leg.leg_id == repair_leg.leg_id]
+        stored_targets = [leg for leg in stored.legs if leg.leg_id == repair_leg.leg_id]
+        if len(targets) != 1 or len(stored_targets) != 1:
+            raise ValueError("TRACK2_U16_REPAIR_TARGET_LEG_NOT_UNIQUE")
+        target = targets[0]
+        identity = self.identity_for_leg(group_plan, target)
+        stored_identity = self.identity_for_leg(stored, stored_targets[0])
+        repair_identity = self.identity_for_leg(plan, repair_leg)
+        if (identity != stored_identity or identity != repair_identity
+                or repair_leg.side != target.side
+                or repair_leg.option_type != target.option_type
+                or repair_leg.strike != target.strike
+                or repair_leg.position_role != target.position_role
+                or int(repair_leg.quantity) <= 0
+                or int(repair_leg.quantity) >= int(target.quantity)):
+            raise ValueError("TRACK2_U16_REPAIR_CONTRACT_OR_QUANTITY_INVALID")
+        if any(pending_plan.group_id == group_plan.group_id
+               for pending_plan, _pending_leg, _command in self.pending_legs.values()):
+            raise ValueError("TRACK2_U16_REPAIR_GROUP_ORDERS_PENDING")
+        original_id = self._client_order_id(group_plan, target, identity)
+        original_reports = [
+            item for item in self.groups.get(group_plan.group_id, ())
+            if item.client_order_id == original_id and item.leg_id == target.leg_id
+        ]
+        if not original_reports:
+            raise ValueError("TRACK2_U16_REPAIR_ORIGINAL_ORDER_REPORT_REQUIRED")
+        latest = original_reports[-1]
+        status = str(getattr(getattr(latest, "status", None), "value",
+                             getattr(latest, "status", ""))).upper()
+        if status not in {"CANCELLED", "REJECTED", "EXPIRED"}:
+            raise ValueError("TRACK2_U16_REPAIR_ORIGINAL_ORDER_NOT_TERMINAL")
+        confirmed_filled = sum(
+            int(item.filled_quantity or 0)
+            for item in self.groups.get(group_plan.group_id, ())
+            if item.leg_id == target.leg_id
+        )
+        if (confirmed_filled <= 0 or confirmed_filled >= int(target.quantity)
+                or int(repair_leg.quantity) != int(target.quantity) - confirmed_filled):
+            raise ValueError("TRACK2_U16_REPAIR_MISSING_QUANTITY_MISMATCH")
+        open_lots = tuple(self.position_lot_store.open_lots())
+        lot_quantity = sum(
+            int(lot.remaining_quantity) for lot in open_lots
+            if lot.run_id == self.run_id
+            and lot.strategy_id == group_plan.strategy_id
+            and lot.group_id == group_plan.group_id
+            and lot.instrument_id == identity.instrument_id
+        )
+        vssf_runtime = self.bundle.execution._authoritative_execute.__self__.vssf_runtime
+        account_position = vssf_runtime.account.positions.get(identity.instrument_id)
+        account_quantity = abs(Decimal(str(
+            (account_position or {}).get("qty", 0) or 0
+        )))
+        if lot_quantity != confirmed_filled or account_quantity != Decimal(confirmed_filled):
+            raise ValueError("TRACK2_U16_REPAIR_FILL_POSITION_NOT_RECONCILED")
+
     def execute(
         self,
         plan: MultiLegExecutionPlan,
@@ -961,6 +1032,7 @@ class VirtualMultiLegExecutionBridge:
         reconciled_reports: dict[str, ExecutionReport] | None = None,
         reconciled_commands: dict[str, BrokerOrderCommand] | None = None,
     ) -> MultiLegExecutionResult:
+        supplied_group_plan = group_plan
         if group_plan is None:
             group_plan = plan
             if (plan.strategy_id == "track9_event_overnight_insurance" and str(plan.purpose or "").upper() == "OVERNIGHT_INSURANCE"):
@@ -969,7 +1041,7 @@ class VirtualMultiLegExecutionBridge:
                 (plan.strategy_id == "track8_macro_regime_monthly_strangle" and plan.purpose in {"MONTHLY_STRANGLE_ENTRY_CALL", "MONTHLY_STRANGLE_ENTRY_PUT"})
                 or (plan.strategy_id == "track6_daily_tail_insurance" and plan.purpose == "DAILY_TAIL_INSURANCE_ENTRY")
                 or (plan.strategy_id == "track7_volatility_skew_weekly_insurance" and plan.purpose in {"WEEKLY_INSURANCE_ENTRY", "WEEKLY_INSURANCE_ENTRY_PUT", "WEEKLY_INSURANCE_ENTRY_CALL"})
-                or (plan.strategy_id == "track2_asymmetric_trap" and str(plan.purpose or "").upper() != "TRAP_CLOSE")
+                or (plan.strategy_id == "track2_asymmetric_trap" and str(plan.purpose or "").upper() not in {"TRAP_CLOSE", "TRAP_REPAIR"})
             )
             if is_group_entry:
                 prior_group_plan = self._group_plans.get(plan.group_id)
@@ -989,6 +1061,10 @@ class VirtualMultiLegExecutionBridge:
         reconciled_commands = dict(reconciled_commands or {})
         if group_plan.group_id != plan.group_id or group_plan.strategy_id != plan.strategy_id:
             raise ValueError("MULTI_LEG_GROUP_PLAN_MISMATCH")
+        if str(plan.purpose or "").upper() == "TRAP_REPAIR":
+            if supplied_group_plan is None:
+                raise ValueError("TRACK2_U16_REPAIR_ORIGINAL_GROUP_PLAN_REQUIRED")
+            self._validate_track2_repair_plan(plan, group_plan)
         if not plan.legs:
             raise ValueError("MULTI_LEG_PLAN_EMPTY")
         reports: list[ExecutionReport] = []
@@ -1235,7 +1311,7 @@ class VirtualMultiLegExecutionBridge:
             return result
 
         track2_next_leg_id = None
-        if plan.strategy_id == "track2_asymmetric_trap" and str(plan.purpose or "").upper() != "TRAP_CLOSE":
+        if plan.strategy_id == "track2_asymmetric_trap" and str(plan.purpose or "").upper() not in {"TRAP_CLOSE", "TRAP_REPAIR"}:
             from core.strategy.track2_entry_sequence import evaluate_track2_entry_progress
             progress = evaluate_track2_entry_progress(
                 group_plan, self.groups.get(group_plan.group_id, ())
@@ -1247,7 +1323,7 @@ class VirtualMultiLegExecutionBridge:
                 track2_next_leg_id = None
 
         for leg, identity, client_order_id, broker_command, canonical, preflight_evaluation, _admitted in evaluations:
-            if plan.strategy_id == "track2_asymmetric_trap" and str(plan.purpose or "").upper() != "TRAP_CLOSE":
+            if plan.strategy_id == "track2_asymmetric_trap" and str(plan.purpose or "").upper() not in {"TRAP_CLOSE", "TRAP_REPAIR"}:
                 if track2_next_leg_id is None or leg.leg_id != track2_next_leg_id:
                     continue
             freshness_verdict = freshness_verdict_by_leg[leg.leg_id]

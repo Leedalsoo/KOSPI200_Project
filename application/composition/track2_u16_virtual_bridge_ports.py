@@ -285,7 +285,9 @@ class ValidationOnlyU16VirtualBridgePorts:
             raise ValueError("U16_BRIDGE_REPAIR_LIMIT_PRICE_INVALID")
         repair_leg = replace(original_leg, quantity=int(missing_quantity),
                              requested_price=requested_price)
-        repair_plan = replace(group_plan, legs=(repair_leg,), attempt_id=client_order_id)
+        repair_plan = replace(
+            group_plan, legs=(repair_leg,), attempt_id=client_order_id, purpose="TRAP_REPAIR"
+        )
         expected_id = self._bridge._client_order_id(repair_plan, repair_leg, identity)
         result = self._bridge.execute(repair_plan, group_plan=group_plan)
         return self._evidence(plan=group_plan, leg=repair_leg, identity=identity,

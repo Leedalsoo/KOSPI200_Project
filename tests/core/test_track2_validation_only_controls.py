@@ -117,6 +117,28 @@ def test_track2_strategy_activates_only_after_complete_nonflat_group():
     assert strategy._trap_active is True
 
 
+
+def test_track2_strategy_activates_only_after_u16_repair_completes_four_leg_group():
+    from types import SimpleNamespace
+    from core.strategy.track2_asymmetric_trap import Track2AsymmetricTrap
+
+    strategy = Track2AsymmetricTrap(runtime_config_verified=True, risk_limits_available=True)
+    strategy._entry_pending = True
+    strategy.on_execution_result(
+        "TRAP_REPAIR",
+        SimpleNamespace(group_complete=False, position_flat=False),
+    )
+    assert strategy._entry_pending is True
+    assert strategy._trap_active is False
+
+    strategy.on_execution_result(
+        "TRAP_REPAIR",
+        SimpleNamespace(group_complete=True, position_flat=False),
+    )
+    assert strategy._entry_pending is False
+    assert strategy._trap_active is True
+
+
 def test_track2_strategy_blocks_new_signal_while_entry_pending_or_active():
     from types import SimpleNamespace
     from core.strategy.track2_asymmetric_trap import Track2AsymmetricTrap

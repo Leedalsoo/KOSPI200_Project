@@ -105,7 +105,7 @@ class Track2AsymmetricTrap:
         self._group_pnl_status = "GROUP_PNL_SNAPSHOT_UNAVAILABLE"
 
     def on_execution_result(self, purpose: str, result: object) -> None:
-        if purpose in {"ASYMMETRIC_TRAP_WIDE", "ASYMMETRIC_TRAP_NARROW"} and self._entry_pending:
+        if purpose in {"ASYMMETRIC_TRAP_WIDE", "ASYMMETRIC_TRAP_NARROW", "TRAP_REPAIR"} and self._entry_pending:
             if bool(getattr(result, "group_complete", False)) and not bool(getattr(result, "position_flat", False)):
                 self._entry_pending = False
                 self._trap_active = True
