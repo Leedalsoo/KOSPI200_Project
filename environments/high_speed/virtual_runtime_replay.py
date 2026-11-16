@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from uuid import uuid4
 from types import SimpleNamespace
-from decimal import Decimal
+from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 
 from application.bootstrap import create_virtual_runtime_bootstrap
 from application.composition.automated_virtual_runtime_factory import attach_standard_automated_loop
@@ -19,6 +19,7 @@ from environments.high_speed.validation_only_track7_execution import S7Validatio
 from contracts.strategy_runtime_status import StrategyRuntimeStatus
 from core.strategy.track6_order_lifecycle import Track6LifecycleConfig
 from contracts.clock import ClockProvider
+from core.strategy.track2_u16_repair_lifecycle import U16QuotePolicy
 from environments.high_speed.replay_trace import ReplayExecutionObserver, ReplayLogMode, ReplayTraceController
 
 
@@ -113,6 +114,66 @@ def _publish_contract_scoped_replay_quote(tick, *, option_master, market, order_
     )
     # Never route this validation-only identity through a Standard instrument ID.
     order_book.update_bid_ask(bid, ask, instrument_id=synthetic_id)
+
+
+def _build_validation_only_track2_u16_runtime_inputs(track2_adapter):
+    """Build U16 lifecycle inputs only from the validated validation-only S2 profile."""
+    if track2_adapter is None:
+        return None, None
+    profile = getattr(track2_adapter, "profile", None)
+    u16 = getattr(profile, "u16_quote_policy", None)
+    u21 = getattr(profile, "u21_quote_policy", None)
+    if not isinstance(u16, dict) or not isinstance(u21, dict):
+        raise ValueError("TRACK2_U16_VALIDATION_PROFILE_POLICY_REQUIRED")
+    try:
+        schedule = tuple(int(value) for value in u16["retry_schedule_seconds_after_t0"])
+        deadline = int(u16["deadline_seconds"])
+        max_retries = int(u16["max_additional_retries"])
+        tick_size = Decimal(str(u21["tick_size"]))
+        quote_policy = U16QuotePolicy(
+            validated=bool(u16["validated"]),
+            side_to_book_rule=str(u16["side_to_book_rule"]),
+            max_quote_age_seconds=int(u16["max_quote_age_seconds"]),
+            max_spread=str(u16["max_spread"]),
+            spread_unit=str(u16["spread_unit"]),
+            fallback_formula=str(u16["fallback_formula"]),
+            fallback_priority=str(u16["fallback_priority"]),
+            tick_rounding_rule=str(u16["tick_rounding_rule"]),
+            retry_interval_seconds=schedule[0],
+        )
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise ValueError("TRACK2_U16_VALIDATION_PROFILE_POLICY_INVALID") from exc
+    if (
+        not quote_policy.is_resolved()
+        or not schedule
+        or len(schedule) != max_retries
+        or schedule != tuple(quote_policy.retry_interval_seconds * index for index in range(1, max_retries + 1))
+        or deadline <= schedule[-1]
+        or u16.get("side_to_book_rule") != "BUY_ASK_SELL_BID"
+        or u16.get("tick_rounding_rule") != "BUY_CEILING_SELL_FLOOR"
+        or str(u21.get("tick_rounding")) != quote_policy.tick_rounding_rule
+        or str(u21.get("max_age_seconds")) != str(quote_policy.max_quote_age_seconds)
+        or str(u21.get("max_spread")) != str(quote_policy.max_spread)
+        or not tick_size.is_finite()
+        or tick_size <= 0
+    ):
+        raise ValueError("TRACK2_U16_VALIDATION_PROFILE_POLICY_INCONSISTENT")
+
+    def repair_price_resolver(group_plan, leg, identity, quote, policy, now):
+        side = str(getattr(leg, "side", "")).upper()
+        if side == "BUY":
+            raw_price = Decimal(str(quote["ask"]))
+            rounding = ROUND_CEILING
+        elif side == "SELL":
+            raw_price = Decimal(str(quote["bid"]))
+            rounding = ROUND_FLOOR
+        else:
+            raise ValueError("TRACK2_U16_REPAIR_SIDE_INVALID")
+        if not raw_price.is_finite() or raw_price <= 0:
+            raise ValueError("TRACK2_U16_REPAIR_EXECUTABLE_QUOTE_INVALID")
+        return (raw_price / tick_size).to_integral_value(rounding=rounding) * tick_size
+
+    return quote_policy, repair_price_resolver
 
 
 class HighSpeedVirtualRuntimeReplayRunner:
@@ -319,6 +380,9 @@ class HighSpeedVirtualRuntimeReplayRunner:
         existing_loop = getattr(bootstrap, "automated_loop", None)
         if existing_loop is not None:
             bootstrap.bundle.market.unsubscribe(existing_loop.on_tick)
+        validation_only_u16_quote_policy, validation_only_u16_repair_price_resolver = (
+            _build_validation_only_track2_u16_runtime_inputs(self.track2_validation_runtime_adapter)
+        )
         loop = attach_standard_automated_loop(
             bootstrap,
             strategy_keys=self.strategy_keys,
@@ -333,6 +397,8 @@ class HighSpeedVirtualRuntimeReplayRunner:
             validation_only_s7_runtime_adapter=self.s7_validation_runtime_adapter,
             validation_only_track2_runtime_adapter=self.track2_validation_runtime_adapter,
             validation_only_track6_lifecycle_config=self.validation_only_track6_lifecycle_config,
+            validation_only_u16_quote_policy=validation_only_u16_quote_policy,
+            validation_only_u16_repair_price_resolver=validation_only_u16_repair_price_resolver,
         )
         self.s9_runtime_provider = getattr(loop, "standard_runtime_input_provider", None)
         self.s9_strategy = getattr(loop, "s9_strategy", None)

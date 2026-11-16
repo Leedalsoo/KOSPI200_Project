@@ -920,6 +920,11 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         if u16_runtime_coordinator is not None and u16_bridge_ports is not None and tick is not None:
             now = datetime.fromisoformat(str(tick.timestamp))
             for group_plan in multi_leg_bridge.group_plans_for_strategy("track2_asymmetric_trap"):
+                # U16 owns entry repair/reconciliation only. A strategy-originated
+                # TRAP_CLOSE is already handled by the close execution lifecycle;
+                # it has no original entry order plan for U16 repair input.
+                if str(group_plan.purpose or "").upper() == "TRAP_CLOSE":
+                    continue
                 group_reports = tuple(multi_leg_bridge.groups.get(group_plan.group_id, ()))
                 for leg in group_plan.legs:
                     if not any(item.leg_id == leg.leg_id for item in group_reports):
