@@ -11,6 +11,10 @@ from typing import Any
 from contracts.market_data_freshness import FreshnessStatus, FreshnessVerdict
 from contracts.option_expiry import require_exact_option_expiry
 from core.risk.track2_synthetic_scenario_profile import load_track2_synthetic_scenario_profile
+from core.risk.track2_validation_profile import (
+    DEFAULT_TRACK2_VALIDATION_PROFILE,
+    load_track2_validation_profile,
+)
 
 STRATEGY_ID = "track2_asymmetric_trap"
 SYNTHETIC_ID_PREFIX = "SYNTHETIC_CONTRACT:S2:"
@@ -36,6 +40,8 @@ class Track2SyntheticValidationEvidence:
     dataset_sha256: str
     profile_path: str
     profile_sha256: str
+    validation_profile_path: str
+    validation_profile_sha256: str
     registry_id: str
     rows: int
     trading_dates: tuple[str, ...]
@@ -115,6 +121,7 @@ class Track2ValidationOnlyRuntimeAdapter:
     """Isolated S2 strategy configuration and identity adapter for accepted-data replay."""
 
     def __init__(self, *, dataset: str | Path, manifest_path: str | Path, profile_path: str | Path,
+                 validation_profile_path: str | Path = DEFAULT_TRACK2_VALIDATION_PROFILE,
                  quote_scenario_manifest_path: str | Path | None = None) -> None:
         self.dataset = Path(dataset).resolve()
         self.root = self.dataset
@@ -128,7 +135,11 @@ class Track2ValidationOnlyRuntimeAdapter:
             self.manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise ValueError("TRACK2_SYNTHETIC_MANIFEST_INVALID") from exc
+        self.validation_profile_path = Path(validation_profile_path).resolve()
+        self.validation_profile = load_track2_validation_profile(self.validation_profile_path)
         self.profile = load_track2_synthetic_scenario_profile(self.profile_path)
+        if self.validation_profile.strategy_id != self.profile.strategy_id:
+            raise ValueError("TRACK2_VALIDATION_AND_SYNTHETIC_PROFILE_STRATEGY_MISMATCH")
         self._validate_manifest_and_dataset()
         self.run_id = "UNBOUND"
         self.preflight_checked = 0
@@ -199,6 +210,8 @@ class Track2ValidationOnlyRuntimeAdapter:
             manifest_sha256=sha256(self.manifest_path.read_bytes()).hexdigest(),
             dataset_sha256=sha256("\n".join(dataset_fingerprint).encode("utf-8")).hexdigest(),
             profile_path=str(self.profile_path), profile_sha256=self.profile.profile_sha256,
+            validation_profile_path=str(self.validation_profile_path),
+            validation_profile_sha256=self.validation_profile.profile_sha256,
             registry_id=str(manifest["registry_id"]), rows=total_rows,
             trading_dates=tuple(sorted(seen_dates)),
         )

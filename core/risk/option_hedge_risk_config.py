@@ -71,6 +71,22 @@ class OptionHedgeRiskConfig:
     allow_synthetic_quotes: bool
     allow_live_orders: bool
 
+    @property
+    def operational_enforcement_enabled(self) -> bool:
+        return self.activation_mode == "ENFORCED"
+
+    def is_strategy_operationally_enabled(self, strategy_id: str) -> bool:
+        configured = self.strategies.get(str(strategy_id))
+        return bool(
+            self.operational_enforcement_enabled
+            and configured is not None
+            and configured.enabled
+        )
+
+    @property
+    def live_order_submission_permitted(self) -> bool:
+        return bool(self.operational_enforcement_enabled and self.allow_live_orders)
+
 
 def _limit(raw: Mapping[str, Any], field: str, *, default_enabled: bool = False) -> StrategyOptionRiskLimit:
     enabled = raw.get("enabled", default_enabled)

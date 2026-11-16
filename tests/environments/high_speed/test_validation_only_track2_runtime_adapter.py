@@ -239,3 +239,28 @@ def test_validation_only_pnl_evidence_fails_closed_on_stale_quote(tmp_path):
         market=market, synthetic_sources=sources,
     )
     assert evidence["quote_freshness_verified"] is None
+
+def test_runtime_adapter_pairs_synthetic_values_with_separate_null_validation_profile(tmp_path):
+    dataset, manifest = _dataset(tmp_path)
+    adapter = Track2ValidationOnlyRuntimeAdapter(
+        dataset=dataset,
+        manifest_path=manifest,
+        profile_path="config/validation_only/track2/synthetic_scenario_profile.market_calibrated.v2.json",
+    )
+
+    assert adapter.validation_profile.numeric_limits_resolved is False
+    assert len(adapter.validation_profile.risk_limit_keys) == 12
+    assert len(adapter.validation_profile.profile_sha256) == 64
+    assert adapter.profile.risk_limits["account_capital_krw"] == 100_000_000
+    assert (
+        adapter.evidence.validation_profile_sha256
+        == adapter.validation_profile.profile_sha256
+    )
+
+    with pytest.raises(ValueError, match="IDENTITY_INVALID"):
+        Track2ValidationOnlyRuntimeAdapter(
+            dataset=dataset,
+            manifest_path=manifest,
+            profile_path="config/validation_only/track2/synthetic_scenario_profile.market_calibrated.v2.json",
+            validation_profile_path="config/validation_only/track2/synthetic_scenario_profile.market_calibrated.v2.json",
+        )
