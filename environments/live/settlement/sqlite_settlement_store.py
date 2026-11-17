@@ -6,6 +6,7 @@ intentionally unrelated. This module never performs broker or KIS API calls.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import asdict, is_dataclass
@@ -827,6 +828,11 @@ class SQLiteSettlementStore:
         connection = self._connect()
         try:
             self._begin(connection)
+            bootstrap = connection.execute(
+                "SELECT status FROM reconciliation_state WHERE scope_key='__runtime_bootstrap__'"
+            ).fetchone()
+            if bootstrap is not None and bootstrap["status"] == "CONFLICT":
+                raise SettlementStoreError("RUNTIME_BOOTSTRAP_CONFLICT_REQUIRES_MANUAL_REVIEW")
             connection.execute(
                 """INSERT INTO position_states(instrument_id,position_json,updated_at)
                    VALUES(?,?,CURRENT_TIMESTAMP)
@@ -866,9 +872,10 @@ class SQLiteSettlementStore:
                    VALUES('__startup_reconciliation__','__startup_reconciliation__',NULL,'PENDING',
                           'STARTUP_AUTHORITATIVE_RECONCILIATION_REQUIRED',
                           '{"requirement":"orders_fills_positions"}',CURRENT_TIMESTAMP)
-                   ON CONFLICT(scope_key) DO UPDATE SET status='PENDING',
-                     reason=excluded.reason,evidence_ref=NULL,payload_json=excluded.payload_json,
-                     updated_at=CURRENT_TIMESTAMP"""
+                   ON CONFLICT(scope_key) DO UPDATE SET
+                     status=CASE WHEN reconciliation_state.status='CONFLICT' THEN 'CONFLICT' ELSE 'PENDING' END,
+                     reason=CASE WHEN reconciliation_state.status='CONFLICT' THEN reconciliation_state.reason ELSE excluded.reason END,
+                     evidence_ref=NULL,payload_json=excluded.payload_json,updated_at=CURRENT_TIMESTAMP"""
             )
             connection.commit()
 
@@ -889,11 +896,103 @@ class SQLiteSettlementStore:
                 )
             connection.commit()
 
+    def resolve_startup_reconciliation(
+        self,
+        *,
+        orders_snapshot_id: str,
+        executions_snapshot_id: str,
+        positions_snapshot_id: str,
+        as_of: datetime,
+        source: str,
+        payload_sha256: str,
+        authoritative_evidence_ref: str,
+    ) -> bool:
+        """Release the startup gate only with a complete, time-aligned three-snapshot evidence set."""
+        snapshot_ids = tuple(str(value).strip() for value in (
+            orders_snapshot_id, executions_snapshot_id, positions_snapshot_id
+        ))
+        source_value = str(source).strip()
+        digest = str(payload_sha256).strip().lower()
+        evidence = str(authoritative_evidence_ref).strip()
+        if any(not value for value in snapshot_ids) or len(set(snapshot_ids)) != 3:
+            raise ValueError("STARTUP_ORDERS_EXECUTIONS_POSITIONS_SNAPSHOT_IDS_REQUIRED_AND_DISTINCT")
+        if not source_value or not evidence:
+            raise ValueError("STARTUP_RECONCILIATION_SOURCE_AND_EVIDENCE_REQUIRED")
+        if as_of.tzinfo is None or as_of.utcoffset() is None:
+            raise ValueError("STARTUP_RECONCILIATION_AS_OF_MUST_BE_TIMEZONE_AWARE")
+        if re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+            raise ValueError("STARTUP_RECONCILIATION_SHA256_INVALID")
+        payload = {
+            "source": source_value,
+            "orders_snapshot_id": snapshot_ids[0],
+            "executions_snapshot_id": snapshot_ids[1],
+            "positions_snapshot_id": snapshot_ids[2],
+            "as_of": as_of.isoformat(),
+            "payload_sha256": digest,
+            "evidence_ref": evidence,
+            "coverage": ["orders", "fills", "positions"],
+        }
+        encoded = encode_record(payload)
+        with self._connection() as connection:
+            self._begin(connection)
+            baseline = connection.execute(
+                "SELECT value FROM settlement_meta WHERE key='authoritative_baseline_ready'"
+            ).fetchone()
+            if baseline is None or baseline["value"] != "1":
+                connection.rollback()
+                raise SettlementStoreError("AUTHORITATIVE_BASELINE_REQUIRED_BEFORE_STARTUP_RECONCILIATION")
+            startup = connection.execute(
+                "SELECT status FROM reconciliation_state WHERE scope_key='__startup_reconciliation__'"
+            ).fetchone()
+            if startup is None:
+                connection.rollback()
+                raise SettlementStoreError("STARTUP_RECONCILIATION_GATE_NOT_REGISTERED")
+            existing_evidence = connection.execute(
+                "SELECT value FROM settlement_meta WHERE key='startup_reconciliation_evidence'"
+            ).fetchone()
+            if startup["status"] == "RESOLVED":
+                connection.rollback()
+                if existing_evidence is not None and existing_evidence["value"] == encoded:
+                    return False
+                raise SettlementStoreError("STARTUP_RECONCILIATION_NOT_PENDING")
+            if startup["status"] == "CONFLICT":
+                connection.rollback()
+                raise SettlementStoreError("STARTUP_RECONCILIATION_CONFLICT_REQUIRES_MANUAL_REVIEW")
+            open_inbox = connection.execute(
+                "SELECT COUNT(*) AS n FROM reconciliation_inbox WHERE status IN ('PENDING','CONFLICT')"
+            ).fetchone()["n"]
+            other_unresolved = connection.execute(
+                """SELECT COUNT(*) AS n FROM reconciliation_state
+                   WHERE status IN ('PENDING','CONFLICT')
+                     AND scope_key NOT IN ('__startup_reconciliation__')"""
+            ).fetchone()["n"]
+            if open_inbox or other_unresolved:
+                connection.rollback()
+                raise SettlementStoreError("STARTUP_RECONCILIATION_HAS_OTHER_UNRESOLVED_EVENTS")
+            connection.execute(
+                """INSERT INTO settlement_meta(key,value,updated_at)
+                   VALUES('startup_reconciliation_evidence',?,CURRENT_TIMESTAMP)
+                   ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP""",
+                (encoded,),
+            )
+            resolved = connection.execute(
+                """UPDATE reconciliation_state SET status='RESOLVED',reason='STARTUP_ORDERS_FILLS_POSITIONS_RECONCILED',
+                   evidence_ref=?,payload_json=?,updated_at=CURRENT_TIMESTAMP
+                   WHERE scope_key='__startup_reconciliation__' AND status='PENDING'""",
+                (evidence, encoded),
+            )
+            if resolved.rowcount != 1:
+                raise SettlementStoreError("STARTUP_RECONCILIATION_RESOLUTION_FAILED")
+            connection.commit()
+            return True
+
     def resolve_reconciliation(self, *, scope_key: str, authoritative_evidence_ref: str) -> None:
         scope = str(scope_key).strip()
         evidence = str(authoritative_evidence_ref).strip()
         if not scope or not evidence:
             raise ValueError("AUTHORITATIVE_RECONCILIATION_EVIDENCE_REQUIRED")
+        if scope in {"__startup_reconciliation__", "__runtime_bootstrap__"}:
+            raise SettlementStoreError("GLOBAL_RECONCILIATION_REQUIRES_DEDICATED_EVIDENCE_API")
         with self._connection() as connection:
             self._begin(connection)
             open_events = connection.execute(

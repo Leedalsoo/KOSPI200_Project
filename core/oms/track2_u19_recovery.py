@@ -189,6 +189,11 @@ def _checkpoint_id(
         ledger.snapshot_id if ledger else "",
         broker.payload_sha256 if broker else "",
         ledger.payload_sha256 if ledger else "",
+        "\x1f".join(ledger.pending_order_ids) if ledger else "",
+        "\x1f".join(
+            f"{event.execution_id}:{event.fingerprint}"
+            for event in ledger.execution_events
+        ) if ledger else "",
         as_of.astimezone(timezone.utc).isoformat() if _aware(as_of) else "",
     )
     return "u19-" + hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:32]

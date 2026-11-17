@@ -262,6 +262,11 @@ from environments.virtual.position.track2_u19_recovery_store import SqliteTrack2
 
 def test_snapshot_event_resolution_releases_u19_u16_and_router_only_after_last_event(tmp_path):
     store = SQLiteSettlementStore(tmp_path / "shared-gates.sqlite3")
+    store.establish_authoritative_baseline(
+        position_payload={"instrument_id": "OPT-X", "side": "LONG", "qty": 1, "avg_price": "1.00"},
+        authoritative_evidence_ref="TEST_ONLY:baseline-position",
+    )
+    store.mark_startup_reconciliation_pending()
     event_ids = (
         "REST-CCNL-SNAPSHOT|broker-1|2|10.50",
         "REST-CCNL-SNAPSHOT|broker-1|3|10.60",
@@ -276,6 +281,17 @@ def test_snapshot_event_resolution_releases_u19_u16_and_router_only_after_last_e
         )
 
     as_of = datetime(2026, 11, 18, 10, 0, tzinfo=timezone.utc)
+    startup_evidence = {
+        "orders_snapshot_id": "TEST_ONLY:orders-snapshot-001",
+        "executions_snapshot_id": "TEST_ONLY:executions-snapshot-001",
+        "positions_snapshot_id": "TEST_ONLY:positions-snapshot-001",
+        "as_of": as_of,
+        "source": "VALIDATION_ONLY:STARTUP_SNAPSHOT",
+        "payload_sha256": "d" * 64,
+        "authoritative_evidence_ref": "TEST_ONLY:startup-orders-fills-positions-matched",
+    }
+    with pytest.raises(SettlementStoreError, match="STARTUP_RECONCILIATION_HAS_OTHER_UNRESOLVED_EVENTS"):
+        store.resolve_startup_reconciliation(**startup_evidence)
     positions = (U19Position("OPT-X", Decimal("1")),)
     digest = hashlib.sha256(b"shared-validation-snapshot").hexdigest()
     broker_snapshot = U19BrokerPositionSnapshot(
@@ -359,6 +375,18 @@ def test_snapshot_event_resolution_releases_u19_u16_and_router_only_after_last_e
         event_id=event_ids[1], scope_key="client-existing",
         evidence_ref="TEST_ONLY:independent-inquiry:second",
     )
+    after_inbox, after_inbox_restored = coordinator.recover_and_restore_u16_runtime(
+        group_id="SYNTHETIC:SHARED-GATE-GROUP", broker_snapshot=broker_snapshot,
+        ledger_snapshot=ledger_snapshot, u16_runtime=u16,
+    )
+    assert after_inbox.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+    assert after_inbox_restored is False
+    assert u16.calls == 0
+    with pytest.raises(OrderRouterError, match="UNRESOLVED_EXECUTION_RECONCILIATION"):
+        router.register_and_route(command, object(), freshness_verdict=freshness)
+    assert broker.calls == 0
+
+    store.resolve_startup_reconciliation(**startup_evidence)
     final, final_restored = coordinator.recover_and_restore_u16_runtime(
         group_id="SYNTHETIC:SHARED-GATE-GROUP", broker_snapshot=broker_snapshot,
         ledger_snapshot=ledger_snapshot, u16_runtime=u16,

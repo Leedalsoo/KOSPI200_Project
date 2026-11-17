@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal
+import json
+import sqlite3
 
 import pytest
 
@@ -473,3 +475,112 @@ def test_generic_reconciliation_cannot_clear_open_late_fill_inbox(tmp_path):
         )
     assert store.has_unresolved_reconciliation()
     assert len(store.open_reconciliation_events(scope_key="client-open")) == 1
+
+
+
+def test_startup_reconciliation_requires_three_distinct_aligned_snapshots_and_dedicated_gate(tmp_path):
+    from datetime import datetime, timezone
+
+    store = SQLiteSettlementStore(tmp_path / "startup-three-snapshots.sqlite3")
+    store.ensure_authoritative_baseline_gate()
+    with pytest.raises(SettlementStoreError, match="GLOBAL_RECONCILIATION_REQUIRES_DEDICATED_EVIDENCE_API"):
+        store.resolve_reconciliation(
+            scope_key="__runtime_bootstrap__", authoritative_evidence_ref="TEST_ONLY:bypass"
+        )
+    with pytest.raises(SettlementStoreError, match="AUTHORITATIVE_BASELINE_REQUIRED_BEFORE_STARTUP_RECONCILIATION"):
+        store.resolve_startup_reconciliation(
+            orders_snapshot_id="orders-1", executions_snapshot_id="fills-1",
+            positions_snapshot_id="positions-1", as_of=datetime(2026, 11, 18, 10, 0, tzinfo=timezone.utc),
+            source="VALIDATION_ONLY:STARTUP_SNAPSHOT", payload_sha256="a" * 64,
+            authoritative_evidence_ref="TEST_ONLY:startup-evidence",
+        )
+
+    store.establish_authoritative_baseline(
+        position_payload={"instrument_id": "OPT-BASE", "side": None, "qty": 0, "avg_price": None},
+        authoritative_evidence_ref="TEST_ONLY:baseline-position",
+    )
+    store.mark_startup_reconciliation_pending()
+    with pytest.raises(SettlementStoreError, match="GLOBAL_RECONCILIATION_REQUIRES_DEDICATED_EVIDENCE_API"):
+        store.resolve_reconciliation(
+            scope_key="__startup_reconciliation__", authoritative_evidence_ref="TEST_ONLY:bypass"
+        )
+
+    as_of = datetime(2026, 11, 18, 10, 0, tzinfo=timezone.utc)
+    common = {
+        "orders_snapshot_id": "orders-20261118-1000",
+        "executions_snapshot_id": "fills-20261118-1000",
+        "positions_snapshot_id": "positions-20261118-1000",
+        "as_of": as_of,
+        "source": "VALIDATION_ONLY:STARTUP_SNAPSHOT",
+        "payload_sha256": "b" * 64,
+        "authoritative_evidence_ref": "TEST_ONLY:orders-fills-positions-matched",
+    }
+    with pytest.raises(ValueError, match="STARTUP_ORDERS_EXECUTIONS_POSITIONS_SNAPSHOT_IDS_REQUIRED_AND_DISTINCT"):
+        store.resolve_startup_reconciliation(**{**common, "executions_snapshot_id": "orders-20261118-1000"})
+    with pytest.raises(ValueError, match="STARTUP_RECONCILIATION_SHA256_INVALID"):
+        store.resolve_startup_reconciliation(**{**common, "payload_sha256": "not-a-hash"})
+    with pytest.raises(ValueError, match="STARTUP_RECONCILIATION_AS_OF_MUST_BE_TIMEZONE_AWARE"):
+        store.resolve_startup_reconciliation(**{**common, "as_of": datetime(2026, 11, 18, 10, 0)})
+
+    assert store.resolve_startup_reconciliation(**common) is True
+    assert store.resolve_startup_reconciliation(**common) is False
+    assert not store.has_unresolved_reconciliation()
+    with sqlite3.connect(store.path) as connection:
+        evidence = connection.execute(
+            "SELECT value FROM settlement_meta WHERE key='startup_reconciliation_evidence'"
+        ).fetchone()[0]
+    decoded = json.loads(evidence)
+    assert decoded["coverage"] == ["orders", "fills", "positions"]
+    assert decoded["orders_snapshot_id"] == common["orders_snapshot_id"]
+
+
+def test_startup_gate_conflict_is_not_downgraded_by_repeated_startup_mark(tmp_path):
+    from datetime import datetime, timezone
+
+    store = SQLiteSettlementStore(tmp_path / "startup-conflict.sqlite3")
+    store.establish_authoritative_baseline(
+        position_payload={"instrument_id": "OPT-BASE", "side": None, "qty": 0, "avg_price": None},
+        authoritative_evidence_ref="TEST_ONLY:baseline-position",
+    )
+    store.mark_startup_reconciliation_pending()
+    store.mark_reconciliation_pending(
+        scope_key="__startup_reconciliation__",
+        client_order_id="__startup_reconciliation__",
+        broker_order_id=None,
+        reason="TEST_STARTUP_CONFLICT",
+        payload={"conflict": True},
+        conflict=True,
+    )
+    store.mark_startup_reconciliation_pending()
+    unresolved = store.unresolved_reconciliations()
+    assert len(unresolved) == 1
+    assert unresolved[0]["status"] == "CONFLICT"
+    with pytest.raises(SettlementStoreError, match="STARTUP_RECONCILIATION_CONFLICT_REQUIRES_MANUAL_REVIEW"):
+        store.resolve_startup_reconciliation(
+            orders_snapshot_id="orders-1", executions_snapshot_id="fills-1",
+            positions_snapshot_id="positions-1", as_of=datetime(2026, 11, 18, 10, 0, tzinfo=timezone.utc),
+            source="VALIDATION_ONLY:STARTUP_SNAPSHOT", payload_sha256="c" * 64,
+            authoritative_evidence_ref="TEST_ONLY:must-not-clear-conflict",
+        )
+
+
+def test_authoritative_baseline_does_not_clear_runtime_bootstrap_conflict(tmp_path):
+    store = SQLiteSettlementStore(tmp_path / "bootstrap-conflict.sqlite3")
+    store.ensure_authoritative_baseline_gate()
+    store.mark_reconciliation_pending(
+        scope_key="__runtime_bootstrap__",
+        client_order_id="__runtime_bootstrap__",
+        broker_order_id=None,
+        reason="TEST_BOOTSTRAP_CONFLICT",
+        payload={"conflict": True},
+        conflict=True,
+    )
+    with pytest.raises(SettlementStoreError, match="AUTHORITATIVE_BASELINE_TRANSACTION_FAILED"):
+        store.establish_authoritative_baseline(
+            position_payload={"instrument_id": "OPT-BASE", "side": None, "qty": 0, "avg_price": None},
+            authoritative_evidence_ref="TEST_ONLY:must-not-clear-bootstrap-conflict",
+        )
+    unresolved = store.unresolved_reconciliations()
+    assert len(unresolved) == 1
+    assert unresolved[0]["scope_key"] == "__runtime_bootstrap__"
+    assert unresolved[0]["status"] == "CONFLICT"
