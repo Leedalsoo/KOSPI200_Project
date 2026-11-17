@@ -836,3 +836,244 @@ def test_validation_baseline_adapter_rejects_u19_mismatch_without_import(tmp_pat
         assert connection.execute(
             "SELECT COUNT(*) FROM settlement_meta WHERE key='authoritative_baseline_ready'"
         ).fetchone()[0] == 0
+
+
+def _prepare_validation_startup_fixture(tmp_path):
+    from application.composition.validation_only_account_snapshot_baseline_adapter import (
+        ValidationOnlyAccountSnapshotBaselineAdapter,
+    )
+
+    u19_dir = tmp_path / "u19-startup"
+    u19_dir.mkdir()
+    bundle = _multi_group_bundle()
+    validation = validate_account_snapshot_bundle(bundle)
+    assert validation.is_valid
+    reconciler, _ = _make_reconciler(u19_dir)
+    _seed_second_group(reconciler)
+    reconciliation = reconciler.reconcile_account(
+        bundle=bundle, validation=validation,
+        group_ids=(GROUP_ID, GROUP_TWO),
+        snapshot_id="multi-group-startup-adapter", as_of=AS_OF,
+        aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:STARTUP-ADAPTER",
+    )
+    assert reconciliation.is_valid
+    store = SQLiteSettlementStore(tmp_path / "startup-settlement.sqlite3")
+    baseline_adapter = ValidationOnlyAccountSnapshotBaselineAdapter(store, validation_only=True)
+    baseline_import = baseline_adapter.import_reconciled_snapshot(
+        bundle=bundle, validation=validation, reconciliation=reconciliation,
+    )
+    assert baseline_import.is_valid
+    return bundle, validation, reconciliation, baseline_import, store
+
+
+def test_validation_only_startup_adapter_resolves_only_complete_clean_synthetic_evidence(tmp_path):
+    import json
+
+    from application.composition.validation_only_account_snapshot_startup_adapter import (
+        ValidationOnlyAccountSnapshotStartupAdapter,
+    )
+
+    bundle, validation, reconciliation, baseline_import, store = _prepare_validation_startup_fixture(tmp_path)
+    with pytest.raises(ValueError, match="VALIDATION_ONLY_STARTUP_OPT_IN_REQUIRED"):
+        ValidationOnlyAccountSnapshotStartupAdapter(store)
+
+    adapter = ValidationOnlyAccountSnapshotStartupAdapter(store, validation_only=True)
+    result = adapter.reconcile_startup(
+        bundle=bundle, validation=validation,
+        reconciliation=reconciliation, baseline_import=baseline_import,
+    )
+    assert result.is_valid
+    assert result.status == "VALIDATION_ONLY_STARTUP_RECONCILED"
+    assert result.resolved is True
+    assert result.evidence_sha256 and len(result.evidence_sha256) == 64
+    assert not store.has_unresolved_reconciliation()
+    with sqlite3.connect(store.path) as connection:
+        evidence = json.loads(connection.execute(
+            "SELECT value FROM settlement_meta WHERE key='startup_reconciliation_evidence'"
+        ).fetchone()[0])
+    assert evidence["source"] == "VALIDATION_ONLY:ACCOUNT_U19_STARTUP_RECONCILIATION"
+    assert evidence["coverage"] == ["orders", "fills", "positions"]
+    assert evidence["payload_sha256"] == result.evidence_sha256
+
+
+def test_validation_only_startup_adapter_keeps_gate_pending_until_every_inbox_event_is_resolved(tmp_path):
+    from application.composition.validation_only_account_snapshot_startup_adapter import (
+        ValidationOnlyAccountSnapshotStartupAdapter,
+    )
+
+    bundle, validation, reconciliation, baseline_import, store = _prepare_validation_startup_fixture(tmp_path)
+    store.record_reconciliation_event_pending(
+        event_id="SYNTHETIC:STARTUP-LATE-FILL-001",
+        client_order_id="client-late-fill",
+        broker_order_id="broker-late-fill",
+        event_kind="KIS_REST_CUMULATIVE_ORDER_SNAPSHOT",
+        payload={"cumulative_filled_quantity": 1, "source_authority": "VALIDATION_ONLY"},
+    )
+    adapter = ValidationOnlyAccountSnapshotStartupAdapter(store, validation_only=True)
+    pending = adapter.reconcile_startup(
+        bundle=bundle, validation=validation,
+        reconciliation=reconciliation, baseline_import=baseline_import,
+    )
+    assert pending.status == "RECONCILIATION_REQUIRED"
+    assert pending.resolved is False
+    assert any("OPEN_RECONCILIATION_INBOX:SYNTHETIC:STARTUP-LATE-FILL-001:PENDING" == item for item in pending.issues)
+    assert any(
+        item["scope_key"] == "__startup_reconciliation__" and item["status"] == "PENDING"
+        for item in store.unresolved_reconciliations()
+    )
+
+    store.resolve_reconciliation_event(
+        event_id="SYNTHETIC:STARTUP-LATE-FILL-001",
+        scope_key="client-late-fill",
+        evidence_ref="VALIDATION_ONLY:INDEPENDENT-LATE-FILL-CROSSCHECK",
+    )
+    resolved = adapter.reconcile_startup(
+        bundle=bundle, validation=validation,
+        reconciliation=reconciliation, baseline_import=baseline_import,
+    )
+    assert resolved.is_valid
+    assert resolved.resolved is True
+
+
+def test_validation_only_startup_adapter_never_clears_conflicts_or_other_unresolved_scopes(tmp_path):
+    from application.composition.validation_only_account_snapshot_startup_adapter import (
+        ValidationOnlyAccountSnapshotStartupAdapter,
+    )
+
+    bundle, validation, reconciliation, baseline_import, store = _prepare_validation_startup_fixture(tmp_path)
+    adapter = ValidationOnlyAccountSnapshotStartupAdapter(store, validation_only=True)
+    store.mark_reconciliation_pending(
+        scope_key="client-unresolved-order",
+        client_order_id="client-unresolved-order",
+        broker_order_id="broker-unresolved-order",
+        reason="TEST_UNRESOLVED_ORDER",
+        payload={"synthetic": True},
+    )
+    pending = adapter.reconcile_startup(
+        bundle=bundle, validation=validation,
+        reconciliation=reconciliation, baseline_import=baseline_import,
+    )
+    assert pending.status == "RECONCILIATION_REQUIRED"
+    assert any("OTHER_UNRESOLVED_RECONCILIATION:client-unresolved-order:PENDING" == item for item in pending.issues)
+    assert any(item["scope_key"] == "client-unresolved-order" for item in store.unresolved_reconciliations())
+
+    # Clear the test-only scope using the dedicated per-scope evidence API.
+    store.resolve_reconciliation(
+        scope_key="client-unresolved-order",
+        authoritative_evidence_ref="VALIDATION_ONLY:MANUAL-CROSSCHECK",
+    )
+    store.mark_reconciliation_pending(
+        scope_key="__startup_reconciliation__",
+        client_order_id="__startup_reconciliation__",
+        broker_order_id=None,
+        reason="TEST_STARTUP_CONFLICT",
+        payload={"conflict": True},
+        conflict=True,
+    )
+    conflict = adapter.reconcile_startup(
+        bundle=bundle, validation=validation,
+        reconciliation=reconciliation, baseline_import=baseline_import,
+    )
+    assert conflict.status == "RECONCILIATION_REQUIRED"
+    assert conflict.issues == ("STARTUP_GATE_CONFLICT_REQUIRES_MANUAL_REVIEW",)
+    assert any(
+        item["scope_key"] == "__startup_reconciliation__" and item["status"] == "CONFLICT"
+        for item in store.unresolved_reconciliations()
+    )
+
+
+def test_validation_only_startup_adapter_rechecks_snapshot_and_u19_before_gate_resolution(tmp_path):
+    from application.composition.validation_only_account_snapshot_startup_adapter import (
+        ValidationOnlyAccountSnapshotStartupAdapter,
+    )
+
+    bundle, validation, reconciliation, baseline_import, store = _prepare_validation_startup_fixture(tmp_path)
+    adapter = ValidationOnlyAccountSnapshotStartupAdapter(store, validation_only=True)
+    changed = replace(
+        bundle,
+        executions=_section("executions-startup-mutated", AS_OF, bundle.executions.rows),
+    )
+    stale = adapter.reconcile_startup(
+        bundle=changed, validation=validation,
+        reconciliation=reconciliation, baseline_import=baseline_import,
+    )
+    assert stale.status == "RECONCILIATION_REQUIRED"
+    assert stale.issues == ("ACCOUNT_SNAPSHOT_VALIDATION_STALE_OR_MISMATCHED",)
+    assert any(
+        item["scope_key"] == "__startup_reconciliation__" and item["status"] == "PENDING"
+        for item in store.unresolved_reconciliations()
+    )
+
+    mismatched = replace(reconciliation, status="RECONCILIATION_REQUIRED", issues=("TEST_U19_MISMATCH",))
+    rejected = adapter.reconcile_startup(
+        bundle=bundle, validation=validation,
+        reconciliation=mismatched, baseline_import=baseline_import,
+    )
+    assert rejected.status == "RECONCILIATION_REQUIRED"
+    assert rejected.issues == ("ACCOUNT_U19_RECONCILIATION_REQUIRED",)
+    assert any(
+        item["scope_key"] == "__startup_reconciliation__" and item["status"] == "PENDING"
+        for item in store.unresolved_reconciliations()
+    )
+
+
+def test_validation_only_startup_adapter_keeps_gate_pending_for_unreconciled_u19_orders(tmp_path):
+    from application.composition.validation_only_account_snapshot_startup_adapter import (
+        ValidationOnlyAccountSnapshotStartupAdapter,
+    )
+
+    bundle, validation, reconciliation, baseline_import, store = _prepare_validation_startup_fixture(tmp_path)
+    pending_ledger = replace(
+        reconciliation.ledger_snapshot,
+        pending_order_ids=("SYNTHETIC:PENDING-LATE-FILL-ORDER",),
+    )
+    pending_reconciliation = replace(reconciliation, ledger_snapshot=pending_ledger)
+    adapter = ValidationOnlyAccountSnapshotStartupAdapter(store, validation_only=True)
+    result = adapter.reconcile_startup(
+        bundle=bundle, validation=validation,
+        reconciliation=pending_reconciliation, baseline_import=baseline_import,
+    )
+    assert result.status == "RECONCILIATION_REQUIRED"
+    assert any("U19_PENDING_ORDERS:" in issue for issue in result.issues)
+    assert any(
+        item["scope_key"] == "__startup_reconciliation__" and item["status"] == "PENDING"
+        for item in store.unresolved_reconciliations()
+    )
+
+
+def test_validation_only_startup_adapter_does_not_resolve_conflicting_inbox_event(tmp_path):
+    from application.composition.validation_only_account_snapshot_startup_adapter import (
+        ValidationOnlyAccountSnapshotStartupAdapter,
+    )
+
+    bundle, validation, reconciliation, baseline_import, store = _prepare_validation_startup_fixture(tmp_path)
+    store.record_reconciliation_event_pending(
+        event_id="SYNTHETIC:STARTUP-CONFLICT-EVENT",
+        client_order_id="client-conflict",
+        broker_order_id="broker-conflict",
+        event_kind="KIS_REST_CUMULATIVE_ORDER_SNAPSHOT",
+        payload={"cumulative_filled_quantity": 2, "source_authority": "VALIDATION_ONLY"},
+    )
+    store.mark_reconciliation_pending(
+        scope_key="client-conflict",
+        client_order_id="client-conflict",
+        broker_order_id="broker-conflict",
+        reason="TEST_INBOX_CONFLICT",
+        payload={"conflict": True},
+        conflict=True,
+    )
+    adapter = ValidationOnlyAccountSnapshotStartupAdapter(store, validation_only=True)
+    result = adapter.reconcile_startup(
+        bundle=bundle, validation=validation,
+        reconciliation=reconciliation, baseline_import=baseline_import,
+    )
+    assert result.status == "RECONCILIATION_REQUIRED"
+    assert any("OPEN_RECONCILIATION_INBOX:SYNTHETIC:STARTUP-CONFLICT-EVENT:PENDING" == issue for issue in result.issues)
+    assert any(
+        item["scope_key"] == "client-conflict" and item["status"] == "CONFLICT"
+        for item in store.unresolved_reconciliations()
+    )
+    assert any(
+        item["execution_id"] == "SYNTHETIC:STARTUP-CONFLICT-EVENT" and item["status"] == "PENDING"
+        for item in store.open_reconciliation_events()
+    )
