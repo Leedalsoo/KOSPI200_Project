@@ -251,3 +251,122 @@ def test_only_pending_rest_snapshot_events_are_resolvable_not_late_fills_or_conf
             scope_key="client-conflict",
             evidence_ref="TEST_ONLY:must-not-clear-conflict",
         )
+from contracts.market_data_freshness import FreshnessStatus, FreshnessVerdict
+from contracts.types import BrokerOrderCommand, BrokerOrderResponse
+from core.oms.oms_fsm import OrderStateMachine
+from core.oms.order_router import OrderRouterError, StandardOrderRouter
+from core.oms.track2_u19_recovery import U19BrokerPositionSnapshot, U19ExecutionLedgerSnapshot, U19Position
+from application.composition.track2_u19_recovery import ValidationOnlyTrack2U19RecoveryCoordinator
+from environments.virtual.position.track2_u19_recovery_store import SqliteTrack2U19RecoveryStore
+
+
+def test_snapshot_event_resolution_releases_u19_u16_and_router_only_after_last_event(tmp_path):
+    store = SQLiteSettlementStore(tmp_path / "shared-gates.sqlite3")
+    event_ids = (
+        "REST-CCNL-SNAPSHOT|broker-1|2|10.50",
+        "REST-CCNL-SNAPSHOT|broker-1|3|10.60",
+    )
+    for index, event_id in enumerate(event_ids, start=2):
+        store.record_reconciliation_event_pending(
+            event_id=event_id,
+            client_order_id="client-existing",
+            broker_order_id="broker-1",
+            event_kind="KIS_REST_CUMULATIVE_ORDER_SNAPSHOT",
+            payload={"cumulative_filled_quantity": index, "source_authority": "VALIDATION_ONLY"},
+        )
+
+    as_of = datetime(2026, 11, 18, 10, 0, tzinfo=timezone.utc)
+    positions = (U19Position("OPT-X", Decimal("1")),)
+    digest = hashlib.sha256(b"shared-validation-snapshot").hexdigest()
+    broker_snapshot = U19BrokerPositionSnapshot(
+        group_id="SYNTHETIC:SHARED-GATE-GROUP", snapshot_id="broker-shared-gate",
+        as_of=as_of, source="VALIDATION_ONLY:BROKER_EXCHANGE", positions=positions,
+        complete=True, capability_verified=True, payload_sha256=digest,
+    )
+    ledger_snapshot = U19ExecutionLedgerSnapshot(
+        group_id="SYNTHETIC:SHARED-GATE-GROUP", snapshot_id="ledger-shared-gate",
+        as_of=as_of, source="VALIDATION_ONLY:EXECUTION_LEDGER", positions=positions,
+        complete=True, payload_sha256=digest, execution_events=(), pending_order_ids=(),
+    )
+    coordinator = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(tmp_path / "u19-shared-gate.sqlite3"),
+        settlement_store=store,
+    )
+
+    class U16Runtime:
+        def __init__(self):
+            self.calls = 0
+
+        def restore_after_u19_recovery(self, group_id, decision):
+            self.calls += 1
+            return decision.status is U19RecoveryStatus.RESTORE_ALLOWED
+
+    u16 = U16Runtime()
+    first, restored = coordinator.recover_and_restore_u16_runtime(
+        group_id="SYNTHETIC:SHARED-GATE-GROUP", broker_snapshot=broker_snapshot,
+        ledger_snapshot=ledger_snapshot, u16_runtime=u16,
+    )
+    assert first.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+    assert restored is False
+    assert u16.calls == 0
+
+    class Broker:
+        def __init__(self):
+            self.calls = 0
+
+        def submit(self, command, **kwargs):
+            self.calls += 1
+            return BrokerOrderResponse(
+                client_order_id=command.client_order_id, accepted=True, broker_order_id="broker-new"
+            )
+
+    broker = Broker()
+    router = StandardOrderRouter(
+        order_state_machine=OrderStateMachine(), broker_adapter=broker, reconciliation_guard=store
+    )
+    command = BrokerOrderCommand(
+        client_order_id="client-new", instrument_id="OPT-X", side="BUY", quantity=1,
+        order_type="LIMIT", broker_symbol="OPT-X",
+    )
+    freshness = FreshnessVerdict(
+        FreshnessStatus.FRESH, "validation fixture", "validation-v1",
+        source="KIS_VTS_REST", tr_id="H0IOASP0", environment="VIRTUAL",
+        instrument_id="OPT-X", symbol="OPT-X",
+        source_instant=datetime(2026, 11, 18, 9, 55, tzinfo=timezone.utc),
+        received_at=datetime(2026, 11, 18, 9, 55, tzinfo=timezone.utc),
+        evidence_sha256="a" * 64,
+    )
+    with pytest.raises(OrderRouterError, match="UNRESOLVED_EXECUTION_RECONCILIATION"):
+        router.register_and_route(command, object(), freshness_verdict=freshness)
+    assert broker.calls == 0
+
+    store.resolve_reconciliation_event(
+        event_id=event_ids[0], scope_key="client-existing",
+        evidence_ref="TEST_ONLY:independent-inquiry:first",
+    )
+    mid, mid_restored = coordinator.recover_and_restore_u16_runtime(
+        group_id="SYNTHETIC:SHARED-GATE-GROUP", broker_snapshot=broker_snapshot,
+        ledger_snapshot=ledger_snapshot, u16_runtime=u16,
+    )
+    assert mid.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+    assert mid_restored is False
+    assert u16.calls == 0
+    with pytest.raises(OrderRouterError, match="UNRESOLVED_EXECUTION_RECONCILIATION"):
+        router.register_and_route(command, object(), freshness_verdict=freshness)
+    assert broker.calls == 0
+
+    store.resolve_reconciliation_event(
+        event_id=event_ids[1], scope_key="client-existing",
+        evidence_ref="TEST_ONLY:independent-inquiry:second",
+    )
+    final, final_restored = coordinator.recover_and_restore_u16_runtime(
+        group_id="SYNTHETIC:SHARED-GATE-GROUP", broker_snapshot=broker_snapshot,
+        ledger_snapshot=ledger_snapshot, u16_runtime=u16,
+    )
+    assert final.status is U19RecoveryStatus.RESTORE_ALLOWED
+    assert final_restored is True
+    assert u16.calls == 1
+
+    response = router.register_and_route(command, object(), freshness_verdict=freshness)
+    assert response.accepted is True
+    assert broker.calls == 1
