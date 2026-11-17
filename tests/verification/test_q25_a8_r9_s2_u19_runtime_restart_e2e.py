@@ -330,3 +330,73 @@ def test_s2_four_leg_runtime_state_is_captured_and_reconciled_after_u19_restart(
     assert persisted["new_entry_enabled"] is False
     assert persisted["order_submission_enabled"] is False
     assert persisted["runtime_restore_performed"] is False
+
+    # Persist four-leg U16 lifecycle state, then construct a fresh coordinator as a new process would.
+    from application.composition.track2_u16_runtime_coordinator import ValidationOnlyU16RuntimeCoordinator
+    from environments.virtual.position.track2_u16_runtime_store import SqliteTrack2U16RuntimeStore
+
+    def no_submit(*args, **kwargs):
+        raise AssertionError("U19 restore validation must not submit or retry orders")
+
+    u16_path = tmp_path / "u16-four-leg-runtime-restart.sqlite3"
+    u16_store = SqliteTrack2U16RuntimeStore(u16_path)
+    u16_state = {
+        f"{group_id}|leg-{index}": {
+            "first_repair_submitted_at": as_of,
+            "additional_retry_count": 0,
+            "previous_repair_terminal": True,
+            "previous_repair_reconciled": True,
+            "last_client_order_id": f"validation-client-order-{index}",
+        }
+        for index in range(1, 5)
+    }
+    u16_store.save(group_id, u16_state)
+
+    restarted_u16 = ValidationOnlyU16RuntimeCoordinator(
+        validation_only=True,
+        submit_repair=no_submit,
+        submit_flatten=no_submit,
+        state_store=SqliteTrack2U16RuntimeStore(u16_path),
+    )
+    assert restarted_u16.snapshot() == {}
+    restarted_u19 = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(checkpoint_path)
+    )
+    restored_decision, u16_restored = restarted_u19.recover_and_restore_u16_runtime(
+        group_id=group_id,
+        broker_snapshot=broker_snapshot,
+        ledger_snapshot=ledger_snapshot,
+        u16_runtime=restarted_u16,
+    )
+    assert restored_decision.status is U19RecoveryStatus.RESTORE_ALLOWED
+    assert u16_restored is True
+    assert restarted_u16.snapshot() == u16_state
+    assert len(restarted_u16.snapshot()) == 4
+
+    # An unresolved late-fill order must not restore even this persisted retry state.
+    blocked_u16 = ValidationOnlyU16RuntimeCoordinator(
+        validation_only=True,
+        submit_repair=no_submit,
+        submit_flatten=no_submit,
+        state_store=SqliteTrack2U16RuntimeStore(u16_path),
+    )
+    blocked_ledger = U19ExecutionLedgerSnapshot(
+        group_id=group_id,
+        snapshot_id="validation-four-leg-ledger-pending-after-restart",
+        as_of=as_of,
+        source="VALIDATION_ONLY:EXECUTION_LEDGER",
+        positions=lot_positions,
+        complete=True,
+        payload_sha256=_digest({**ledger_payload, "pending_order_ids": ["late-order"]}),
+        execution_events=execution_events,
+        pending_order_ids=("late-order",),
+    )
+    blocked_decision, blocked_restore = restarted_u19.recover_and_restore_u16_runtime(
+        group_id=group_id,
+        broker_snapshot=broker_snapshot,
+        ledger_snapshot=blocked_ledger,
+        u16_runtime=blocked_u16,
+    )
+    assert blocked_decision.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+    assert blocked_restore is False
+    assert blocked_u16.snapshot() == {}
