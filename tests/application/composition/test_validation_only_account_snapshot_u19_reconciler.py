@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import sqlite3
+import pytest
 
 from application.composition.validation_only_account_snapshot_assembler import (
     AccountSnapshotBundle,
@@ -649,3 +651,188 @@ def test_multi_group_account_snapshot_detects_order_quantity_crosswalk_mismatch(
     assert result.status == "RECONCILIATION_REQUIRED"
     assert "ACCOUNT_U19_ORDER_LINEAGE_MISMATCH:client-g2-shared" in result.issues
     assert result.recovery_decision is None
+
+
+def test_multi_group_reconciliation_imports_validation_baseline_and_keeps_startup_gate_pending(tmp_path):
+    import json
+    import sqlite3
+
+    from application.composition.validation_only_account_snapshot_baseline_adapter import (
+        ValidationOnlyAccountSnapshotBaselineAdapter,
+        ValidationOnlyBaselineImportError,
+    )
+    from application.composition.live_execution_position_composition_factory import (
+        create_live_execution_position_composition,
+    )
+
+    bundle = _multi_group_bundle()
+    validation = validate_account_snapshot_bundle(bundle)
+    assert validation.is_valid
+    reconciler, _ = _make_reconciler(tmp_path)
+    _seed_second_group(reconciler)
+    reconciliation = reconciler.reconcile_account(
+        bundle=bundle, validation=validation,
+        group_ids=(GROUP_ID, GROUP_TWO),
+        snapshot_id="multi-group-baseline-import", as_of=AS_OF,
+        aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:BASELINE-IMPORT",
+    )
+    assert reconciliation.is_valid
+
+    baseline_path = tmp_path / "validation-only-account-baseline.sqlite3"
+    baseline_store = SQLiteSettlementStore(baseline_path)
+    with pytest.raises(ValidationOnlyBaselineImportError, match="VALIDATION_ONLY_BASELINE_OPT_IN_REQUIRED"):
+        ValidationOnlyAccountSnapshotBaselineAdapter(baseline_store)
+
+    adapter = ValidationOnlyAccountSnapshotBaselineAdapter(baseline_store, validation_only=True)
+    imported = adapter.import_reconciled_snapshot(
+        bundle=bundle, validation=validation, reconciliation=reconciliation,
+    )
+
+    assert imported.is_valid
+    assert imported.imported_position_count == 2
+    assert imported.startup_gate_status == "PENDING"
+    unresolved = baseline_store.unresolved_reconciliations()
+    assert [(item["scope_key"], item["status"]) for item in unresolved] == [
+        ("__startup_reconciliation__", "PENDING"),
+    ]
+    with sqlite3.connect(baseline_path) as connection:
+        bootstrap = connection.execute(
+            "SELECT status FROM reconciliation_state WHERE scope_key='__runtime_bootstrap__'"
+        ).fetchone()[0]
+        evidence = json.loads(connection.execute(
+            "SELECT value FROM settlement_meta WHERE key='authoritative_baseline_evidence'"
+        ).fetchone()[0])
+        positions = connection.execute(
+            "SELECT instrument_id,position_json FROM position_states ORDER BY instrument_id"
+        ).fetchall()
+    assert bootstrap == "RESOLVED"
+    assert evidence["source"] == "VALIDATION_ONLY:ACCOUNT_U19_BASELINE_IMPORT"
+    assert evidence["payload_sha256"] == imported.evidence_sha256
+    assert {item[0] for item in positions} == {SHARED_INSTRUMENT, SECOND_INSTRUMENT}
+
+    # A fixture-only startup snapshot can exercise the gate API; this does not grant Live authority.
+    assert baseline_store.resolve_startup_reconciliation(
+        orders_snapshot_id=bundle.orders.snapshot_id,
+        executions_snapshot_id=bundle.executions.snapshot_id,
+        positions_snapshot_id=bundle.positions.snapshot_id,
+        as_of=validation.as_of,
+        source="VALIDATION_ONLY:STARTUP_GATE_FIXTURE",
+        payload_sha256=imported.evidence_sha256,
+        authoritative_evidence_ref=f"VALIDATION_ONLY:STARTUP_GATE:{imported.evidence_sha256}",
+    )
+    assert not baseline_store.has_unresolved_reconciliation()
+
+    reopened = SQLiteSettlementStore(baseline_path)
+    position = LivePositionAggregate(SHARED_INSTRUMENT)
+    composition = create_live_execution_position_composition(
+        execution_source=object(),
+        order_state_machine=OrderStateMachine(),
+        position_fill_adapter=LivePositionFillAdapter(position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(),
+        position_aggregate=position,
+        settlement_store=reopened,
+    )
+    assert composition.settlement_store is reopened
+    restarted_gate = reopened.unresolved_reconciliations()
+    assert [(item["scope_key"], item["status"]) for item in restarted_gate] == [
+        ("__startup_reconciliation__", "PENDING"),
+    ]
+
+
+def test_validation_baseline_adapter_does_not_import_unreconciled_account(tmp_path):
+    from application.composition.validation_only_account_snapshot_baseline_adapter import (
+        ValidationOnlyAccountSnapshotBaselineAdapter,
+        ValidationOnlyBaselineImportError,
+    )
+
+    bundle = _multi_group_bundle()
+    validation = validate_account_snapshot_bundle(bundle)
+    assert validation.is_valid
+    reconciler, _ = _make_reconciler(tmp_path)
+    _seed_second_group(reconciler)
+    changed = replace(
+        bundle,
+        positions=_section(
+            bundle.positions.snapshot_id, AS_OF,
+            tuple({**row, "quantity": 99} if row["instrument_id"] == SHARED_INSTRUMENT else row
+                  for row in bundle.positions.rows),
+        ),
+    )
+    invalid_validation = validate_account_snapshot_bundle(changed)
+    assert not invalid_validation.is_valid
+    baseline_store = SQLiteSettlementStore(tmp_path / "must-not-import.sqlite3")
+    adapter = ValidationOnlyAccountSnapshotBaselineAdapter(baseline_store, validation_only=True)
+
+    with pytest.raises(ValidationOnlyBaselineImportError, match="ACCOUNT_SNAPSHOT_VALIDATION_REQUIRED"):
+        adapter.import_reconciled_snapshot(
+            bundle=changed, validation=invalid_validation,
+            reconciliation=object(),
+        )
+
+    assert not baseline_store.has_unresolved_reconciliation()
+    with sqlite3.connect(baseline_store.path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM position_states").fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT COUNT(*) FROM settlement_meta WHERE key='authoritative_baseline_ready'"
+        ).fetchone()[0] == 0
+
+
+def test_validation_baseline_adapter_rejects_stale_bundle_validation_before_import(tmp_path):
+    from application.composition.validation_only_account_snapshot_baseline_adapter import (
+        ValidationOnlyAccountSnapshotBaselineAdapter,
+        ValidationOnlyBaselineImportError,
+    )
+
+    bundle = _multi_group_bundle()
+    validation = validate_account_snapshot_bundle(bundle)
+    assert validation.is_valid
+    changed = replace(
+        bundle,
+        orders=_section("orders-account-revised", AS_OF, bundle.orders.rows),
+    )
+    baseline_store = SQLiteSettlementStore(tmp_path / "stale-baseline.sqlite3")
+    adapter = ValidationOnlyAccountSnapshotBaselineAdapter(baseline_store, validation_only=True)
+
+    with pytest.raises(ValidationOnlyBaselineImportError, match="ACCOUNT_SNAPSHOT_VALIDATION_STALE_OR_MISMATCHED"):
+        adapter.import_reconciled_snapshot(
+            bundle=changed, validation=validation,
+            reconciliation=object(),
+        )
+
+    assert not baseline_store.has_unresolved_reconciliation()
+    with sqlite3.connect(baseline_store.path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM position_states").fetchone()[0] == 0
+
+
+def test_validation_baseline_adapter_rejects_u19_mismatch_without_import(tmp_path):
+    from application.composition.validation_only_account_snapshot_baseline_adapter import (
+        ValidationOnlyAccountSnapshotBaselineAdapter,
+        ValidationOnlyBaselineImportError,
+    )
+
+    bundle = _multi_group_bundle()
+    validation = validate_account_snapshot_bundle(bundle)
+    assert validation.is_valid
+    reconciler, _ = _make_reconciler(tmp_path, old_first_fill_quantity=2)
+    _seed_second_group(reconciler)
+    reconciliation = reconciler.reconcile_account(
+        bundle=bundle, validation=validation,
+        group_ids=(GROUP_ID, GROUP_TWO),
+        snapshot_id="multi-group-baseline-u19-mismatch", as_of=AS_OF,
+        aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:U19-MISMATCH",
+    )
+    assert not reconciliation.is_valid
+    baseline_store = SQLiteSettlementStore(tmp_path / "u19-mismatch-no-import.sqlite3")
+    adapter = ValidationOnlyAccountSnapshotBaselineAdapter(baseline_store, validation_only=True)
+
+    with pytest.raises(ValidationOnlyBaselineImportError, match="ACCOUNT_U19_RECONCILIATION_REQUIRED"):
+        adapter.import_reconciled_snapshot(
+            bundle=bundle, validation=validation, reconciliation=reconciliation,
+        )
+
+    assert not baseline_store.has_unresolved_reconciliation()
+    with sqlite3.connect(baseline_store.path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM position_states").fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT COUNT(*) FROM settlement_meta WHERE key='authoritative_baseline_ready'"
+        ).fetchone()[0] == 0
