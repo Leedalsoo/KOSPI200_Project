@@ -176,3 +176,78 @@ def test_recovery_snapshot_identity_collision_keeps_both_order_ids_in_u19_gate(t
     assert decision.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
     assert set(decision.pending_order_ids) == {"client-original", "client-other"}
     assert decision.restore_allowed is False
+
+
+def test_rest_snapshot_events_resolve_individually_and_only_last_clears_order_gate(tmp_path):
+    store = SQLiteSettlementStore(tmp_path / "snapshot-event-resolution.sqlite3")
+    for index in (1, 2):
+        store.record_reconciliation_event_pending(
+            event_id=f"REST-CCNL-SNAPSHOT|broker-1|{index + 1}|10.{index}0",
+            client_order_id="client-order-1",
+            broker_order_id="broker-order-1",
+            event_kind="KIS_REST_CUMULATIVE_ORDER_SNAPSHOT",
+            payload={"cumulative_filled_quantity": index + 1, "source_authority": "VALIDATION_ONLY"},
+        )
+
+    first = store.resolve_reconciliation_event(
+        event_id="REST-CCNL-SNAPSHOT|broker-1|2|10.10",
+        scope_key="client-order-1",
+        evidence_ref="TEST_ONLY:independent-inquiry:first-snapshot",
+    )
+    assert first is True
+    assert len(store.open_reconciliation_events(scope_key="client-order-1")) == 1
+    assert store.has_unresolved_reconciliation()
+
+    second = store.resolve_reconciliation_event(
+        event_id="REST-CCNL-SNAPSHOT|broker-1|3|10.20",
+        scope_key="client-order-1",
+        evidence_ref="TEST_ONLY:independent-inquiry:second-snapshot",
+    )
+    assert second is True
+    assert store.resolve_reconciliation_event(
+        event_id="REST-CCNL-SNAPSHOT|broker-1|3|10.20",
+        scope_key="client-order-1",
+        evidence_ref="TEST_ONLY:duplicate-resolution",
+    ) is False
+    assert store.open_reconciliation_events(scope_key="client-order-1") == ()
+    assert not store.has_unresolved_reconciliation()
+    assert store.load_execution_journal_records() == ()
+    assert store.load_position_state("OPT-NOT-TOUCHED") is None
+
+
+def test_only_pending_rest_snapshot_events_are_resolvable_not_late_fills_or_conflicts(tmp_path):
+    store = SQLiteSettlementStore(tmp_path / "snapshot-resolution-guard.sqlite3")
+    store.record_late_fill_pending(
+        execution_id="late-fill-event-1",
+        client_order_id="client-late",
+        broker_order_id="broker-late",
+        payload={"execution_id": "late-fill-event-1"},
+    )
+    with pytest.raises(SettlementStoreError, match="RECONCILIATION_EVENT_KIND_NOT_EXTERNALLY_RESOLVABLE"):
+        store.resolve_reconciliation_event(
+            event_id="late-fill-event-1",
+            scope_key="client-late",
+            evidence_ref="TEST_ONLY:cannot-resolve-late-fill-without-settlement",
+        )
+
+    store.record_reconciliation_event_pending(
+        event_id="REST-CCNL-SNAPSHOT|broker-conflict|2|10.50",
+        client_order_id="client-conflict",
+        broker_order_id="broker-conflict",
+        event_kind="KIS_REST_CUMULATIVE_ORDER_SNAPSHOT",
+        payload={"cumulative_filled_quantity": 2},
+    )
+    with pytest.raises(SettlementStoreError, match="RECONCILIATION_EVENT_ID_COLLISION"):
+        store.record_reconciliation_event_pending(
+            event_id="REST-CCNL-SNAPSHOT|broker-conflict|2|10.50",
+            client_order_id="client-conflict",
+            broker_order_id="broker-conflict",
+            event_kind="KIS_REST_CUMULATIVE_ORDER_SNAPSHOT",
+            payload={"cumulative_filled_quantity": 3},
+        )
+    with pytest.raises(SettlementStoreError, match="RECONCILIATION_EVENT_CONFLICT_REQUIRES_MANUAL_REVIEW"):
+        store.resolve_reconciliation_event(
+            event_id="REST-CCNL-SNAPSHOT|broker-conflict|2|10.50",
+            scope_key="client-conflict",
+            evidence_ref="TEST_ONLY:must-not-clear-conflict",
+        )

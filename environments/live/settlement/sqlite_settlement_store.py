@@ -445,10 +445,16 @@ class SQLiteSettlementStore:
                     (scope,),
                 ).fetchone()["n"]
                 if remaining_inbox == 0:
+                    state = connection.execute(
+                        "SELECT status FROM reconciliation_state WHERE scope_key=?",
+                        (scope,),
+                    ).fetchone()
+                    if state is None or state["status"] == "CONFLICT":
+                        raise SettlementStoreError("RECONCILIATION_SCOPE_CONFLICT_REQUIRES_MANUAL_REVIEW")
                     resolved = connection.execute(
                         """UPDATE reconciliation_state
                            SET status='RESOLVED', evidence_ref=?, updated_at=CURRENT_TIMESTAMP
-                           WHERE scope_key=? AND status IN ('PENDING','CONFLICT')""",
+                           WHERE scope_key=? AND status='PENDING'""",
                         (evidence, scope),
                     )
                     if resolved.rowcount != 1:
@@ -492,7 +498,9 @@ class SQLiteSettlementStore:
         if not event_key or not client_key or not kind:
             raise ValueError("RECONCILIATION_EVENT_IDENTITY_AND_KIND_REQUIRED")
         scope = client_key
-        encoded = encode_record(dict(payload))
+        payload_record = dict(payload)
+        payload_record["reconciliation_event_kind"] = kind
+        encoded = encode_record(payload_record)
         with self._connection() as connection:
             self._begin(connection)
             existing = connection.execute(
@@ -547,6 +555,73 @@ class SQLiteSettlementStore:
                  f"{kind}_REQUIRES_AUTHORITATIVE_RECONCILIATION",
                  encode_record({"reconciliation_event_id": event_key, "event_kind": kind})),
             )
+            connection.commit()
+            return True
+
+    def resolve_reconciliation_event(
+        self,
+        *,
+        event_id: str,
+        scope_key: str,
+        evidence_ref: str,
+    ) -> bool:
+        """Resolve one pending REST snapshot only after an external evidence reference is supplied."""
+        event_key = str(event_id).strip()
+        scope = str(scope_key).strip()
+        evidence = str(evidence_ref).strip()
+        if not event_key or not scope or not evidence:
+            raise ValueError("RECONCILIATION_EVENT_EVIDENCE_FIELDS_REQUIRED")
+        with self._connection() as connection:
+            self._begin(connection)
+            row = connection.execute(
+                """SELECT status,scope_key,payload_json FROM reconciliation_inbox
+                   WHERE execution_id=?""",
+                (event_key,),
+            ).fetchone()
+            if row is None or row["scope_key"] != scope:
+                connection.rollback()
+                raise SettlementStoreError("RECONCILIATION_EVENT_NOT_FOUND")
+            if row["status"] == "RESOLVED":
+                connection.rollback()
+                return False
+            if row["status"] == "CONFLICT":
+                connection.rollback()
+                raise SettlementStoreError("RECONCILIATION_EVENT_CONFLICT_REQUIRES_MANUAL_REVIEW")
+            payload = json.loads(row["payload_json"])
+            if payload.get("reconciliation_event_kind") != "KIS_REST_CUMULATIVE_ORDER_SNAPSHOT":
+                connection.rollback()
+                raise SettlementStoreError("RECONCILIATION_EVENT_KIND_NOT_EXTERNALLY_RESOLVABLE")
+            state = connection.execute(
+                "SELECT status FROM reconciliation_state WHERE scope_key=?",
+                (scope,),
+            ).fetchone()
+            if state is None:
+                connection.rollback()
+                raise SettlementStoreError("RECONCILIATION_SCOPE_STATE_MISSING")
+            if state["status"] == "CONFLICT":
+                connection.rollback()
+                raise SettlementStoreError("RECONCILIATION_SCOPE_CONFLICT_REQUIRES_MANUAL_REVIEW")
+            if state["status"] != "PENDING":
+                connection.rollback()
+                raise SettlementStoreError("RECONCILIATION_SCOPE_NOT_PENDING")
+            connection.execute(
+                """UPDATE reconciliation_inbox SET status='RESOLVED',evidence_ref=?
+                   WHERE execution_id=? AND scope_key=? AND status='PENDING'""",
+                (evidence, event_key, scope),
+            )
+            remaining = connection.execute(
+                """SELECT COUNT(*) AS n FROM reconciliation_inbox
+                   WHERE scope_key=? AND status IN ('PENDING','CONFLICT')""",
+                (scope,),
+            ).fetchone()["n"]
+            if remaining == 0:
+                resolved = connection.execute(
+                    """UPDATE reconciliation_state SET status='RESOLVED',evidence_ref=?,
+                       updated_at=CURRENT_TIMESTAMP WHERE scope_key=? AND status='PENDING'""",
+                    (evidence, scope),
+                )
+                if resolved.rowcount != 1:
+                    raise SettlementStoreError("RECONCILIATION_SCOPE_RESOLUTION_FAILED")
             connection.commit()
             return True
 
