@@ -12,6 +12,7 @@ def create_live_execution_recovery_composition(
     adapter: Any,
     correlation_provider: Any,
     settlement_callback: Any,
+    reconciliation_callback: Any | None = None,
 ) -> LiveExecutionRecoveryService:
     required = {
         "transport": transport,
@@ -28,4 +29,5 @@ def create_live_execution_recovery_composition(
         adapter=adapter,
         correlation_provider=correlation_provider,
         on_report=settlement_callback,
+        on_reconciliation_required=reconciliation_callback,
     )

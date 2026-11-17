@@ -476,6 +476,80 @@ class SQLiteSettlementStore:
         finally:
             connection.close()
 
+    def record_reconciliation_event_pending(
+        self,
+        *,
+        event_id: str,
+        client_order_id: str,
+        broker_order_id: str | None,
+        event_kind: str,
+        payload: Mapping[str, Any],
+    ) -> bool:
+        """Persist a non-fill recovery event for explicit later reconciliation."""
+        event_key = str(event_id).strip()
+        client_key = str(client_order_id).strip()
+        kind = str(event_kind).strip()
+        if not event_key or not client_key or not kind:
+            raise ValueError("RECONCILIATION_EVENT_IDENTITY_AND_KIND_REQUIRED")
+        scope = client_key
+        encoded = encode_record(dict(payload))
+        with self._connection() as connection:
+            self._begin(connection)
+            existing = connection.execute(
+                "SELECT scope_key,client_order_id,broker_order_id,payload_json "
+                "FROM reconciliation_inbox WHERE execution_id=?",
+                (event_key,),
+            ).fetchone()
+            if existing is not None:
+                identical = (
+                    existing["scope_key"] == scope
+                    and existing["client_order_id"] == client_key
+                    and existing["broker_order_id"] == broker_order_id
+                    and existing["payload_json"] == encoded
+                )
+                if identical:
+                    connection.rollback()
+                    return False
+                connection.execute(
+                    "UPDATE reconciliation_inbox SET status='CONFLICT' WHERE execution_id=?",
+                    (event_key,),
+                )
+                connection.execute(
+                    """INSERT INTO reconciliation_state
+                       (scope_key,client_order_id,broker_order_id,status,reason,payload_json,updated_at)
+                       VALUES(?,?,?,'CONFLICT','RECONCILIATION_EVENT_ID_COLLISION',?,CURRENT_TIMESTAMP)
+                       ON CONFLICT(scope_key) DO UPDATE SET status='CONFLICT',
+                         reason=excluded.reason,evidence_ref=NULL,payload_json=excluded.payload_json,
+                         updated_at=CURRENT_TIMESTAMP""",
+                    (scope, client_key, broker_order_id,
+                     encode_record({"event_id": event_key, "event_kind": kind, "collision": True})),
+                )
+                connection.commit()
+                raise SettlementStoreError("RECONCILIATION_EVENT_ID_COLLISION")
+
+            connection.execute(
+                """INSERT INTO reconciliation_inbox
+                   (execution_id,scope_key,client_order_id,broker_order_id,payload_json)
+                   VALUES(?,?,?,?,?)""",
+                (event_key, scope, client_key, broker_order_id, encoded),
+            )
+            connection.execute(
+                """INSERT INTO reconciliation_state
+                   (scope_key,client_order_id,broker_order_id,status,reason,payload_json,updated_at)
+                   VALUES(?,?,?,'PENDING',?,?,CURRENT_TIMESTAMP)
+                   ON CONFLICT(scope_key) DO UPDATE SET
+                     client_order_id=excluded.client_order_id,
+                     broker_order_id=excluded.broker_order_id,
+                     status=CASE WHEN reconciliation_state.status='CONFLICT' THEN 'CONFLICT' ELSE 'PENDING' END,
+                     reason=CASE WHEN reconciliation_state.status='CONFLICT' THEN reconciliation_state.reason ELSE excluded.reason END,
+                     evidence_ref=NULL, payload_json=excluded.payload_json, updated_at=CURRENT_TIMESTAMP""",
+                (scope, client_key, broker_order_id,
+                 f"{kind}_REQUIRES_AUTHORITATIVE_RECONCILIATION",
+                 encode_record({"reconciliation_event_id": event_key, "event_kind": kind})),
+            )
+            connection.commit()
+            return True
+
     def record_late_fill_pending(
         self,
         *,

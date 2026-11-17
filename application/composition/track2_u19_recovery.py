@@ -27,9 +27,17 @@ class ValidationOnlyTrack2U19RecoveryCoordinator:
     ) -> U19RecoveryDecision:
         if self.settlement_store is not None and ledger_snapshot is not None:
             open_events = self.settlement_store.open_reconciliation_events()
+            unresolved = self.settlement_store.unresolved_reconciliations()
+            unresolved_ids = tuple(
+                "__GLOBAL_RECONCILIATION__"
+                if item.get("scope_key") in {"__startup_reconciliation__", "__runtime_bootstrap__"}
+                else str(item.get("client_order_id") or "").strip()
+                for item in unresolved
+            )
             pending_ids = tuple(dict.fromkeys(
                 (*ledger_snapshot.pending_order_ids,
-                 *(event["client_order_id"] for event in open_events))
+                 *(event["client_order_id"] for event in open_events),
+                 *(item for item in unresolved_ids if item))
             ))
             if pending_ids != ledger_snapshot.pending_order_ids:
                 ledger_snapshot = replace(ledger_snapshot, pending_order_ids=pending_ids)

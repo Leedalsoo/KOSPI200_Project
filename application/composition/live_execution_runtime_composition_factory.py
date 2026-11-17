@@ -105,11 +105,43 @@ def create_live_execution_runtime_composition(
         raise ValueError("LIVE_RECOVERY_TRANSPORT_ADAPTER_MUST_BE_PAIRED")
     recovery_service = None
     if recovery_transport is not None:
+        def record_recovery_snapshot(report, cumulative_quantity: int):
+            execution_timestamp = report.execution_timestamp
+            timestamp_text = execution_timestamp.isoformat() if execution_timestamp is not None else None
+            timestamp_timezone = (
+                "UNSPECIFIED"
+                if execution_timestamp is not None
+                and (execution_timestamp.tzinfo is None or execution_timestamp.utcoffset() is None)
+                else "AWARE"
+                if execution_timestamp is not None
+                else "MISSING"
+            )
+            return settlement_store.record_reconciliation_event_pending(
+                event_id=str(report.execution_id or ""),
+                client_order_id=report.client_order_id,
+                broker_order_id=report.broker_order_id,
+                event_kind="KIS_REST_CUMULATIVE_ORDER_SNAPSHOT",
+                payload={
+                    "snapshot_identity": report.execution_id,
+                    "status": report.status,
+                    "delta_quantity_from_prior_snapshot": report.filled_quantity,
+                    "cumulative_filled_quantity": cumulative_quantity,
+                    "remaining_quantity": report.remaining_quantity,
+                    "delta_average_price": str(report.execution_price) if report.execution_price is not None else None,
+                    "source_execution_timestamp": timestamp_text,
+                    "source_execution_timestamp_timezone": timestamp_timezone,
+                    "source_authority": "KIS_REST_ORDER_LEVEL_SNAPSHOT_NOT_INDIVIDUAL_EXECUTION",
+                    "execution_journal_commit": False,
+                    "position_mutation": False,
+                },
+            )
+
         recovery_service = create_live_execution_recovery_composition(
             transport=recovery_transport,
             adapter=recovery_adapter,
             correlation_provider=correlation_provider,
             settlement_callback=settlement.settle,
+            reconciliation_callback=record_recovery_snapshot,
         )
 
     return LiveExecutionRuntimeComposition(
