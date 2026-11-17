@@ -1,4 +1,4 @@
-"""Durable SQLite settlement journal for one local, single-writer Live runtime.
+﻿"""Durable SQLite settlement journal for one local, single-writer Live runtime.
 
 The database is the settlement source of truth. Market-data JSONL stores are
 intentionally unrelated. This module never performs broker or KIS API calls.
@@ -14,7 +14,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 
 class SettlementStoreError(RuntimeError):
@@ -859,6 +859,135 @@ class SQLiteSettlementStore:
         except Exception as exc:
             connection.rollback()
             raise SettlementStoreError("AUTHORITATIVE_BASELINE_TRANSACTION_FAILED") from exc
+        finally:
+            connection.close()
+
+    def establish_authoritative_baseline_snapshot(
+        self,
+        *,
+        positions_payload: Sequence[Mapping[str, Any]],
+        orders_snapshot_id: str,
+        executions_snapshot_id: str,
+        positions_snapshot_id: str,
+        as_of: datetime,
+        source: str,
+        payload_sha256: str,
+        authoritative_evidence_ref: str,
+    ) -> None:
+        """Atomically import a complete multi-instrument account baseline.
+
+        This releases only the initial runtime bootstrap gate. The separate
+        per-startup orders/fills/positions reconciliation gate remains pending.
+        """
+        snapshot_ids = tuple(str(value).strip() for value in (
+            orders_snapshot_id, executions_snapshot_id, positions_snapshot_id
+        ))
+        source_value = str(source).strip()
+        digest = str(payload_sha256).strip().lower()
+        evidence = str(authoritative_evidence_ref).strip()
+        if any(not value for value in snapshot_ids) or len(set(snapshot_ids)) != 3:
+            raise ValueError("BASELINE_ORDERS_EXECUTIONS_POSITIONS_SNAPSHOT_IDS_REQUIRED_AND_DISTINCT")
+        if not source_value or not evidence:
+            raise ValueError("BASELINE_SOURCE_AND_EVIDENCE_REQUIRED")
+        if as_of.tzinfo is None or as_of.utcoffset() is None:
+            raise ValueError("BASELINE_SNAPSHOT_AS_OF_MUST_BE_TIMEZONE_AWARE")
+        if re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+            raise ValueError("BASELINE_SNAPSHOT_SHA256_INVALID")
+
+        normalized_positions: list[dict[str, Any]] = []
+        seen_instruments: set[str] = set()
+        for raw in positions_payload:
+            item = dict(raw)
+            instrument_id = str(item.get("instrument_id") or "").strip()
+            quantity = item.get("qty")
+            side = item.get("side")
+            average = item.get("avg_price")
+            if not instrument_id or instrument_id in seen_instruments:
+                raise ValueError("BASELINE_POSITION_INSTRUMENT_ID_MISSING_OR_DUPLICATE")
+            if not isinstance(quantity, int) or isinstance(quantity, bool) or quantity < 0:
+                raise ValueError("BASELINE_POSITION_QUANTITY_INVALID")
+            if quantity > 0 and (side not in {"LONG", "SHORT"} or average is None):
+                raise ValueError("BASELINE_POSITION_SIDE_AND_AVERAGE_PRICE_REQUIRED")
+            if quantity == 0 and side not in {None, "FLAT"}:
+                raise ValueError("BASELINE_FLAT_POSITION_SIDE_INVALID")
+            if average is not None:
+                try:
+                    average_value = Decimal(str(average))
+                except (InvalidOperation, TypeError) as exc:
+                    raise ValueError("BASELINE_POSITION_AVERAGE_PRICE_INVALID") from exc
+                if not average_value.is_finite() or average_value <= 0:
+                    raise ValueError("BASELINE_POSITION_AVERAGE_PRICE_INVALID")
+                item["avg_price"] = str(average_value)
+            item["instrument_id"] = instrument_id
+            seen_instruments.add(instrument_id)
+            normalized_positions.append(item)
+
+        payload = {
+            "source": source_value,
+            "orders_snapshot_id": snapshot_ids[0],
+            "executions_snapshot_id": snapshot_ids[1],
+            "positions_snapshot_id": snapshot_ids[2],
+            "as_of": as_of.isoformat(),
+            "payload_sha256": digest,
+            "evidence_ref": evidence,
+            "position_count": len(normalized_positions),
+            "positions": normalized_positions,
+            "coverage": ["orders", "fills", "positions"],
+        }
+        encoded = encode_record(payload)
+        connection = self._connect()
+        try:
+            self._begin(connection)
+            bootstrap = connection.execute(
+                "SELECT status FROM reconciliation_state WHERE scope_key='__runtime_bootstrap__'"
+            ).fetchone()
+            if bootstrap is not None and bootstrap["status"] == "CONFLICT":
+                raise SettlementStoreError("RUNTIME_BOOTSTRAP_CONFLICT_REQUIRES_MANUAL_REVIEW")
+            open_inbox = connection.execute(
+                "SELECT COUNT(*) AS n FROM reconciliation_inbox WHERE status IN ('PENDING','CONFLICT')"
+            ).fetchone()["n"]
+            other_unresolved = connection.execute(
+                """SELECT COUNT(*) AS n FROM reconciliation_state
+                   WHERE status IN ('PENDING','CONFLICT')
+                     AND scope_key NOT IN ('__runtime_bootstrap__','__startup_reconciliation__')"""
+            ).fetchone()["n"]
+            if open_inbox or other_unresolved:
+                raise SettlementStoreError("BASELINE_IMPORT_HAS_OTHER_UNRESOLVED_RECONCILIATION")
+
+            connection.execute("DELETE FROM position_states")
+            for item in normalized_positions:
+                connection.execute(
+                    """INSERT INTO position_states(instrument_id,position_json,updated_at)
+                       VALUES(?,?,CURRENT_TIMESTAMP)""",
+                    (item["instrument_id"], encode_record(item)),
+                )
+            connection.execute(
+                """INSERT INTO settlement_meta(key,value,updated_at)
+                   VALUES('authoritative_baseline_ready','1',CURRENT_TIMESTAMP)
+                   ON CONFLICT(key) DO UPDATE SET value='1',updated_at=CURRENT_TIMESTAMP"""
+            )
+            connection.execute(
+                """INSERT INTO settlement_meta(key,value,updated_at)
+                   VALUES('authoritative_baseline_evidence',?,CURRENT_TIMESTAMP)
+                   ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=CURRENT_TIMESTAMP""",
+                (encoded,),
+            )
+            connection.execute(
+                """INSERT INTO reconciliation_state
+                   (scope_key,client_order_id,broker_order_id,status,reason,evidence_ref,payload_json,updated_at)
+                   VALUES('__runtime_bootstrap__','__runtime_bootstrap__',NULL,'RESOLVED',
+                          'AUTHORITATIVE_MULTI_INSTRUMENT_BASELINE_ESTABLISHED',?,?,CURRENT_TIMESTAMP)
+                   ON CONFLICT(scope_key) DO UPDATE SET status='RESOLVED',reason=excluded.reason,
+                     evidence_ref=excluded.evidence_ref,payload_json=excluded.payload_json,
+                     updated_at=CURRENT_TIMESTAMP""",
+                (evidence, encoded),
+            )
+            connection.commit()
+        except Exception as exc:
+            connection.rollback()
+            if isinstance(exc, (ValueError, SettlementStoreError)):
+                raise
+            raise SettlementStoreError("AUTHORITATIVE_BASELINE_SNAPSHOT_TRANSACTION_FAILED") from exc
         finally:
             connection.close()
 

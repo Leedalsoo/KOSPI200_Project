@@ -584,3 +584,154 @@ def test_authoritative_baseline_does_not_clear_runtime_bootstrap_conflict(tmp_pa
     assert len(unresolved) == 1
     assert unresolved[0]["scope_key"] == "__runtime_bootstrap__"
     assert unresolved[0]["status"] == "CONFLICT"
+
+
+def test_multi_instrument_baseline_snapshot_import_is_atomic_and_keeps_startup_gate(tmp_path):
+    from datetime import datetime, timezone
+
+    store = SQLiteSettlementStore(tmp_path / "multi-instrument-baseline.sqlite3")
+    store.ensure_authoritative_baseline_gate()
+    store.establish_authoritative_baseline_snapshot(
+        positions_payload=(
+            {"instrument_id": "OPT-CALL", "side": "LONG", "qty": 2, "avg_price": "10.25"},
+            {"instrument_id": "OPT-PUT", "side": "SHORT", "qty": 1, "avg_price": "7.50"},
+            {"instrument_id": "FUT-NEAR", "side": None, "qty": 0, "avg_price": None},
+        ),
+        orders_snapshot_id="TEST_ONLY:baseline-orders-1",
+        executions_snapshot_id="TEST_ONLY:baseline-fills-1",
+        positions_snapshot_id="TEST_ONLY:baseline-positions-1",
+        as_of=datetime(2026, 11, 18, 9, 0, tzinfo=timezone.utc),
+        source="VALIDATION_ONLY:ACCOUNT_BASELINE",
+        payload_sha256="e" * 64,
+        authoritative_evidence_ref="TEST_ONLY:complete-multi-instrument-baseline",
+    )
+    with sqlite3.connect(store.path) as connection:
+        rows = connection.execute(
+            "SELECT instrument_id,position_json FROM position_states ORDER BY instrument_id"
+        ).fetchall()
+        baseline_ready = connection.execute(
+            "SELECT value FROM settlement_meta WHERE key='authoritative_baseline_ready'"
+        ).fetchone()[0]
+    assert len(rows) == 3
+    assert baseline_ready == "1"
+    assert {instrument_id for instrument_id, _ in rows} == {"OPT-CALL", "OPT-PUT", "FUT-NEAR"}
+    assert not store.has_unresolved_reconciliation()
+
+    # The bootstrap baseline does not release the separate per-startup gate.
+    store.mark_startup_reconciliation_pending()
+    assert store.has_unresolved_reconciliation()
+
+
+def test_multi_instrument_baseline_rejects_duplicate_identity_without_partial_write(tmp_path):
+    from datetime import datetime, timezone
+
+    store = SQLiteSettlementStore(tmp_path / "invalid-multi-baseline.sqlite3")
+    store.ensure_authoritative_baseline_gate()
+    with pytest.raises(ValueError, match="BASELINE_POSITION_INSTRUMENT_ID_MISSING_OR_DUPLICATE"):
+        store.establish_authoritative_baseline_snapshot(
+            positions_payload=(
+                {"instrument_id": "OPT-CALL", "side": "LONG", "qty": 1, "avg_price": "10.00"},
+                {"instrument_id": "OPT-CALL", "side": "LONG", "qty": 2, "avg_price": "10.10"},
+            ),
+            orders_snapshot_id="TEST_ONLY:orders-1",
+            executions_snapshot_id="TEST_ONLY:fills-1",
+            positions_snapshot_id="TEST_ONLY:positions-1",
+            as_of=datetime(2026, 11, 18, 9, 0, tzinfo=timezone.utc),
+            source="VALIDATION_ONLY:ACCOUNT_BASELINE",
+            payload_sha256="f" * 64,
+            authoritative_evidence_ref="TEST_ONLY:invalid-duplicate-instrument",
+        )
+    with sqlite3.connect(store.path) as connection:
+        count = connection.execute("SELECT COUNT(*) FROM position_states").fetchone()[0]
+        baseline = connection.execute(
+            "SELECT value FROM settlement_meta WHERE key='authoritative_baseline_ready'"
+        ).fetchone()
+    assert count == 0
+    assert baseline is None
+    assert store.has_unresolved_reconciliation()
+
+
+def test_multi_instrument_baseline_import_does_not_clear_existing_order_inbox(tmp_path):
+    from datetime import datetime, timezone
+
+    store = SQLiteSettlementStore(tmp_path / "baseline-open-inbox.sqlite3")
+    store.ensure_authoritative_baseline_gate()
+    store.record_reconciliation_event_pending(
+        event_id="REST-CCNL-SNAPSHOT|broker-open|1|10.00",
+        client_order_id="client-open",
+        broker_order_id="broker-open",
+        event_kind="KIS_REST_CUMULATIVE_ORDER_SNAPSHOT",
+        payload={"cumulative_filled_quantity": 1},
+    )
+    with pytest.raises(SettlementStoreError, match="BASELINE_IMPORT_HAS_OTHER_UNRESOLVED_RECONCILIATION"):
+        store.establish_authoritative_baseline_snapshot(
+            positions_payload=(),
+            orders_snapshot_id="TEST_ONLY:orders-1",
+            executions_snapshot_id="TEST_ONLY:fills-1",
+            positions_snapshot_id="TEST_ONLY:positions-1",
+            as_of=datetime(2026, 11, 18, 9, 0, tzinfo=timezone.utc),
+            source="VALIDATION_ONLY:ACCOUNT_BASELINE",
+            payload_sha256="f" * 64,
+            authoritative_evidence_ref="TEST_ONLY:must-not-clear-open-order",
+        )
+    assert store.has_unresolved_reconciliation()
+    with sqlite3.connect(store.path) as connection:
+        count = connection.execute("SELECT COUNT(*) FROM position_states").fetchone()[0]
+        baseline = connection.execute(
+            "SELECT value FROM settlement_meta WHERE key='authoritative_baseline_ready'"
+        ).fetchone()
+    assert count == 0
+    assert baseline is None
+
+def test_live_composition_reapplies_startup_gate_after_restart(tmp_path):
+    from datetime import datetime, timezone
+    from application.composition.live_execution_position_composition_factory import (
+        create_live_execution_position_composition,
+    )
+
+    store = SQLiteSettlementStore(tmp_path / "composition-restart-baseline.sqlite3")
+    store.establish_authoritative_baseline_snapshot(
+        positions_payload=(
+            {"instrument_id": "OPT-CALL", "side": "LONG", "qty": 1, "avg_price": "10.00"},
+            {"instrument_id": "OPT-PUT", "side": "SHORT", "qty": 1, "avg_price": "8.00"},
+        ),
+        orders_snapshot_id="TEST_ONLY:baseline-orders",
+        executions_snapshot_id="TEST_ONLY:baseline-fills",
+        positions_snapshot_id="TEST_ONLY:baseline-positions",
+        as_of=datetime(2026, 11, 18, 9, 0, tzinfo=timezone.utc),
+        source="VALIDATION_ONLY:ACCOUNT_BASELINE",
+        payload_sha256="d" * 64,
+        authoritative_evidence_ref="TEST_ONLY:baseline-complete",
+    )
+
+    def compose():
+        position = LivePositionAggregate("OPT-CALL")
+        return create_live_execution_position_composition(
+            execution_source=object(),
+            order_state_machine=OrderStateMachine(),
+            position_fill_adapter=LivePositionFillAdapter(position),
+            execution_event_deduplicator=ExecutionEventDeduplicator(),
+            position_aggregate=position,
+            settlement_store=store,
+        )
+
+    first = compose()
+    assert first.settlement_store is store
+    assert store.has_unresolved_reconciliation()
+    store.resolve_startup_reconciliation(
+        orders_snapshot_id="TEST_ONLY:startup-orders-1",
+        executions_snapshot_id="TEST_ONLY:startup-fills-1",
+        positions_snapshot_id="TEST_ONLY:startup-positions-1",
+        as_of=datetime(2026, 11, 18, 9, 5, tzinfo=timezone.utc),
+        source="VALIDATION_ONLY:STARTUP_SNAPSHOT",
+        payload_sha256="e" * 64,
+        authoritative_evidence_ref="TEST_ONLY:first-startup-reconciliation",
+    )
+    assert not store.has_unresolved_reconciliation()
+
+    # A fresh composition represents a new process start and must re-open the gate.
+    second = compose()
+    assert second.settlement_store is store
+    assert store.has_unresolved_reconciliation()
+    unresolved = store.unresolved_reconciliations()
+    assert any(item["scope_key"] == "__startup_reconciliation__" and item["status"] == "PENDING" for item in unresolved)
