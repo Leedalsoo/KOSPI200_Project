@@ -127,6 +127,24 @@ class SQLiteSettlementStore:
                     evidence_ref TEXT,
                     received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
+                CREATE TABLE IF NOT EXISTS startup_reconciliation_history (
+                    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_type TEXT NOT NULL CHECK(event_type IN (
+                        'GATE_REGISTERED','GATE_REARMED','GATE_REARM_BLOCKED_CONFLICT','STARTUP_RESOLVED'
+                    )),
+                    gate_status TEXT NOT NULL CHECK(gate_status IN ('PENDING','CONFLICT','RESOLVED')),
+                    evidence_sha256 TEXT,
+                    manifest_version TEXT,
+                    baseline_evidence_sha256 TEXT,
+                    payload_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TRIGGER IF NOT EXISTS startup_reconciliation_history_no_update
+                BEFORE UPDATE ON startup_reconciliation_history
+                BEGIN SELECT RAISE(ABORT, 'STARTUP_RECONCILIATION_HISTORY_APPEND_ONLY'); END;
+                CREATE TRIGGER IF NOT EXISTS startup_reconciliation_history_no_delete
+                BEFORE DELETE ON startup_reconciliation_history
+                BEGIN SELECT RAISE(ABORT, 'STARTUP_RECONCILIATION_HISTORY_APPEND_ONLY'); END;
                 CREATE TABLE IF NOT EXISTS order_replacement_links (
                     link_id TEXT PRIMARY KEY,
                     original_client_order_id TEXT NOT NULL,
@@ -1016,10 +1034,111 @@ class SQLiteSettlementStore:
         finally:
             connection.close()
 
+    def startup_reconciliation_history(self) -> tuple[dict[str, Any], ...]:
+        """Return append-only startup gate transitions and successful resolutions."""
+        with self._connection() as connection:
+            rows = connection.execute(
+                """SELECT event_id,event_type,gate_status,evidence_sha256,manifest_version,
+                          baseline_evidence_sha256,payload_json,created_at
+                   FROM startup_reconciliation_history ORDER BY event_id"""
+            ).fetchall()
+        return tuple({
+            "event_id": row["event_id"],
+            "event_type": row["event_type"],
+            "gate_status": row["gate_status"],
+            "evidence_sha256": row["evidence_sha256"],
+            "manifest_version": row["manifest_version"],
+            "baseline_evidence_sha256": row["baseline_evidence_sha256"],
+            "payload": json.loads(row["payload_json"]),
+            "created_at": row["created_at"],
+        } for row in rows)
+
+    def startup_lineage_audit(self) -> dict[str, Any]:
+        """Audit persisted startup lineage without changing gate or evidence state."""
+        history = self.startup_reconciliation_history()
+        baseline = self.authoritative_baseline_evidence()
+        current_baseline_hash = baseline.get("payload_sha256") if baseline else None
+        audited = []
+        for event in history:
+            item = dict(event)
+            if event["event_type"] != "STARTUP_RESOLVED":
+                item["lineage_status"] = "GATE_TRANSITION"
+            else:
+                payload = event["payload"]
+                manifest = payload.get("lineage_manifest")
+                if not isinstance(manifest, dict):
+                    status = "LEGACY_UNVERSIONED"
+                elif manifest.get("manifest_version") != "Q25-A8-U19-BASELINE-STARTUP-LINEAGE-v1":
+                    status = "UNSUPPORTED_MANIFEST_VERSION"
+                elif hashlib.sha256(encode_record(manifest).encode("utf-8")).hexdigest() != event["evidence_sha256"]:
+                    status = "MANIFEST_HASH_MISMATCH"
+                elif manifest.get("baseline_import_evidence_sha256") != current_baseline_hash:
+                    status = "BASELINE_EVIDENCE_CHANGED_SINCE_RESOLUTION"
+                else:
+                    status = "SUPPORTED_CURRENT_BASELINE"
+                item["lineage_status"] = status
+            audited.append(item)
+        current_startup = self.startup_reconciliation_evidence()
+        if current_startup is not None:
+            current_digest = current_startup.get("payload_sha256")
+            recorded = any(
+                item["event_type"] == "STARTUP_RESOLVED"
+                and item["evidence_sha256"] == current_digest
+                for item in audited
+            )
+            if not recorded:
+                manifest = current_startup.get("lineage_manifest")
+                if not isinstance(manifest, dict):
+                    legacy_status = "LEGACY_UNVERSIONED"
+                elif manifest.get("manifest_version") != "Q25-A8-U19-BASELINE-STARTUP-LINEAGE-v1":
+                    legacy_status = "UNSUPPORTED_MANIFEST_VERSION"
+                elif hashlib.sha256(encode_record(manifest).encode("utf-8")).hexdigest() != current_digest:
+                    legacy_status = "MANIFEST_HASH_MISMATCH"
+                elif manifest.get("baseline_import_evidence_sha256") != current_baseline_hash:
+                    legacy_status = "BASELINE_EVIDENCE_CHANGED_SINCE_RESOLUTION"
+                else:
+                    legacy_status = "SUPPORTED_CURRENT_BASELINE"
+                audited.append({
+                    "event_id": None,
+                    "event_type": "LEGACY_EXISTING_EVIDENCE",
+                    "gate_status": self.reconciliation_status("__startup_reconciliation__") or "UNREGISTERED",
+                    "evidence_sha256": current_digest,
+                    "manifest_version": manifest.get("manifest_version") if isinstance(manifest, dict) else None,
+                    "baseline_evidence_sha256": (
+                        manifest.get("baseline_import_evidence_sha256") if isinstance(manifest, dict) else None
+                    ),
+                    "payload": current_startup,
+                    "created_at": None,
+                    "lineage_status": legacy_status,
+                })
+        with self._connection() as connection:
+            gate = connection.execute(
+                "SELECT status FROM reconciliation_state WHERE scope_key='__startup_reconciliation__'"
+            ).fetchone()
+            open_inbox = connection.execute(
+                "SELECT COUNT(*) AS n FROM reconciliation_inbox WHERE status IN ('PENDING','CONFLICT')"
+            ).fetchone()["n"]
+            unresolved = connection.execute(
+                "SELECT COUNT(*) AS n FROM reconciliation_state WHERE status IN ('PENDING','CONFLICT')"
+            ).fetchone()["n"]
+        return {
+            "current_gate_status": str(gate["status"]) if gate else "UNREGISTERED",
+            "current_baseline_evidence_sha256": current_baseline_hash,
+            "history_count": len(audited),
+            "resolution_count": sum(item["event_type"] == "STARTUP_RESOLVED" for item in audited),
+            "open_inbox_count": int(open_inbox),
+            "unresolved_scope_count": int(unresolved),
+            "history": tuple(audited),
+        }
+
     def mark_startup_reconciliation_pending(self) -> None:
         """Require a fresh authoritative broker/position reconciliation each startup."""
         with self._connection() as connection:
             self._begin(connection)
+            previous = connection.execute(
+                "SELECT status FROM reconciliation_state WHERE scope_key='__startup_reconciliation__'"
+            ).fetchone()
+            previous_status = str(previous["status"]) if previous else None
             connection.execute(
                 """INSERT INTO reconciliation_state
                    (scope_key,client_order_id,broker_order_id,status,reason,payload_json,updated_at)
@@ -1031,6 +1150,26 @@ class SQLiteSettlementStore:
                      reason=CASE WHEN reconciliation_state.status='CONFLICT' THEN reconciliation_state.reason ELSE excluded.reason END,
                      evidence_ref=NULL,payload_json=excluded.payload_json,updated_at=CURRENT_TIMESTAMP"""
             )
+            current = connection.execute(
+                "SELECT status FROM reconciliation_state WHERE scope_key='__startup_reconciliation__'"
+            ).fetchone()
+            current_status = str(current["status"]) if current else "PENDING"
+            event_type = None
+            if current_status == "CONFLICT":
+                event_type = "GATE_REARM_BLOCKED_CONFLICT"
+            elif previous_status != "PENDING":
+                event_type = "GATE_REARMED" if previous_status == "RESOLVED" else "GATE_REGISTERED"
+            if event_type is not None:
+                connection.execute(
+                    """INSERT INTO startup_reconciliation_history
+                       (event_type,gate_status,payload_json)
+                       VALUES(?,?,?)""",
+                    (event_type, current_status, encode_record({
+                        "previous_status": previous_status,
+                        "resulting_status": current_status,
+                        "reason": "FRESH_STARTUP_RECONCILIATION_REQUIRED",
+                    })),
+                )
             connection.commit()
 
     def ensure_authoritative_baseline_gate(self) -> None:
@@ -1144,6 +1283,19 @@ class SQLiteSettlementStore:
             )
             if resolved.rowcount != 1:
                 raise SettlementStoreError("STARTUP_RECONCILIATION_RESOLUTION_FAILED")
+            manifest = payload.get("lineage_manifest")
+            connection.execute(
+                """INSERT INTO startup_reconciliation_history
+                   (event_type,gate_status,evidence_sha256,manifest_version,
+                    baseline_evidence_sha256,payload_json)
+                   VALUES('STARTUP_RESOLVED','RESOLVED',?,?,?,?)""",
+                (
+                    digest,
+                    manifest.get("manifest_version") if isinstance(manifest, dict) else None,
+                    manifest.get("baseline_import_evidence_sha256") if isinstance(manifest, dict) else None,
+                    encoded,
+                ),
+            )
             connection.commit()
             return True
 

@@ -1260,3 +1260,221 @@ def test_validation_startup_keeps_unresolved_inbox_and_conflict_after_sqlite_reo
         for item in reopened.open_reconciliation_events()
     )
     assert reopened.reconciliation_status("__startup_reconciliation__") == "PENDING"
+
+
+def test_startup_lineage_audit_tracks_three_restart_cycles_and_is_append_only(tmp_path):
+    import sqlite3
+
+    from application.composition.live_execution_position_composition_factory import (
+        create_live_execution_position_composition,
+    )
+    from application.composition.validation_only_account_snapshot_startup_adapter import (
+        ValidationOnlyAccountSnapshotStartupAdapter,
+    )
+
+    bundle, validation, reconciliation, baseline_import, store = _prepare_validation_startup_fixture(tmp_path)
+    adapter = ValidationOnlyAccountSnapshotStartupAdapter(store, validation_only=True)
+    first = adapter.reconcile_startup(
+        bundle=bundle, validation=validation, reconciliation=reconciliation,
+        baseline_import=baseline_import,
+    )
+    assert first.is_valid and first.resolved
+
+    for _ in range(2):
+        reopened = SQLiteSettlementStore(store.path)
+        position = LivePositionAggregate(SHARED_INSTRUMENT)
+        composition = create_live_execution_position_composition(
+            execution_source=object(),
+            order_state_machine=OrderStateMachine(),
+            position_fill_adapter=LivePositionFillAdapter(position),
+            execution_event_deduplicator=ExecutionEventDeduplicator(),
+            position_aggregate=position,
+            settlement_store=reopened,
+        )
+        assert composition.settlement_store.reconciliation_status("__startup_reconciliation__") == "PENDING"
+        cycle_adapter = ValidationOnlyAccountSnapshotStartupAdapter(
+            composition.settlement_store, validation_only=True,
+        )
+        result = cycle_adapter.reconcile_startup(
+            bundle=bundle, validation=validation, reconciliation=reconciliation,
+            baseline_import=baseline_import,
+        )
+        assert result.is_valid and result.resolved
+
+    final_store = SQLiteSettlementStore(store.path)
+    final_adapter = ValidationOnlyAccountSnapshotStartupAdapter(final_store, validation_only=True)
+    repeated = final_adapter.reconcile_startup(
+        bundle=bundle, validation=validation, reconciliation=reconciliation,
+        baseline_import=baseline_import,
+    )
+    assert repeated.status == "VALIDATION_ONLY_STARTUP_ALREADY_RECONCILED"
+
+    audit = final_store.startup_lineage_audit()
+    assert audit["current_gate_status"] == "RESOLVED"
+    assert audit["resolution_count"] == 3
+    assert audit["history_count"] == 6
+    assert audit["open_inbox_count"] == 0
+    assert audit["unresolved_scope_count"] == 0
+    assert [event["event_type"] for event in audit["history"]].count("GATE_REGISTERED") == 1
+    assert [event["event_type"] for event in audit["history"]].count("GATE_REARMED") == 2
+    assert all(
+        event["lineage_status"] == "SUPPORTED_CURRENT_BASELINE"
+        for event in audit["history"] if event["event_type"] == "STARTUP_RESOLVED"
+    )
+
+    with sqlite3.connect(final_store.path) as connection:
+        with pytest.raises(sqlite3.IntegrityError, match="STARTUP_RECONCILIATION_HISTORY_APPEND_ONLY"):
+            connection.execute("UPDATE startup_reconciliation_history SET gate_status='PENDING' WHERE event_id=1")
+        with pytest.raises(sqlite3.IntegrityError, match="STARTUP_RECONCILIATION_HISTORY_APPEND_ONLY"):
+            connection.execute("DELETE FROM startup_reconciliation_history WHERE event_id=1")
+
+
+def test_startup_lineage_audit_marks_unknown_manifest_version_without_changing_gate(tmp_path):
+    import sqlite3
+
+    from environments.live.settlement.sqlite_settlement_store import encode_record
+    from application.composition.validation_only_account_snapshot_startup_adapter import (
+        ValidationOnlyAccountSnapshotStartupAdapter,
+    )
+
+    bundle, validation, reconciliation, baseline_import, store = _prepare_validation_startup_fixture(tmp_path)
+    result = ValidationOnlyAccountSnapshotStartupAdapter(store, validation_only=True).reconcile_startup(
+        bundle=bundle, validation=validation, reconciliation=reconciliation,
+        baseline_import=baseline_import,
+    )
+    assert result.is_valid and result.resolved
+
+    future_manifest = {"manifest_version": "Q25-A8-U19-BASELINE-STARTUP-LINEAGE-v999"}
+    payload = {
+        "payload_sha256": "0" * 64,
+        "lineage_manifest": future_manifest,
+    }
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            """INSERT INTO startup_reconciliation_history
+               (event_type,gate_status,evidence_sha256,manifest_version,
+                baseline_evidence_sha256,payload_json)
+               VALUES('STARTUP_RESOLVED','RESOLVED',?,?,?,?)""",
+            (
+                "0" * 64, future_manifest["manifest_version"],
+                baseline_import.evidence_sha256, encode_record(payload),
+            ),
+        )
+
+    audit = store.startup_lineage_audit()
+    assert audit["current_gate_status"] == "RESOLVED"
+    assert audit["history"][-1]["lineage_status"] == "UNSUPPORTED_MANIFEST_VERSION"
+
+
+def test_startup_lineage_audit_detects_baseline_evidence_replacement(tmp_path):
+    import json
+    import sqlite3
+
+    from application.composition.validation_only_account_snapshot_startup_adapter import (
+        ValidationOnlyAccountSnapshotStartupAdapter,
+    )
+
+    bundle, validation, reconciliation, baseline_import, store = _prepare_validation_startup_fixture(tmp_path)
+    result = ValidationOnlyAccountSnapshotStartupAdapter(store, validation_only=True).reconcile_startup(
+        bundle=bundle, validation=validation, reconciliation=reconciliation,
+        baseline_import=baseline_import,
+    )
+    assert result.is_valid and result.resolved
+
+    with sqlite3.connect(store.path) as connection:
+        row = connection.execute(
+            "SELECT value FROM settlement_meta WHERE key='authoritative_baseline_evidence'"
+        ).fetchone()
+        evidence = json.loads(row[0])
+        evidence["payload_sha256"] = "f" * 64
+        connection.execute(
+            "UPDATE settlement_meta SET value=? WHERE key='authoritative_baseline_evidence'",
+            (json.dumps(evidence, sort_keys=True, separators=(",", ":")),),
+        )
+
+    audit = store.startup_lineage_audit()
+    resolved_events = [item for item in audit["history"] if item["event_type"] == "STARTUP_RESOLVED"]
+    assert resolved_events
+    assert all(
+        item["lineage_status"] == "BASELINE_EVIDENCE_CHANGED_SINCE_RESOLUTION"
+        for item in resolved_events
+    )
+    assert audit["current_gate_status"] == "RESOLVED"
+
+
+def test_validation_baseline_import_rejects_changed_snapshot_ids_without_overwriting_baseline(tmp_path):
+    from application.composition.validation_only_account_snapshot_baseline_adapter import (
+        ValidationOnlyAccountSnapshotBaselineAdapter,
+        ValidationOnlyBaselineImportError,
+    )
+
+    bundle, validation, reconciliation, baseline_import, store = _prepare_validation_startup_fixture(tmp_path)
+    changed_bundle = replace(
+        bundle,
+        orders=_section("orders-new-snapshot-cycle", AS_OF, bundle.orders.rows),
+    )
+    changed_validation = validate_account_snapshot_bundle(changed_bundle)
+    assert changed_validation.is_valid
+    adapter = ValidationOnlyAccountSnapshotBaselineAdapter(store, validation_only=True)
+    with pytest.raises(ValidationOnlyBaselineImportError, match="BASELINE_EVIDENCE_IDEMPOTENCY_CONFLICT"):
+        adapter.import_reconciled_snapshot(
+            bundle=changed_bundle, validation=changed_validation, reconciliation=reconciliation,
+        )
+    persisted = store.authoritative_baseline_evidence()
+    assert persisted["orders_snapshot_id"] == bundle.orders.snapshot_id
+    assert persisted["payload_sha256"] == baseline_import.evidence_sha256
+
+
+def test_startup_lineage_audit_surfaces_legacy_unversioned_evidence_without_mutation(tmp_path):
+    import sqlite3
+
+    from environments.live.settlement.sqlite_settlement_store import encode_record
+
+    bundle, validation, reconciliation, baseline_import, store = _prepare_validation_startup_fixture(tmp_path)
+    legacy = {
+        "source": "VALIDATION_ONLY:LEGACY_STARTUP",
+        "payload_sha256": "a" * 64,
+        "orders_snapshot_id": bundle.orders.snapshot_id,
+        "executions_snapshot_id": bundle.executions.snapshot_id,
+        "positions_snapshot_id": bundle.positions.snapshot_id,
+    }
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            """INSERT INTO settlement_meta(key,value) VALUES('startup_reconciliation_evidence',?)""",
+            (encode_record(legacy),),
+        )
+
+    audit = store.startup_lineage_audit()
+    assert audit["current_gate_status"] == "PENDING"
+    legacy_events = [item for item in audit["history"] if item["event_type"] == "LEGACY_EXISTING_EVIDENCE"]
+    assert len(legacy_events) == 1
+    assert legacy_events[0]["lineage_status"] == "LEGACY_UNVERSIONED"
+    assert store.reconciliation_status("__startup_reconciliation__") == "PENDING"
+
+
+def test_startup_lineage_audit_detects_manifest_hash_mismatch(tmp_path):
+    import sqlite3
+
+    from environments.live.settlement.sqlite_settlement_store import encode_record
+
+    bundle, validation, reconciliation, baseline_import, store = _prepare_validation_startup_fixture(tmp_path)
+    manifest = {
+        "manifest_version": "Q25-A8-U19-BASELINE-STARTUP-LINEAGE-v1",
+        "baseline_import_evidence_sha256": baseline_import.evidence_sha256,
+    }
+    payload = {"payload_sha256": "0" * 64, "lineage_manifest": manifest}
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            """INSERT INTO startup_reconciliation_history
+               (event_type,gate_status,evidence_sha256,manifest_version,
+                baseline_evidence_sha256,payload_json)
+               VALUES('STARTUP_RESOLVED','RESOLVED',?,?,?,?)""",
+            (
+                "0" * 64, manifest["manifest_version"],
+                baseline_import.evidence_sha256, encode_record(payload),
+            ),
+        )
+
+    audit = store.startup_lineage_audit()
+    assert audit["current_gate_status"] == "PENDING"
+    assert audit["history"][-1]["lineage_status"] == "MANIFEST_HASH_MISMATCH"
