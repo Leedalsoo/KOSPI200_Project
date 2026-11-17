@@ -162,6 +162,19 @@ def _event_ids_valid(events: tuple[U19ExecutionEvent, ...]) -> bool:
     return True
 
 
+def _deduplicate_execution_events(
+    events: tuple[U19ExecutionEvent, ...],
+) -> tuple[U19ExecutionEvent, ...]:
+    seen: set[str] = set()
+    unique: list[U19ExecutionEvent] = []
+    for event in events:
+        if event.execution_id in seen:
+            continue
+        seen.add(event.execution_id)
+        unique.append(event)
+    return tuple(unique)
+
+
 def _checkpoint_id(
     group_id: str,
     status: U19RecoveryStatus,
@@ -258,7 +271,11 @@ def evaluate_u19_recovery(
         ledger_snapshot_id=ledger_snapshot.snapshot_id if ledger_snapshot else None,
         broker_positions=tuple(broker_snapshot.positions) if broker_snapshot else (),
         ledger_positions=tuple(ledger_snapshot.positions) if ledger_snapshot else (),
-        execution_events=tuple(ledger_snapshot.execution_events) if ledger_snapshot else (),
+        execution_events=(
+            _deduplicate_execution_events(tuple(ledger_snapshot.execution_events))
+            if ledger_snapshot and _event_ids_valid(tuple(ledger_snapshot.execution_events))
+            else tuple(ledger_snapshot.execution_events) if ledger_snapshot else ()
+        ),
         pending_order_ids=tuple(ledger_snapshot.pending_order_ids) if ledger_snapshot else (),
         restore_allowed=allowed,
         strategy_resume_allowed=allowed,

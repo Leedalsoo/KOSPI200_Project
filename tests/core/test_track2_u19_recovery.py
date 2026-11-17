@@ -140,6 +140,7 @@ def test_duplicate_execution_id_with_same_fingerprint_is_idempotent():
     events = (U19ExecutionEvent("exec-1", "fill-fingerprint"), U19ExecutionEvent("exec-1", "fill-fingerprint"))
     result = evaluate_u19_recovery(group_id=GROUP, broker_snapshot=broker(), ledger_snapshot=ledger(events=events))
     assert result.status is U19RecoveryStatus.RESTORE_ALLOWED
+    assert result.execution_events == (events[0],)
 
 
 def test_duplicate_execution_id_with_conflicting_fingerprint_blocks():
@@ -456,3 +457,71 @@ def test_four_leg_late_fill_blocks_restart_then_reconciles_before_restore(tmp_pa
     assert persisted["new_entry_enabled"] is False
     assert persisted["order_submission_enabled"] is False
     assert persisted["runtime_restore_performed"] is False
+
+
+
+def test_execution_event_replay_in_out_of_order_delivery_is_stable_and_deduplicated(tmp_path):
+    path = tmp_path / "u19-out-of-order-replay.sqlite3"
+    events = (
+        U19ExecutionEvent("exec-3", "fingerprint-3"),
+        U19ExecutionEvent("exec-1", "fingerprint-1"),
+        U19ExecutionEvent("exec-2", "fingerprint-2"),
+        U19ExecutionEvent("exec-1", "fingerprint-1"),
+        U19ExecutionEvent("exec-3", "fingerprint-3"),
+    )
+    decision = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(path)
+    ).recover(group_id=GROUP, broker_snapshot=broker(), ledger_snapshot=ledger(events=events))
+    assert decision.status is U19RecoveryStatus.RESTORE_ALLOWED
+    assert decision.execution_events == events[:3]
+    persisted = SqliteTrack2U19RecoveryStore(path).load_latest(GROUP)
+    assert persisted["execution_events"] == [
+        {"execution_id": "exec-3", "fingerprint": "fingerprint-3"},
+        {"execution_id": "exec-1", "fingerprint": "fingerprint-1"},
+        {"execution_id": "exec-2", "fingerprint": "fingerprint-2"},
+    ]
+
+
+def test_cancel_fill_race_remains_pending_until_terminal_and_position_reconciliation():
+    filled_position = (U19Position("SYNTHETIC_CONTRACT:S2:leg-4", Decimal("1")),)
+    late_fill = U19ExecutionEvent("late-fill-4", "late-fill-fingerprint-4")
+
+    # Fill event and cancel request coexist: order is still unresolved, so restore must wait.
+    during_race = evaluate_u19_recovery(
+        group_id=GROUP,
+        broker_snapshot=broker(positions=filled_position),
+        ledger_snapshot=ledger(
+            positions=filled_position,
+            events=(late_fill,),
+            pending=("cancel-pending-client-order-4",),
+        ),
+    )
+    assert during_race.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+    assert during_race.restore_allowed is False
+
+    # A terminal cancel acknowledgement alone is insufficient while broker and ledger disagree.
+    after_cancel_ack = evaluate_u19_recovery(
+        group_id=GROUP,
+        broker_snapshot=broker(positions=filled_position),
+        ledger_snapshot=ledger(
+            positions=(),
+            events=(late_fill,),
+            pending=(),
+        ),
+    )
+    assert after_cancel_ack.status is U19RecoveryStatus.POSITION_LEDGER_MISMATCH
+    assert after_cancel_ack.restore_allowed is False
+
+    # Once the late fill is reconciled in both views, replay duplicates are collapsed by execution ID.
+    reconciled = evaluate_u19_recovery(
+        group_id=GROUP,
+        broker_snapshot=broker(positions=filled_position),
+        ledger_snapshot=ledger(
+            positions=filled_position,
+            events=(late_fill, late_fill),
+            pending=(),
+        ),
+    )
+    assert reconciled.status is U19RecoveryStatus.RESTORE_ALLOWED
+    assert reconciled.execution_events == (late_fill,)
+    assert reconciled.pending_order_ids == ()
