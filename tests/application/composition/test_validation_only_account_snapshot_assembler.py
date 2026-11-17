@@ -176,3 +176,16 @@ def test_account_snapshot_bundle_rejects_live_source_and_execution_before_openin
     assert "NON_VALIDATION_SOURCE_REJECTED:orders-snapshot-001" in result.issues
     assert "EXECUTION_BEFORE_OPENING_POSITION_SNAPSHOT:SYNTHETIC:FILL-001" in result.issues
     assert result.status == "RECONCILIATION_REQUIRED"
+
+
+def test_account_snapshot_bundle_accepts_out_of_order_unique_execution_rows_deterministically():
+    bundle = _bundle()
+    reversed_rows = tuple(reversed(bundle.executions.rows))
+    reordered = replace(
+        bundle,
+        executions=_section(bundle.executions.snapshot_id, AS_OF, reversed_rows),
+    )
+    result = validate_account_snapshot_bundle(reordered)
+    assert result.is_valid
+    assert result.status == "VALIDATION_ONLY_RECONCILED"
+    assert result.normalized_positions == validate_account_snapshot_bundle(bundle).normalized_positions
