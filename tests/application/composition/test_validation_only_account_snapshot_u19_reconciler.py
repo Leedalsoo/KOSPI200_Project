@@ -1478,3 +1478,229 @@ def test_startup_lineage_audit_detects_manifest_hash_mismatch(tmp_path):
     audit = store.startup_lineage_audit()
     assert audit["current_gate_status"] == "PENDING"
     assert audit["history"][-1]["lineage_status"] == "MANIFEST_HASH_MISMATCH"
+
+
+def test_validation_only_baseline_generation_reset_preserves_history_and_reconciles_new_manifest(tmp_path):
+    from application.composition.validation_only_account_snapshot_baseline_adapter import (
+        ValidationOnlyAccountSnapshotBaselineAdapter,
+    )
+    from application.composition.validation_only_account_snapshot_startup_adapter import (
+        ValidationOnlyAccountSnapshotStartupAdapter,
+    )
+
+    bundle, validation, reconciliation, baseline_import, store = _prepare_validation_startup_fixture(tmp_path)
+    startup_adapter = ValidationOnlyAccountSnapshotStartupAdapter(store, validation_only=True)
+    first_startup = startup_adapter.reconcile_startup(
+        bundle=bundle, validation=validation, reconciliation=reconciliation,
+        baseline_import=baseline_import,
+    )
+    assert first_startup.is_valid and first_startup.resolved
+
+    changed_bundle = replace(
+        bundle,
+        orders=replace(bundle.orders, snapshot_id="orders-generation-2"),
+        executions=replace(bundle.executions, snapshot_id="executions-generation-2"),
+        positions=replace(bundle.positions, snapshot_id="positions-generation-2"),
+        provenance=replace(
+            bundle.provenance,
+            deterministic_rule_id="SYNTHETIC-ACCOUNT-REPLAY-RULE-v2",
+        ),
+    )
+    changed_validation = validate_account_snapshot_bundle(changed_bundle)
+    assert changed_validation.is_valid
+    reset_result = ValidationOnlyAccountSnapshotBaselineAdapter(
+        store, validation_only=True,
+    ).import_reconciled_snapshot(
+        bundle=changed_bundle,
+        validation=changed_validation,
+        reconciliation=reconciliation,
+        expected_previous_evidence_sha256=baseline_import.evidence_sha256,
+        reset_reason="VALIDATION_ONLY_NEW_SNAPSHOT_GENERATION_AFTER_SOURCE_CROSSCHECK",
+    )
+    assert reset_result.status == "VALIDATION_ONLY_BASELINE_GENERATION_REPLACED_STARTUP_PENDING"
+    assert reset_result.evidence_sha256 != baseline_import.evidence_sha256
+    assert store.reconciliation_status("__startup_reconciliation__") == "PENDING"
+
+    second_startup = startup_adapter.reconcile_startup(
+        bundle=changed_bundle,
+        validation=changed_validation,
+        reconciliation=reconciliation,
+        baseline_import=reset_result,
+    )
+    assert second_startup.is_valid and second_startup.resolved
+
+    history = store.validation_baseline_history()
+    assert len(history) == 2
+    assert history[0]["event_type"] == "INITIAL_IMPORT"
+    assert history[1]["event_type"] == "VALIDATION_ONLY_RESET"
+    assert history[1]["previous_payload_sha256"] == baseline_import.evidence_sha256
+    assert history[1]["new_payload_sha256"] == reset_result.evidence_sha256
+    assert history[1]["reset_reason"] == "VALIDATION_ONLY_NEW_SNAPSHOT_GENERATION_AFTER_SOURCE_CROSSCHECK"
+
+    baseline_audit = store.validation_baseline_lineage_audit()
+    assert baseline_audit["generation_count"] == 2
+    assert baseline_audit["history_chain_valid"] is True
+    assert baseline_audit["current_baseline_matches_latest_generation"] is True
+    assert all(item["lineage_status"] == "CHAIN_VALID" for item in baseline_audit["history"])
+
+    audit = store.startup_lineage_audit()
+    assert audit["baseline_lineage"]["history_chain_valid"] is True
+    resolutions = [item for item in audit["history"] if item["event_type"] == "STARTUP_RESOLVED"]
+    assert len(resolutions) == 2
+    assert resolutions[0]["lineage_status"] == "BASELINE_EVIDENCE_CHANGED_SINCE_RESOLUTION"
+    assert resolutions[1]["lineage_status"] == "SUPPORTED_CURRENT_BASELINE"
+    assert audit["current_gate_status"] == "RESOLVED"
+
+
+def test_validation_only_baseline_reset_rejects_position_changes_without_mutation(tmp_path):
+    from environments.live.settlement.sqlite_settlement_store import SettlementStoreError
+
+    bundle, validation, reconciliation, baseline_import, store = _prepare_validation_startup_fixture(tmp_path)
+    positions = validation.baseline_positions_payload()
+    changed_positions = [dict(item) for item in positions]
+    changed_positions[0]["qty"] = int(changed_positions[0]["qty"]) + 1
+    with pytest.raises(SettlementStoreError, match="BASELINE_RESET_POSITION_STATE_CHANGE_REQUIRES_SEPARATE_RECONCILIATION"):
+        store.replace_validation_only_baseline_snapshot(
+            positions_payload=changed_positions,
+            orders_snapshot_id="orders-position-change",
+            executions_snapshot_id="executions-position-change",
+            positions_snapshot_id="positions-position-change",
+            as_of=validation.as_of,
+            source="VALIDATION_ONLY:ACCOUNT_U19_BASELINE_IMPORT",
+            payload_sha256="b" * 64,
+            authoritative_evidence_ref="VALIDATION_ONLY:RESET_POSITION_CHANGE",
+            expected_previous_payload_sha256=baseline_import.evidence_sha256,
+            reset_reason="TEST_POSITION_CHANGE_MUST_NOT_BE_SILENTLY_ACCEPTED",
+        )
+    assert store.authoritative_baseline_evidence()["payload_sha256"] == baseline_import.evidence_sha256
+    assert len(store.validation_baseline_history()) == 1
+    assert store.reconciliation_status("__startup_reconciliation__") == "PENDING"
+
+
+def test_validation_only_baseline_reset_preserves_pending_inbox_and_conflict(tmp_path):
+    from environments.live.settlement.sqlite_settlement_store import SettlementStoreError
+
+    bundle, validation, reconciliation, baseline_import, store = _prepare_validation_startup_fixture(tmp_path)
+    store.record_reconciliation_event_pending(
+        event_id="SYNTHETIC:RESET-LATE-FILL",
+        client_order_id="client-reset-pending",
+        broker_order_id="broker-reset-pending",
+        event_kind="KIS_REST_CUMULATIVE_ORDER_SNAPSHOT",
+        payload={"cumulative_filled_quantity": 1},
+    )
+    with pytest.raises(SettlementStoreError, match="BASELINE_IMPORT_HAS_OTHER_UNRESOLVED_RECONCILIATION"):
+        store.replace_validation_only_baseline_snapshot(
+            positions_payload=validation.baseline_positions_payload(),
+            orders_snapshot_id="orders-reset-pending",
+            executions_snapshot_id="executions-reset-pending",
+            positions_snapshot_id="positions-reset-pending",
+            as_of=validation.as_of,
+            source="VALIDATION_ONLY:ACCOUNT_U19_BASELINE_IMPORT",
+            payload_sha256="c" * 64,
+            authoritative_evidence_ref="VALIDATION_ONLY:RESET_PENDING",
+            expected_previous_payload_sha256=baseline_import.evidence_sha256,
+            reset_reason="TEST_PENDING_INBOX_MUST_REMAIN_OPEN",
+        )
+    assert store.authoritative_baseline_evidence()["payload_sha256"] == baseline_import.evidence_sha256
+    assert store.open_reconciliation_events()[0]["status"] == "PENDING"
+    assert len(store.validation_baseline_history()) == 1
+
+
+def test_validation_only_baseline_reset_rejects_persisted_orders_and_startup_conflict(tmp_path):
+    from environments.live.settlement.sqlite_settlement_store import SettlementStoreError
+
+    bundle, validation, reconciliation, baseline_import, store = _prepare_validation_startup_fixture(tmp_path)
+    store.save_order_state("client-existing-order", {"status": "FILLED"})
+    with pytest.raises(SettlementStoreError, match="BASELINE_RESET_PERSISTED_ORDERS_PRESENT"):
+        store.replace_validation_only_baseline_snapshot(
+            positions_payload=validation.baseline_positions_payload(),
+            orders_snapshot_id="orders-reset-order",
+            executions_snapshot_id="executions-reset-order",
+            positions_snapshot_id="positions-reset-order",
+            as_of=validation.as_of,
+            source="VALIDATION_ONLY:ACCOUNT_U19_BASELINE_IMPORT",
+            payload_sha256="d" * 64,
+            authoritative_evidence_ref="VALIDATION_ONLY:RESET_ORDER",
+            expected_previous_payload_sha256=baseline_import.evidence_sha256,
+            reset_reason="TEST_EXISTING_ORDER_STATE_MUST_BLOCK_RESET",
+        )
+    assert store.authoritative_baseline_evidence()["payload_sha256"] == baseline_import.evidence_sha256
+
+    conflict_dir = tmp_path / "conflict-case"
+    conflict_dir.mkdir()
+    bundle, validation, reconciliation, baseline_import, store = _prepare_validation_startup_fixture(
+        conflict_dir
+    )
+    store.mark_reconciliation_pending(
+        scope_key="__startup_reconciliation__",
+        client_order_id="__startup_reconciliation__",
+        broker_order_id=None,
+        reason="TEST_STARTUP_CONFLICT",
+        payload={"conflict": True},
+        conflict=True,
+    )
+    with pytest.raises(SettlementStoreError, match="BASELINE_RESET_STARTUP_CONFLICT_REQUIRES_MANUAL_REVIEW"):
+        store.replace_validation_only_baseline_snapshot(
+            positions_payload=validation.baseline_positions_payload(),
+            orders_snapshot_id="orders-reset-conflict",
+            executions_snapshot_id="executions-reset-conflict",
+            positions_snapshot_id="positions-reset-conflict",
+            as_of=validation.as_of,
+            source="VALIDATION_ONLY:ACCOUNT_U19_BASELINE_IMPORT",
+            payload_sha256="e" * 64,
+            authoritative_evidence_ref="VALIDATION_ONLY:RESET_CONFLICT",
+            expected_previous_payload_sha256=baseline_import.evidence_sha256,
+            reset_reason="TEST_CONFLICT_MUST_REMAIN_MANUAL",
+        )
+    assert store.reconciliation_status("__startup_reconciliation__") == "CONFLICT"
+    assert store.authoritative_baseline_evidence()["payload_sha256"] == baseline_import.evidence_sha256
+    assert len(store.validation_baseline_history()) == 1
+
+
+def test_validation_baseline_history_is_append_only_after_reset(tmp_path):
+    import sqlite3
+    from environments.live.settlement.sqlite_settlement_store import SettlementStoreError
+
+    bundle, validation, reconciliation, baseline_import, store = _prepare_validation_startup_fixture(tmp_path)
+    store.replace_validation_only_baseline_snapshot(
+        positions_payload=validation.baseline_positions_payload(),
+        orders_snapshot_id="orders-reset-same-position",
+        executions_snapshot_id="executions-reset-same-position",
+        positions_snapshot_id="positions-reset-same-position",
+        as_of=validation.as_of,
+        source="VALIDATION_ONLY:ACCOUNT_U19_BASELINE_IMPORT",
+        payload_sha256="9" * 64,
+        authoritative_evidence_ref="VALIDATION_ONLY:RESET_SAME_POSITION",
+        expected_previous_payload_sha256=baseline_import.evidence_sha256,
+        reset_reason="TEST_EXPLICIT_NEW_SNAPSHOT_GENERATION",
+    )
+    with sqlite3.connect(store.path) as connection:
+        with pytest.raises(sqlite3.IntegrityError, match="VALIDATION_BASELINE_HISTORY_APPEND_ONLY"):
+            connection.execute(
+                "UPDATE validation_baseline_history SET reset_reason='rewritten' WHERE generation_id=1"
+            )
+        with pytest.raises(sqlite3.IntegrityError, match="VALIDATION_BASELINE_HISTORY_APPEND_ONLY"):
+            connection.execute("DELETE FROM validation_baseline_history WHERE generation_id=1")
+
+
+def test_validation_baseline_lineage_audit_detects_current_generation_hash_replacement(tmp_path):
+    import json
+    import sqlite3
+
+    bundle, validation, reconciliation, baseline_import, store = _prepare_validation_startup_fixture(tmp_path)
+    with sqlite3.connect(store.path) as connection:
+        row = connection.execute(
+            "SELECT value FROM settlement_meta WHERE key='authoritative_baseline_evidence'"
+        ).fetchone()
+        payload = json.loads(row[0])
+        payload["payload_sha256"] = "f" * 64
+        connection.execute(
+            "UPDATE settlement_meta SET value=? WHERE key='authoritative_baseline_evidence'",
+            (json.dumps(payload, sort_keys=True, separators=(",", ":")),),
+        )
+
+    audit = store.validation_baseline_lineage_audit()
+    assert audit["generation_count"] == 1
+    assert audit["history_chain_valid"] is False
+    assert audit["current_baseline_matches_latest_generation"] is False
+    assert audit["history"][0]["lineage_status"] == "CHAIN_VALID"

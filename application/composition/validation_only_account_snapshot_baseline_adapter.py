@@ -33,6 +33,7 @@ class ValidationOnlyBaselineImportResult:
         return self.status in {
             "VALIDATION_ONLY_BASELINE_IMPORTED_STARTUP_PENDING",
             "VALIDATION_ONLY_BASELINE_ALREADY_IMPORTED",
+            "VALIDATION_ONLY_BASELINE_GENERATION_REPLACED_STARTUP_PENDING",
         }
 
 
@@ -46,7 +47,11 @@ class ValidationOnlyAccountSnapshotBaselineAdapter:
             raise ValidationOnlyBaselineImportError("VALIDATION_ONLY_BASELINE_OPT_IN_REQUIRED")
         self.settlement_store = settlement_store
 
-    def import_reconciled_snapshot(self, *, bundle, validation, reconciliation) -> ValidationOnlyBaselineImportResult:
+    def import_reconciled_snapshot(
+        self, *, bundle, validation, reconciliation,
+        expected_previous_evidence_sha256: str | None = None,
+        reset_reason: str | None = None,
+    ) -> ValidationOnlyBaselineImportResult:
         if not validation.is_valid or validation.as_of is None or not validation.evidence_sha256:
             raise ValidationOnlyBaselineImportError("ACCOUNT_SNAPSHOT_VALIDATION_REQUIRED")
         current_validation = validate_account_snapshot_bundle(bundle)
@@ -136,8 +141,34 @@ class ValidationOnlyAccountSnapshotBaselineAdapter:
                 and existing.get("as_of") == validation.as_of.isoformat()
             )
             if not same_evidence:
+                if not expected_previous_evidence_sha256 or not str(reset_reason or "").strip():
+                    raise ValidationOnlyBaselineImportError(
+                        "BASELINE_EVIDENCE_IDEMPOTENCY_CONFLICT"
+                    )
+                try:
+                    store.replace_validation_only_baseline_snapshot(
+                        positions_payload=positions_payload,
+                        orders_snapshot_id=bundle.orders.snapshot_id,
+                        executions_snapshot_id=bundle.executions.snapshot_id,
+                        positions_snapshot_id=bundle.positions.snapshot_id,
+                        as_of=validation.as_of,
+                        source=self.SOURCE,
+                        payload_sha256=evidence_sha256,
+                        authoritative_evidence_ref=f"VALIDATION_ONLY:ACCOUNT_U19_BASELINE:{evidence_sha256}",
+                        expected_previous_payload_sha256=expected_previous_evidence_sha256,
+                        reset_reason=reset_reason,
+                    )
+                except Exception as exc:
+                    raise ValidationOnlyBaselineImportError(str(exc)) from exc
+                return ValidationOnlyBaselineImportResult(
+                    status="VALIDATION_ONLY_BASELINE_GENERATION_REPLACED_STARTUP_PENDING",
+                    evidence_sha256=evidence_sha256,
+                    imported_position_count=len(positions_payload),
+                    startup_gate_status="PENDING",
+                )
+            if expected_previous_evidence_sha256 is not None or reset_reason is not None:
                 raise ValidationOnlyBaselineImportError(
-                    "BASELINE_EVIDENCE_IDEMPOTENCY_CONFLICT"
+                    "BASELINE_RESET_NOT_REQUIRED_FOR_IDENTICAL_EVIDENCE"
                 )
             startup_status = store.reconciliation_status("__startup_reconciliation__")
             return ValidationOnlyBaselineImportResult(
@@ -147,6 +178,10 @@ class ValidationOnlyAccountSnapshotBaselineAdapter:
                 startup_gate_status=startup_status or "UNREGISTERED",
             )
 
+        if expected_previous_evidence_sha256 is not None or reset_reason is not None:
+            raise ValidationOnlyBaselineImportError(
+                "BASELINE_RESET_REQUIRES_EXISTING_BASELINE_EVIDENCE"
+            )
         store.ensure_authoritative_baseline_gate()
         unresolved = store.unresolved_reconciliations()
         if any(

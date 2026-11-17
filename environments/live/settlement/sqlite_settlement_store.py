@@ -127,6 +127,24 @@ class SQLiteSettlementStore:
                     evidence_ref TEXT,
                     received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
+                CREATE TABLE IF NOT EXISTS validation_baseline_history (
+                    generation_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_type TEXT NOT NULL CHECK(event_type IN ('INITIAL_IMPORT','VALIDATION_ONLY_RESET')),
+                    previous_payload_sha256 TEXT,
+                    new_payload_sha256 TEXT NOT NULL,
+                    snapshot_ids_json TEXT NOT NULL,
+                    as_of TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    reset_reason TEXT,
+                    payload_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TRIGGER IF NOT EXISTS validation_baseline_history_no_update
+                BEFORE UPDATE ON validation_baseline_history
+                BEGIN SELECT RAISE(ABORT, 'VALIDATION_BASELINE_HISTORY_APPEND_ONLY'); END;
+                CREATE TRIGGER IF NOT EXISTS validation_baseline_history_no_delete
+                BEFORE DELETE ON validation_baseline_history
+                BEGIN SELECT RAISE(ABORT, 'VALIDATION_BASELINE_HISTORY_APPEND_ONLY'); END;
                 CREATE TABLE IF NOT EXISTS startup_reconciliation_history (
                     event_id INTEGER PRIMARY KEY AUTOINCREMENT,
                     event_type TEXT NOT NULL CHECK(event_type IN (
@@ -905,7 +923,46 @@ class SQLiteSettlementStore:
             ).fetchone()
         return str(row["status"]) if row is not None else None
 
-    def establish_authoritative_baseline_snapshot(
+    def establish_authoritative_baseline_snapshot(self, **snapshot_kwargs: Any) -> None:
+        """Create the first baseline; replacement requires the explicit validation-only reset API."""
+        self._write_authoritative_baseline_snapshot(**snapshot_kwargs)
+
+    def replace_validation_only_baseline_snapshot(
+        self,
+        *,
+        expected_previous_payload_sha256: str,
+        reset_reason: str,
+        **snapshot_kwargs: Any,
+    ) -> None:
+        """Append a new validation-only baseline generation without discarding prior lineage."""
+        self._write_authoritative_baseline_snapshot(
+            **snapshot_kwargs,
+            _validation_only_reset=True,
+            _expected_previous_payload_sha256=expected_previous_payload_sha256,
+            _reset_reason=reset_reason,
+        )
+
+    def validation_baseline_history(self) -> tuple[dict[str, Any], ...]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                """SELECT generation_id,event_type,previous_payload_sha256,new_payload_sha256,
+                          snapshot_ids_json,as_of,source,reset_reason,payload_json,created_at
+                   FROM validation_baseline_history ORDER BY generation_id"""
+            ).fetchall()
+        return tuple({
+            "generation_id": row["generation_id"],
+            "event_type": row["event_type"],
+            "previous_payload_sha256": row["previous_payload_sha256"],
+            "new_payload_sha256": row["new_payload_sha256"],
+            "snapshot_ids": json.loads(row["snapshot_ids_json"]),
+            "as_of": row["as_of"],
+            "source": row["source"],
+            "reset_reason": row["reset_reason"],
+            "payload": json.loads(row["payload_json"]),
+            "created_at": row["created_at"],
+        } for row in rows)
+
+    def _write_authoritative_baseline_snapshot(
         self,
         *,
         positions_payload: Sequence[Mapping[str, Any]],
@@ -916,8 +973,11 @@ class SQLiteSettlementStore:
         source: str,
         payload_sha256: str,
         authoritative_evidence_ref: str,
+        _validation_only_reset: bool = False,
+        _expected_previous_payload_sha256: str | None = None,
+        _reset_reason: str | None = None,
     ) -> None:
-        """Atomically import a complete multi-instrument account baseline.
+        """Atomically import or explicitly reset a multi-instrument validation baseline.
 
         This releases only the initial runtime bootstrap gate. The separate
         per-startup orders/fills/positions reconciliation gate remains pending.
@@ -997,6 +1057,56 @@ class SQLiteSettlementStore:
             if open_inbox or other_unresolved:
                 raise SettlementStoreError("BASELINE_IMPORT_HAS_OTHER_UNRESOLVED_RECONCILIATION")
 
+            previous_row = connection.execute(
+                "SELECT value FROM settlement_meta WHERE key='authoritative_baseline_evidence'"
+            ).fetchone()
+            previous_payload = json.loads(previous_row["value"]) if previous_row is not None else None
+            previous_digest = previous_payload.get("payload_sha256") if previous_payload else None
+            if previous_payload is not None and not _validation_only_reset:
+                raise SettlementStoreError("BASELINE_ALREADY_EXISTS_USE_EXPLICIT_VALIDATION_ONLY_RESET")
+            if _validation_only_reset:
+                if not source_value.startswith("VALIDATION_ONLY:"):
+                    raise SettlementStoreError("BASELINE_RESET_VALIDATION_ONLY_SOURCE_REQUIRED")
+                if previous_payload is None or not _expected_previous_payload_sha256:
+                    raise SettlementStoreError("BASELINE_RESET_PREVIOUS_EVIDENCE_REQUIRED")
+                if previous_digest != str(_expected_previous_payload_sha256).strip().lower():
+                    raise SettlementStoreError("BASELINE_RESET_PREVIOUS_EVIDENCE_MISMATCH")
+                if not str(_reset_reason or "").strip():
+                    raise SettlementStoreError("BASELINE_RESET_REASON_REQUIRED")
+                order_count = connection.execute("SELECT COUNT(*) AS n FROM order_states").fetchone()["n"]
+                if order_count:
+                    raise SettlementStoreError("BASELINE_RESET_PERSISTED_ORDERS_PRESENT")
+                current_positions = {
+                    row["instrument_id"]: json.loads(row["position_json"])
+                    for row in connection.execute(
+                        "SELECT instrument_id,position_json FROM position_states"
+                    ).fetchall()
+                }
+                new_positions = {item["instrument_id"]: item for item in normalized_positions}
+                if current_positions != new_positions:
+                    raise SettlementStoreError("BASELINE_RESET_POSITION_STATE_CHANGE_REQUIRES_SEPARATE_RECONCILIATION")
+                startup_gate = connection.execute(
+                    "SELECT status FROM reconciliation_state WHERE scope_key='__startup_reconciliation__'"
+                ).fetchone()
+                if startup_gate is not None and startup_gate["status"] == "CONFLICT":
+                    raise SettlementStoreError("BASELINE_RESET_STARTUP_CONFLICT_REQUIRES_MANUAL_REVIEW")
+
+            connection.execute(
+                """INSERT INTO validation_baseline_history
+                   (event_type,previous_payload_sha256,new_payload_sha256,snapshot_ids_json,
+                    as_of,source,reset_reason,payload_json)
+                   VALUES(?,?,?,?,?,?,?,?)""",
+                (
+                    "VALIDATION_ONLY_RESET" if _validation_only_reset else "INITIAL_IMPORT",
+                    previous_digest,
+                    digest,
+                    encode_record(list(snapshot_ids)),
+                    as_of.isoformat(),
+                    source_value,
+                    str(_reset_reason).strip() if _validation_only_reset else None,
+                    encoded,
+                ),
+            )
             connection.execute("DELETE FROM position_states")
             for item in normalized_positions:
                 connection.execute(
@@ -1025,6 +1135,27 @@ class SQLiteSettlementStore:
                      updated_at=CURRENT_TIMESTAMP""",
                 (evidence, encoded),
             )
+            if _validation_only_reset:
+                connection.execute(
+                    """INSERT INTO reconciliation_state
+                       (scope_key,client_order_id,broker_order_id,status,reason,payload_json,updated_at)
+                       VALUES('__startup_reconciliation__','__startup_reconciliation__',NULL,'PENDING',
+                              'VALIDATION_ONLY_BASELINE_GENERATION_CHANGED',
+                              '{"requirement":"orders_fills_positions"}',CURRENT_TIMESTAMP)
+                       ON CONFLICT(scope_key) DO UPDATE SET status='PENDING',
+                         reason=excluded.reason,evidence_ref=NULL,payload_json=excluded.payload_json,
+                         updated_at=CURRENT_TIMESTAMP"""
+                )
+                connection.execute(
+                    """INSERT INTO startup_reconciliation_history
+                       (event_type,gate_status,baseline_evidence_sha256,payload_json)
+                       VALUES('GATE_REARMED','PENDING',?,?)""",
+                    (digest, encode_record({
+                        "reason": "VALIDATION_ONLY_BASELINE_GENERATION_CHANGED",
+                        "previous_baseline_evidence_sha256": previous_digest,
+                        "new_baseline_evidence_sha256": digest,
+                    })),
+                )
             connection.commit()
         except Exception as exc:
             connection.rollback()
@@ -1053,9 +1184,51 @@ class SQLiteSettlementStore:
             "created_at": row["created_at"],
         } for row in rows)
 
+    def validation_baseline_lineage_audit(self) -> dict[str, Any]:
+        """Verify the append-only baseline generation chain against the current baseline."""
+        history = self.validation_baseline_history()
+        baseline = self.authoritative_baseline_evidence()
+        current_digest = baseline.get("payload_sha256") if baseline else None
+        previous_digest = None
+        audited = []
+        chain_valid = True
+        for item in history:
+            expected_previous = previous_digest
+            payload_digest = item["payload"].get("payload_sha256")
+            event_valid = (
+                item["previous_payload_sha256"] == expected_previous
+                and item["new_payload_sha256"] == payload_digest
+                and item["source"].startswith("VALIDATION_ONLY:")
+            )
+            if item["event_type"] == "INITIAL_IMPORT":
+                event_valid = event_valid and expected_previous is None
+            elif item["event_type"] == "VALIDATION_ONLY_RESET":
+                event_valid = event_valid and bool(item["reset_reason"])
+            else:
+                event_valid = False
+            chain_valid = chain_valid and event_valid
+            row = dict(item)
+            row["lineage_status"] = "CHAIN_VALID" if event_valid else "BASELINE_HISTORY_CHAIN_MISMATCH"
+            audited.append(row)
+            previous_digest = item["new_payload_sha256"]
+        current_matches = (
+            (not history and current_digest is None)
+            or (bool(history) and previous_digest == current_digest)
+        )
+        if not current_matches:
+            chain_valid = False
+        return {
+            "generation_count": len(audited),
+            "current_baseline_evidence_sha256": current_digest,
+            "history_chain_valid": chain_valid,
+            "current_baseline_matches_latest_generation": current_matches,
+            "history": tuple(audited),
+        }
+
     def startup_lineage_audit(self) -> dict[str, Any]:
         """Audit persisted startup lineage without changing gate or evidence state."""
         history = self.startup_reconciliation_history()
+        baseline_history_audit = self.validation_baseline_lineage_audit()
         baseline = self.authoritative_baseline_evidence()
         current_baseline_hash = baseline.get("payload_sha256") if baseline else None
         audited = []
@@ -1128,6 +1301,7 @@ class SQLiteSettlementStore:
             "resolution_count": sum(item["event_type"] == "STARTUP_RESOLVED" for item in audited),
             "open_inbox_count": int(open_inbox),
             "unresolved_scope_count": int(unresolved),
+            "baseline_lineage": baseline_history_audit,
             "history": tuple(audited),
         }
 
