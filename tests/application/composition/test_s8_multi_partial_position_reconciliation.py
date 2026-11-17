@@ -1,5 +1,7 @@
 from dataclasses import replace
-from datetime import datetime
+import hashlib
+import json
+from datetime import datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -10,6 +12,15 @@ from contracts.position_provenance import PositionRole
 from contracts.types import ExecutionFill, ExecutionLeg, ExecutionReport, MultiLegExecutionPlan, OptionInstrumentIdentity
 from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
 from environments.virtual.position.virtual_position_lot_store import VirtualPositionLotStore
+from application.composition.track2_u19_recovery import ValidationOnlyTrack2U19RecoveryCoordinator
+from core.oms.track2_u19_recovery import (
+    U19BrokerPositionSnapshot,
+    U19ExecutionEvent,
+    U19ExecutionLedgerSnapshot,
+    U19Position,
+    U19RecoveryStatus,
+)
+from environments.virtual.position.track2_u19_recovery_store import SqliteTrack2U19RecoveryStore
 
 
 def _bridge():
@@ -135,3 +146,104 @@ def test_conflicting_reused_execution_id_fails_closed_without_new_lot():
 
     assert len(bridge.position_lot_store.history()) == 2
     assert bridge.leg_positions[identity.instrument_id].qty == 3
+
+
+
+def test_partial_fill_order_execution_position_lots_reconcile_through_u19_checkpoint(tmp_path):
+    bridge = _bridge()
+    plan, leg, identity, command, report = _inputs()
+    bridge._apply_reconciled_execution(
+        plan=plan, leg=leg, identity=identity,
+        broker_command=command, report=report,
+    )
+
+    lots = bridge.position_lot_store.history()
+    assert len(lots) == 2
+    assert [lot.opened_quantity for lot in lots] == [1, 2]
+    assert {lot.client_order_id for lot in lots} == {command.client_order_id}
+    assert {lot.group_id for lot in lots} == {plan.group_id}
+    assert {lot.leg_id for lot in lots} == {leg.leg_id}
+    assert {lot.instrument_id for lot in lots} == {identity.instrument_id}
+
+    def digest(value):
+        body = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+        return hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+    lot_by_execution = {lot.execution_id: lot for lot in lots}
+    assert len(lot_by_execution) == 2
+    execution_events = tuple(
+        U19ExecutionEvent(
+            lot.execution_id,
+            digest({
+                "client_order_id": lot.client_order_id,
+                "group_id": lot.group_id,
+                "leg_id": lot.leg_id,
+                "instrument_id": lot.instrument_id,
+                "side": lot.side,
+                "opened_quantity": lot.opened_quantity,
+                "execution_timestamp": lot.execution_timestamp,
+            }),
+        )
+        for lot in lots
+    )
+    assert {event.execution_id for event in execution_events} == set(lot_by_execution)
+
+    aggregate_quantity = sum(
+        lot.opened_quantity if lot.side == "BUY" else -lot.opened_quantity
+        for lot in lots
+    )
+    positions = (U19Position(identity.instrument_id, Decimal(str(aggregate_quantity))),)
+    as_of = datetime(2026, 11, 3, 0, 0, tzinfo=timezone.utc)
+    broker_payload = {
+        "group_id": plan.group_id,
+        "positions": [(item.instrument_id, str(item.signed_quantity)) for item in positions],
+    }
+    ledger_payload = {
+        **broker_payload,
+        "execution_events": [
+            (event.execution_id, event.fingerprint) for event in execution_events
+        ],
+    }
+    broker_snapshot = U19BrokerPositionSnapshot(
+        group_id=plan.group_id,
+        snapshot_id="validation-partial-fill-broker",
+        as_of=as_of,
+        source="VALIDATION_ONLY:BROKER_EXCHANGE",
+        positions=positions,
+        complete=True,
+        capability_verified=True,
+        payload_sha256=digest(broker_payload),
+    )
+    ledger_snapshot = U19ExecutionLedgerSnapshot(
+        group_id=plan.group_id,
+        snapshot_id="validation-partial-fill-ledger",
+        as_of=as_of,
+        source="VALIDATION_ONLY:EXECUTION_LEDGER",
+        positions=positions,
+        complete=True,
+        payload_sha256=digest(ledger_payload),
+        execution_events=execution_events,
+        pending_order_ids=(),
+    )
+
+    checkpoint_path = tmp_path / "partial-fill-u19.sqlite3"
+    decision = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(checkpoint_path)
+    ).recover(
+        group_id=plan.group_id,
+        broker_snapshot=broker_snapshot,
+        ledger_snapshot=ledger_snapshot,
+    )
+    assert decision.status is U19RecoveryStatus.RESTORE_ALLOWED
+    assert decision.positions == positions
+    assert decision.execution_events == execution_events
+    assert decision.new_entry_enabled is False
+    assert decision.order_submission_enabled is False
+
+    persisted = SqliteTrack2U19RecoveryStore(checkpoint_path).load_latest(plan.group_id)
+    assert persisted["status"] == U19RecoveryStatus.RESTORE_ALLOWED.value
+    assert persisted["positions"] == [
+        {"instrument_id": identity.instrument_id, "signed_quantity": "3"}
+    ]
+    assert {item["execution_id"] for item in persisted["execution_events"]} == set(lot_by_execution)
+    assert persisted["pending_order_ids"] == []
