@@ -31,7 +31,7 @@ def make_inputs(*, opening_side="LONG", target_qty=2, projected_qty=2, issues=()
     now = datetime(2026, 11, 18, 1, 0, tzinfo=timezone.utc)
     bundle = SimpleNamespace(
         opening_positions=SimpleNamespace(rows=({"instrument_id": "OPT_A", "side": opening_side, "quantity": 1},)),
-        provenance=SimpleNamespace(namespace=namespace, deterministic_rule_id="rule-v1", manifest_sha256="b" * 64),
+        provenance=SimpleNamespace(namespace=namespace, deterministic_rule_id="rule-v1", manifest_sha256="b" * 64, source_anchor_refs=("anchor-1",), source_anchor_as_of=now, scenario_timestamp=now),
     )
     validation = SimpleNamespace(
         is_valid=True, evidence_sha256="c" * 64, snapshot_ids=("orders-1", "fills-1", "positions-1"),

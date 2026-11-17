@@ -130,6 +130,16 @@ class ValidationOnlyPositionMigrationAuditor:
             issues.append("POSITION_MIGRATION_DETERMINISTIC_RULE_REQUIRED")
         if re.fullmatch(r"[0-9a-f]{64}", manifest_hash) is None:
             issues.append("POSITION_MIGRATION_SOURCE_MANIFEST_SHA256_REQUIRED")
+        anchor_refs = tuple(str(value).strip() for value in getattr(provenance, "source_anchor_refs", ()) if str(value).strip())
+        anchor_as_of = getattr(provenance, "source_anchor_as_of", None)
+        scenario_timestamp = getattr(provenance, "scenario_timestamp", None)
+        if not anchor_refs or anchor_as_of is None or scenario_timestamp is None:
+            issues.append("POSITION_MIGRATION_SOURCE_ANCHOR_PROVENANCE_REQUIRED")
+        elif (anchor_as_of.tzinfo is None or anchor_as_of.utcoffset() is None
+              or scenario_timestamp.tzinfo is None or scenario_timestamp.utcoffset() is None):
+            issues.append("POSITION_MIGRATION_SOURCE_ANCHOR_TIMEZONE_REQUIRED")
+        elif anchor_as_of.astimezone(timezone.utc) > scenario_timestamp.astimezone(timezone.utc):
+            issues.append("POSITION_MIGRATION_FUTURE_SOURCE_ANCHOR_REJECTED")
         if not getattr(validation, "snapshot_ids", ()) or not getattr(validation, "as_of", None):
             issues.append("POSITION_MIGRATION_SNAPSHOT_LINEAGE_REQUIRED")
         elif validation.as_of.tzinfo is None or validation.as_of.utcoffset() is None:
@@ -151,6 +161,9 @@ class ValidationOnlyPositionMigrationAuditor:
             "synthetic_namespace": namespace,
             "deterministic_rule_id": rule_id,
             "source_manifest_sha256": manifest_hash,
+            "source_anchor_refs": list(anchor_refs),
+            "source_anchor_as_of": anchor_as_of.astimezone(timezone.utc).isoformat() if anchor_as_of is not None and anchor_as_of.tzinfo else None,
+            "scenario_timestamp": scenario_timestamp.astimezone(timezone.utc).isoformat() if scenario_timestamp is not None and scenario_timestamp.tzinfo else None,
             "u19_ledger_sha256": getattr(ledger, "payload_sha256", None),
             "u19_projected_sha256": getattr(projected, "payload_sha256", None),
             "u19_broker_sha256": getattr(broker, "payload_sha256", None),
