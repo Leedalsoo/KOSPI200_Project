@@ -379,3 +379,80 @@ def test_u19_recovery_gates_u16_persistent_runtime_restore(tmp_path):
     )
     assert blocked.status is U19RecoveryStatus.POSITION_LEDGER_MISMATCH
     assert restored is False
+
+
+def test_four_leg_late_fill_blocks_restart_then_reconciles_before_restore(tmp_path):
+    path = tmp_path / "u19-four-leg-late-fill.sqlite3"
+    group = "s2-four-leg-late-fill"
+    initial_positions = (
+        U19Position("SYNTHETIC_CONTRACT:S2:inner-put", Decimal("1")),
+        U19Position("SYNTHETIC_CONTRACT:S2:inner-call", Decimal("1")),
+        U19Position("SYNTHETIC_CONTRACT:S2:outer-put", Decimal("-1")),
+    )
+    complete_positions = initial_positions + (
+        U19Position("SYNTHETIC_CONTRACT:S2:outer-call", Decimal("-1")),
+    )
+    initial_events = tuple(
+        U19ExecutionEvent(f"synthetic-exec-{index}", f"fill-fingerprint-{index}")
+        for index in range(1, 4)
+    )
+    late_event = U19ExecutionEvent("synthetic-exec-4-late", "late-fill-fingerprint-4")
+
+    first = ValidationOnlyTrack2U19RecoveryCoordinator(SqliteTrack2U19RecoveryStore(path))
+    pending = first.recover(
+        group_id=group,
+        broker_snapshot=broker(
+            positions=initial_positions, snapshot_id="broker-before-late-fill",
+            group_id=group,
+        ),
+        ledger_snapshot=ledger(
+            positions=initial_positions, events=initial_events,
+            pending=("client-order-outer-call",),
+            snapshot_id="ledger-before-late-fill", group_id=group,
+        ),
+    )
+    assert pending.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+    assert pending.restore_allowed is False
+    assert pending.new_entry_enabled is False
+    assert pending.order_submission_enabled is False
+
+    # Simulate process restart while the fourth leg's execution is still unresolved.
+    restarted = ValidationOnlyTrack2U19RecoveryCoordinator(SqliteTrack2U19RecoveryStore(path))
+    persisted_pending = restarted.store.load_latest(group)
+    assert persisted_pending["status"] == U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED.value
+    assert persisted_pending["pending_order_ids"] == ["client-order-outer-call"]
+
+    # A validation-only late-fill snapshot resolves the pending order; no blind retry is issued.
+    late_fill_as_of = AS_OF + timedelta(seconds=2)
+    reconciled = restarted.recover(
+        group_id=group,
+        broker_snapshot=broker(
+            positions=complete_positions, as_of=late_fill_as_of,
+            snapshot_id="broker-after-late-fill", digest="e", group_id=group,
+        ),
+        ledger_snapshot=ledger(
+            positions=complete_positions, as_of=late_fill_as_of,
+            events=initial_events + (late_event,), pending=(),
+            snapshot_id="ledger-after-late-fill", digest="f", group_id=group,
+        ),
+    )
+    assert reconciled.status is U19RecoveryStatus.RESTORE_ALLOWED
+    assert reconciled.positions == complete_positions
+    assert reconciled.execution_events == initial_events + (late_event,)
+    assert reconciled.pending_order_ids == ()
+    assert reconciled.new_entry_enabled is False
+    assert reconciled.order_submission_enabled is False
+    assert reconciled.runtime_restore_performed is False
+
+    final_store = SqliteTrack2U19RecoveryStore(path)
+    persisted = final_store.load_latest(group)
+    assert persisted["status"] == U19RecoveryStatus.RESTORE_ALLOWED.value
+    assert len(persisted["broker_positions"]) == 4
+    assert persisted["broker_positions"] == persisted["ledger_positions"]
+    assert [item["execution_id"] for item in persisted["execution_events"]] == [
+        "synthetic-exec-1", "synthetic-exec-2", "synthetic-exec-3", "synthetic-exec-4-late",
+    ]
+    assert persisted["pending_order_ids"] == []
+    assert persisted["new_entry_enabled"] is False
+    assert persisted["order_submission_enabled"] is False
+    assert persisted["runtime_restore_performed"] is False
