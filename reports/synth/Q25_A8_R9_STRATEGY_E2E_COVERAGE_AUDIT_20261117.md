@@ -1,4 +1,4 @@
-﻿# Q25 A8 R9 — Strategy 1–9 E2E coverage audit
+# Q25 A8 R9 — Strategy 1–9 E2E coverage audit
 
 - Date: 2026-11-17
 - Status: COVERAGE AUDIT / VALIDATION ONLY; integrated 1–9 E2E is NOT COMPLETE
