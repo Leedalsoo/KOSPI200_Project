@@ -30,7 +30,10 @@ class ValidationOnlyBaselineImportResult:
 
     @property
     def is_valid(self) -> bool:
-        return self.status == "VALIDATION_ONLY_BASELINE_IMPORTED_STARTUP_PENDING"
+        return self.status in {
+            "VALIDATION_ONLY_BASELINE_IMPORTED_STARTUP_PENDING",
+            "VALIDATION_ONLY_BASELINE_ALREADY_IMPORTED",
+        }
 
 
 class ValidationOnlyAccountSnapshotBaselineAdapter:
@@ -122,6 +125,28 @@ class ValidationOnlyAccountSnapshotBaselineAdapter:
         positions_payload = validation.baseline_positions_payload()
 
         store = self.settlement_store
+        existing = store.authoritative_baseline_evidence()
+        if existing is not None:
+            same_evidence = (
+                existing.get("source") == self.SOURCE
+                and existing.get("payload_sha256") == evidence_sha256
+                and existing.get("orders_snapshot_id") == bundle.orders.snapshot_id
+                and existing.get("executions_snapshot_id") == bundle.executions.snapshot_id
+                and existing.get("positions_snapshot_id") == bundle.positions.snapshot_id
+                and existing.get("as_of") == validation.as_of.isoformat()
+            )
+            if not same_evidence:
+                raise ValidationOnlyBaselineImportError(
+                    "BASELINE_EVIDENCE_IDEMPOTENCY_CONFLICT"
+                )
+            startup_status = store.reconciliation_status("__startup_reconciliation__")
+            return ValidationOnlyBaselineImportResult(
+                status="VALIDATION_ONLY_BASELINE_ALREADY_IMPORTED",
+                evidence_sha256=evidence_sha256,
+                imported_position_count=len(positions_payload),
+                startup_gate_status=startup_status or "UNREGISTERED",
+            )
+
         store.ensure_authoritative_baseline_gate()
         unresolved = store.unresolved_reconciliations()
         if any(

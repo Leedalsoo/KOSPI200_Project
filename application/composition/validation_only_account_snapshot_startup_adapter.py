@@ -56,7 +56,7 @@ class ValidationOnlyAccountSnapshotStartupAdapter:
             return self._pending("ACCOUNT_SNAPSHOT_VALIDATION_STALE_OR_MISMATCHED")
         if not getattr(baseline_import, "is_valid", False):
             return self._pending("VALIDATION_ONLY_BASELINE_IMPORT_REQUIRED")
-        if getattr(baseline_import, "startup_gate_status", None) != "PENDING":
+        if getattr(baseline_import, "startup_gate_status", None) not in {"PENDING", "RESOLVED"}:
             return self._pending("STARTUP_GATE_MUST_BE_PENDING_BEFORE_RECONCILIATION")
         if getattr(baseline_import, "source", None) != "VALIDATION_ONLY:ACCOUNT_U19_BASELINE_IMPORT":
             return self._pending("VALIDATION_ONLY_BASELINE_SOURCE_MISMATCH")
@@ -115,12 +115,73 @@ class ValidationOnlyAccountSnapshotStartupAdapter:
             return self._pending("VALIDATION_ONLY_BASELINE_EVIDENCE_HASH_REQUIRED")
 
         store = self.settlement_store
+        persisted_baseline = store.authoritative_baseline_evidence()
+        expected_snapshot_ids = (
+            bundle.orders.snapshot_id, bundle.executions.snapshot_id, bundle.positions.snapshot_id
+        )
+        if (
+            persisted_baseline is None
+            or persisted_baseline.get("source") != baseline_import.source
+            or persisted_baseline.get("payload_sha256") != baseline_import.evidence_sha256
+            or (
+                persisted_baseline.get("orders_snapshot_id"),
+                persisted_baseline.get("executions_snapshot_id"),
+                persisted_baseline.get("positions_snapshot_id"),
+            ) != expected_snapshot_ids
+            or persisted_baseline.get("as_of") != validation.as_of.isoformat()
+        ):
+            return self._pending("VALIDATION_ONLY_BASELINE_PERSISTED_EVIDENCE_MISMATCH")
+
+        manifest = {
+            "manifest_version": "Q25-A8-U19-BASELINE-STARTUP-LINEAGE-v1",
+            "baseline_import_evidence_sha256": baseline_import.evidence_sha256,
+            "baseline_source": baseline_import.source,
+            "baseline_snapshot_ids": [
+                bundle.orders.snapshot_id, bundle.executions.snapshot_id, bundle.positions.snapshot_id
+            ],
+            "snapshot_validation_evidence_sha256": validation.evidence_sha256,
+            "snapshot_ids": [
+                bundle.orders.snapshot_id, bundle.executions.snapshot_id, bundle.positions.snapshot_id
+            ],
+            "snapshot_payload_hashes": [
+                bundle.orders.payload_sha256, bundle.executions.payload_sha256, bundle.positions.payload_sha256
+            ],
+            "as_of": expected_as_of.isoformat(),
+            "namespace": provenance.namespace,
+            "deterministic_rule_id": provenance.deterministic_rule_id,
+            "manifest_sha256": str(provenance.manifest_sha256).lower(),
+            "source_anchor_refs": list(provenance.source_anchor_refs),
+            "source_anchor_as_of": (
+                provenance.source_anchor_as_of.astimezone(timezone.utc).isoformat()
+                if provenance.source_anchor_as_of is not None else None
+            ),
+            "u19_snapshot_ids": [snapshot.snapshot_id for snapshot in snapshots],
+            "u19_snapshot_hashes": [snapshot.payload_sha256 for snapshot in snapshots],
+            "u19_group_snapshot_ids": [snapshot.snapshot_id for snapshot in reconciliation.group_ledger_snapshots],
+            "recovery_status": decision_status,
+            "new_entry_enabled": False,
+            "order_submission_enabled": False,
+            "open_inbox_count": 0,
+            "other_unresolved_count": 0,
+        }
+        digest = hashlib.sha256(
+            json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+
         startup = next((
             item for item in store.unresolved_reconciliations()
             if item["scope_key"] == "__startup_reconciliation__"
         ), None)
         if startup is None:
-            return self._pending("STARTUP_RECONCILIATION_GATE_NOT_PENDING")
+            if store.reconciliation_status("__startup_reconciliation__") == "RESOLVED":
+                persisted = store.startup_reconciliation_evidence()
+                if persisted is not None and persisted.get("lineage_manifest") == manifest:
+                    return ValidationOnlyStartupReconciliationResult(
+                        status="VALIDATION_ONLY_STARTUP_ALREADY_RECONCILED",
+                        issues=(), evidence_sha256=persisted.get("payload_sha256"), resolved=False,
+                    )
+                return self._pending("STARTUP_RECONCILIATION_EVIDENCE_CONFLICT_REQUIRES_NEW_GATE", digest)
+            return self._pending("STARTUP_RECONCILIATION_GATE_NOT_PENDING", digest)
         if startup["status"] == "CONFLICT":
             return self._pending("STARTUP_GATE_CONFLICT_REQUIRES_MANUAL_REVIEW")
         if startup["status"] != "PENDING":
@@ -148,31 +209,6 @@ class ValidationOnlyAccountSnapshotStartupAdapter:
                 ),
             )
 
-        evidence = {
-            "adapter": "validation-only-account-startup-v1",
-            "source": self.SOURCE,
-            "snapshot_ids": [bundle.orders.snapshot_id, bundle.executions.snapshot_id, bundle.positions.snapshot_id],
-            "snapshot_hashes": [bundle.orders.payload_sha256, bundle.executions.payload_sha256, bundle.positions.payload_sha256],
-            "as_of": expected_as_of.isoformat(),
-            "validation_evidence_sha256": validation.evidence_sha256,
-            "baseline_import_evidence_sha256": baseline_import.evidence_sha256,
-            "namespace": provenance.namespace,
-            "deterministic_rule_id": provenance.deterministic_rule_id,
-            "manifest_sha256": provenance.manifest_sha256,
-            "source_anchor_refs": list(provenance.source_anchor_refs),
-            "source_anchor_as_of": (
-                provenance.source_anchor_as_of.astimezone(timezone.utc).isoformat()
-                if provenance.source_anchor_as_of is not None else None
-            ),
-            "u19_snapshot_hashes": [snapshot.payload_sha256 for snapshot in snapshots],
-            "u19_group_snapshot_ids": [snapshot.snapshot_id for snapshot in reconciliation.group_ledger_snapshots],
-            "recovery_status": decision_status,
-            "open_inbox_count": 0,
-            "other_unresolved_count": 0,
-        }
-        digest = hashlib.sha256(
-            json.dumps(evidence, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        ).hexdigest()
         try:
             resolved = store.resolve_startup_reconciliation(
                 orders_snapshot_id=bundle.orders.snapshot_id,
@@ -182,6 +218,7 @@ class ValidationOnlyAccountSnapshotStartupAdapter:
                 source=self.SOURCE,
                 payload_sha256=digest,
                 authoritative_evidence_ref=f"VALIDATION_ONLY:STARTUP:{digest}",
+                evidence_manifest=manifest,
             )
         except (SettlementStoreError, ValueError) as exc:
             return self._pending(f"STARTUP_GATE_REQUIRES_RECONCILIATION:{exc}", digest)

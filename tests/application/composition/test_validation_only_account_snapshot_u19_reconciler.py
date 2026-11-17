@@ -1077,3 +1077,186 @@ def test_validation_only_startup_adapter_does_not_resolve_conflicting_inbox_even
         item["execution_id"] == "SYNTHETIC:STARTUP-CONFLICT-EVENT" and item["status"] == "PENDING"
         for item in store.open_reconciliation_events()
     )
+
+
+def test_validation_baseline_import_is_idempotent_and_rejects_changed_evidence(tmp_path):
+    from application.composition.validation_only_account_snapshot_baseline_adapter import (
+        ValidationOnlyAccountSnapshotBaselineAdapter,
+        ValidationOnlyBaselineImportError,
+    )
+
+    bundle, validation, reconciliation, baseline_import, store = _prepare_validation_startup_fixture(tmp_path)
+    adapter = ValidationOnlyAccountSnapshotBaselineAdapter(store, validation_only=True)
+    repeated = adapter.import_reconciled_snapshot(
+        bundle=bundle, validation=validation, reconciliation=reconciliation,
+    )
+    assert repeated.is_valid
+    assert repeated.status == "VALIDATION_ONLY_BASELINE_ALREADY_IMPORTED"
+    assert repeated.evidence_sha256 == baseline_import.evidence_sha256
+    assert repeated.startup_gate_status == "PENDING"
+
+    changed_bundle = replace(
+        bundle,
+        provenance=replace(bundle.provenance, deterministic_rule_id="different-deterministic-rule"),
+    )
+    changed_validation = validate_account_snapshot_bundle(changed_bundle)
+    assert changed_validation.is_valid
+    with pytest.raises(ValidationOnlyBaselineImportError, match="BASELINE_EVIDENCE_IDEMPOTENCY_CONFLICT"):
+        adapter.import_reconciled_snapshot(
+            bundle=changed_bundle, validation=changed_validation, reconciliation=reconciliation,
+        )
+    assert store.authoritative_baseline_evidence()["payload_sha256"] == baseline_import.evidence_sha256
+
+
+def test_validation_startup_lineage_manifest_persists_and_is_idempotent_after_sqlite_reopen(tmp_path):
+    import hashlib
+    import json
+
+    from application.composition.validation_only_account_snapshot_startup_adapter import (
+        ValidationOnlyAccountSnapshotStartupAdapter,
+    )
+
+    bundle, validation, reconciliation, baseline_import, store = _prepare_validation_startup_fixture(tmp_path)
+    adapter = ValidationOnlyAccountSnapshotStartupAdapter(store, validation_only=True)
+    first = adapter.reconcile_startup(
+        bundle=bundle, validation=validation, reconciliation=reconciliation,
+        baseline_import=baseline_import,
+    )
+    assert first.is_valid and first.resolved
+    persisted = store.startup_reconciliation_evidence()
+    manifest = persisted["lineage_manifest"]
+    assert manifest["baseline_import_evidence_sha256"] == baseline_import.evidence_sha256
+    assert manifest["snapshot_validation_evidence_sha256"] == validation.evidence_sha256
+    assert manifest["snapshot_ids"] == [
+        bundle.orders.snapshot_id, bundle.executions.snapshot_id, bundle.positions.snapshot_id,
+    ]
+    assert manifest["u19_snapshot_ids"]
+    assert manifest["new_entry_enabled"] is False
+    assert manifest["order_submission_enabled"] is False
+    expected_digest = hashlib.sha256(
+        json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    assert expected_digest == first.evidence_sha256 == persisted["payload_sha256"]
+
+    repeated = adapter.reconcile_startup(
+        bundle=bundle, validation=validation, reconciliation=reconciliation,
+        baseline_import=baseline_import,
+    )
+    assert repeated.status == "VALIDATION_ONLY_STARTUP_ALREADY_RECONCILED"
+    assert repeated.evidence_sha256 == first.evidence_sha256
+
+    reopened = SQLiteSettlementStore(store.path)
+    reopened_adapter = ValidationOnlyAccountSnapshotStartupAdapter(reopened, validation_only=True)
+    after_restart = reopened_adapter.reconcile_startup(
+        bundle=bundle, validation=validation, reconciliation=reconciliation,
+        baseline_import=baseline_import,
+    )
+    assert after_restart.status == "VALIDATION_ONLY_STARTUP_ALREADY_RECONCILED"
+    assert after_restart.evidence_sha256 == first.evidence_sha256
+
+
+def test_validation_startup_rejects_changed_evidence_reuse_until_gate_is_rearmed(tmp_path):
+    from application.composition.validation_only_account_snapshot_startup_adapter import (
+        ValidationOnlyAccountSnapshotStartupAdapter,
+    )
+
+    bundle, validation, reconciliation, baseline_import, store = _prepare_validation_startup_fixture(tmp_path)
+    adapter = ValidationOnlyAccountSnapshotStartupAdapter(store, validation_only=True)
+    first = adapter.reconcile_startup(
+        bundle=bundle, validation=validation, reconciliation=reconciliation,
+        baseline_import=baseline_import,
+    )
+    assert first.is_valid
+
+    changed_baseline = replace(baseline_import, evidence_sha256="f" * 64)
+    changed = adapter.reconcile_startup(
+        bundle=bundle, validation=validation, reconciliation=reconciliation,
+        baseline_import=changed_baseline,
+    )
+    assert changed.status == "RECONCILIATION_REQUIRED"
+    assert changed.issues == ("VALIDATION_ONLY_BASELINE_PERSISTED_EVIDENCE_MISMATCH",)
+
+    store.mark_startup_reconciliation_pending()
+    assert store.reconciliation_status("__startup_reconciliation__") == "PENDING"
+    accepted_after_new_gate = adapter.reconcile_startup(
+        bundle=bundle, validation=validation, reconciliation=reconciliation,
+        baseline_import=baseline_import,
+    )
+    assert accepted_after_new_gate.is_valid
+    assert accepted_after_new_gate.resolved
+
+
+def test_fresh_live_composition_rearms_startup_gate_without_enabling_orders(tmp_path):
+    from application.composition.live_execution_position_composition_factory import (
+        create_live_execution_position_composition,
+    )
+    from application.composition.validation_only_account_snapshot_startup_adapter import (
+        ValidationOnlyAccountSnapshotStartupAdapter,
+    )
+
+    bundle, validation, reconciliation, baseline_import, store = _prepare_validation_startup_fixture(tmp_path)
+    adapter = ValidationOnlyAccountSnapshotStartupAdapter(store, validation_only=True)
+    resolved = adapter.reconcile_startup(
+        bundle=bundle, validation=validation, reconciliation=reconciliation,
+        baseline_import=baseline_import,
+    )
+    assert resolved.is_valid
+    assert store.reconciliation_status("__startup_reconciliation__") == "RESOLVED"
+
+    position = LivePositionAggregate(SHARED_INSTRUMENT)
+    composition = create_live_execution_position_composition(
+        execution_source=object(),
+        order_state_machine=OrderStateMachine(),
+        position_fill_adapter=LivePositionFillAdapter(position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(),
+        position_aggregate=position,
+        settlement_store=SQLiteSettlementStore(store.path),
+    )
+    assert composition.settlement_store.reconciliation_status("__startup_reconciliation__") == "PENDING"
+    rearmed = adapter.reconcile_startup(
+        bundle=bundle, validation=validation, reconciliation=reconciliation,
+        baseline_import=baseline_import,
+    )
+    assert rearmed.is_valid and rearmed.resolved
+    assert composition.settlement_store.reconciliation_status("__startup_reconciliation__") == "RESOLVED"
+
+
+def test_validation_startup_keeps_unresolved_inbox_and_conflict_after_sqlite_reopen(tmp_path):
+    from application.composition.validation_only_account_snapshot_startup_adapter import (
+        ValidationOnlyAccountSnapshotStartupAdapter,
+    )
+
+    bundle, validation, reconciliation, baseline_import, store = _prepare_validation_startup_fixture(tmp_path)
+    store.record_reconciliation_event_pending(
+        event_id="SYNTHETIC:PERSISTED-LATE-FILL",
+        client_order_id="client-persisted-late-fill",
+        broker_order_id="broker-persisted-late-fill",
+        event_kind="KIS_REST_CUMULATIVE_ORDER_SNAPSHOT",
+        payload={"cumulative_filled_quantity": 1, "source_authority": "VALIDATION_ONLY"},
+    )
+    store.mark_reconciliation_pending(
+        scope_key="client-persisted-late-fill",
+        client_order_id="client-persisted-late-fill",
+        broker_order_id="broker-persisted-late-fill",
+        reason="PERSISTED_LATE_FILL_CONFLICT",
+        payload={"conflict": True},
+        conflict=True,
+    )
+
+    reopened = SQLiteSettlementStore(store.path)
+    adapter = ValidationOnlyAccountSnapshotStartupAdapter(reopened, validation_only=True)
+    result = adapter.reconcile_startup(
+        bundle=bundle, validation=validation, reconciliation=reconciliation,
+        baseline_import=baseline_import,
+    )
+    assert result.status == "RECONCILIATION_REQUIRED"
+    assert any("OPEN_RECONCILIATION_INBOX:SYNTHETIC:PERSISTED-LATE-FILL:PENDING" == issue for issue in result.issues)
+    assert any(
+        item["scope_key"] == "client-persisted-late-fill" and item["status"] == "CONFLICT"
+        for item in reopened.unresolved_reconciliations()
+    )
+    assert any(
+        item["execution_id"] == "SYNTHETIC:PERSISTED-LATE-FILL" and item["status"] == "PENDING"
+        for item in reopened.open_reconciliation_events()
+    )
+    assert reopened.reconciliation_status("__startup_reconciliation__") == "PENDING"

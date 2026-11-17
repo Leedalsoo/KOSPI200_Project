@@ -5,6 +5,7 @@ intentionally unrelated. This module never performs broker or KIS API calls.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sqlite3
@@ -862,6 +863,30 @@ class SQLiteSettlementStore:
         finally:
             connection.close()
 
+    def authoritative_baseline_evidence(self) -> dict[str, Any] | None:
+        """Return persisted baseline evidence without mutating settlement state."""
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT value FROM settlement_meta WHERE key='authoritative_baseline_evidence'"
+            ).fetchone()
+        return json.loads(row["value"]) if row is not None else None
+
+    def startup_reconciliation_evidence(self) -> dict[str, Any] | None:
+        """Return persisted startup evidence without mutating settlement state."""
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT value FROM settlement_meta WHERE key='startup_reconciliation_evidence'"
+            ).fetchone()
+        return json.loads(row["value"]) if row is not None else None
+
+    def reconciliation_status(self, scope_key: str) -> str | None:
+        """Read one reconciliation scope status without changing its gate."""
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT status FROM reconciliation_state WHERE scope_key=?", (str(scope_key),)
+            ).fetchone()
+        return str(row["status"]) if row is not None else None
+
     def establish_authoritative_baseline_snapshot(
         self,
         *,
@@ -1035,6 +1060,7 @@ class SQLiteSettlementStore:
         source: str,
         payload_sha256: str,
         authoritative_evidence_ref: str,
+        evidence_manifest: Mapping[str, Any] | None = None,
     ) -> bool:
         """Release the startup gate only with a complete, time-aligned three-snapshot evidence set."""
         snapshot_ids = tuple(str(value).strip() for value in (
@@ -1061,6 +1087,12 @@ class SQLiteSettlementStore:
             "evidence_ref": evidence,
             "coverage": ["orders", "fills", "positions"],
         }
+        if evidence_manifest is not None:
+            manifest = dict(evidence_manifest)
+            manifest_digest = hashlib.sha256(encode_record(manifest).encode("utf-8")).hexdigest()
+            if manifest_digest != digest:
+                raise ValueError("STARTUP_RECONCILIATION_MANIFEST_DIGEST_MISMATCH")
+            payload["lineage_manifest"] = manifest
         encoded = encode_record(payload)
         with self._connection() as connection:
             self._begin(connection)
