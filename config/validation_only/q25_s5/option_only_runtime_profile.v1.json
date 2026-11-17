@@ -1,0 +1,87 @@
+{
+  "authority": {
+    "account": "NONE",
+    "contract_identity": "NONE",
+    "contract_multiplier": "NONE",
+    "live_readiness": "NONE",
+    "profitability": "NONE",
+    "tradability": "NONE"
+  },
+  "execution_enabled": false,
+  "live_api_enabled": false,
+  "notes": [
+    "This profile is a validation-only adapter over the existing R7 market-calibrated CALL/PUT quote sidecar.",
+    "The sidecar quote rows preserve the source anchor timestamps, source hashes, IV calibration, spread and depth proxy provenance.",
+    "The sidecar's per-timestamp synthetic quote IDs are remapped to stable scenario-local identities solely to model one contract across entry and exit ticks.",
+    "The VSSF runtime currently requires a non-null multiplier. The value 1 is injected only as a synthetic accounting unit scale; no monetary result may be interpreted.",
+    "The custom S5 lifecycle driver is test-only and does not enable or modify the production Track5GapDivergence policy.",
+    "This lifecycle sequence validates the common Runtime order/lot/close path; it does not approve the pending D2-D8 S5 operating policy."
+  ],
+  "order_submission_enabled": false,
+  "production_runtime_eligible": false,
+  "profile_id": "Q25-A8-R8-S5-OPTION-ONLY-SHARED-RUNTIME-v1",
+  "real_vts_api_enabled": false,
+  "scenario": {
+    "expiry": "20261112",
+    "lifecycle": [
+      {
+        "intent": "PRIMARY_ENTRY",
+        "option_type": "CALL",
+        "phase": 1,
+        "quantity": 1,
+        "side": "BUY"
+      },
+      {
+        "intent": "PRE_ADVANCE_OPPOSITE_HEDGE",
+        "option_type": "PUT",
+        "phase": 2,
+        "quantity": 1,
+        "side": "BUY"
+      },
+      {
+        "intent": "HEDGE_CLOSE",
+        "option_type": "PUT",
+        "phase": 3,
+        "quantity": 1,
+        "side": "SELL"
+      },
+      {
+        "intent": "PRIMARY_OPTION_CLOSE",
+        "option_type": "CALL",
+        "phase": 4,
+        "quantity": 1,
+        "side": "SELL"
+      }
+    ],
+    "runtime_dte_proxy": {
+      "exchange_holiday_authority": "NONE",
+      "method": "weekday-only derived fixture from 2026-10-13 to 2026-11-12",
+      "not_used_for_s5_policy": true,
+      "value": 22
+    },
+    "runtime_unit_scale": "1",
+    "runtime_unit_scale_semantics": "A technical virtual-accounting scale required by the current VSSF option execution interface; not a KIS contract multiplier, KRW amount, contract specification, margin, or PnL authority.",
+    "source_contract_codes_are_crosswalk_only": true,
+    "stable_identity_rule": "sha256(profile_id|expiry|option_type|strike)[:32]",
+    "strike": "937.5",
+    "synthetic_identity_namespace": "SYNTHETIC_CONTRACT:S5:A8R8:",
+    "timestamps": [
+      "2026-10-13T10:26:29+09:00",
+      "2026-10-13T10:26:38+09:00",
+      "2026-10-13T10:26:49+09:00",
+      "2026-10-13T10:27:11+09:00"
+    ]
+  },
+  "source_sidecar": {
+    "candidate_file_sha256": "8716c0907c9f699492acdeabc159323939643034d60d02300d0248a52b562dc2",
+    "complete_call_put_pairs": 1570,
+    "copied_to": "data/derived_scenario/q25_a8_r8_s5_atm_market_calibrated_v1_20261117",
+    "dataset": "q25_a8_r7_s5_atm_market_calibrated_v3_20261117",
+    "manifest_sha256": "606e3d4c93f03adfbb7831208c0c08c396d7f373026c36f80635b7795eacf335",
+    "origin_worktree": "Q25_A8_R7",
+    "quote_file_sha256": "df8f2bea97ac8e3cd1b90213575aefa9bf782179d65b87baf0be2e6c08bf7193",
+    "quote_rows": 3160
+  },
+  "status": "SYNTHETIC_VALIDATION_ONLY",
+  "virtual_runtime_validation_enabled": true
+}
