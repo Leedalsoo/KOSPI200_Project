@@ -106,17 +106,18 @@ def _bundle(*, final_quantity=4, executions=None):
 
 def _seed_order(
     store, *, client_id, broker_id, instrument, quantity, leg_id, fills,
+    group_id=GROUP_ID, side="BUY", execution_times=None,
 ):
     oms = OrderStateMachine(persistence_store=store)
     oms.apply_intent(OrderIntent(
-        client_order_id=client_id, instrument_id=instrument, side="BUY",
+        client_order_id=client_id, instrument_id=instrument, side=side,
         quantity=quantity, intent_type="OPEN", strategy_id="S2",
-        group_id=GROUP_ID, leg_id=leg_id,
+        group_id=group_id, leg_id=leg_id,
     ))
     oms.register_broker_order_command(BrokerOrderCommand(
-        client_order_id=client_id, instrument_id=instrument, side="BUY",
+        client_order_id=client_id, instrument_id=instrument, side=side,
         quantity=quantity, order_type="LIMIT", broker_symbol=instrument,
-        asset_type="OPTION", strategy_id="S2", group_id=GROUP_ID,
+        asset_type="OPTION", strategy_id="S2", group_id=group_id,
         leg_id=leg_id, position_role="OPEN",
     ))
     oms.apply_ack(OrderAckEvent(client_order_id=client_id, accepted=True, broker_order_id=broker_id))
@@ -136,8 +137,8 @@ def _seed_order(
             status="FILLED" if cumulative == quantity else "PARTIALLY_FILLED",
             filled_quantity=quantity_filled, remaining_quantity=quantity - cumulative,
             execution_price=Decimal(price),
-            execution_timestamp=AS_OF - timedelta(minutes={"SYNTHETIC:FILL-001": 5, "SYNTHETIC:FILL-002": 4, "SYNTHETIC:FILL-003": 2}[execution_id]),
-            fee=Decimal("1"), group_id=GROUP_ID, leg_id=leg_id,
+            execution_timestamp=(execution_times or {}).get(execution_id, AS_OF - timedelta(minutes={"SYNTHETIC:FILL-001": 5, "SYNTHETIC:FILL-002": 4, "SYNTHETIC:FILL-003": 2}.get(execution_id, 1 + index))),
+            fee=Decimal("1"), group_id=group_id, leg_id=leg_id,
         ))
     return oms
 
@@ -314,3 +315,337 @@ def test_account_snapshot_u19_as_of_mismatch_is_reconciliation_required(tmp_path
     assert result.status == "RECONCILIATION_REQUIRED"
     assert "ACCOUNT_U19_SNAPSHOT_AS_OF_MISMATCH" in result.issues
     assert result.recovery_decision.status is U19RecoveryStatus.SNAPSHOT_AS_OF_MISMATCH
+
+
+
+GROUP_TWO = "SYNTHETIC:GROUP:ACCOUNT-U19-SECOND"
+SHARED_INSTRUMENT = "SYNTHETIC_CONTRACT:KOSPI200_CALL_202612"
+SECOND_INSTRUMENT = "SYNTHETIC_CONTRACT:KOSPI200_PUT_202612"
+
+
+def _multi_group_bundle(*, final_shared=3, final_second=1, shared_sell_quantity=1):
+    orders = (
+        {
+            "client_order_id": "client-old", "broker_order_id": "broker-old",
+            "group_id": GROUP_ID, "instrument_id": SHARED_INSTRUMENT,
+            "side": "BUY", "order_quantity": 3, "cumulative_filled_quantity": 2,
+            "status": "CANCELLED",
+        },
+        {
+            "client_order_id": "client-replacement", "broker_order_id": "broker-replacement",
+            "group_id": GROUP_ID, "instrument_id": SHARED_INSTRUMENT,
+            "side": "BUY", "order_quantity": 2, "cumulative_filled_quantity": 1,
+            "status": "PARTIALLY_FILLED", "replaces_broker_order_id": "broker-old",
+        },
+        {
+            "client_order_id": "client-g2-shared", "broker_order_id": "broker-g2-shared",
+            "group_id": GROUP_TWO, "instrument_id": SHARED_INSTRUMENT,
+            "side": "SELL", "order_quantity": (shared_sell_quantity + 1), "cumulative_filled_quantity": shared_sell_quantity,
+            "status": "PARTIALLY_FILLED",
+        },
+        {
+            "client_order_id": "client-g2-second", "broker_order_id": "broker-g2-second",
+            "group_id": GROUP_TWO, "instrument_id": SECOND_INSTRUMENT,
+            "side": "SELL", "order_quantity": 1, "cumulative_filled_quantity": 1,
+            "status": "FILLED",
+        },
+    )
+    executions = (
+        {
+            "execution_id": "SYNTHETIC:FILL-001", "client_order_id": "client-old",
+            "broker_order_id": "broker-old", "group_id": GROUP_ID,
+            "instrument_id": SHARED_INSTRUMENT, "side": "BUY",
+            "filled_quantity": 1, "execution_price": "10.00",
+            "execution_timestamp": AS_OF - timedelta(minutes=5),
+        },
+        {
+            "execution_id": "SYNTHETIC:FILL-002", "client_order_id": "client-old",
+            "broker_order_id": "broker-old", "group_id": GROUP_ID,
+            "instrument_id": SHARED_INSTRUMENT, "side": "BUY",
+            "filled_quantity": 1, "execution_price": "10.10",
+            "execution_timestamp": AS_OF - timedelta(minutes=4),
+        },
+        {
+            "execution_id": "SYNTHETIC:FILL-003", "client_order_id": "client-replacement",
+            "broker_order_id": "broker-replacement", "group_id": GROUP_ID,
+            "instrument_id": SHARED_INSTRUMENT, "side": "BUY",
+            "filled_quantity": 1, "execution_price": "10.20",
+            "execution_timestamp": AS_OF - timedelta(minutes=2),
+        },
+        {
+            "execution_id": "SYNTHETIC:G2-FILL-001", "client_order_id": "client-g2-shared",
+            "broker_order_id": "broker-g2-shared", "group_id": GROUP_TWO,
+            "instrument_id": SHARED_INSTRUMENT, "side": "SELL",
+            "filled_quantity": shared_sell_quantity, "execution_price": "10.30",
+            "execution_timestamp": AS_OF - timedelta(minutes=1),
+        },
+        {
+            "execution_id": "SYNTHETIC:G2-FILL-002", "client_order_id": "client-g2-second",
+            "broker_order_id": "broker-g2-second", "group_id": GROUP_TWO,
+            "instrument_id": SECOND_INSTRUMENT, "side": "SELL",
+            "filled_quantity": 1, "execution_price": "8.30",
+            "execution_timestamp": AS_OF - timedelta(seconds=30),
+        },
+    )
+    opening = ({
+        "instrument_id": SHARED_INSTRUMENT, "side": "LONG",
+        "quantity": 1, "avg_price": "9.75",
+    },)
+    positions = (
+        {
+            "instrument_id": SHARED_INSTRUMENT, "side": ("FLAT" if final_shared == 0 else "LONG"),
+            "quantity": final_shared, "avg_price": "10.10",
+        },
+        {
+            "instrument_id": SECOND_INSTRUMENT, "side": "SHORT",
+            "quantity": final_second, "avg_price": "8.30",
+        },
+    )
+    opening_as_of = AS_OF - timedelta(minutes=10)
+    return AccountSnapshotBundle(
+        orders=_section("orders-multi-account", AS_OF, orders),
+        executions=_section("executions-multi-account", AS_OF, executions),
+        positions=_section("positions-multi-account", AS_OF, positions),
+        opening_positions=_section("opening-multi-account", opening_as_of, opening),
+        provenance=SyntheticSnapshotProvenance(
+            namespace="SYNTHETIC:DERIVED_SCENARIO",
+            deterministic_rule_id="account-u19-multi-group-netting-v1",
+            manifest_sha256="c" * 64,
+            scenario_timestamp=AS_OF,
+            source_anchor_refs=("TEST_ONLY:multi-group-opening-anchor",),
+            source_anchor_as_of=opening_as_of,
+        ),
+    )
+
+
+def _seed_second_group(reconciler, *, shared_sell_quantity=1):
+    settlement = reconciler.ledger_snapshot_builder.settlement_store
+    _seed_order(
+        settlement, client_id="client-g2-shared", broker_id="broker-g2-shared",
+        instrument=SHARED_INSTRUMENT, quantity=(shared_sell_quantity + 1), leg_id="shared",
+        fills=(("SYNTHETIC:G2-FILL-001", shared_sell_quantity, "10.30"),),
+        execution_times={"SYNTHETIC:G2-FILL-001": AS_OF - timedelta(minutes=1)},
+        group_id=GROUP_TWO, side="SELL",
+    )
+    _seed_order(
+        settlement, client_id="client-g2-second", broker_id="broker-g2-second",
+        instrument=SECOND_INSTRUMENT, quantity=1, leg_id="second",
+        fills=(("SYNTHETIC:G2-FILL-002", 1, "8.30"),),
+        execution_times={"SYNTHETIC:G2-FILL-002": AS_OF - timedelta(seconds=30)},
+        group_id=GROUP_TWO, side="SELL",
+    )
+
+
+def test_multi_group_account_snapshot_nets_shared_instrument_and_reopens_aggregate_u19_checkpoint(tmp_path):
+    bundle = _multi_group_bundle()
+    validation = validate_account_snapshot_bundle(bundle)
+    assert validation.is_valid
+    reconciler, checkpoint_path = _make_reconciler(tmp_path)
+    _seed_second_group(reconciler)
+
+    result = reconciler.reconcile_account(
+        bundle=bundle, validation=validation,
+        group_ids=(GROUP_ID, GROUP_TWO),
+        snapshot_id="multi-group-account-001", as_of=AS_OF,
+        aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:MULTI-001",
+    )
+
+    assert result.is_valid
+    assert result.issues == ()
+    assert {item.group_id for item in result.group_ledger_snapshots} == {GROUP_ID, GROUP_TWO}
+    assert {event.execution_id for event in result.ledger_snapshot.execution_events} == {
+        "SYNTHETIC:FILL-001", "SYNTHETIC:FILL-002", "SYNTHETIC:FILL-003",
+        "SYNTHETIC:G2-FILL-001", "SYNTHETIC:G2-FILL-002",
+    }
+    assert {item.instrument_id: item.signed_quantity for item in result.ledger_snapshot.positions} == {
+        SHARED_INSTRUMENT: Decimal("2"), SECOND_INSTRUMENT: Decimal("-1"),
+    }
+    assert {item.instrument_id: item.signed_quantity for item in result.projected_ledger_snapshot.positions} == {
+        SHARED_INSTRUMENT: Decimal("3"), SECOND_INSTRUMENT: Decimal("-1"),
+    }
+    assert result.projected_ledger_snapshot.positions == result.broker_snapshot.positions
+    assert result.recovery_decision.status is U19RecoveryStatus.RESTORE_ALLOWED
+    assert result.recovery_decision.new_entry_enabled is False
+    assert result.recovery_decision.order_submission_enabled is False
+
+    checkpoint = SqliteTrack2U19RecoveryStore(checkpoint_path).load_latest(
+        "SYNTHETIC:ACCOUNT_AGGREGATE:MULTI-001"
+    )
+    assert checkpoint["status"] == U19RecoveryStatus.RESTORE_ALLOWED.value
+    assert checkpoint["broker_positions"] == checkpoint["ledger_positions"]
+    assert {item["execution_id"] for item in checkpoint["execution_events"]} == {
+        "SYNTHETIC:FILL-001", "SYNTHETIC:FILL-002", "SYNTHETIC:FILL-003",
+        "SYNTHETIC:G2-FILL-001", "SYNTHETIC:G2-FILL-002",
+    }
+
+
+def test_multi_group_account_snapshot_rejects_missing_group_lineage_without_blocking_other_validation(tmp_path):
+    bundle = _multi_group_bundle()
+    changed_orders = tuple(
+        {key: value for key, value in row.items() if key != "group_id"}
+        if row["client_order_id"] == "client-g2-shared" else row
+        for row in bundle.orders.rows
+    )
+    bundle = replace(bundle, orders=_section(bundle.orders.snapshot_id, AS_OF, changed_orders))
+    validation = validate_account_snapshot_bundle(bundle)
+    assert validation.is_valid
+    reconciler, _ = _make_reconciler(tmp_path)
+    _seed_second_group(reconciler)
+
+    result = reconciler.reconcile_account(
+        bundle=bundle, validation=validation,
+        group_ids=(GROUP_ID, GROUP_TWO),
+        snapshot_id="multi-group-missing-lineage", as_of=AS_OF,
+        aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:MULTI-MISSING",
+    )
+
+    assert result.status == "RECONCILIATION_REQUIRED"
+    assert "ACCOUNT_ORDER_GROUP_LINEAGE_MISSING" in result.issues
+    assert result.recovery_decision is None
+
+
+def test_multi_group_account_snapshot_keeps_late_fill_pending_for_owning_group(tmp_path):
+    bundle = _multi_group_bundle()
+    validation = validate_account_snapshot_bundle(bundle)
+    assert validation.is_valid
+    reconciler, _ = _make_reconciler(tmp_path)
+    _seed_second_group(reconciler)
+    reconciler.ledger_snapshot_builder.settlement_store.record_late_fill_pending(
+        execution_id="SYNTHETIC:G2-LATE-FILL-PENDING",
+        client_order_id="client-g2-shared", broker_order_id="broker-g2-shared",
+        payload={"execution_id": "SYNTHETIC:G2-LATE-FILL-PENDING", "source": "VALIDATION_ONLY"},
+    )
+
+    result = reconciler.reconcile_account(
+        bundle=bundle, validation=validation,
+        group_ids=(GROUP_ID, GROUP_TWO),
+        snapshot_id="multi-group-late-fill", as_of=AS_OF,
+        aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:MULTI-LATE",
+    )
+
+    assert result.status == "RECONCILIATION_REQUIRED"
+    assert result.recovery_decision.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+    assert "client-g2-shared" in result.recovery_decision.pending_order_ids
+    assert result.recovery_decision.new_entry_enabled is False
+    assert result.recovery_decision.order_submission_enabled is False
+
+
+def test_multi_group_account_snapshot_does_not_checkpoint_on_execution_position_mismatch(tmp_path):
+    bundle = _multi_group_bundle()
+    validation = validate_account_snapshot_bundle(bundle)
+    assert validation.is_valid
+    reconciler, _ = _make_reconciler(tmp_path)
+    _seed_second_group(reconciler, shared_sell_quantity=2)
+
+    result = reconciler.reconcile_account(
+        bundle=bundle, validation=validation,
+        group_ids=(GROUP_ID, GROUP_TWO),
+        snapshot_id="multi-group-position-mismatch", as_of=AS_OF,
+        aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:MULTI-MISMATCH",
+    )
+
+    assert result.status == "RECONCILIATION_REQUIRED"
+    assert "ACCOUNT_POSITION_U19_GROUP_AGGREGATE_MISMATCH" in result.issues
+    assert "ACCOUNT_U19_EXECUTION_QUANTITY_MISMATCH:SYNTHETIC:G2-FILL-001" in result.issues
+    assert result.recovery_decision is None
+
+
+
+
+
+
+
+def test_multi_group_account_snapshot_normalizes_flat_position_after_cross_group_offset(tmp_path):
+    bundle = _multi_group_bundle(final_shared=0, shared_sell_quantity=4)
+    validation = validate_account_snapshot_bundle(bundle)
+    assert validation.is_valid
+    reconciler, _ = _make_reconciler(tmp_path)
+    _seed_second_group(reconciler, shared_sell_quantity=4)
+
+    result = reconciler.reconcile_account(
+        bundle=bundle, validation=validation,
+        group_ids=(GROUP_ID, GROUP_TWO),
+        snapshot_id="multi-group-flat-netting", as_of=AS_OF,
+        aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:MULTI-FLAT",
+    )
+
+    assert result.is_valid
+    assert {item.instrument_id: item.signed_quantity for item in result.projected_ledger_snapshot.positions} == {
+        SECOND_INSTRUMENT: Decimal("-1"),
+    }
+    assert result.broker_snapshot.positions == result.projected_ledger_snapshot.positions
+
+
+def test_multi_group_account_snapshot_is_independent_of_execution_row_order(tmp_path):
+    bundle = _multi_group_bundle()
+    reversed_rows = tuple(reversed(bundle.executions.rows))
+    bundle = replace(
+        bundle,
+        executions=_section(bundle.executions.snapshot_id, AS_OF, reversed_rows),
+    )
+    validation = validate_account_snapshot_bundle(bundle)
+    assert validation.is_valid
+    reconciler, _ = _make_reconciler(tmp_path)
+    _seed_second_group(reconciler)
+
+    result = reconciler.reconcile_account(
+        bundle=bundle, validation=validation,
+        group_ids=(GROUP_TWO, GROUP_ID),
+        snapshot_id="multi-group-out-of-order", as_of=AS_OF,
+        aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:MULTI-ORDER",
+    )
+
+    assert result.is_valid
+    assert tuple(event.execution_id for event in result.ledger_snapshot.execution_events) == tuple(sorted(
+        event.execution_id for event in result.ledger_snapshot.execution_events
+    ))
+
+
+def test_multi_group_account_snapshot_detects_order_group_crosswalk_mismatch(tmp_path):
+    bundle = _multi_group_bundle()
+    changed_orders = tuple(
+        {**row, "group_id": GROUP_ID}
+        if row["client_order_id"] == "client-g2-shared" else row
+        for row in bundle.orders.rows
+    )
+    bundle = replace(bundle, orders=_section(bundle.orders.snapshot_id, AS_OF, changed_orders))
+    validation = validate_account_snapshot_bundle(bundle)
+    assert validation.is_valid
+    reconciler, _ = _make_reconciler(tmp_path)
+    _seed_second_group(reconciler)
+
+    result = reconciler.reconcile_account(
+        bundle=bundle, validation=validation,
+        group_ids=(GROUP_ID, GROUP_TWO),
+        snapshot_id="multi-group-order-crosswalk-mismatch", as_of=AS_OF,
+        aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:MULTI-CROSSWALK",
+    )
+
+    assert result.status == "RECONCILIATION_REQUIRED"
+    assert "ACCOUNT_EXECUTION_GROUP_ORDER_MISMATCH:SYNTHETIC:G2-FILL-001" in result.issues
+    assert result.recovery_decision is None
+
+
+def test_multi_group_account_snapshot_detects_order_quantity_crosswalk_mismatch(tmp_path):
+    bundle = _multi_group_bundle()
+    changed_orders = tuple(
+        {**row, "order_quantity": 3}
+        if row["client_order_id"] == "client-g2-shared" else row
+        for row in bundle.orders.rows
+    )
+    bundle = replace(bundle, orders=_section(bundle.orders.snapshot_id, AS_OF, changed_orders))
+    validation = validate_account_snapshot_bundle(bundle)
+    assert validation.is_valid
+    reconciler, _ = _make_reconciler(tmp_path)
+    _seed_second_group(reconciler)
+
+    result = reconciler.reconcile_account(
+        bundle=bundle, validation=validation,
+        group_ids=(GROUP_ID, GROUP_TWO),
+        snapshot_id="multi-group-order-quantity-mismatch", as_of=AS_OF,
+        aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:MULTI-ORDER-QTY",
+    )
+
+    assert result.status == "RECONCILIATION_REQUIRED"
+    assert "ACCOUNT_U19_ORDER_LINEAGE_MISMATCH:client-g2-shared" in result.issues
+    assert result.recovery_decision is None
