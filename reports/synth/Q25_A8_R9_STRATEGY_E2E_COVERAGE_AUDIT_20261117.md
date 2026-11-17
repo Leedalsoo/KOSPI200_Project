@@ -155,3 +155,37 @@ The test distinguishes StrategyHub signal approval from downstream RiskGuard/Rou
 ### Evidence boundary
 
 These fault tests prove that the exercised virtual Runtime path does not route/fill under the three injected conditions. They do not certify all strategy-native fault behavior, persistent process restart recovery, all multi-strategy capital contention, S3/S4 production activation, or Live readiness. Continue to use No.1534 inventory/reuse-first reconciliation and No.1538/No.1554 provenance-preserving validation-only synthetic standards. No new data collection, Live/REAL_VTS/real-account/order API, Raw/Canonical mutation, or Project200 integration was performed.
+
+## 12. S3/S4 validation-only synthetic input profile and adapter (2026-11-17)
+
+### Decision and source reconciliation
+
+- Re-read mandatory No.1534 and applied its inventory/reuse-first policy. The original working folder contains the 2026-10-08 WebSocket Raw day file; the source was read-only inspected in place. No new collection and no Raw/Canonical copy or mutation was performed.
+- Re-read No.956: S3 basis semantics are same-event-time KOSPI200 Futures minus KOSPI200 Index, using H0IFCNT0/H0IFASP0 and index code 2001. `futures_underlying_rest` is not promoted as an authoritative substitute.
+- Re-read No.1554/No.1535/No.1538: synthetic/derived inputs are accepted for project validation when source lineage, deterministic generation rule, explicit namespace and hashes are preserved. They do not establish real KIS identity, account/broker facts, Production or Live readiness.
+- Source anchor `data/kis_market_data_restart/20261008/kis_vts_websocket_raw.jsonl` SHA-256: `794f17cb445878b6688fea79e04d5473a33b5e5e1856eb166ab0232eaf429c2f`. Day manifest SHA-256: `998198545e60aaa266e0f9796f66a70baa5d5787a6fd09c735845685bc0c3ad4`.
+- Parsed 17,072 exact BSOP_HOUR matches between H0IFCNT0 instrument A01612 and H0UPCNT0 instrument 2001 on 2026-10-08. The compact fixture retains the first 20 chronologically matched pairs, including both source frame sequence numbers and each payload SHA-256. It computes `basis = futures_price - index_price`; sample mean `4.4045`, population std `0.5286631725399453`. A `mean + 2.5σ = 5.726158` scenario point is explicitly generated, not represented as an observed market value.
+- A01612's broker/contract identity is not promoted: the profile uses `SYNTHETIC_CONTRACT:KOSPI200_FUTURES_VALIDATION` and grants no identity or execution authority. KRX multiplier 250,000 is only a validation fixture assumption, not an account/KIS verification.
+
+### Implemented files
+
+- `config/validation_only/q25_s3_s4/profile.v1.json` — profile `Q25-S3-S4-MARKET-ANCHORED-VALIDATION-v1`, namespace `SYNTHETIC:DERIVED_SCENARIO`; profile SHA-256 `95aad13a19d7e961b0cd0bcbc06f65cc52c4035c6cf231b69918c193ee57d939`, checked against its `.sha256` sidecar.
+- `application/composition/validation_only_s3_s4_input_adapter.py` — requires explicit namespace, raw source anchors, valid SHA-256, deterministic generation rules, exact-time basis crosswalk and reproducible mean/std/shock; rejects production/Live authority claims. It builds typed S3/S4 inputs only and is not registered in production Runtime composition.
+- `tests/application/test_q25_s3_s4_validation_only_profile.py` — validates profile provenance/hash, S3 natural strategy entry and close signal/state completion, S4 basecamp non-execution event, capped futures delta hedge and trailing close lifecycle, and rejection of a profile claiming production authority.
+
+### S4 evidence boundary
+
+- Underlying-price context is anchored to the 2026-10-08 09:00:49 KST H0UPCNT0 observation (1075.33).
+- Active/base volatility, delta/gamma/theta, PnL, premium, equity and max hedge quantity are deterministic stress inputs for exercising existing S4 strategy methods. They are not KIS option Greeks, listed option identity, option-lot ownership, account values, official margin or approved production risk limits.
+- The basecamp output is asserted as `NON_EXECUTION`; only the existing futures-delta hedge proposal and its trailing close are exercised. No option order or option lot is fabricated.
+
+### Test results and guard preservation
+
+- New S3/S4 validation-only profile tests plus existing S3/S4 production guard/spec tests: **13 passed in 0.18s**.
+- Combined focused regression including the S2 U16/U18/U19 paths and shared Runtime fault matrix: **151 passed in 6.70s**.
+- `git diff --check`: PASS.
+- Existing production S3 multi-leg adapter still rejects unresolved tradable spread legs. Existing S4 disabled/null capital gate and missing max-hedge cap guards remain unchanged. Validation-only synthetic flags are confined to this adapter/profile and do not authorize OMS/Runtime routing.
+
+### Execution boundary
+
+No production strategy, production Runtime registration, risk profile, Raw/Canonical/accepted source, original work folder, collector, scheduler, credential, KIS Live/REAL_VTS/real-account/order API was modified or called. No real order, new data collection or Project200 merge was performed. This is strategy-input and strategy-method validation only, not full S3/S4 Runtime E2E or production/Live certification.

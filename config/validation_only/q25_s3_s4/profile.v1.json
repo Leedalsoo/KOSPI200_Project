@@ -1,0 +1,82 @@
+﻿{
+  "schema_version": "q25-s3-s4-validation-only-profile-v1",
+  "profile_id": "Q25-S3-S4-MARKET-ANCHORED-VALIDATION-v1",
+  "namespace": "SYNTHETIC:DERIVED_SCENARIO",
+  "authority": {
+    "identity_authority": "NONE",
+    "execution_authority": "NONE",
+    "production_eligible": false,
+    "live_eligible": false
+  },
+  "source_anchors": [
+    {
+      "path": "data/kis_market_data_restart/20261008/kis_vts_websocket_raw.jsonl",
+      "sha256": "794f17cb445878b6688fea79e04d5473a33b5e5e1856eb166ab0232eaf429c2f",
+      "trading_date": "20261008",
+      "tr_ids": ["H0IFCNT0", "H0UPCNT0"],
+      "selected_symbols": {"futures": "A01612", "index": "2001"},
+      "selection_rule": "Exact BSOP_HOUR match; futures price minus KOSPI200 index price; no received_at substitution."
+    },
+    {
+      "path": "data/kis_market_data_restart/20261008/manifest.json",
+      "sha256": "998198545e60aaa266e0f9796f66a70baa5d5787a6fd09c735845685bc0c3ad4",
+      "trading_date": "20261008",
+      "role": "raw-day inventory and file-hash cross-check"
+    }
+  ],
+  "generation_rules": {
+    "s3": "Use the first 20 exact-time matched H0IFCNT0(A01612) and H0UPCNT0(2001) observations in ascending BSOP_HOUR. basis=futures_price-index_price. Compute population standard deviation from those 20 observed basis points. Add a validation-only 2.5-sigma scenario point; do not label it as observed. Use the KRX standard KOSPI200 futures multiplier 250000 only as a validation fixture assumption. No S3 order plan or tradable spread legs are asserted.",
+    "s4": "Use the final observed index value only as an underlying-price anchor. active_vol/base_vol/delta/gamma/PnL/equity/premium/max_hedge_qty are deterministic stress inputs to exercise the existing S4 basecamp and futures-delta-hedge logic. They are not KIS option Greeks, account values, approved risk limits, or an option-lot identity."
+  },
+  "s3": {
+    "synthetic_contract_namespace": "SYNTHETIC_CONTRACT:KOSPI200_FUTURES_VALIDATION",
+    "contract_multiplier": 250000,
+    "z_score": 2.5,
+    "spread_std": 0.5286631725399453,
+    "current_basis": 5.726158,
+    "regime": "NORMAL",
+    "time_str": "09:00:50",
+    "date_str": "20261008",
+    "observations": [
+      {"time":"090030","futures_price":1079.55,"index_price":1074.98,"basis":4.57,"futures_frame_sequence":309,"futures_payload_sha256":"4fff7509f4a366180984c74276381b14dc10ae7206996907fe74f4f8f46e9c6f","index_frame_sequence":297,"index_payload_sha256":"1c773a318d76d970d79c577c2dd0ad29712e9659af1d092ca8172b8cd0a34568"},
+      {"time":"090031","futures_price":1079.25,"index_price":1075.04,"basis":4.21,"futures_frame_sequence":330,"futures_payload_sha256":"d4e87544d167882cfe2f15b89a594accaef1dd64e58213040b16c509394d4d88","index_frame_sequence":312,"index_payload_sha256":"d1d60ffba324394b9c00c7012847659b795042c2e7c6389aa7e1cb19b2f7e393"},
+      {"time":"090032","futures_price":1078.95,"index_price":1074.78,"basis":4.17,"futures_frame_sequence":345,"futures_payload_sha256":"5ad1429d106132d57a0c391a004f3f337f43adf4fa4cdc3eb14ac41a0d06a051","index_frame_sequence":334,"index_payload_sha256":"ffcfb16fa71e459359a09739801a370a1bc0a73832db1f455423d77a0298e125"},
+      {"time":"090033","futures_price":1079.35,"index_price":1074.74,"basis":4.61,"futures_frame_sequence":366,"futures_payload_sha256":"14c7a407742438405105bb80302eeca399c76edaa88c87659afc50a15a1e1bd7","index_frame_sequence":354,"index_payload_sha256":"eac47975da2681d752f20682fd9619de416047be5948ed6e5c4eb1bc73859a0b"},
+      {"time":"090034","futures_price":1079.00,"index_price":1074.15,"basis":4.85,"futures_frame_sequence":387,"futures_payload_sha256":"1f3d984955f44db3af7c4dc4802ff9a37634920df0c903608e70778cdd08b9e4","index_frame_sequence":377,"index_payload_sha256":"78d07de4b0ad4f9e0db5a261f2b46566451ccb4dec29155ca8c1131240fa803e"},
+      {"time":"090035","futures_price":1079.45,"index_price":1073.98,"basis":5.47,"futures_frame_sequence":401,"futures_payload_sha256":"ae1877499e1b84786d12612da1692742b2422496b92113bf8dedbb3d07626d5c","index_frame_sequence":388,"index_payload_sha256":"1005c8b0d754cdac2f799e67e31b443decf533a1a57b576bbbba3912ffb26317"},
+      {"time":"090036","futures_price":1079.00,"index_price":1073.77,"basis":5.23,"futures_frame_sequence":423,"futures_payload_sha256":"83d22235505280da6c5398e59eee40f7807607fe1dbda892ba2c7998d2597c04","index_frame_sequence":415,"index_payload_sha256":"00e99e37fa6e115dda70fa529eabacc169ca3e076396401295b92cb305358917"},
+      {"time":"090037","futures_price":1078.90,"index_price":1074.46,"basis":4.44,"futures_frame_sequence":439,"futures_payload_sha256":"09f03de1df638f00490a003e63c7f4bac631caf131546c2e991e1e515f2a1c81","index_frame_sequence":426,"index_payload_sha256":"a01a31f584686f0ed9104894d0a158d2cdab38e3c96a21d13e15f87dd96d82cd"},
+      {"time":"090038","futures_price":1079.45,"index_price":1074.23,"basis":5.22,"futures_frame_sequence":453,"futures_payload_sha256":"62690b4ebbb5afb7f8f2fb88415ab169432b0fa49761b3277810657db99af7af","index_frame_sequence":441,"index_payload_sha256":"d8410295265af1fc91ba0c7409ca25bbc8c6143bc4d026032af1125b7318886b"},
+      {"time":"090039","futures_price":1079.65,"index_price":1075.44,"basis":4.21,"futures_frame_sequence":481,"futures_payload_sha256":"bc6d5c4e1fc8e66b54aadba9ea69a46a17738285517bfc77830cc7788c800889","index_frame_sequence":469,"index_payload_sha256":"ff9b914f8887f3f35db264b242503cae96935d2192e01bf0ae0a1cbf365e2376"},
+      {"time":"090040","futures_price":1079.45,"index_price":1075.50,"basis":3.95,"futures_frame_sequence":498,"futures_payload_sha256":"d9f73c5721618cca137d8633d96f4d131603d897df5afda8944a62eb0a3e7efb","index_frame_sequence":490,"index_payload_sha256":"eb224140f612aedca2ae8bef232753425cf606ce1fd87311585438063d5b600b"},
+      {"time":"090041","futures_price":1079.00,"index_price":1075.65,"basis":3.35,"futures_frame_sequence":509,"futures_payload_sha256":"9484a98564757ec0075ae9afc6415cf4adb05f6f30278ed39c412fe44e901c48","index_frame_sequence":500,"index_payload_sha256":"c386c1fb600497506cd4cb90a00b3559baab8ef4a865e57d447ba071d441b7ad"},
+      {"time":"090042","futures_price":1079.20,"index_price":1074.41,"basis":4.79,"futures_frame_sequence":520,"futures_payload_sha256":"55051b036f19fcbcde80e0715bbe4d683b517198a6f024b1788d36d4d43291f3","index_frame_sequence":513,"index_payload_sha256":"d3221499ae7fb3ad3b536ff302ce1108a91de1cdf465d9ab8ee983499f667392"},
+      {"time":"090043","futures_price":1079.60,"index_price":1075.32,"basis":4.28,"futures_frame_sequence":535,"futures_payload_sha256":"9d311b97ee1838206c15c9eec9f8f41a65863d71e15b7c349872f17a9cf2808e","index_frame_sequence":522,"index_payload_sha256":"1e25c706a099a01b439ca4faf666a89d1a723013b42aae3616595239ffd8dc0d"},
+      {"time":"090044","futures_price":1079.75,"index_price":1075.74,"basis":4.01,"futures_frame_sequence":543,"futures_payload_sha256":"3aa56a1c1fea4f42dd515e1108505115f0dd422bb9769443fce2a14b582a981c","index_frame_sequence":539,"index_payload_sha256":"2ef976b9363173cc862c1ded98650aeaf394ef29d13ed26ac691d1c613dfe3d0"},
+      {"time":"090045","futures_price":1079.70,"index_price":1075.63,"basis":4.07,"futures_frame_sequence":552,"futures_payload_sha256":"b8d5f1b182b9442131996df2b97db3b6d589b5cef260df4844360863da3552a1","index_frame_sequence":549,"index_payload_sha256":"e7e1f8aedcba4cf0a9ccd72233e8e41b5becd733d2e5ac365a8a26c492ab39e1"},
+      {"time":"090046","futures_price":1079.85,"index_price":1076.28,"basis":3.57,"futures_frame_sequence":580,"futures_payload_sha256":"ebba4a5b0e340a5e94d6b232be824cb017182b64c51b64f71f8e095be95afc4d","index_frame_sequence":556,"index_payload_sha256":"32b19dd3ebfbe020a1aea1a4abb5e95fc4200fc1a1d10d2fe12e8ddc745c823a"},
+      {"time":"090047","futures_price":1079.85,"index_price":1075.18,"basis":4.67,"futures_frame_sequence":588,"futures_payload_sha256":"a3026b62c9b8679e5e4d9f5bff1e1816c7a18cf8304cd9e1b04047253005b198","index_frame_sequence":582,"index_payload_sha256":"f65210939f63f5bd860290b96e26e8d76f19cd42bc772e06e72f50626f28c2d6"},
+      {"time":"090048","futures_price":1079.65,"index_price":1075.20,"basis":4.45,"futures_frame_sequence":597,"futures_payload_sha256":"6ccda6308a1775f64fd3275430dea63c9c3c2bbf425efc38ed89bc5ba504e90f","index_frame_sequence":592,"index_payload_sha256":"171e60f3ef8d88ff3fab620e790b4147512133e409cced35c6dec8ce8af94504"},
+      {"time":"090049","futures_price":1079.30,"index_price":1075.33,"basis":3.97,"futures_frame_sequence":609,"futures_payload_sha256":"dd69d828f6cfdba429ce01ea8efd38e9653b4e007d92aed2f573ad530b095b06","index_frame_sequence":600,"index_payload_sha256":"81a9a75ddb3af1b8905f3c20932706be3b34fef73817475b522b363961109117"}
+    ]
+  },
+  "s4": {
+    "observed_at": "2026-10-08T09:00:49+09:00",
+    "current_price": 1075.33,
+    "active_vol": 20,
+    "base_vol": 15,
+    "current_delta": 1000000,
+    "current_gamma": 1,
+    "current_theta": -0.5,
+    "current_pnl_initial": 50000,
+    "current_pnl_retrace": 40000,
+    "current_equity": 1000000,
+    "premium_spent": 15000,
+    "max_hedge_qty": 2,
+    "deadband": 0,
+    "price_history": [1074.98,1075.04,1074.78,1074.74,1074.15,1073.98,1073.77,1074.46,1074.23,1075.44,1075.50,1075.65,1074.41,1075.32,1075.74,1075.63,1076.28,1075.18,1075.20,1075.33],
+    "greeks_provenance": "SYNTHETIC:DERIVED_SCENARIO deterministic delta/gamma stress; not a KIS option Greek observation",
+    "option_identity": null,
+    "option_lot_owner": null
+  }
+}
