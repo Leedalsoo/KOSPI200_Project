@@ -131,3 +131,27 @@ Validation-only and virtual execution only. No KIS Live/REAL_VTS/real-account/or
 - Strengthened the shared Runtime harness fixture to validate the dataset manifest's `DERIVED_SCENARIO` provenance, dataset identity, declared source-anchor presence and SHA-256 before replay. If the dataset or anchor is absent in another checkout, the fixture reports an explicit pytest skip requesting original-source reconciliation rather than falsely treating the missing local copy as proof of invalid source data.
 - Re-run after the change: shared Runtime harness **10 passed in 4.61s**.
 - The source anchor copy is ignored validation data and is not committed. Only test code and the audit report are eligible for the isolated branch commit.
+
+## 11. Shared-Runtime fault-injection expansion (2026-11-17)
+
+### Scope
+
+Added three validation-only fault-injection cases to the same StrategyHub → RiskGuard/RiskRouter → OMS/Virtual Multi-Leg Bridge → VSSF boundary. Each uses the already reconciled DERIVED_SCENARIO fixture and its SHA-256-verified KRX source anchor. No production strategy, Runtime, risk, order or source-data code was modified.
+
+| Fault | Injected condition | Verified outcome |
+|---|---|---|
+| RiskGuard denial | Explicit `admission_allowed=false`, kill switch engaged | Order rejected; no route/fill/open lot |
+| Stale quote | Execution freshness verdict `STALE` | Order rejected; no route/fill/open lot |
+| Identity mismatch | Freshness symbol differs from command broker symbol | Order rejected; no route/fill/open lot |
+
+The test distinguishes StrategyHub signal approval from downstream RiskGuard/Router admission: the strategy-level result may report `approved=1`, while the order is rejected (`rejected=1`) and `routed=0`, `filled=0`, no execution IDs and no remaining PositionLots. This is not counted as a risk-approved order.
+
+### Results
+
+- Expanded shared Runtime harness: **13 passed in 4.89s** (10 prior lifecycle/shared-account cases + 3 new fault cases).
+- Focused integration regression: **83 passed in 5.44s**. Includes S3/S4 spec/guard, freshness, restart-after-gap, S2 sequential progression, S9 partial-reject, S15B parity, caller-edge and new shared Runtime fault matrix. Test modules overlap; do not sum independent run totals as unique tests.
+- `git diff --check`: PASS.
+
+### Evidence boundary
+
+These fault tests prove that the exercised virtual Runtime path does not route/fill under the three injected conditions. They do not certify all strategy-native fault behavior, persistent process restart recovery, all multi-strategy capital contention, S3/S4 production activation, or Live readiness. Continue to use No.1534 inventory/reuse-first reconciliation and No.1538/No.1554 provenance-preserving validation-only synthetic standards. No new data collection, Live/REAL_VTS/real-account/order API, Raw/Canonical mutation, or Project200 integration was performed.

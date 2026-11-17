@@ -14,6 +14,8 @@ from application.bootstrap import create_virtual_runtime_bootstrap
 from application.composition.automated_virtual_runtime_factory import attach_standard_automated_loop
 from application.strategy_hub.hub import StrategyHub
 from contracts.market_data_freshness import FreshnessStatus, FreshnessVerdict
+from contracts.risk_guard import RiskGuardStatusSnapshot
+from contracts.trading_state import SensorLevel
 from contracts.types import ExecutionLeg, MultiLegExecutionPlan, OptionInstrumentIdentity
 from core.oms.multi_leg_plan import build_trap_plan
 from core.strategy.contracts import Signal, SignalKind
@@ -572,3 +574,142 @@ def test_two_strategies_share_one_account_without_cross_strategy_position_close(
     assert loop.fee_ledger is not None
     assert loop.fee_ledger.total(run_id=run_id) >= Decimal("0")
 
+
+class _StaticRiskGuardSource:
+    def __init__(self, *, allowed: bool, observed_at: datetime) -> None:
+        self.allowed = allowed
+        self.observed_at = observed_at
+
+    def snapshot(self):
+        return RiskGuardStatusSnapshot(
+            observed_at=self.observed_at,
+            admission_allowed=self.allowed,
+            kill_switch_engaged=not self.allowed,
+            health_level=SensorLevel.GREEN if self.allowed else SensorLevel.BLOCKED,
+            reason="R9_TEST_ALLOWED" if self.allowed else "R9_TEST_RISK_DENIED",
+            decision_version="R9-FAULT-INJECTION-v1",
+        )
+
+
+@pytest.mark.parametrize("fault", ("risk_guard_denied", "stale_quote", "identity_mismatch"))
+def test_shared_runtime_fault_injection_never_routes_unapproved_risk(fault, _synthetic_scenario):
+    scenario = _synthetic_scenario
+    tick = scenario["entry_tick"]
+    option_master = scenario["option_master"]
+    identity = option_master.get_contract_identity(tick.instrument_id)
+    assert identity is not None
+
+    sources = SyntheticRuntimeSources()
+    observed_at = datetime.fromisoformat(tick.timestamp)
+    risk_guard = _StaticRiskGuardSource(
+        allowed=fault != "risk_guard_denied", observed_at=observed_at
+    )
+    bootstrap = create_virtual_runtime_bootstrap(
+        option_master=option_master,
+        initial_capital=250_000_000.0,
+        risk_guard_status_source=risk_guard,
+    )
+    if bootstrap.automated_loop is not None:
+        bootstrap.bundle.market.unsubscribe(bootstrap.automated_loop.on_tick)
+
+    strategy_key = next(key for key in STANDARD_STRATEGY_KEYS if key[0] == "TRACK1_TAIL_DEFENSE")
+    strategy_id, version = strategy_key
+    run_id = f"R9-FAULT-INJECTION-{fault}"
+    loop = attach_standard_automated_loop(
+        bootstrap,
+        strategy_keys=(strategy_key,),
+        run_id=run_id,
+        synthetic_runtime_sources=sources,
+        track4_greeks_provider=sources,
+        risk_guard_status_source=risk_guard,
+    )
+    registry = StrategyRegistry()
+    registry.register(_ScenarioLifecycleStrategy(
+        strategy_id, version, ((tick, "BUY", "R9_FAULT_ENTRY"),)
+    ))
+    loop.strategy_hub = StrategyHub(registry, (strategy_key,))
+
+    def plan_resolver(evaluation, canonical):
+        proposal = evaluation.result.execution_proposal
+        assert proposal is not None
+        return MultiLegExecutionPlan(
+            group_id=f"{run_id}-ENTRY",
+            strategy_id=strategy_id,
+            purpose="R9_VALIDATION_ONLY_FAULT_INJECTION",
+            legs=(ExecutionLeg(
+                "R9_FAULT_ENTRY", "BUY", 1,
+                str(proposal.option_type).upper(), Decimal(str(proposal.strike)),
+                requested_price=Decimal(str(proposal.requested_price)),
+            ),),
+        )
+
+    loop.multi_leg_plan_resolver = plan_resolver
+    original_context_builder = loop.context_builder
+
+    def fixture_context_builder(current_tick, state):
+        contexts = original_context_builder(current_tick, state)
+        current_identity = option_master.get_contract_identity(current_tick.instrument_id)
+        assert current_identity is not None
+        current_observed = datetime.fromisoformat(current_tick.timestamp)
+        verdict = FreshnessVerdict(
+            status=FreshnessStatus.FRESH,
+            reason="R9_SYNTHETIC_FIXTURE_ONLY",
+            policy_version="R9-TEST-FIXTURE-v1",
+            source="DERIVED_SCENARIO_TEST_FIXTURE",
+            environment="VIRTUAL_VALIDATION_ONLY",
+            instrument_id=current_identity.shrn_iscd,
+            symbol=current_identity.shrn_iscd,
+            source_instant=current_observed,
+            received_at=current_observed,
+            evidence_sha256=sha256(
+                f"{current_tick.timestamp}|{current_identity.shrn_iscd}|R9-FAULT".encode()
+            ).hexdigest(),
+        )
+        contexts[strategy_id] = replace(contexts[strategy_id], input=None, freshness_verdict=verdict)
+        return contexts
+
+    loop.context_builder = fixture_context_builder
+
+    def fault_freshness(plan, leg, leg_identity, command):
+        status = FreshnessStatus.STALE if fault == "stale_quote" else FreshnessStatus.FRESH
+        symbol = "SYNTHETIC_CONTRACT:INTENTIONALLY_MISMATCHED" if fault == "identity_mismatch" else command.broker_symbol
+        return FreshnessVerdict(
+            status=status,
+            reason=f"R9_FAULT_{fault.upper()}",
+            policy_version="R9-FAULT-INJECTION-v1",
+            source="DERIVED_SCENARIO_TEST_FIXTURE",
+            environment="VIRTUAL_VALIDATION_ONLY",
+            instrument_id=command.instrument_id,
+            symbol=symbol,
+            source_instant=observed_at,
+            received_at=observed_at,
+            evidence_sha256=sha256(
+                f"{fault}|{command.instrument_id}|{symbol}".encode()
+            ).hexdigest(),
+        )
+
+    loop.multi_leg_bridge.freshness_verdict_provider = fault_freshness
+    sources.set_tick(tick)
+    vssf_runtime = bootstrap.bundle.execution._authoritative_execute.__self__.vssf_runtime
+    for quote_tick in scenario["quote_sets"][tick.timestamp]:
+        _publish_contract_scoped_replay_quote(
+            quote_tick,
+            option_master=bootstrap.bundle.option_master,
+            market=bootstrap.bundle.market,
+            order_book=vssf_runtime.order_book,
+        )
+    bootstrap.bundle.market.publish_replay_tick(tick)
+
+    result = loop.last_result
+    assert result is not None
+    assert result.signals == 1
+    assert result.approved == 1  # strategy-level approval; risk/router admission is separately denied
+    assert result.routed == 0
+    assert result.filled == 0
+    assert result.rejected == 1
+    assert result.execution_ids == ()
+    open_lots = tuple(
+        lot for lot in loop.multi_leg_bridge.position_lot_store.open_lots()
+        if lot.run_id == run_id and lot.remaining_quantity > 0
+    )
+    assert open_lots == ()
