@@ -125,6 +125,26 @@ class SQLiteSettlementStore:
                     evidence_ref TEXT,
                     received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
+                CREATE TABLE IF NOT EXISTS order_replacement_links (
+                    link_id TEXT PRIMARY KEY,
+                    original_client_order_id TEXT NOT NULL,
+                    original_broker_order_id TEXT NOT NULL,
+                    replacement_client_order_id TEXT NOT NULL UNIQUE,
+                    replacement_broker_order_id TEXT NOT NULL,
+                    group_id TEXT NOT NULL,
+                    leg_id TEXT NOT NULL,
+                    cancel_request_ref TEXT NOT NULL,
+                    cancel_ack_ref TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TRIGGER IF NOT EXISTS order_replacement_links_no_update
+                BEFORE UPDATE ON order_replacement_links
+                BEGIN SELECT RAISE(ABORT, 'ORDER_REPLACEMENT_LINKS_APPEND_ONLY'); END;
+                CREATE TRIGGER IF NOT EXISTS order_replacement_links_no_delete
+                BEFORE DELETE ON order_replacement_links
+                BEGIN SELECT RAISE(ABORT, 'ORDER_REPLACEMENT_LINKS_APPEND_ONLY'); END;
                 """
             )
 
@@ -154,6 +174,94 @@ class SQLiteSettlementStore:
                 "SELECT state_json FROM order_states ORDER BY client_order_id"
             ).fetchall()
         return tuple(json.loads(row["state_json"]) for row in rows)
+
+    def record_order_replacement_link(
+        self,
+        *,
+        link_id: str,
+        original_client_order_id: str,
+        original_broker_order_id: str,
+        replacement_client_order_id: str,
+        replacement_broker_order_id: str,
+        group_id: str,
+        leg_id: str,
+        cancel_request_ref: str,
+        cancel_ack_ref: str,
+        source: str,
+        payload: Mapping[str, Any],
+    ) -> bool:
+        """Persist explicit order replacement lineage without inferring broker IDs."""
+        values = {
+            "link_id": link_id,
+            "original_client_order_id": original_client_order_id,
+            "original_broker_order_id": original_broker_order_id,
+            "replacement_client_order_id": replacement_client_order_id,
+            "replacement_broker_order_id": replacement_broker_order_id,
+            "group_id": group_id,
+            "leg_id": leg_id,
+            "cancel_request_ref": cancel_request_ref,
+            "cancel_ack_ref": cancel_ack_ref,
+            "source": source,
+        }
+        normalized = {key: str(value or "").strip() for key, value in values.items()}
+        if any(not value for value in normalized.values()):
+            raise ValueError("ORDER_REPLACEMENT_LINEAGE_FIELDS_REQUIRED")
+        if normalized["original_client_order_id"] == normalized["replacement_client_order_id"]:
+            raise ValueError("ORDER_REPLACEMENT_SELF_LINK_INVALID")
+        if normalized["cancel_request_ref"] == normalized["cancel_ack_ref"]:
+            raise ValueError("ORDER_REPLACEMENT_CANCEL_REQUEST_ACK_MUST_DIFFER")
+        encoded = encode_record(dict(payload))
+        columns = tuple(normalized)
+        with self._connection() as connection:
+            self._begin(connection)
+            existing = connection.execute(
+                "SELECT * FROM order_replacement_links WHERE link_id=?",
+                (normalized["link_id"],),
+            ).fetchone()
+            if existing is not None:
+                identical = all(existing[key] == normalized[key] for key in columns) and existing["payload_json"] == encoded
+                connection.rollback()
+                if identical:
+                    return False
+                raise SettlementStoreError("ORDER_REPLACEMENT_LINK_ID_COLLISION")
+            try:
+                connection.execute(
+                    """INSERT INTO order_replacement_links
+                       (link_id,original_client_order_id,original_broker_order_id,
+                        replacement_client_order_id,replacement_broker_order_id,group_id,leg_id,
+                        cancel_request_ref,cancel_ack_ref,source,payload_json)
+                       VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                    tuple(normalized[key] for key in columns) + (encoded,),
+                )
+            except sqlite3.IntegrityError as exc:
+                connection.rollback()
+                raise SettlementStoreError("ORDER_REPLACEMENT_CLIENT_ALREADY_LINKED") from exc
+            connection.commit()
+            return True
+
+    def load_order_replacement_links(self) -> tuple[dict[str, Any], ...]:
+        """Read immutable original-to-replacement order lineage in insertion order."""
+        with self._connection() as connection:
+            rows = connection.execute(
+                """SELECT link_id,original_client_order_id,original_broker_order_id,
+                          replacement_client_order_id,replacement_broker_order_id,group_id,leg_id,
+                          cancel_request_ref,cancel_ack_ref,source,payload_json,created_at
+                   FROM order_replacement_links ORDER BY rowid"""
+            ).fetchall()
+        return tuple({
+            "link_id": row["link_id"],
+            "original_client_order_id": row["original_client_order_id"],
+            "original_broker_order_id": row["original_broker_order_id"],
+            "replacement_client_order_id": row["replacement_client_order_id"],
+            "replacement_broker_order_id": row["replacement_broker_order_id"],
+            "group_id": row["group_id"],
+            "leg_id": row["leg_id"],
+            "cancel_request_ref": row["cancel_request_ref"],
+            "cancel_ack_ref": row["cancel_ack_ref"],
+            "source": row["source"],
+            "payload": json.loads(row["payload_json"]),
+            "created_at": row["created_at"],
+        } for row in rows)
 
     def load_execution_journal_records(self) -> tuple[dict[str, Any], ...]:
         """Read committed execution rows in SQLite insertion order without mutation."""

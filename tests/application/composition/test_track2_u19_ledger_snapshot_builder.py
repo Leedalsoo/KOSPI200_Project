@@ -1,5 +1,6 @@
 ﻿from datetime import datetime, timezone
 from decimal import Decimal
+import sqlite3
 
 import pytest
 
@@ -30,9 +31,9 @@ GROUP_ID = "SYNTHETIC:GROUP:U19-LEDGER"
 
 
 def _order_with_fill(store, *, client_id, broker_id, instrument_id, side, leg_id, group_id=GROUP_ID,
-                     fills=(("exec-1", 1, 0, "10.00"),)):
+                     fills=(("exec-1", 1, 0, "10.00"),), order_quantity=None):
     oms = OrderStateMachine(persistence_store=store)
-    quantity = sum(item[1] for item in fills)
+    quantity = order_quantity if order_quantity is not None else sum(item[1] for item in fills)
     oms.apply_intent(OrderIntent(
         client_order_id=client_id,
         instrument_id=instrument_id,
@@ -210,3 +211,124 @@ def test_u19_ledger_builder_promotes_unknown_inbox_order_to_global_gate(tmp_path
         group_id=GROUP_ID, snapshot_id="ledger-global-gate", as_of=AS_OF
     )
     assert snapshot.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
+
+
+
+def test_u19_builder_preserves_cancelled_original_and_replacement_order_lineage(tmp_path):
+    store = SQLiteSettlementStore(tmp_path / "replacement-lineage.sqlite3")
+    original_oms = _order_with_fill(
+        store, client_id="client-original", broker_id="broker-original", instrument_id="OPT-SAME",
+        side="BUY", leg_id="inner-call", fills=(("exec-original-1", 1, 0, "10.00"),),
+        order_quantity=3,
+    )
+    cancelled = original_oms.apply_cancel(ExecutionReport(
+        client_order_id="client-original",
+        broker_order_id="broker-original",
+        execution_id="cancel-ack-fixture-1",
+        status="CANCELLED",
+        filled_quantity=0,
+        remaining_quantity=2,
+        execution_price=None,
+        execution_timestamp=AS_OF,
+        group_id=GROUP_ID,
+        leg_id="inner-call",
+    ))
+    assert cancelled.status == "CANCELLED"
+    _order_with_fill(
+        store, client_id="client-replacement", broker_id="broker-replacement", instrument_id="OPT-SAME",
+        side="BUY", leg_id="inner-call", fills=(("exec-replacement-1", 1, 0, "10.20"),),
+        order_quantity=2,
+    )
+    assert store.record_order_replacement_link(
+        link_id="lineage-fixture-1",
+        original_client_order_id="client-original",
+        original_broker_order_id="broker-original",
+        replacement_client_order_id="client-replacement",
+        replacement_broker_order_id="broker-replacement",
+        group_id=GROUP_ID,
+        leg_id="inner-call",
+        cancel_request_ref="VALIDATION_ONLY:cancel-request-1",
+        cancel_ack_ref="VALIDATION_ONLY:cancel-ack-1",
+        source="VALIDATION_ONLY:ORDER_REPLACEMENT_FIXTURE",
+        payload={"reason": "replacement after partial fill and cancel acknowledgement"},
+    ) is True
+
+    snapshot = ValidationOnlyU19LedgerSnapshotBuilder(store).build(
+        group_id=GROUP_ID, snapshot_id="ledger-replacement-linked", as_of=AS_OF
+    )
+    assert snapshot.positions == (U19Position("OPT-SAME", Decimal("2")),)
+    assert {event.execution_id for event in snapshot.execution_events} == {
+        "exec-original-1", "exec-replacement-1"
+    }
+    assert snapshot.pending_order_ids == ()
+
+
+def test_u19_builder_rejects_multiple_orders_for_same_leg_without_link(tmp_path):
+    store = SQLiteSettlementStore(tmp_path / "replacement-missing-link.sqlite3")
+    _order_with_fill(
+        store, client_id="client-original", broker_id="broker-original", instrument_id="OPT-SAME",
+        side="BUY", leg_id="inner-call", fills=(("exec-original-1", 1, 0, "10.00"),),
+    )
+    _order_with_fill(
+        store, client_id="client-replacement", broker_id="broker-replacement", instrument_id="OPT-SAME",
+        side="BUY", leg_id="inner-call", fills=(("exec-replacement-1", 1, 0, "10.20"),),
+    )
+    with pytest.raises(U19LedgerSnapshotBuildError, match="U19_MULTIPLE_ORDERS_FOR_LEG_WITHOUT_REPLACEMENT_LINEAGE"):
+        ValidationOnlyU19LedgerSnapshotBuilder(store).build(
+            group_id=GROUP_ID, snapshot_id="ledger-missing-replacement-link", as_of=AS_OF
+        )
+
+
+def test_u19_builder_rejects_replacement_link_leg_or_instrument_conflict(tmp_path):
+    store = SQLiteSettlementStore(tmp_path / "replacement-conflict.sqlite3")
+    original_oms = _order_with_fill(
+        store, client_id="client-original", broker_id="broker-original", instrument_id="OPT-SAME",
+        side="BUY", leg_id="inner-call", fills=(("exec-original-1", 1, 0, "10.00"),),
+        order_quantity=2,
+    )
+    original_oms.apply_cancel(ExecutionReport(
+        client_order_id="client-original", broker_order_id="broker-original",
+        execution_id="cancel-ack-fixture-2", status="CANCELLED", filled_quantity=0,
+        remaining_quantity=1, execution_price=None, execution_timestamp=AS_OF,
+        group_id=GROUP_ID, leg_id="inner-call",
+    ))
+    _order_with_fill(
+        store, client_id="client-replacement", broker_id="broker-replacement", instrument_id="OPT-DIFFERENT",
+        side="BUY", leg_id="outer-call", fills=(("exec-replacement-1", 1, 0, "10.20"),),
+    )
+    store.record_order_replacement_link(
+        link_id="lineage-conflict-1",
+        original_client_order_id="client-original", original_broker_order_id="broker-original",
+        replacement_client_order_id="client-replacement", replacement_broker_order_id="broker-replacement",
+        group_id=GROUP_ID, leg_id="inner-call",
+        cancel_request_ref="VALIDATION_ONLY:cancel-request-2",
+        cancel_ack_ref="VALIDATION_ONLY:cancel-ack-2",
+        source="VALIDATION_ONLY:ORDER_REPLACEMENT_FIXTURE", payload={},
+    )
+    with pytest.raises(U19LedgerSnapshotBuildError, match="U19_REPLACEMENT_ORDER_LINEAGE_IDENTITY_CONFLICT"):
+        ValidationOnlyU19LedgerSnapshotBuilder(store).build(
+            group_id=GROUP_ID, snapshot_id="ledger-replacement-conflict", as_of=AS_OF
+        )
+
+
+
+def test_order_replacement_lineage_is_append_only(tmp_path):
+    store = SQLiteSettlementStore(tmp_path / "replacement-append-only.sqlite3")
+    store.record_order_replacement_link(
+        link_id="lineage-append-only",
+        original_client_order_id="old-client",
+        original_broker_order_id="old-broker",
+        replacement_client_order_id="new-client",
+        replacement_broker_order_id="new-broker",
+        group_id=GROUP_ID,
+        leg_id="inner-call",
+        cancel_request_ref="VALIDATION_ONLY:cancel-request",
+        cancel_ack_ref="VALIDATION_ONLY:cancel-ack",
+        source="VALIDATION_ONLY:ORDER_REPLACEMENT_FIXTURE",
+        payload={},
+    )
+    with sqlite3.connect(store.path) as connection:
+        with pytest.raises(sqlite3.IntegrityError, match="ORDER_REPLACEMENT_LINKS_APPEND_ONLY"):
+            connection.execute("UPDATE order_replacement_links SET leg_id='other' WHERE link_id='lineage-append-only'")
+        with pytest.raises(sqlite3.IntegrityError, match="ORDER_REPLACEMENT_LINKS_APPEND_ONLY"):
+            connection.execute("DELETE FROM order_replacement_links WHERE link_id='lineage-append-only'")

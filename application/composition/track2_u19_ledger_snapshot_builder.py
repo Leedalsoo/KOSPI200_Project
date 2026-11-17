@@ -47,6 +47,94 @@ class ValidationOnlyU19LedgerSnapshotBuilder:
             commands[client_id] = command
             states_by_client[client_id] = state
 
+        replacement_links_for_group: list[dict[str, str]] = []
+        replacement_graph: dict[str, set[str]] = {}
+        replacement_edges: dict[str, str] = {}
+        for link in self.settlement_store.load_order_replacement_links():
+            if not str(link.get("source") or "").startswith("VALIDATION_ONLY:"):
+                raise U19LedgerSnapshotBuildError("U19_REPLACEMENT_LINK_SOURCE_NOT_VALIDATION_ONLY")
+            original_id = link["original_client_order_id"]
+            replacement_id = link["replacement_client_order_id"]
+            original_command = commands.get(original_id)
+            replacement_command = commands.get(replacement_id)
+            if original_command is None or replacement_command is None:
+                raise U19LedgerSnapshotBuildError("U19_REPLACEMENT_ORDER_COMMAND_LINEAGE_MISSING")
+            original_state = states_by_client[original_id]
+            replacement_state = states_by_client[replacement_id]
+            original_group = str(original_command.get("group_id") or "").strip()
+            replacement_group = str(replacement_command.get("group_id") or "").strip()
+            original_leg = str(original_command.get("leg_id") or "").strip()
+            replacement_leg = str(replacement_command.get("leg_id") or "").strip()
+            original_instrument = str(original_command.get("instrument_id") or "").strip()
+            replacement_instrument = str(replacement_command.get("instrument_id") or "").strip()
+            original_side = str(original_command.get("side") or "").strip().upper()
+            replacement_side = str(replacement_command.get("side") or "").strip().upper()
+            if (
+                original_state.get("status") != "CANCELLED"
+                or not link.get("cancel_request_ref") or not link.get("cancel_ack_ref")
+                or link["cancel_request_ref"] == link["cancel_ack_ref"]
+                or str(original_state.get("broker_order_id") or "") != link["original_broker_order_id"]
+                or str(replacement_state.get("broker_order_id") or "") != link["replacement_broker_order_id"]
+                or original_group != replacement_group
+                or original_leg != replacement_leg
+                or original_instrument != replacement_instrument
+                or original_side != replacement_side
+                or link["group_id"] != original_group
+                or link["leg_id"] != original_leg
+            ):
+                raise U19LedgerSnapshotBuildError("U19_REPLACEMENT_ORDER_LINEAGE_IDENTITY_CONFLICT")
+            previous_parent = replacement_edges.get(replacement_id)
+            if previous_parent is not None and previous_parent != original_id:
+                raise U19LedgerSnapshotBuildError("U19_REPLACEMENT_ORDER_MULTIPLE_PARENTS")
+            replacement_edges[replacement_id] = original_id
+            replacement_graph.setdefault(original_id, set()).add(replacement_id)
+            replacement_graph.setdefault(replacement_id, set()).add(original_id)
+            if original_group == group:
+                replacement_links_for_group.append({
+                    "link_id": link["link_id"],
+                    "original_client_order_id": original_id,
+                    "original_broker_order_id": link["original_broker_order_id"],
+                    "replacement_client_order_id": replacement_id,
+                    "replacement_broker_order_id": link["replacement_broker_order_id"],
+                    "group_id": original_group,
+                    "leg_id": original_leg,
+                    "cancel_request_ref": link["cancel_request_ref"],
+                    "cancel_ack_ref": link["cancel_ack_ref"],
+                    "source": link["source"],
+                })
+
+        group_orders_by_leg: dict[str, set[str]] = {}
+        for client_id, command in commands.items():
+            if str(command.get("group_id") or "").strip() == group:
+                leg = str(command.get("leg_id") or "").strip()
+                if not leg:
+                    raise U19LedgerSnapshotBuildError("U19_GROUP_ORDER_LEG_ID_REQUIRED")
+                group_orders_by_leg.setdefault(leg, set()).add(client_id)
+        for leg, order_ids in group_orders_by_leg.items():
+            if len(order_ids) <= 1:
+                continue
+            start = next(iter(order_ids))
+            visited: set[str] = set()
+            pending = [start]
+            while pending:
+                current = pending.pop()
+                if current in visited:
+                    continue
+                visited.add(current)
+                pending.extend(replacement_graph.get(current, set()) - visited)
+            if not order_ids.issubset(visited):
+                raise U19LedgerSnapshotBuildError("U19_MULTIPLE_ORDERS_FOR_LEG_WITHOUT_REPLACEMENT_LINEAGE")
+
+        # Directed replacement links must form an acyclic chain.
+        for start in replacement_edges:
+            seen: set[str] = set()
+            current = start
+            while current in replacement_edges:
+                if current in seen:
+                    raise U19LedgerSnapshotBuildError("U19_REPLACEMENT_LINEAGE_CYCLE")
+                seen.add(current)
+                current = replacement_edges[current]
+
         signed_quantities: dict[str, int] = {}
         order_fill_totals: dict[str, int] = {}
         events: list[U19ExecutionEvent] = []
@@ -161,6 +249,7 @@ class ValidationOnlyU19LedgerSnapshotBuilder:
                 {"execution_id": item.execution_id, "fingerprint": item.fingerprint}
                 for item in events
             ],
+            "order_replacement_links": replacement_links_for_group,
             "pending_order_ids": list(pending),
         }
         digest = hashlib.sha256(
