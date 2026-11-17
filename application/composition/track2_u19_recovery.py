@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from core.oms.track2_u19_recovery import (
     U19BrokerPositionSnapshot,
     U19ExecutionLedgerSnapshot,
@@ -12,8 +14,9 @@ from environments.virtual.position.track2_u19_recovery_store import SqliteTrack2
 class ValidationOnlyTrack2U19RecoveryCoordinator:
     """Coordinates injected validation snapshots and persists a durable decision."""
 
-    def __init__(self, store: SqliteTrack2U19RecoveryStore) -> None:
+    def __init__(self, store: SqliteTrack2U19RecoveryStore, *, settlement_store=None) -> None:
         self.store = store
+        self.settlement_store = settlement_store
 
     def recover(
         self,
@@ -22,6 +25,14 @@ class ValidationOnlyTrack2U19RecoveryCoordinator:
         broker_snapshot: U19BrokerPositionSnapshot | None,
         ledger_snapshot: U19ExecutionLedgerSnapshot | None,
     ) -> U19RecoveryDecision:
+        if self.settlement_store is not None and ledger_snapshot is not None:
+            open_events = self.settlement_store.open_reconciliation_events()
+            pending_ids = tuple(dict.fromkeys(
+                (*ledger_snapshot.pending_order_ids,
+                 *(event["client_order_id"] for event in open_events))
+            ))
+            if pending_ids != ledger_snapshot.pending_order_ids:
+                ledger_snapshot = replace(ledger_snapshot, pending_order_ids=pending_ids)
         decision = evaluate_u19_recovery(
             group_id=group_id,
             broker_snapshot=broker_snapshot,

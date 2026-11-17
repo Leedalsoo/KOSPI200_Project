@@ -427,6 +427,33 @@ class SQLiteSettlementStore:
             connection.commit()
             return True
 
+    def open_reconciliation_events(
+        self, *, scope_key: str | None = None
+    ) -> tuple[dict[str, Any], ...]:
+        """Return pending and conflicting inbox events for startup recovery gates."""
+        with self._connection() as connection:
+            if scope_key is None:
+                rows = connection.execute(
+                    """SELECT execution_id,scope_key,client_order_id,broker_order_id,status,payload_json,evidence_ref,received_at
+                       FROM reconciliation_inbox WHERE status IN ('PENDING','CONFLICT') ORDER BY inbox_id"""
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    """SELECT execution_id,scope_key,client_order_id,broker_order_id,status,payload_json,evidence_ref,received_at
+                       FROM reconciliation_inbox WHERE scope_key=? AND status IN ('PENDING','CONFLICT') ORDER BY inbox_id""",
+                    (str(scope_key).strip(),),
+                ).fetchall()
+        return tuple({
+            "execution_id": row["execution_id"],
+            "scope_key": row["scope_key"],
+            "client_order_id": row["client_order_id"],
+            "broker_order_id": row["broker_order_id"],
+            "status": row["status"],
+            "payload": json.loads(row["payload_json"]),
+            "evidence_ref": row["evidence_ref"],
+            "received_at": row["received_at"],
+        } for row in rows)
+
     def pending_reconciliation_events(
         self, *, scope_key: str | None = None
     ) -> tuple[dict[str, Any], ...]:
@@ -596,6 +623,14 @@ class SQLiteSettlementStore:
             raise ValueError("AUTHORITATIVE_RECONCILIATION_EVIDENCE_REQUIRED")
         with self._connection() as connection:
             self._begin(connection)
+            open_events = connection.execute(
+                """SELECT COUNT(*) AS n FROM reconciliation_inbox
+                   WHERE scope_key=? AND status IN ('PENDING','CONFLICT')""",
+                (scope,),
+            ).fetchone()["n"]
+            if open_events:
+                connection.rollback()
+                raise SettlementStoreError("RECONCILIATION_INBOX_EVENTS_MUST_BE_SETTLED_INDIVIDUALLY")
             cursor = connection.execute(
                 """UPDATE reconciliation_state
                    SET status='RESOLVED', evidence_ref=?, updated_at=CURRENT_TIMESTAMP

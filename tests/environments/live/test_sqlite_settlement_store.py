@@ -456,3 +456,20 @@ def test_late_fill_settlement_resolves_inbox_only_after_every_event_is_settled(t
     ).settle(late_one)
     assert restarted_replay_state.filled_quantity == 3
     assert restarted_position.qty == 3
+
+
+def test_generic_reconciliation_cannot_clear_open_late_fill_inbox(tmp_path):
+    store = SQLiteSettlementStore(tmp_path / "settlement.sqlite3")
+    store.record_late_fill_pending(
+        execution_id="exec-open-1",
+        client_order_id="client-open",
+        broker_order_id="broker-open",
+        payload={"execution_id": "exec-open-1", "source_authority": "VALIDATION_ONLY"},
+    )
+    with pytest.raises(SettlementStoreError, match="RECONCILIATION_INBOX_EVENTS_MUST_BE_SETTLED_INDIVIDUALLY"):
+        store.resolve_reconciliation(
+            scope_key="client-open",
+            authoritative_evidence_ref="TEST_ONLY:must-not-clear-inbox",
+        )
+    assert store.has_unresolved_reconciliation()
+    assert len(store.open_reconciliation_events(scope_key="client-open")) == 1

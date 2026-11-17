@@ -525,3 +525,69 @@ def test_cancel_fill_race_remains_pending_until_terminal_and_position_reconcilia
     assert reconciled.status is U19RecoveryStatus.RESTORE_ALLOWED
     assert reconciled.execution_events == (late_fill,)
     assert reconciled.pending_order_ids == ()
+
+
+def test_u19_startup_recovery_imports_pending_and_conflict_inbox_events(tmp_path):
+    from environments.live.settlement.sqlite_settlement_store import (
+        SQLiteSettlementStore,
+        SettlementStoreError,
+    )
+
+    settlement_path = tmp_path / "live-settlement.sqlite3"
+    settlement = SQLiteSettlementStore(settlement_path)
+    settlement.record_late_fill_pending(
+        execution_id="late-fill-pending-1",
+        client_order_id="client-late-pending",
+        broker_order_id="broker-late-pending",
+        payload={"execution_id": "late-fill-pending-1", "source": "VALIDATION_ONLY"},
+    )
+    settlement.record_late_fill_pending(
+        execution_id="late-fill-conflict-1",
+        client_order_id="client-late-conflict",
+        broker_order_id="broker-late-conflict",
+        payload={"execution_id": "late-fill-conflict-1", "source": "VALIDATION_ONLY"},
+    )
+    with pytest.raises(SettlementStoreError, match="RECONCILIATION_INBOX_EXECUTION_ID_COLLISION"):
+        settlement.record_late_fill_pending(
+            execution_id="late-fill-conflict-1",
+            client_order_id="client-late-conflict",
+            broker_order_id="broker-late-conflict",
+            payload={"execution_id": "late-fill-conflict-1", "source": "CONFLICTING_VALIDATION_ONLY"},
+        )
+
+    recovery_path = tmp_path / "u19-recovery.sqlite3"
+    first = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(recovery_path), settlement_store=settlement
+    ).recover(group_id=GROUP, broker_snapshot=broker(), ledger_snapshot=ledger())
+
+    assert first.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+    assert first.pending_order_ids == ("client-late-pending", "client-late-conflict")
+    assert first.restore_allowed is False
+    assert first.strategy_resume_allowed is False
+    assert first.new_entry_enabled is False
+    assert first.order_submission_enabled is False
+
+    # Reopen both stores: unresolved inbox entries must still gate U19 restore.
+    restarted_settlement = SQLiteSettlementStore(settlement_path)
+    restarted = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(recovery_path), settlement_store=restarted_settlement
+    ).recover(group_id=GROUP, broker_snapshot=broker(snapshot_id="broker-after-restart"),
+              ledger_snapshot=ledger(snapshot_id="ledger-after-restart"))
+    assert restarted.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+    assert restarted.restore_allowed is False
+    assert len(restarted_settlement.open_reconciliation_events()) == 2
+    class RestoreMustNotRun:
+        def restore_after_u19_recovery(self, group_id, decision):
+            raise AssertionError("U16 restore must remain gated by open reconciliation inbox")
+
+    blocked_u16, restored_u16 = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(tmp_path / "u19-u16.sqlite3"),
+        settlement_store=restarted_settlement,
+    ).recover_and_restore_u16_runtime(
+        group_id=GROUP,
+        broker_snapshot=broker(snapshot_id="broker-u16-gated"),
+        ledger_snapshot=ledger(snapshot_id="ledger-u16-gated"),
+        u16_runtime=RestoreMustNotRun(),
+    )
+    assert blocked_u16.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+    assert restored_u16 is False
