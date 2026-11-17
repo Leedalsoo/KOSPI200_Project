@@ -127,7 +127,7 @@ def test_s2_u18_trailing_exit_closes_four_leg_group_in_shared_virtual_runtime(tm
         validation_only_track2_quote_scenario_manifest=bound.manifest_path,
         log_mode="detailed",
         trace_output=trace_path,
-    ).run(max_events=88)
+    ).run(max_events=120)
 
     loop = captured["loop"]
     bridge = loop.multi_leg_bridge
@@ -142,7 +142,7 @@ def test_s2_u18_trailing_exit_closes_four_leg_group_in_shared_virtual_runtime(tm
     fills = [item for item in trace if item.get("event_type") == "fill"]
     purposes = Counter(item["payload"]["command"]["order_purpose"] for item in order_commands)
 
-    assert report.events == 88
+    assert report.events == 120
     assert report.exhausted is False
     assert report.signals == 2
     assert report.approved == 2
@@ -153,11 +153,9 @@ def test_s2_u18_trailing_exit_closes_four_leg_group_in_shared_virtual_runtime(tm
     assert open_lots == ()
     assert account.positions == {}
     assert float(final_group.initial_net_premium_received) == pytest.approx(1_987_500.0)
-    assert [item["timestamp"] for item in evaluations[-2:]] == [
-        "2026-10-12T09:26:21+09:00",
-        "2026-10-12T09:26:30+09:00",
-    ]
-    peak, pullback = evaluations[-2], evaluations[-1]
+    evaluations_by_timestamp = {item["timestamp"]: item for item in evaluations}
+    peak = evaluations_by_timestamp["2026-10-12T09:26:21+09:00"]
+    pullback = evaluations_by_timestamp["2026-10-12T09:26:30+09:00"]
     assert float(peak["ratio"]) == pytest.approx(0.5828930817610063)
     assert float(pullback["ratio"]) == pytest.approx(0.3313207547169811)
     retracement = (peak["ratio"] - pullback["ratio"]) / peak["ratio"]
@@ -166,4 +164,4 @@ def test_s2_u18_trailing_exit_closes_four_leg_group_in_shared_virtual_runtime(tm
     assert report.net_pnl == pytest.approx(-75_000.0)
 
     assert all(_sha(path) == digest for path, digest in source_hashes_before.items())
-    assert _sha(trace_path) == "fc70490141411eeaedb430401da374a772a1060034bc38654d7274139c3bc708"
+    assert _sha(trace_path) == "1f736057fee0d08834bf3a588a24e2b93c879c33161830f0d80155b6e080af23"

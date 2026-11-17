@@ -10,7 +10,7 @@
 
 ## Reuse-first source audit
 
-The historical 23-candidate/92-row trailing sidecar referenced by earlier work was not present in the available original, R8, or R9 worktrees. The R9 source sidecar was present and hash-verified at 21 candidates / 84 quote rows. Rather than declaring the path blocked, the existing source anchor and No.1540 scenario timing were reused, then two missing four-leg snapshots were generated deterministically in a temporary, versioned test sidecar.
+No.1540 records a 23-candidate/92-row synthetic path, 120 market events, 8 fills, 0 rejects, profile SHA-256 `eada46f0f80fe0d44c4e0ad52e7b972a31ae2eca031a91bf103a3c63e9049d79`, and historical trace SHA-256 `5f063f6672795e0293603be2b5b13e88347901d2b57e679be3106ccca7e0c888`. The exact historical sidecar/report/trace files were not found in the current MovingProject worktrees checked (original, P1/P2/Q1/Q4, R1–R9, sync-validation, and other project worktrees); the No.1540 Notion record remains the historical reference. The R9 source sidecar was present and hash-verified at 21 candidates / 84 quote rows. Rather than declaring the path blocked, the existing source anchor and No.1540 timestamps/target ratios were reused to generate two missing four-leg snapshots deterministically in a temporary validation sidecar. This is a new reproducible revalidation, not a byte-identical rerun of the historical trace.
 
 Accepted Runtime v2:
 - Rows: 2,072
@@ -61,7 +61,7 @@ Profile-bound sidecar:
 
 Test: `tests/verification/test_q25_a8_r9_s2_u18_trailing_runtime_e2e.py`
 
-- Replay cap: 88 base market events.
+- Replay cap: 120 base market events.
 - 2 strategy signals / 2 approvals.
 - Entry: 4 fills (`ASYMMETRIC_TRAP_NARROW`).
 - Exit: 4 fills (`TRAP_CLOSE`).
@@ -76,8 +76,8 @@ Test: `tests/verification/test_q25_a8_r9_s2_u18_trailing_runtime_e2e.py`
 
 Detailed trace:
 - Local file: `reports/synth/Q25_A8_R9_S2_U18_TRAILING_RUNTIME_E2E_20261117.jsonl`
-- 114 trace records.
-- SHA-256: `fc70490141411eeaedb430401da374a772a1060034bc38654d7274139c3bc708`
+- 146 trace records.
+- SHA-256: `1f736057fee0d08834bf3a588a24e2b93c879c33161830f0d80155b6e080af23`
 - The trace is retained locally as runtime evidence and is not included in the code commit.
 
 ## Validation
@@ -88,7 +88,7 @@ Combined focused regression:
 - Shared StrategyHub Runtime E2E
 - U18 stop-close and trailing-close Runtime E2E
 - Quote profile binding and market-calibrated quote scenario tests
-- Result: **92 passed in 8.97s**
+- Result: **92 passed in 8.56s**
 - `py_compile`: PASS
 - `git diff --check`: PASS
 
