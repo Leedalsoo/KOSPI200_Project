@@ -41,6 +41,25 @@ class ValidationOnlyTrack2U19RecoveryCoordinator:
         self.store.save(decision.to_checkpoint())
         return decision
 
+    def recover_from_settlement_store(
+        self,
+        *,
+        group_id: str,
+        broker_snapshot: U19BrokerPositionSnapshot | None,
+        snapshot_id: str,
+        as_of,
+        ledger_snapshot_builder,
+    ) -> U19RecoveryDecision:
+        """Build the local validation ledger from persisted OMS/fill lineage, then reconcile."""
+        ledger_snapshot = ledger_snapshot_builder.build(
+            group_id=group_id, snapshot_id=snapshot_id, as_of=as_of
+        )
+        return self.recover(
+            group_id=group_id,
+            broker_snapshot=broker_snapshot,
+            ledger_snapshot=ledger_snapshot,
+        )
+
     def recover_and_restore_u16_runtime(
         self,
         *,

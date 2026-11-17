@@ -155,6 +155,22 @@ class SQLiteSettlementStore:
             ).fetchall()
         return tuple(json.loads(row["state_json"]) for row in rows)
 
+    def load_execution_journal_records(self) -> tuple[dict[str, Any], ...]:
+        """Read committed execution rows in SQLite insertion order without mutation."""
+        with self._connection() as connection:
+            rows = connection.execute(
+                """SELECT execution_id,client_order_id,broker_order_id,report_json,committed_at
+                   FROM execution_journal ORDER BY rowid"""
+            ).fetchall()
+        return tuple({
+            "execution_id": row["execution_id"],
+            "client_order_id": row["client_order_id"],
+            "broker_order_id": row["broker_order_id"],
+            "report": json.loads(row["report_json"]),
+            "report_json": row["report_json"],
+            "committed_at": row["committed_at"],
+        } for row in rows)
+
     def save_position_state(self, instrument_id: str, position_payload: Mapping[str, Any]) -> None:
         key = str(instrument_id).strip()
         if not key:
