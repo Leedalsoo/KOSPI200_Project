@@ -87,12 +87,10 @@ class LiveExecutionPositionBridge:
         state = self._oms.get(report.client_order_id)
         if state is None or state.status != "CANCELLED":
             raise OrderStateTransitionError("CANCELLED_ORDER_REQUIRED_FOR_LATE_FILL_RECONCILIATION")
-        report_payload = self._execution_payload(
-            report,
-            execution_id,
-            authoritative_evidence_ref=evidence,
-            reconciliation_kind="AUTHORITATIVELY_VERIFIED_LATE_FILL",
-        )
+        # Keep the journal payload identical to the original execution report so
+        # a later replay is recognized as the same event. Reconciliation evidence
+        # is persisted separately on the inbox/reconciliation record.
+        report_payload = self._execution_payload(report, execution_id)
         if self._store.check_execution_duplicate(
             execution_id=execution_id,
             client_order_id=report.client_order_id,
@@ -230,18 +228,16 @@ class LiveExecutionPositionBridge:
 
         if state.status == "CANCELLED":
             if self._store is not None:
-                self._store.mark_reconciliation_pending(
-                    scope_key=report.client_order_id,
+                self._store.record_late_fill_pending(
+                    execution_id=execution_id,
                     client_order_id=report.client_order_id,
                     broker_order_id=report.broker_order_id,
-                    reason="LATE_FILL_AFTER_CANCEL_REQUIRES_AUTHORITATIVE_RECONCILIATION",
-                    payload={
-                        "execution_id": execution_id,
-                        "status": report.status,
-                        "filled_quantity": report.filled_quantity,
-                        "execution_price": str(report.execution_price) if report.execution_price is not None else None,
-                        "execution_timestamp": report.execution_timestamp.isoformat() if report.execution_timestamp else None,
-                    },
+                    payload=self._execution_payload(
+                        report,
+                        execution_id,
+                        reconciliation_kind="LATE_FILL_AFTER_CANCEL",
+                        source_authority="UNVERIFIED_PENDING_RECONCILIATION",
+                    ),
                 )
                 raise OrderStateTransitionError("RECONCILIATION_PENDING")
             raise OrderStateTransitionError("EXECUTION_BEFORE_ACK")

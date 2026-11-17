@@ -299,3 +299,160 @@ def test_live_position_composition_requires_and_shares_persistent_store(tmp_path
     assert store.has_unresolved_reconciliation()
     oms.apply_intent(type("Intent", (), {"client_order_id": "persisted-intent", "quantity": 1})())
     assert store.load_order_state_payloads()[0]["client_order_id"] == "persisted-intent"
+
+
+def test_cancelled_order_late_fill_inbox_is_append_only_and_survives_restart(tmp_path):
+    store, oms, position, dedup, bridge = _prepared(tmp_path)
+    bridge.settle(_fill())
+    oms.apply_cancel(
+        ExecutionReport(
+            client_order_id="client-1",
+            broker_order_id="broker-1",
+            execution_id=None,
+            status="CANCELLED",
+            filled_quantity=0,
+            remaining_quantity=2,
+            execution_price=None,
+            execution_timestamp=datetime(2026, 10, 29, 8, 55, tzinfo=timezone.utc),
+        )
+    )
+    late_one = _fill(execution_id="exec-late-1", quantity=1, remaining=1, price="14.80")
+    late_two = _fill(execution_id="exec-late-2", quantity=1, remaining=0, price="14.85")
+
+    for report in (late_one, late_two):
+        with pytest.raises(OrderStateTransitionError, match="RECONCILIATION_PENDING"):
+            bridge.settle(report)
+
+    events = store.pending_reconciliation_events(scope_key="client-1")
+    assert [event["execution_id"] for event in events] == ["exec-late-1", "exec-late-2"]
+    assert all(event["payload"]["source_authority"] == "UNVERIFIED_PENDING_RECONCILIATION" for event in events)
+    assert not store.has_execution("exec-late-1")
+    assert not store.has_execution("exec-late-2")
+    assert oms.get("client-1").status == "CANCELLED"
+    assert oms.get("client-1").filled_quantity == 1
+    assert position.qty == 1
+    assert store.has_unresolved_reconciliation()
+
+    # Reopen the durable store and rebuild only the persisted OMS/position projections.
+    restarted_store = SQLiteSettlementStore(tmp_path / "settlement.sqlite3")
+    restarted_oms = OrderStateMachine(persistence_store=restarted_store)
+    restarted_oms.restore_from_store()
+    restarted_position = LivePositionAggregate("FUT-1")
+    restarted_position.restore_persistence_record(restarted_store.load_position_state("FUT-1"))
+    restarted_bridge = LiveExecutionPositionBridge(
+        order_state_machine=restarted_oms,
+        position_fill_adapter=LivePositionFillAdapter(restarted_position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=restarted_store),
+        position_aggregate=restarted_position,
+        settlement_store=restarted_store,
+    )
+
+    with pytest.raises(OrderStateTransitionError, match="RECONCILIATION_PENDING"):
+        restarted_bridge.settle(late_one)
+
+    restored_events = restarted_store.pending_reconciliation_events(scope_key="client-1")
+    assert [event["execution_id"] for event in restored_events] == ["exec-late-1", "exec-late-2"]
+    assert restarted_oms.get("client-1").status == "CANCELLED"
+    assert restarted_oms.get("client-1").filled_quantity == 1
+    assert restarted_position.qty == 1
+    assert restarted_store.has_unresolved_reconciliation()
+
+
+def test_late_fill_inbox_execution_id_collision_is_preserved_as_conflict(tmp_path):
+    store, oms, position, dedup, bridge = _prepared(tmp_path)
+    bridge.settle(_fill())
+    oms.apply_cancel(
+        ExecutionReport(
+            client_order_id="client-1",
+            broker_order_id="broker-1",
+            execution_id=None,
+            status="CANCELLED",
+            filled_quantity=0,
+            remaining_quantity=2,
+            execution_price=None,
+            execution_timestamp=datetime(2026, 10, 29, 8, 55, tzinfo=timezone.utc),
+        )
+    )
+    first = _fill(execution_id="exec-late-collision", quantity=1, remaining=1, price="14.80")
+    with pytest.raises(OrderStateTransitionError, match="RECONCILIATION_PENDING"):
+        bridge.settle(first)
+
+    conflicting = _fill(execution_id="exec-late-collision", quantity=1, remaining=1, price="14.90")
+    with pytest.raises(SettlementStoreError, match="RECONCILIATION_INBOX_EXECUTION_ID_COLLISION"):
+        bridge.settle(conflicting)
+
+    later_unique = _fill(execution_id="exec-late-after-conflict", quantity=1, remaining=1, price="14.82")
+    with pytest.raises(OrderStateTransitionError, match="RECONCILIATION_PENDING"):
+        bridge.settle(later_unique)
+
+    assert len(store.pending_reconciliation_events(scope_key="client-1")) == 1
+    unresolved = store.unresolved_reconciliations()
+    assert any(item["status"] == "CONFLICT" and item["reason"] == "RECONCILIATION_INBOX_EXECUTION_ID_COLLISION" for item in unresolved)
+    assert oms.get("client-1").filled_quantity == 1
+    assert position.qty == 1
+
+
+def test_late_fill_settlement_resolves_inbox_only_after_every_event_is_settled(tmp_path):
+    store, oms, position, dedup, bridge = _prepared(tmp_path)
+    bridge.settle(_fill())
+    oms.apply_cancel(
+        ExecutionReport(
+            client_order_id="client-1",
+            broker_order_id="broker-1",
+            execution_id=None,
+            status="CANCELLED",
+            filled_quantity=0,
+            remaining_quantity=2,
+            execution_price=None,
+            execution_timestamp=datetime(2026, 10, 29, 8, 55, tzinfo=timezone.utc),
+        )
+    )
+    late_one = _fill(execution_id="exec-late-settle-1", quantity=1, remaining=1, price="14.80")
+    late_two = _fill(execution_id="exec-late-settle-2", quantity=1, remaining=0, price="14.85")
+    for report in (late_one, late_two):
+        with pytest.raises(OrderStateTransitionError, match="RECONCILIATION_PENDING"):
+            bridge.settle(report)
+
+    # Test-only simulated inquiry evidence; this is not real KIS/broker evidence.
+    first_state = bridge.settle_authoritatively_reconciled_fill(
+        late_one,
+        authoritative_evidence_ref="TEST_ONLY:simulated_external_inquiry:late-fill-1",
+    )
+    assert first_state.filled_quantity == 2
+    assert [event["execution_id"] for event in store.pending_reconciliation_events(scope_key="client-1")] == [
+        "exec-late-settle-2"
+    ]
+    assert store.has_unresolved_reconciliation()
+
+    final_state = bridge.settle_authoritatively_reconciled_fill(
+        late_two,
+        authoritative_evidence_ref="TEST_ONLY:simulated_external_inquiry:late-fill-2",
+    )
+    assert final_state.filled_quantity == 3
+    assert position.qty == 3
+    assert store.pending_reconciliation_events(scope_key="client-1") == ()
+    assert not store.has_unresolved_reconciliation()
+
+    restarted_store = SQLiteSettlementStore(tmp_path / "settlement.sqlite3")
+    restarted_oms = OrderStateMachine(persistence_store=restarted_store)
+    restarted_oms.restore_from_store()
+    restarted_position = LivePositionAggregate("FUT-1")
+    restarted_position.restore_persistence_record(restarted_store.load_position_state("FUT-1"))
+    assert restarted_oms.get("client-1").status == "CANCELLED"
+    assert restarted_oms.get("client-1").filled_quantity == 3
+    assert restarted_position.qty == 3
+    assert restarted_store.pending_reconciliation_events(scope_key="client-1") == ()
+
+    # A post-settlement replay must match the original journal payload and stay idempotent.
+    replay_state = bridge.settle(late_one)
+    assert replay_state.filled_quantity == 3
+    assert position.qty == 3
+    restarted_replay_state = LiveExecutionPositionBridge(
+        order_state_machine=restarted_oms,
+        position_fill_adapter=LivePositionFillAdapter(restarted_position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=restarted_store),
+        position_aggregate=restarted_position,
+        settlement_store=restarted_store,
+    ).settle(late_one)
+    assert restarted_replay_state.filled_quantity == 3
+    assert restarted_position.qty == 3

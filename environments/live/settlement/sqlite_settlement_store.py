@@ -114,6 +114,17 @@ class SQLiteSettlementStore:
                     payload_json TEXT NOT NULL,
                     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
+                CREATE TABLE IF NOT EXISTS reconciliation_inbox (
+                    inbox_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    execution_id TEXT NOT NULL UNIQUE,
+                    scope_key TEXT NOT NULL,
+                    client_order_id TEXT NOT NULL,
+                    broker_order_id TEXT,
+                    status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','RESOLVED','CONFLICT')),
+                    payload_json TEXT NOT NULL,
+                    evidence_ref TEXT,
+                    received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
                 """
             )
 
@@ -300,14 +311,24 @@ class SQLiteSettlementStore:
                 evidence = str(authoritative_evidence_ref or "").strip()
                 if not scope or not evidence:
                     raise ValueError("AUTHORITATIVE_RECONCILIATION_EVIDENCE_REQUIRED")
-                resolved = connection.execute(
-                    """UPDATE reconciliation_state
-                       SET status='RESOLVED', evidence_ref=?, updated_at=CURRENT_TIMESTAMP
-                       WHERE scope_key=? AND status IN ('PENDING','CONFLICT')""",
-                    (evidence, scope),
+                connection.execute(
+                    """UPDATE reconciliation_inbox SET status='RESOLVED', evidence_ref=?
+                       WHERE execution_id=? AND scope_key=? AND status='PENDING'""",
+                    (evidence, execution_key, scope),
                 )
-                if resolved.rowcount != 1:
-                    raise SettlementStoreError("UNRESOLVED_RECONCILIATION_NOT_FOUND")
+                remaining_inbox = connection.execute(
+                    "SELECT COUNT(*) AS n FROM reconciliation_inbox WHERE scope_key=? AND status IN ('PENDING','CONFLICT')",
+                    (scope,),
+                ).fetchone()["n"]
+                if remaining_inbox == 0:
+                    resolved = connection.execute(
+                        """UPDATE reconciliation_state
+                           SET status='RESOLVED', evidence_ref=?, updated_at=CURRENT_TIMESTAMP
+                           WHERE scope_key=? AND status IN ('PENDING','CONFLICT')""",
+                        (evidence, scope),
+                    )
+                    if resolved.rowcount != 1:
+                        raise SettlementStoreError("UNRESOLVED_RECONCILIATION_NOT_FOUND")
             connection.commit()
             return True
         except Exception as exc:
@@ -330,6 +351,108 @@ class SQLiteSettlementStore:
             raise SettlementStoreError("SETTLEMENT_TRANSACTION_FAILED") from exc
         finally:
             connection.close()
+
+    def record_late_fill_pending(
+        self,
+        *,
+        execution_id: str,
+        client_order_id: str,
+        broker_order_id: str | None,
+        payload: Mapping[str, Any],
+    ) -> bool:
+        """Append one late-fill event and keep its order reconciliation gate pending.
+
+        Returns False for an identical replay. A reused execution ID with a
+        different order identity or payload is retained as a reconciliation conflict.
+        """
+        execution_key = str(execution_id).strip()
+        client_key = str(client_order_id).strip()
+        if not execution_key or not client_key:
+            raise ValueError("LATE_FILL_EVENT_IDENTITY_REQUIRED")
+        scope = client_key
+        encoded = encode_record(dict(payload))
+        with self._connection() as connection:
+            self._begin(connection)
+            existing = connection.execute(
+                "SELECT scope_key,client_order_id,broker_order_id,payload_json "
+                "FROM reconciliation_inbox WHERE execution_id=?",
+                (execution_key,),
+            ).fetchone()
+            if existing is not None:
+                identical = (
+                    existing["scope_key"] == scope
+                    and existing["client_order_id"] == client_key
+                    and existing["broker_order_id"] == broker_order_id
+                    and existing["payload_json"] == encoded
+                )
+                if identical:
+                    connection.rollback()
+                    return False
+                connection.execute(
+                    "UPDATE reconciliation_inbox SET status='CONFLICT' WHERE execution_id=?",
+                    (execution_key,),
+                )
+                connection.execute(
+                    """INSERT INTO reconciliation_state
+                       (scope_key,client_order_id,broker_order_id,status,reason,payload_json,updated_at)
+                       VALUES(?,?,?,'CONFLICT','RECONCILIATION_INBOX_EXECUTION_ID_COLLISION',?,CURRENT_TIMESTAMP)
+                       ON CONFLICT(scope_key) DO UPDATE SET status='CONFLICT',
+                         reason=excluded.reason,evidence_ref=NULL,payload_json=excluded.payload_json,
+                         updated_at=CURRENT_TIMESTAMP""",
+                    (scope, client_key, broker_order_id,
+                     encode_record({"execution_id": execution_key, "collision": True})),
+                )
+                connection.commit()
+                raise SettlementStoreError("RECONCILIATION_INBOX_EXECUTION_ID_COLLISION")
+
+            connection.execute(
+                """INSERT INTO reconciliation_inbox
+                   (execution_id,scope_key,client_order_id,broker_order_id,payload_json)
+                   VALUES(?,?,?,?,?)""",
+                (execution_key, scope, client_key, broker_order_id, encoded),
+            )
+            connection.execute(
+                """INSERT INTO reconciliation_state
+                   (scope_key,client_order_id,broker_order_id,status,reason,payload_json,updated_at)
+                   VALUES(?,?,?,'PENDING','LATE_FILL_AFTER_CANCEL_REQUIRES_AUTHORITATIVE_RECONCILIATION',?,CURRENT_TIMESTAMP)
+                   ON CONFLICT(scope_key) DO UPDATE SET
+                     client_order_id=excluded.client_order_id,
+                     broker_order_id=excluded.broker_order_id,
+                     status=CASE WHEN reconciliation_state.status='CONFLICT' THEN 'CONFLICT' ELSE 'PENDING' END,
+                     reason=CASE WHEN reconciliation_state.status='CONFLICT' THEN reconciliation_state.reason ELSE excluded.reason END,
+                     evidence_ref=NULL, payload_json=excluded.payload_json, updated_at=CURRENT_TIMESTAMP""",
+                (scope, client_key, broker_order_id,
+                 encode_record({"inbox_execution_id": execution_key})),
+            )
+            connection.commit()
+            return True
+
+    def pending_reconciliation_events(
+        self, *, scope_key: str | None = None
+    ) -> tuple[dict[str, Any], ...]:
+        """Read append-only late-fill events in deterministic receive order."""
+        with self._connection() as connection:
+            if scope_key is None:
+                rows = connection.execute(
+                    """SELECT execution_id,scope_key,client_order_id,broker_order_id,status,payload_json,evidence_ref,received_at
+                       FROM reconciliation_inbox WHERE status='PENDING' ORDER BY inbox_id"""
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    """SELECT execution_id,scope_key,client_order_id,broker_order_id,status,payload_json,evidence_ref,received_at
+                       FROM reconciliation_inbox WHERE scope_key=? AND status='PENDING' ORDER BY inbox_id""",
+                    (str(scope_key).strip(),),
+                ).fetchall()
+        return tuple({
+            "execution_id": row["execution_id"],
+            "scope_key": row["scope_key"],
+            "client_order_id": row["client_order_id"],
+            "broker_order_id": row["broker_order_id"],
+            "status": row["status"],
+            "payload": json.loads(row["payload_json"]),
+            "evidence_ref": row["evidence_ref"],
+            "received_at": row["received_at"],
+        } for row in rows)
 
     def mark_reconciliation_pending(
         self,
