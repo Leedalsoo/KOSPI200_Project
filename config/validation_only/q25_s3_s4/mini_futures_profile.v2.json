@@ -1,0 +1,325 @@
+{
+  "profile_id": "Q25-S3-S4-MINI-FUTURES-VALIDATION-v2",
+  "namespace": "SYNTHETIC:DERIVED_SCENARIO",
+  "source_anchors": [
+    {
+      "path": "data/kis_market_data_restart/20261008/kis_vts_websocket_raw.jsonl",
+      "sha256": "794f17cb445878b6688fea79e04d5473a33b5e5e1856eb166ab0232eaf429c2f",
+      "role": "KIS_WS_RAW_ORIGINAL_READ_ONLY"
+    },
+    {
+      "path": "data/kis_market_data_restart/20261008/manifest.json",
+      "sha256": "998198545e60aaa266e0f9796f66a70baa5d5787a6fd09c735845685bc0c3ad4",
+      "role": "KIS_DAY_MANIFEST"
+    }
+  ],
+  "authority": {
+    "identity_authority": "NONE",
+    "execution_authority": "NONE",
+    "production_eligible": false,
+    "live_eligible": false
+  },
+  "contract_evidence": {
+    "source": "Notion No.638 and No.1067 historical KIS Master verification",
+    "source_urls": [
+      "https://app.notion.com/p/3e05f4f6eaa181d08952e31b909b52d3",
+      "https://app.notion.com/p/3ef5f4f6eaa18161aa29e4339cc39965"
+    ],
+    "historical_contract_code": "A05610",
+    "product_type": "MINI",
+    "contract_month": "202610",
+    "contract_multiplier": 50000,
+    "multiplier_source": "KRX official Mini KOSPI200 Futures contract specification, recorded in No.638",
+    "validation_identity_namespace": "SYNTHETIC_CONTRACT:KOSPI200_MINI_FUTURES_VALIDATION"
+  },
+  "futures_market": {
+    "product_type": "MINI",
+    "source_instrument": "A05610",
+    "contract_month": "202610",
+    "contract_multiplier": 50000,
+    "raw_tr_frames": 27114,
+    "parsed_trade_records": 45295,
+    "unique_futures_event_times": 13163,
+    "index_raw_frames": 23480,
+    "unique_index_event_times": 23480,
+    "exact_event_time_matches": 12619,
+    "mini_orderbook_frames": 0,
+    "synthetic_contract_namespace": "SYNTHETIC_CONTRACT:KOSPI200_MINI_FUTURES_VALIDATION",
+    "quote_proxy": {
+      "source_kind": "SYNTHETIC_L1_DEPTH_PROXY",
+      "namespace": "SYNTHETIC:DERIVED_SCENARIO",
+      "source_instrument": "A05610",
+      "source_event_time": "2026-10-08T09:00:49+09:00",
+      "source_frame_sequence": 610,
+      "source_payload_sha256": "6e04b29ef56c21af13c9eacb90e2cb72fe5f0252746de5c3b61c83637c7af8f5",
+      "source_last_price": 1074.16,
+      "generated_quote_time": "2026-10-08T09:00:49+09:00",
+      "bid": 1074.11,
+      "ask": 1074.21,
+      "bid_size": 5,
+      "ask_size": 5,
+      "spread_width_points": 0.1,
+      "generation_rule": "bid=observed_last_price-0.05; ask=observed_last_price+0.05; bid/ask depth proxy=5 each; fixture only, not an observed order book or official tick-size assertion",
+      "official_tick_size_claimed": false
+    }
+  },
+  "generation_rules": {
+    "s3": "Parse A05610 H0IFCNT0 as count x 50-field records; event time=field[1], last price=field[5]. Join H0UPCNT0 index code 2001 by exact event time. For duplicate event times select the record with greatest source frame sequence. Keep the first 20 chronological matched observations. basis=MINI futures last price minus KOSPI200 index price. current_basis=sample mean + 2.5 population standard deviations.",
+    "s4": "Use actual A05610 H0IFCNT0 last price at 09:00:49 as the quote anchor. No A05610 H0IFASP0 order-book frames exist in this day file, so create a validation-only L1 quote proxy at +/-0.05 points with depth proxy 5 each. Synthetic delta=25 is a deterministic stress input that maps to 5 MINI hedge contracts under the existing delta-to-mini-futures quantity function. Greeks/account/option ownership are not observed facts."
+  },
+  "s3": {
+    "synthetic_contract_namespace": "SYNTHETIC_CONTRACT:KOSPI200_MINI_FUTURES_VALIDATION",
+    "product_type": "MINI",
+    "source_instrument": "A05610",
+    "contract_multiplier": 50000,
+    "z_score": 2.5,
+    "spread_std": 0.5162003002711254,
+    "current_basis": 0.3270007506778134,
+    "regime": "NORMAL",
+    "time_str": "09:00:50",
+    "date_str": "20261008",
+    "observations": [
+      {
+        "time": "090030",
+        "futures_price": 1074.32,
+        "index_price": 1074.98,
+        "basis": -0.66,
+        "futures_frame_sequence": 308,
+        "futures_payload_sha256": "0f32dd46d0d14c3a666a010285caf2a7e5aa7f49e40fe03b022e503230b9a59b",
+        "index_frame_sequence": 297,
+        "index_payload_sha256": "1c773a318d76d970d79c577c2dd0ad29712e9659af1d092ca8172b8cd0a34568"
+      },
+      {
+        "time": "090031",
+        "futures_price": 1073.86,
+        "index_price": 1075.04,
+        "basis": -1.18,
+        "futures_frame_sequence": 321,
+        "futures_payload_sha256": "72d1b9b9763ce09286bcfd80611a4548f6091251bee4ca9d8bd8cb3ff804afd3",
+        "index_frame_sequence": 312,
+        "index_payload_sha256": "d1d60ffba324394b9c00c7012847659b795042c2e7c6389aa7e1cb19b2f7e393"
+      },
+      {
+        "time": "090032",
+        "futures_price": 1073.62,
+        "index_price": 1074.78,
+        "basis": -1.16,
+        "futures_frame_sequence": 348,
+        "futures_payload_sha256": "a361bb9838ee82cd7ec1626f84add1a66ae6f6a6277ef36ddc73851eccc3289b",
+        "index_frame_sequence": 334,
+        "index_payload_sha256": "ffcfb16fa71e459359a09739801a370a1bc0a73832db1f455423d77a0298e125"
+      },
+      {
+        "time": "090033",
+        "futures_price": 1073.9,
+        "index_price": 1074.74,
+        "basis": -0.84,
+        "futures_frame_sequence": 368,
+        "futures_payload_sha256": "c035d75601910d7b1d1f563122c4e1531d32c4f2878c879da48e6559277ce469",
+        "index_frame_sequence": 354,
+        "index_payload_sha256": "eac47975da2681d752f20682fd9619de416047be5948ed6e5c4eb1bc73859a0b"
+      },
+      {
+        "time": "090034",
+        "futures_price": 1073.92,
+        "index_price": 1074.15,
+        "basis": -0.23,
+        "futures_frame_sequence": 386,
+        "futures_payload_sha256": "d7a48dfaa617fca10f15c54466006bc762d270137e6859a18f2a8f7aa7e9a0f5",
+        "index_frame_sequence": 377,
+        "index_payload_sha256": "78d07de4b0ad4f9e0db5a261f2b46566451ccb4dec29155ca8c1131240fa803e"
+      },
+      {
+        "time": "090035",
+        "futures_price": 1073.74,
+        "index_price": 1073.98,
+        "basis": -0.24,
+        "futures_frame_sequence": 400,
+        "futures_payload_sha256": "e1ef4908c431716d343607cb5e05b9dcc870dee23554b4a508b30b73f871c378",
+        "index_frame_sequence": 388,
+        "index_payload_sha256": "1005c8b0d754cdac2f799e67e31b443decf533a1a57b576bbbba3912ffb26317"
+      },
+      {
+        "time": "090036",
+        "futures_price": 1073.88,
+        "index_price": 1073.77,
+        "basis": 0.11,
+        "futures_frame_sequence": 422,
+        "futures_payload_sha256": "0015ed98ee130879599f46d17d2da053781828d1e6ea76f7f11dedbf29126cac",
+        "index_frame_sequence": 415,
+        "index_payload_sha256": "00e99e37fa6e115dda70fa529eabacc169ca3e076396401295b92cb305358917"
+      },
+      {
+        "time": "090037",
+        "futures_price": 1073.5,
+        "index_price": 1074.46,
+        "basis": -0.96,
+        "futures_frame_sequence": 435,
+        "futures_payload_sha256": "b00bc1e748756c6651e23005635d5e14216575cd0195418cb49baef773afbb57",
+        "index_frame_sequence": 426,
+        "index_payload_sha256": "a01a31f584686f0ed9104894d0a158d2cdab38e3c96a21d13e15f87dd96d82cd"
+      },
+      {
+        "time": "090038",
+        "futures_price": 1073.82,
+        "index_price": 1074.23,
+        "basis": -0.41,
+        "futures_frame_sequence": 450,
+        "futures_payload_sha256": "e9a7cfb3ac108dfa7f4a96f6a52d6a6592abd1aec3e4a2357bd03dca01059f3e",
+        "index_frame_sequence": 441,
+        "index_payload_sha256": "d8410295265af1fc91ba0c7409ca25bbc8c6143bc4d026032af1125b7318886b"
+      },
+      {
+        "time": "090039",
+        "futures_price": 1074.42,
+        "index_price": 1075.44,
+        "basis": -1.02,
+        "futures_frame_sequence": 483,
+        "futures_payload_sha256": "d245d7ee148003e89b6d7f6f4b131b209be6725a659b4c4786e6c8f403e65bd2",
+        "index_frame_sequence": 469,
+        "index_payload_sha256": "ff9b914f8887f3f35db264b242503cae96935d2192e01bf0ae0a1cbf365e2376"
+      },
+      {
+        "time": "090040",
+        "futures_price": 1073.8,
+        "index_price": 1075.5,
+        "basis": -1.7,
+        "futures_frame_sequence": 496,
+        "futures_payload_sha256": "90b50439721c3e48330fd66a31f26cc5afc291e1d4c72ebfef6821c8017aaabe",
+        "index_frame_sequence": 490,
+        "index_payload_sha256": "eb224140f612aedca2ae8bef232753425cf606ce1fd87311585438063d5b600b"
+      },
+      {
+        "time": "090041",
+        "futures_price": 1073.72,
+        "index_price": 1075.65,
+        "basis": -1.93,
+        "futures_frame_sequence": 507,
+        "futures_payload_sha256": "1d11c83742d77f7bee2d877b079627d868af898a19e08c88c10d6ba471058bce",
+        "index_frame_sequence": 500,
+        "index_payload_sha256": "c386c1fb600497506cd4cb90a00b3559baab8ef4a865e57d447ba071d441b7ad"
+      },
+      {
+        "time": "090042",
+        "futures_price": 1073.76,
+        "index_price": 1074.41,
+        "basis": -0.65,
+        "futures_frame_sequence": 515,
+        "futures_payload_sha256": "a562d31d659676706ad00009406c6e02f5303507f4b9c8ea8a5718373ee80ab1",
+        "index_frame_sequence": 513,
+        "index_payload_sha256": "d3221499ae7fb3ad3b536ff302ce1108a91de1cdf465d9ab8ee983499f667392"
+      },
+      {
+        "time": "090043",
+        "futures_price": 1074.32,
+        "index_price": 1075.32,
+        "basis": -1.0,
+        "futures_frame_sequence": 534,
+        "futures_payload_sha256": "708ffe73a20975b3786eafdf04f6388c5b7bf7c03148d448ad48942c8412e513",
+        "index_frame_sequence": 522,
+        "index_payload_sha256": "1e25c706a099a01b439ca4faf666a89d1a723013b42aae3616595239ffd8dc0d"
+      },
+      {
+        "time": "090044",
+        "futures_price": 1074.16,
+        "index_price": 1075.74,
+        "basis": -1.58,
+        "futures_frame_sequence": 536,
+        "futures_payload_sha256": "61f5ce5796b0078ce79781c807d485b92e1d8f918fbb0edd9818bc24f43b2bf8",
+        "index_frame_sequence": 539,
+        "index_payload_sha256": "2ef976b9363173cc862c1ded98650aeaf394ef29d13ed26ac691d1c613dfe3d0"
+      },
+      {
+        "time": "090045",
+        "futures_price": 1074.48,
+        "index_price": 1075.63,
+        "basis": -1.15,
+        "futures_frame_sequence": 555,
+        "futures_payload_sha256": "a3cf6e53d590a8f9b1d573d7d8992c27cf70f2bb0eedda4f45fb398c714ac9d8",
+        "index_frame_sequence": 549,
+        "index_payload_sha256": "e7e1f8aedcba4cf0a9ccd72233e8e41b5becd733d2e5ac365a8a26c492ab39e1"
+      },
+      {
+        "time": "090046",
+        "futures_price": 1074.58,
+        "index_price": 1076.28,
+        "basis": -1.7,
+        "futures_frame_sequence": 577,
+        "futures_payload_sha256": "9e67fdcb22c9821866a0007d3ebfe1476008e1aa01d63198e96cee55c7360370",
+        "index_frame_sequence": 556,
+        "index_payload_sha256": "32b19dd3ebfbe020a1aea1a4abb5e95fc4200fc1a1d10d2fe12e8ddc745c823a"
+      },
+      {
+        "time": "090047",
+        "futures_price": 1074.4,
+        "index_price": 1075.18,
+        "basis": -0.78,
+        "futures_frame_sequence": 590,
+        "futures_payload_sha256": "955ba4bd41556564ec10b36664909b24034c09093d6ae3ab77493b3cea5513c0",
+        "index_frame_sequence": 582,
+        "index_payload_sha256": "f65210939f63f5bd860290b96e26e8d76f19cd42bc772e06e72f50626f28c2d6"
+      },
+      {
+        "time": "090048",
+        "futures_price": 1074.18,
+        "index_price": 1075.2,
+        "basis": -1.02,
+        "futures_frame_sequence": 598,
+        "futures_payload_sha256": "4feff75fd0732a452d44ddec073a0e0461e453956b6a580a0723f733c2d1fb62",
+        "index_frame_sequence": 592,
+        "index_payload_sha256": "171e60f3ef8d88ff3fab620e790b4147512133e409cced35c6dec8ce8af94504"
+      },
+      {
+        "time": "090049",
+        "futures_price": 1074.16,
+        "index_price": 1075.33,
+        "basis": -1.17,
+        "futures_frame_sequence": 610,
+        "futures_payload_sha256": "6e04b29ef56c21af13c9eacb90e2cb72fe5f0252746de5c3b61c83637c7af8f5",
+        "index_frame_sequence": 600,
+        "index_payload_sha256": "81a9a75ddb3af1b8905f3c20932706be3b34fef73817475b522b363961109117"
+      }
+    ]
+  },
+  "s4": {
+    "observed_at": "2026-10-08T09:00:49+09:00",
+    "current_price": 1075.33,
+    "futures_price_anchor": 1074.16,
+    "active_vol": 20,
+    "base_vol": 15,
+    "current_delta": 25,
+    "current_gamma": 1,
+    "current_theta": -0.5,
+    "current_pnl_initial": 50000,
+    "current_pnl_retrace": 40000,
+    "current_equity": 1000000,
+    "premium_spent": 15000,
+    "max_hedge_qty": 5,
+    "deadband": 0,
+    "price_history": [
+      1074.98,
+      1075.04,
+      1074.78,
+      1074.74,
+      1074.15,
+      1073.98,
+      1073.77,
+      1074.46,
+      1074.23,
+      1075.44,
+      1075.5,
+      1075.65,
+      1074.41,
+      1075.32,
+      1075.74,
+      1075.63,
+      1076.28,
+      1075.18,
+      1075.2,
+      1075.33
+    ],
+    "greeks_provenance": "SYNTHETIC:DERIVED_SCENARIO deterministic delta/gamma/theta stress; not KIS option Greeks",
+    "option_identity": null,
+    "option_lot_owner": null
+  }
+}

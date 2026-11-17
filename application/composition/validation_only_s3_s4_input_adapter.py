@@ -75,6 +75,15 @@ class ValidationOnlyS3S4InputAdapter:
             cost_model_verified=True,
         )
 
+    def build_futures_quote_proxy(self) -> Mapping[str, object]:
+        futures_market = self._profile.get("futures_market")
+        if not isinstance(futures_market, Mapping):
+            raise ValidationOnlyProfileError("MINI_FUTURES_MARKET_PROFILE_REQUIRED")
+        proxy = futures_market.get("quote_proxy")
+        if not isinstance(proxy, Mapping):
+            raise ValidationOnlyProfileError("MINI_FUTURES_QUOTE_PROXY_REQUIRED")
+        return dict(proxy)
+
     def build_track4_input(self) -> Track4MarketInput:
         s4 = self._profile["s4"]
         observed_at = datetime.fromisoformat(str(s4["observed_at"]))
@@ -139,6 +148,42 @@ class ValidationOnlyS3S4InputAdapter:
         if not math.isclose(expected_shock, float(s3["current_basis"]), rel_tol=1e-6, abs_tol=1e-6):
             raise ValidationOnlyProfileError("S3_SYNTHETIC_SHOCK_REPRODUCTION_MISMATCH")
 
+        futures_market = self._profile.get("futures_market")
+        if futures_market is not None:
+            if not isinstance(futures_market, Mapping):
+                raise ValidationOnlyProfileError("MINI_FUTURES_MARKET_PROFILE_INVALID")
+            if (
+                futures_market.get("product_type") != "MINI"
+                or futures_market.get("source_instrument") != "A05610"
+                or Decimal(str(futures_market.get("contract_multiplier"))) != Decimal("50000")
+                or not str(futures_market.get("synthetic_contract_namespace", "")).startswith("SYNTHETIC_CONTRACT:")
+            ):
+                raise ValidationOnlyProfileError("MINI_FUTURES_CONTRACT_PROFILE_INVALID")
+            if int(futures_market.get("mini_orderbook_frames", -1)) != 0:
+                raise ValidationOnlyProfileError("MINI_FUTURES_ORDERBOOK_ABSENCE_EVIDENCE_MISMATCH")
+            proxy = futures_market.get("quote_proxy")
+            if not isinstance(proxy, Mapping) or proxy.get("namespace") != self.REQUIRED_NAMESPACE:
+                raise ValidationOnlyProfileError("MINI_FUTURES_SYNTHETIC_QUOTE_NAMESPACE_REQUIRED")
+            anchor_price = Decimal(str(proxy.get("source_last_price", "0")))
+            bid = Decimal(str(proxy.get("bid", "0")))
+            ask = Decimal(str(proxy.get("ask", "0")))
+            if (
+                anchor_price <= 0 or bid <= 0 or ask <= bid
+                or (bid + ask) / Decimal("2") != anchor_price
+                or int(proxy.get("bid_size", 0)) <= 0
+                or int(proxy.get("ask_size", 0)) <= 0
+                or proxy.get("official_tick_size_claimed") is not False
+                or proxy.get("source_event_time") != proxy.get("generated_quote_time")
+            ):
+                raise ValidationOnlyProfileError("MINI_FUTURES_SYNTHETIC_QUOTE_PROXY_INVALID")
+            s3_namespace = str(s3.get("synthetic_contract_namespace", ""))
+            if (
+                s3.get("product_type") != "MINI"
+                or s3.get("source_instrument") != "A05610"
+                or Decimal(str(s3.get("contract_multiplier"))) != Decimal("50000")
+                or s3_namespace != futures_market.get("synthetic_contract_namespace")
+            ):
+                raise ValidationOnlyProfileError("S3_MINI_FUTURES_PROFILE_MISMATCH")
         s4 = self._profile.get("s4")
         if not isinstance(s4, Mapping) or not s4.get("greeks_provenance"):
             raise ValidationOnlyProfileError("S4_SYNTHETIC_GREEKS_PROVENANCE_REQUIRED")

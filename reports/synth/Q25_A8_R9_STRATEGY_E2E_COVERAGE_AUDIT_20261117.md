@@ -189,3 +189,37 @@ These fault tests prove that the exercised virtual Runtime path does not route/f
 ### Execution boundary
 
 No production strategy, production Runtime registration, risk profile, Raw/Canonical/accepted source, original work folder, collector, scheduler, credential, KIS Live/REAL_VTS/real-account/order API was modified or called. No real order, new data collection or Project200 merge was performed. This is strategy-input and strategy-method validation only, not full S3/S4 Runtime E2E or production/Live certification.
+
+## 13. S3/S4 MINI futures source reconciliation and validation-only test (2026-11-17)
+
+### Original-data reconciliation
+
+- Re-read mandatory No.1534 and checked original Raw in `C:\Users\white\Desktop\MovingProject\KOSPI200_Project`; no Raw/Canonical/accepted data was modified or copied into the repository.
+- Re-read No.638 and No.1067: historical KIS Master evidence identifies `A05610` as the 2026-10 MINI KOSPI200 Futures contract; MINI multiplier 50,000 is supported by the recorded KRX contract-spec evidence. The profile uses a synthetic validation identity namespace and does not grant broker identity/execution authority.
+- The original 2026-10-08 WS Raw contains `A05610` / `H0IFCNT0`: 27,114 frames, 45,295 parsed 50-field trade records, 13,163 unique futures event times. Exact event-time crosswalk with H0UPCNT0 index code 2001: 12,619 matched times (index: 23,480 frames/unique event times). Parser uses H0IFCNT0 record count × 50 fields, event time field[1], last price field[5], and for duplicate event times selects the greatest source frame sequence.
+- Raw SHA-256 remains `794f17cb445878b6688fea79e04d5473a33b5e5e1856eb166ab0232eaf429c2f`; day manifest SHA-256 remains `998198545e60aaa266e0f9796f66a70baa5d5787a6fd09c735845685bc0c3ad4`.
+- First 20 chronologically matched MINI/index observations: mean basis `-0.9635`, population standard deviation `0.5162003002711254`. A `mean + 2.5σ = 0.3270007506778134` point is a deterministic derived scenario, not an observed price/basis.
+- No A05610 H0IFASP0 order-book frames were present in the 2026-10-08 file (`0`). Therefore observed MINI last-trade prices are reused for S3; S4 receives only a validation-only synthetic L1 proxy around the observed 09:00:49 last price 1074.16: bid 1074.11 / ask 1074.21, depth proxy 5 each. This proxy is explicitly not an observed order book and makes no official tick-size assertion.
+
+### Added validation-only files
+
+- `config/validation_only/q25_s3_s4/mini_futures_profile.v2.json` and SHA-256 sidecar; profile ID `Q25-S3-S4-MINI-FUTURES-VALIDATION-v2`. Source lineage, raw/master evidence, deterministic matching/generation rules, MINI multiplier, order-book absence, synthetic quote proxy, 20 paired observations and S4 stress inputs are declared.
+- Profile SHA-256 is stored in the sidecar and checked by tests. Namespace is `SYNTHETIC:DERIVED_SCENARIO`; validation contract namespace is `SYNTHETIC_CONTRACT:KOSPI200_MINI_FUTURES_VALIDATION`; identity/execution authority NONE; production/live eligible false.
+- Extended `application/composition/validation_only_s3_s4_input_adapter.py` to validate MINI product/multiplier/source instrument, explicit no-orderbook evidence and the synthetic quote proxy boundary. Existing v1 profile behavior is retained. Adapter remains outside production Runtime registration.
+- Added `tests/application/test_q25_s3_s4_mini_futures_validation_profile.py`:
+  - S3 exact-time MINI Futures-index basis input, 50,000 multiplier, strategy entry/close signal and flat callback lifecycle.
+  - S4 deterministic synthetic Greek stress: delta 25 maps to a capped 5 MINI futures hedge contracts; trailing close requests 5 contracts and flat callback resets state.
+  - Quote proxy checks distinguish actual last-trade anchor from generated synthetic bid/ask/depth.
+
+### Test results and scope
+
+- New MINI-profile tests + existing S3/S4 profile/spec/guard + shared Runtime harness: **20 passed in 6.14s**.
+- S3/S4 specification and configured-hedge-cap regression: **12 passed in 0.25s**.
+- Combined focused regression including MINI profile, existing S3/S4 guards, shared Runtime fault matrix, freshness/restart, S2 sequential progression, S9 partial reject, S15B parity and caller-edge matrix: **90 passed in 5.61s**.
+- `git diff --check`: PASS.
+- S3 validation remains signal/state lifecycle only: unresolved tradable spread legs still prevent a production order plan. S4 validation covers NON_EXECUTION basecamp, synthetic-Greek 5-contract hedge signal and trailing close state cycle; it does not establish option lot ownership, authoritative Greeks, account capital/margin, aggregate risk, or real fill behavior. The synthetic quote proxy does not represent a real order book.
+- No production strategy/Runtime wiring, production guard, Raw/Canonical/accepted source, collector/scheduler, credentials, Live/REAL_VTS/real-account/order API was modified or called. No new data collection, real order, or Project200/master merge.
+
+### Next strategy boundary
+
+S3/S4 MINI futures input coverage is now recorded. Keep the remaining S3 spread-leg and S4 option-lot/real-account limits explicit; do not spend further work inventing missing production facts. Continue with the next strategy's existing No.1534 reuse-first inventory and validation-only provenance process.
