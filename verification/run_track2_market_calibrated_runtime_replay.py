@@ -33,7 +33,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                         help="New detailed JSONL trace path; existing files are never overwritten.")
     parser.add_argument("--run-id", required=True,
                         help="Stable run ID for deterministic trace comparison.")
+    parser.add_argument("--max-events", type=int, default=None,
+                        help="Optional event cap for a bounded validation scenario; omitted means full replay.")
     args = parser.parse_args(argv)
+    if args.max_events is not None and args.max_events < 1:
+        parser.error("MAX_EVENTS_MUST_BE_POSITIVE")
 
     dataset = args.dataset.resolve()
     manifest = args.manifest.resolve()
@@ -62,7 +66,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         validation_only_track2_quote_scenario_manifest=quote_manifest,
         log_mode="detailed",
         trace_output=trace_output,
-    ).run()
+    ).run(max_events=args.max_events)
     if not trace_output.is_file():
         raise RuntimeError("TRACK2_RUNTIME_TRACE_NOT_CREATED")
 
@@ -70,6 +74,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "run_id": report.run_id,
         "dataset": str(dataset),
         "events": report.events,
+        "max_events": args.max_events,
         "signals": report.signals,
         "approved": report.approved,
         "routed": report.routed,
