@@ -1,8 +1,9 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
+import json
 from hashlib import sha256
 from itertools import islice
 from pathlib import Path
@@ -35,6 +36,21 @@ S5_ID = "track5_gap_divergence"
 
 @pytest.fixture(scope="module")
 def _synthetic_scenario():
+    manifest_path = Path(DATASET) / "manifest.json"
+    if not manifest_path.is_file():
+        pytest.skip("No.1534: existing validation dataset is unavailable in this checkout; compare original source before classifying the gap")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest.get("provenance") == "DERIVED_SCENARIO"
+    assert manifest.get("dataset") == Path(DATASET).name
+    anchor_relative_path = manifest.get("option_master_path")
+    anchor_expected_sha256 = manifest.get("option_master_sha256")
+    if not anchor_relative_path or not anchor_expected_sha256:
+        pytest.skip("Validation dataset has no declared source anchor; provenance cannot be verified")
+    anchor_path = Path(anchor_relative_path)
+    if not anchor_path.is_file():
+        pytest.skip("No.1534: source anchor is not materialized in this checkout; compare the original workspace first")
+    assert sha256(anchor_path.read_bytes()).hexdigest() == str(anchor_expected_sha256).lower()
+
     adapter = SyntheticReplayAdapter(DATASET)
     option_master = build_synthetic_option_master(DATASET, validation_only_adapter=adapter)
     ticks = tuple(islice(HighSpeedReplayRunner(DATASET, synthetic_adapter=adapter).events(), 60))

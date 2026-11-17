@@ -122,3 +122,12 @@ Command: `py -m pytest -q tests/application/composition/test_q25_a8_r9_strategyh
 ### Execution boundary
 
 Validation-only and virtual execution only. No KIS Live/REAL_VTS/real-account/order API calls, no collector/new data collection, and no Raw/Canonical/accepted source mutation. This report does not certify all nine production strategies as natural-signal E2E complete or approve investment/live operation.
+
+## 10. No.1534 source-anchor discrepancy reconciliation (2026-11-17)
+
+- The R9 isolated worktree contained the existing `DERIVED_SCENARIO` dataset manifest, but its declared KRX source anchor `data/historical/krx_raw/20261008_options_daily.json` was absent from that worktree. This was not treated as immediate data failure.
+- Checked the original working folder `C:\Users\white\Desktop\MovingProject\KOSPI200_Project` before classifying the gap. The source anchor existed there and its SHA-256 exactly matched the manifest declaration: `e770a22a882e71e500260203276a067fc27940587d1d7edcbd670548b36e20d9`.
+- Copied that exact source anchor into the isolated R9 worktree only, marked the copy read-only, and verified source-to-copy SHA-256 equality. Size: 5,324,345 bytes. Original source file was not changed.
+- Strengthened the shared Runtime harness fixture to validate the dataset manifest's `DERIVED_SCENARIO` provenance, dataset identity, declared source-anchor presence and SHA-256 before replay. If the dataset or anchor is absent in another checkout, the fixture reports an explicit pytest skip requesting original-source reconciliation rather than falsely treating the missing local copy as proof of invalid source data.
+- Re-run after the change: shared Runtime harness **10 passed in 4.61s**.
+- The source anchor copy is ignored validation data and is not committed. Only test code and the audit report are eligible for the isolated branch commit.
