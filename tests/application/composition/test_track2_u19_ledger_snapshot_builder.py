@@ -10,7 +10,7 @@ from application.composition.track2_u19_ledger_snapshot_builder import (
 )
 from application.composition.track2_u19_recovery import ValidationOnlyTrack2U19RecoveryCoordinator
 from contracts.types import BrokerOrderCommand, ExecutionReport, OrderAckEvent, OrderIntent
-from core.oms.oms_fsm import OrderStateMachine
+from core.oms.oms_fsm import OrderStateMachine, OrderStateTransitionError
 from core.oms.track2_u19_recovery import (
     U19BrokerPositionSnapshot,
     U19Position,
@@ -31,7 +31,7 @@ GROUP_ID = "SYNTHETIC:GROUP:U19-LEDGER"
 
 
 def _order_with_fill(store, *, client_id, broker_id, instrument_id, side, leg_id, group_id=GROUP_ID,
-                     fills=(("exec-1", 1, 0, "10.00"),), order_quantity=None):
+                     fills=(("exec-1", 1, 0, "10.00"),), order_quantity=None, position_aggregate=None):
     oms = OrderStateMachine(persistence_store=store)
     quantity = order_quantity if order_quantity is not None else sum(item[1] for item in fills)
     oms.apply_intent(OrderIntent(
@@ -59,7 +59,9 @@ def _order_with_fill(store, *, client_id, broker_id, instrument_id, side, leg_id
     )
     oms.register_broker_order_command(command)
     oms.apply_ack(OrderAckEvent(client_order_id=client_id, accepted=True, broker_order_id=broker_id))
-    position = LivePositionAggregate(instrument_id)
+    position = position_aggregate or LivePositionAggregate(instrument_id)
+    if position.instrument_id != instrument_id:
+        raise ValueError("TEST_POSITION_AGGREGATE_INSTRUMENT_MISMATCH")
     bridge = LiveExecutionPositionBridge(
         order_state_machine=oms,
         position_fill_adapter=LivePositionFillAdapter(position),
@@ -80,6 +82,7 @@ def _order_with_fill(store, *, client_id, broker_id, instrument_id, side, leg_id
             remaining_quantity=quantity - cumulative,
             execution_price=Decimal(price),
             execution_timestamp=datetime(2026, 11, 18, 9, 30 + index, tzinfo=timezone.utc),
+            fee=Decimal("5"),
             group_id=group_id,
             leg_id=leg_id,
         )
@@ -332,3 +335,122 @@ def test_order_replacement_lineage_is_append_only(tmp_path):
             connection.execute("UPDATE order_replacement_links SET leg_id='other' WHERE link_id='lineage-append-only'")
         with pytest.raises(sqlite3.IntegrityError, match="ORDER_REPLACEMENT_LINKS_APPEND_ONLY"):
             connection.execute("DELETE FROM order_replacement_links WHERE link_id='lineage-append-only'")
+
+
+
+def test_replacement_chain_late_fill_reconciles_once_into_group_ledger_and_position(tmp_path):
+    store = SQLiteSettlementStore(tmp_path / "replacement-late-fill.sqlite3")
+    shared_position = LivePositionAggregate("OPT-SAME")
+    original_oms = _order_with_fill(
+        store, client_id="client-original", broker_id="broker-original", instrument_id="OPT-SAME",
+        side="BUY", leg_id="inner-call", fills=(("exec-original-1", 1, 0, "10.00"),),
+        order_quantity=3, position_aggregate=shared_position,
+    )
+    original_oms.apply_cancel(ExecutionReport(
+        client_order_id="client-original", broker_order_id="broker-original",
+        execution_id="cancel-ack-late-fill-fixture", status="CANCELLED", filled_quantity=0,
+        remaining_quantity=2, execution_price=None, execution_timestamp=AS_OF,
+        group_id=GROUP_ID, leg_id="inner-call",
+    ))
+    _order_with_fill(
+        store, client_id="client-replacement", broker_id="broker-replacement", instrument_id="OPT-SAME",
+        side="BUY", leg_id="inner-call", fills=(("exec-replacement-1", 1, 0, "10.20"),),
+        order_quantity=2, position_aggregate=shared_position,
+    )
+    store.record_order_replacement_link(
+        link_id="lineage-late-fill-1",
+        original_client_order_id="client-original", original_broker_order_id="broker-original",
+        replacement_client_order_id="client-replacement", replacement_broker_order_id="broker-replacement",
+        group_id=GROUP_ID, leg_id="inner-call",
+        cancel_request_ref="VALIDATION_ONLY:cancel-request-late-1",
+        cancel_ack_ref="VALIDATION_ONLY:cancel-ack-late-1",
+        source="VALIDATION_ONLY:ORDER_REPLACEMENT_FIXTURE", payload={},
+    )
+
+    late_fill = ExecutionReport(
+        client_order_id="client-original", broker_order_id="broker-original",
+        execution_id="exec-original-late", status="PARTIALLY_FILLED", filled_quantity=1,
+        remaining_quantity=1, execution_price=Decimal("10.10"),
+        execution_timestamp=datetime(2026, 11, 18, 9, 40, tzinfo=timezone.utc),
+        fee=Decimal("5"), group_id=GROUP_ID, leg_id="inner-call",
+    )
+    bridge = LiveExecutionPositionBridge(
+        order_state_machine=original_oms,
+        position_fill_adapter=LivePositionFillAdapter(shared_position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=store),
+        position_aggregate=shared_position,
+        settlement_store=store,
+    )
+    with pytest.raises(OrderStateTransitionError, match="RECONCILIATION_PENDING"):
+        bridge.settle(late_fill)
+
+    pending_ledger = ValidationOnlyU19LedgerSnapshotBuilder(store).build(
+        group_id=GROUP_ID, snapshot_id="replacement-before-late-reconcile", as_of=AS_OF
+    )
+    assert pending_ledger.positions == (U19Position("OPT-SAME", Decimal("2")),)
+    assert pending_ledger.pending_order_ids == ("client-original",)
+    assert shared_position.qty == 2
+
+    reconciled_state = bridge.settle_authoritatively_reconciled_fill(
+        late_fill,
+        authoritative_evidence_ref="TEST_ONLY:broker-inquiry:original-late-fill",
+    )
+    assert reconciled_state.status == "CANCELLED"
+    assert reconciled_state.filled_quantity == 2
+    assert shared_position.qty == 3
+
+    final_ledger = ValidationOnlyU19LedgerSnapshotBuilder(SQLiteSettlementStore(store.path)).build(
+        group_id=GROUP_ID, snapshot_id="replacement-after-late-reconcile", as_of=AS_OF
+    )
+    assert final_ledger.positions == (U19Position("OPT-SAME", Decimal("3")),)
+    assert final_ledger.pending_order_ids == ()
+    assert {event.execution_id for event in final_ledger.execution_events} == {
+        "exec-original-1", "exec-replacement-1", "exec-original-late"
+    }
+    persisted_position = store.load_position_state("OPT-SAME")
+    assert persisted_position["qty"] == 3
+    coordinator = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(tmp_path / "u19-after-replacement-late-fill.sqlite3"),
+        settlement_store=store,
+    )
+    broker_snapshot = U19BrokerPositionSnapshot(
+        group_id=GROUP_ID,
+        snapshot_id="broker-after-replacement-late-fill",
+        as_of=AS_OF,
+        source="VALIDATION_ONLY:BROKER_EXCHANGE",
+        positions=final_ledger.positions,
+        complete=True,
+        capability_verified=True,
+        payload_sha256="c" * 64,
+    )
+    decision = coordinator.recover_from_settlement_store(
+        group_id=GROUP_ID,
+        broker_snapshot=broker_snapshot,
+        snapshot_id="ledger-after-replacement-late-fill",
+        as_of=AS_OF,
+        ledger_snapshot_builder=ValidationOnlyU19LedgerSnapshotBuilder(store),
+    )
+    assert decision.status is U19RecoveryStatus.RESTORE_ALLOWED
+    assert decision.positions == final_ledger.positions
+    assert decision.new_entry_enabled is False
+    assert decision.order_submission_enabled is False
+    journal = store.load_execution_journal_records()
+    assert len(journal) == 3
+    assert sum(Decimal(row["report"]["fee"]) for row in journal) == Decimal("15")
+
+    # Replay after restart must not alter order quantity, Position, fee journal, or U19 event set.
+    restarted_oms = OrderStateMachine(persistence_store=store)
+    restarted_oms.restore_from_store()
+    restarted_position = LivePositionAggregate("OPT-SAME")
+    restarted_position.restore_persistence_record(store.load_position_state("OPT-SAME"))
+    restarted_bridge = LiveExecutionPositionBridge(
+        order_state_machine=restarted_oms,
+        position_fill_adapter=LivePositionFillAdapter(restarted_position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=store),
+        position_aggregate=restarted_position,
+        settlement_store=store,
+    )
+    before = restarted_bridge.settle(late_fill)
+    assert before.filled_quantity == 2
+    assert restarted_position.qty == 3
+    assert len(store.load_execution_journal_records()) == 3
