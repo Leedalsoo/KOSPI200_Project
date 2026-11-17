@@ -112,3 +112,29 @@ def test_profile_binding_refuses_changed_market_or_quote_policy(tmp_path):
             purpose="U18_STOP_PATH_VALIDATION_ONLY",
         )
     assert not (tmp_path / "must-not-exist").exists()
+
+
+def test_profile_binding_allows_validation_only_trailing_path_metadata_change(tmp_path):
+    source_profile, target_profile, source_manifest, _quote, _candidates, _row = _fixture(tmp_path)
+    target = json.loads(target_profile.read_text(encoding="utf-8"))
+    target.pop("exit_path_test", None)
+    target["trailing_path_test"] = {
+        "purpose": "FORCE_TRAILING_ACTIVATION_AND_PULLBACK_ROUTE_VALIDATION_ONLY",
+        "activation_ratio": "0.40",
+        "pullback_ratio": "0.25",
+        "production_policy_approval": False,
+    }
+    target_profile.write_text(json.dumps(target), encoding="utf-8")
+
+    result = bind_validation_only_track2_quote_scenario_profile(
+        source_manifest_path=source_manifest,
+        source_profile_path=source_profile,
+        target_profile_path=target_profile,
+        output_dir=tmp_path / "trailing-bound-sidecar",
+        purpose="U18_TRAILING_PATH_VALIDATION_ONLY",
+    )
+
+    bound_manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert bound_manifest["profile_id"] == target["profile_id"]
+    assert bound_manifest["validation_profile_binding"]["production_policy_approval"] is False
+    assert bound_manifest["validation_profile_binding"]["purpose"] == "U18_TRAILING_PATH_VALIDATION_ONLY"

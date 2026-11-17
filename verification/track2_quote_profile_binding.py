@@ -16,7 +16,7 @@ _PROFILE_BINDING_FIELDS = {
     "source_scenario_profile_sha256",
     "validation_profile_binding",
 }
-_ALLOWED_PROFILE_DIFFERENCES = {"profile_id", "U18_exit_policy", "exit_path_test", "limitations"}
+_ALLOWED_PROFILE_DIFFERENCES = {"profile_id", "U18_exit_policy", "exit_path_test", "trailing_path_test", "limitations"}
 
 
 @dataclass(frozen=True)
