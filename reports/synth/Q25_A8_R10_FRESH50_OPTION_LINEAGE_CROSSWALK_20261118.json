@@ -1,0 +1,160 @@
+{
+  "authority_claimed": false,
+  "chain_judgement": {
+    "authoritative_multiplier_proven": false,
+    "complete_observed_orderbook_available": false,
+    "contract_identity_linked": true,
+    "execution_to_orderbook_direct_linked": false,
+    "quote_to_orderbook_lineage_linked": true,
+    "real_execution_evidence": false
+  },
+  "counts": {
+    "execution_identity_matches": 1,
+    "execution_records": 1,
+    "execution_validation_only_multiplier": 1,
+    "master_records": 2,
+    "orderbook_identity_matches": 2,
+    "orderbook_one_sided_or_empty": 1,
+    "orderbook_quote_lineage_matches": 1,
+    "orderbook_records": 2,
+    "quote_identity_matches": 2,
+    "quote_missing_source_time": 2,
+    "quote_records": 2
+  },
+  "evidence_notes": {
+    "execution": "One validation-only virtual fill, not a historical broker execution. Runtime report has an observed OrderBook payload hash, but this audit does not claim direct raw OrderBook-to-Execution record linkage.",
+    "master_snapshot_identity": "2026-10-21 and 2026-11-08 official KIS ZIP archives both contain B01611887 with identical contract identity; snapshots remain distinct by SHA-256.",
+    "multiplier": "250000 is KRX_STANDARD_MULTIPLIER_VALIDATION_ONLY, not authoritative KIS/account evidence.",
+    "rest_orderbook": "Observed REST H0IOASP0 raw aspr_acpt_hour=154500 is retained without inferring a timezone-qualified datetime; all five ask levels are zero.",
+    "rest_quote": "Observed REST price response has no source timestamp; received_at is retained separately.",
+    "synthetic_quote_and_orderbook": "Generated timestamps are stored as generated_at, not source event time. Synthetic orderbook links to quote dataset SHA-256, quote record ID, source-anchor hash, and generated time."
+  },
+  "executions": [
+    {
+      "adapter": "S15B_VALIDATION_ONLY_VIRTUAL_BROKER",
+      "broker_symbol": "B01611887",
+      "client_order_id": "Q25-A5-S15B-OBSERVED-S1-CALL-8875-S1_SHORT_ACCUMULATION_CALL_000001-cfa6dda6c569",
+      "execution_id": "EXEC-000001",
+      "execution_kind": "VALIDATION_ONLY_VIRTUAL_FILL",
+      "execution_timestamp": "2026-10-21T00:01:16.106074+00:00",
+      "identity_match": true,
+      "instrument_id": "B01611887",
+      "master_link": "MASTER_IDENTITY_MATCH",
+      "multiplier": "250000",
+      "multiplier_source": "KRX_STANDARD_MULTIPLIER_VALIDATION_ONLY",
+      "multiplier_status": "VALIDATION_ONLY_ASSUMPTION",
+      "orderbook_evidence_sha256": "99b91c1a7f0685ab21f2a0da7d87903bd408cf39555cd9202cd7fa4744c870fc",
+      "orderbook_lineage_linked": false,
+      "orderbook_record_id": null,
+      "symbol_match": true,
+      "validation_only": true
+    }
+  ],
+  "gate_release_permitted": false,
+  "issues": [],
+  "master_snapshot_crosswalk": [
+    {
+      "identity_variants": 1,
+      "master_hashes": [
+        "96912b73fcf0fa549cb67cd03299b13afcbaaf229d5c03fdafefa1b5646aaf9e",
+        "efb5b80be190971eea41a73f20573e7f4a4b33caeabf1fc47ca8298a315e43eb"
+      ],
+      "symbol": "B01611887"
+    }
+  ],
+  "mutation_applied": false,
+  "orderbooks": [
+    {
+      "dataset_sha256": "812003757bcbad8ddbafec126889df7fed17ab40d4fffcc704d6ebfcd1d1d7d2",
+      "depth_status": "ONE_SIDED_OR_EMPTY",
+      "generated_at": null,
+      "identity_match": true,
+      "master_link": "MASTER_IDENTITY_MATCH",
+      "populated_ask_levels": 0,
+      "populated_bid_levels": 5,
+      "provenance": "OBSERVED_KIS_VTS:REST:H0IOASP0",
+      "quote_lineage_linked": false,
+      "received_at": "2026-10-21T17:15:26.628393+00:00",
+      "record_id": "OBSERVED_REST_ORDERBOOK:B01611887:20261021",
+      "source_anchor_sha256": null,
+      "source_anchor_timestamp": null,
+      "source_time_status": "SOURCE_TIME_MISSING",
+      "source_timestamp": null,
+      "source_timestamp_raw": "154500",
+      "symbol": "B01611887",
+      "synthetic": false
+    },
+    {
+      "dataset_sha256": "09c775b51dcd791a6ab5c9b79b0ed9e99851dc9ace98d4d43b2a06663cbe8797",
+      "depth_status": "TWO_SIDED_DEPTH_PRESENT",
+      "generated_at": "2026-11-06T10:00:00+09:00",
+      "identity_match": true,
+      "master_link": "MASTER_IDENTITY_MATCH",
+      "populated_ask_levels": 5,
+      "populated_bid_levels": 5,
+      "provenance": "SYNTHETIC:DERIVED_SCENARIO",
+      "quote_lineage_linked": true,
+      "received_at": "2026-11-06T10:00:00.100000+09:00",
+      "record_id": "SYNTHETIC:B01611887:fresh_two_sided",
+      "source_anchor_sha256": "dc68dedd044221e4090f64e996b44482980c0f1e3993f55ff03dd8ad2a839e36",
+      "source_anchor_timestamp": null,
+      "source_time_status": "SOURCE_TIME_MISSING",
+      "source_timestamp": null,
+      "source_timestamp_raw": "10:00:00",
+      "symbol": "B01611887",
+      "synthetic": true
+    }
+  ],
+  "quotes": [
+    {
+      "dataset_sha256": "6d46fdc1d29a2549d8ddd370bfc28f80ee30e23c48776e88ebcbba44e2894852",
+      "generated_at": null,
+      "identity_match": true,
+      "master_link": "MASTER_IDENTITY_MATCH",
+      "provenance": "OBSERVED_KIS_VTS",
+      "received_at": "2026-10-21T17:15:24.139223+00:00",
+      "record_id": "OBSERVED:B01611887:20261021",
+      "source_anchor_sha256": "6d46fdc1d29a2549d8ddd370bfc28f80ee30e23c48776e88ebcbba44e2894852",
+      "source_anchor_timestamp": null,
+      "source_time_status": "SOURCE_TIME_MISSING_RECEIVE_ONLY",
+      "source_timestamp": null,
+      "source_timestamp_raw": null,
+      "symbol": "B01611887",
+      "synthetic": false
+    },
+    {
+      "dataset_sha256": "81d961331e1e0ef370e61494fd3595bb5c8b08d05291809e06b527741ac7aa8c",
+      "generated_at": "2026-11-06T10:00:00+09:00",
+      "identity_match": true,
+      "master_link": "MASTER_IDENTITY_MATCH",
+      "provenance": "SYNTHETIC:DERIVED_SCENARIO",
+      "received_at": "2026-11-06T10:00:00.100000+09:00",
+      "record_id": "SYNTHETIC:B01611887:fresh_two_sided",
+      "source_anchor_sha256": "dc68dedd044221e4090f64e996b44482980c0f1e3993f55ff03dd8ad2a839e36",
+      "source_anchor_timestamp": null,
+      "source_time_status": "SOURCE_TIME_MISSING_RECEIVE_ONLY",
+      "source_timestamp": null,
+      "source_timestamp_raw": null,
+      "symbol": "B01611887",
+      "synthetic": true
+    }
+  ],
+  "report_sha256": "a0cc94b702d745ffb8b40d02ba893fcc3ee91d31ae083fd4df534f003849b51d",
+  "report_version": "Q25-A8-VALIDATION-ONLY-OPTION-LINEAGE-v1",
+  "scope": {
+    "execution_records": 1,
+    "master_records": 2,
+    "orderbook_records": 2,
+    "quote_records": 2,
+    "source_manifest_hashes": {
+      "master_20261021_archive": "efb5b80be190971eea41a73f20573e7f4a4b33caeabf1fc47ca8298a315e43eb",
+      "master_20261108_archive": "96912b73fcf0fa549cb67cd03299b13afcbaaf229d5c03fdafefa1b5646aaf9e",
+      "orderbook_dataset": "09c775b51dcd791a6ab5c9b79b0ed9e99851dc9ace98d4d43b2a06663cbe8797",
+      "orderbook_manifest": "b959d50c442f703b57ba946b6ed86c636d11630bf84c282593c10ac9103a68e3",
+      "quote_dataset": "81d961331e1e0ef370e61494fd3595bb5c8b08d05291809e06b527741ac7aa8c",
+      "quote_manifest": "81f70193b4c783f5333c8ece9640a9db216361a9ea3702db470d251a77e77976",
+      "runtime_manifest": "509a05f6b15b5eb01e62c874f3c3ad4f1ebedb8aabe2b9093ebce79598c9a6ff",
+      "runtime_trace": "9c9aad7c6c76e90f9e5569358dd0c86c92b6b20c75e319cf6b1c8ce47d0c61b0"
+    }
+  }
+}
