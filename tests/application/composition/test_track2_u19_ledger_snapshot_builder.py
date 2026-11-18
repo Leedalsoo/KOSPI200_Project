@@ -798,3 +798,328 @@ def test_fresh33_conflicting_late_fill_survives_restart_and_keeps_u19_gated(tmp_
     assert decision.new_entry_enabled is False
     assert decision.order_submission_enabled is False
     assert restarted_store.unresolved_reconciliations()[0]["status"] == "CONFLICT"
+
+
+@pytest.mark.parametrize(
+    "failure_point,trigger_sql",
+    [
+        (
+            "execution_journal_insert",
+            """
+            CREATE TRIGGER inject_fresh34_journal_failure
+            BEFORE INSERT ON execution_journal
+            WHEN NEW.execution_id='SYNTHETIC:FRESH34:EXEC:LATE'
+            BEGIN SELECT RAISE(ABORT, 'FRESH34_JOURNAL_FAILURE'); END;
+            """,
+        ),
+        (
+            "oms_order_projection",
+            """
+            CREATE TRIGGER inject_fresh34_order_failure
+            BEFORE UPDATE ON order_states
+            WHEN OLD.client_order_id='FRESH34-CLIENT'
+            BEGIN SELECT RAISE(ABORT, 'FRESH34_ORDER_FAILURE'); END;
+            """,
+        ),
+        (
+            "position_projection",
+            """
+            CREATE TRIGGER inject_fresh34_position_failure
+            BEFORE UPDATE ON position_states
+            WHEN OLD.instrument_id='SYNTHETIC_CONTRACT:FRESH34:OPTION:CALL'
+            BEGIN SELECT RAISE(ABORT, 'FRESH34_POSITION_FAILURE'); END;
+            """,
+        ),
+        (
+            "inbox_resolution",
+            """
+            CREATE TRIGGER inject_fresh34_inbox_failure
+            BEFORE UPDATE ON reconciliation_inbox
+            WHEN OLD.execution_id='SYNTHETIC:FRESH34:EXEC:LATE'
+            BEGIN SELECT RAISE(ABORT, 'FRESH34_INBOX_FAILURE'); END;
+            """,
+        ),
+    ],
+)
+def test_fresh34_late_fill_settlement_sqlite_failures_rollback_and_keep_u19_gated(
+    tmp_path, failure_point, trigger_sql
+):
+    store_path = tmp_path / f"fresh34-{failure_point}.sqlite3"
+    instrument_id = "SYNTHETIC_CONTRACT:FRESH34:OPTION:CALL"
+    client_id = "FRESH34-CLIENT"
+    broker_id = "FRESH34-BROKER"
+    group_id = "SYNTHETIC:GROUP:FRESH34-ATOMICITY"
+    position = LivePositionAggregate(instrument_id)
+    store = SQLiteSettlementStore(store_path)
+    oms = _order_with_fill(
+        store,
+        client_id=client_id,
+        broker_id=broker_id,
+        instrument_id=instrument_id,
+        side="BUY",
+        leg_id="FRESH34-CALL",
+        group_id=group_id,
+        fills=(("SYNTHETIC:FRESH34:EXEC:ENTRY", 1, 0, "10.00"),),
+        order_quantity=3,
+        position_aggregate=position,
+    )
+    oms.apply_cancel(ExecutionReport(
+        client_order_id=client_id,
+        broker_order_id=broker_id,
+        execution_id=None,
+        status="CANCELLED",
+        filled_quantity=0,
+        remaining_quantity=2,
+        execution_price=None,
+        execution_timestamp=datetime(2026, 11, 18, 9, 35, tzinfo=timezone.utc),
+        group_id=group_id,
+        leg_id="FRESH34-CALL",
+    ))
+    bridge = LiveExecutionPositionBridge(
+        order_state_machine=oms,
+        position_fill_adapter=LivePositionFillAdapter(position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(
+            persistence_store=store
+        ),
+        position_aggregate=position,
+        settlement_store=store,
+    )
+    late_fill = ExecutionReport(
+        client_order_id=client_id,
+        broker_order_id=broker_id,
+        execution_id="SYNTHETIC:FRESH34:EXEC:LATE",
+        status="PARTIALLY_FILLED",
+        filled_quantity=1,
+        remaining_quantity=1,
+        execution_price=Decimal("10.25"),
+        execution_timestamp=datetime(2026, 11, 18, 9, 40, tzinfo=timezone.utc),
+        fee=Decimal("5"),
+        group_id=group_id,
+        leg_id="FRESH34-CALL",
+    )
+    with pytest.raises(OrderStateTransitionError, match="RECONCILIATION_PENDING"):
+        bridge.settle(late_fill)
+    assert len(store.pending_reconciliation_events(scope_key=client_id)) == 1
+
+    with sqlite3.connect(store_path) as connection:
+        connection.executescript(trigger_sql)
+
+    with pytest.raises(SettlementStoreError, match="SETTLEMENT_TRANSACTION_FAILED"):
+        bridge.settle_authoritatively_reconciled_fill(
+            late_fill,
+            authoritative_evidence_ref=(
+                "VALIDATION_ONLY:SYNTHETIC_RECONCILIATION_FIXTURE:FRESH34"
+            ),
+        )
+
+    # Every failure before SQLite COMMIT rolls back journal, OMS and position
+    # projections together; the original inbox item remains durable.
+    assert not store.has_execution(late_fill.execution_id)
+    assert len(store.load_execution_journal_records()) == 1
+    assert store.load_position_state(instrument_id)["qty"] == 1
+    assert oms.get(client_id).status == "CANCELLED"
+    assert oms.get(client_id).filled_quantity == 1
+    assert position.qty == 1
+    pending = store.pending_reconciliation_events(scope_key=client_id)
+    assert len(pending) == 1
+    assert pending[0]["execution_id"] == late_fill.execution_id
+    unresolved = store.unresolved_reconciliations()
+    assert any(
+        item["scope_key"] == client_id
+        and item["status"] == "CONFLICT"
+        and item["reason"] == "SETTLEMENT_TRANSACTION_FAILED"
+        for item in unresolved
+    )
+
+    # A new process reconstructs the last committed state, not a half-applied fill.
+    restarted_store = SQLiteSettlementStore(store_path)
+    restarted_oms = OrderStateMachine(persistence_store=restarted_store)
+    restarted_oms.restore_from_store()
+    restarted_position = LivePositionAggregate(instrument_id)
+    restarted_position.restore_persistence_record(
+        restarted_store.load_position_state(instrument_id)
+    )
+    restarted_bridge = LiveExecutionPositionBridge(
+        order_state_machine=restarted_oms,
+        position_fill_adapter=LivePositionFillAdapter(restarted_position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(
+            persistence_store=restarted_store
+        ),
+        position_aggregate=restarted_position,
+        settlement_store=restarted_store,
+    )
+    assert restarted_oms.get(client_id).filled_quantity == 1
+    assert restarted_position.qty == 1
+    with pytest.raises(OrderStateTransitionError, match="RECONCILIATION_PENDING"):
+        restarted_bridge.settle(late_fill)
+    assert len(restarted_store.load_execution_journal_records()) == 1
+    assert len(restarted_store.pending_reconciliation_events(scope_key=client_id)) == 1
+
+    builder = ValidationOnlyU19LedgerSnapshotBuilder(restarted_store)
+    ledger = builder.build(
+        group_id=group_id,
+        snapshot_id=f"FRESH34-{failure_point}-PENDING",
+        as_of=AS_OF,
+    )
+    assert ledger.positions == (U19Position(instrument_id, Decimal("1")),)
+    assert ledger.pending_order_ids == (client_id,)
+    coordinator = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(tmp_path / f"fresh34-{failure_point}-u19.sqlite3"),
+        settlement_store=restarted_store,
+    )
+    decision = coordinator.recover_from_settlement_store(
+        group_id=group_id,
+        broker_snapshot=U19BrokerPositionSnapshot(
+            group_id=group_id,
+            snapshot_id=f"FRESH34-{failure_point}-BROKER-PROXY",
+            as_of=AS_OF,
+            source="VALIDATION_ONLY:BROKER_EXCHANGE",
+            positions=ledger.positions,
+            complete=True,
+            capability_verified=True,
+            payload_sha256=("d" if failure_point else "e") * 64,
+        ),
+        snapshot_id=f"FRESH34-{failure_point}-U19-PENDING",
+        as_of=AS_OF,
+        ledger_snapshot_builder=builder,
+    )
+    assert decision.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+    assert decision.restore_allowed is False
+    assert decision.pending_order_ids == (client_id,)
+    assert decision.new_entry_enabled is False
+    assert decision.order_submission_enabled is False
+
+
+def test_fresh34_post_commit_memory_projection_failure_rebuilds_from_sqlite_and_keeps_u19_gated(
+    tmp_path, monkeypatch
+):
+    store_path = tmp_path / "fresh34-post-commit.sqlite3"
+    instrument_id = "SYNTHETIC_CONTRACT:FRESH34:OPTION:PUT"
+    client_id = "FRESH34-POST-COMMIT-CLIENT"
+    broker_id = "FRESH34-POST-COMMIT-BROKER"
+    group_id = "SYNTHETIC:GROUP:FRESH34-POST-COMMIT"
+    position = LivePositionAggregate(instrument_id)
+    store = SQLiteSettlementStore(store_path)
+    oms = _order_with_fill(
+        store,
+        client_id=client_id,
+        broker_id=broker_id,
+        instrument_id=instrument_id,
+        side="BUY",
+        leg_id="FRESH34-PUT",
+        group_id=group_id,
+        fills=(("SYNTHETIC:FRESH34:EXEC:ENTRY-PUT", 1, 0, "9.00"),),
+        order_quantity=3,
+        position_aggregate=position,
+    )
+    oms.apply_cancel(ExecutionReport(
+        client_order_id=client_id,
+        broker_order_id=broker_id,
+        execution_id=None,
+        status="CANCELLED",
+        filled_quantity=0,
+        remaining_quantity=2,
+        execution_price=None,
+        execution_timestamp=datetime(2026, 11, 18, 9, 35, tzinfo=timezone.utc),
+        group_id=group_id,
+        leg_id="FRESH34-PUT",
+    ))
+    bridge = LiveExecutionPositionBridge(
+        order_state_machine=oms,
+        position_fill_adapter=LivePositionFillAdapter(position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(
+            persistence_store=store
+        ),
+        position_aggregate=position,
+        settlement_store=store,
+    )
+    late_fill = ExecutionReport(
+        client_order_id=client_id,
+        broker_order_id=broker_id,
+        execution_id="SYNTHETIC:FRESH34:EXEC:POST-COMMIT",
+        status="PARTIALLY_FILLED",
+        filled_quantity=1,
+        remaining_quantity=1,
+        execution_price=Decimal("9.25"),
+        execution_timestamp=datetime(2026, 11, 18, 9, 40, tzinfo=timezone.utc),
+        fee=Decimal("5"),
+        group_id=group_id,
+        leg_id="FRESH34-PUT",
+    )
+    with pytest.raises(OrderStateTransitionError, match="RECONCILIATION_PENDING"):
+        bridge.settle(late_fill)
+
+    def fail_projection(_snapshot):
+        raise RuntimeError("FRESH34_IN_MEMORY_POSITION_PROJECTION_FAILURE")
+
+    monkeypatch.setattr(position, "restore_snapshot", fail_projection)
+    with pytest.raises(
+        RuntimeError, match="SETTLEMENT_COMMITTED_MEMORY_PROJECTION_REBUILD_REQUIRED"
+    ):
+        bridge.settle_authoritatively_reconciled_fill(
+            late_fill,
+            authoritative_evidence_ref=(
+                "VALIDATION_ONLY:SYNTHETIC_RECONCILIATION_FIXTURE:FRESH34-POST-COMMIT"
+            ),
+        )
+
+    # SQLite commit is atomic and complete; only the in-memory projection failed.
+    assert store.has_execution(late_fill.execution_id)
+    assert len(store.load_execution_journal_records()) == 2
+    assert store.load_position_state(instrument_id)["qty"] == 2
+    assert oms.get(client_id).filled_quantity == 2
+    assert position.qty == 1
+    assert store.pending_reconciliation_events(scope_key=client_id) == ()
+    assert any(
+        item["scope_key"] == client_id
+        and item["status"] == "CONFLICT"
+        and item["reason"] == "POST_COMMIT_MEMORY_PROJECTION_REBUILD_REQUIRED"
+        for item in store.unresolved_reconciliations()
+    )
+
+    # Restart rebuilds both projections from the committed SQLite transaction.
+    restarted_store = SQLiteSettlementStore(store_path)
+    restarted_oms = OrderStateMachine(persistence_store=restarted_store)
+    restarted_oms.restore_from_store()
+    restarted_position = LivePositionAggregate(instrument_id)
+    restarted_position.restore_persistence_record(
+        restarted_store.load_position_state(instrument_id)
+    )
+    assert restarted_oms.get(client_id).filled_quantity == 2
+    assert restarted_position.qty == 2
+    assert len(restarted_store.load_execution_journal_records()) == 2
+    assert restarted_store.pending_reconciliation_events(scope_key=client_id) == ()
+    assert restarted_store.has_unresolved_reconciliation()
+
+    builder = ValidationOnlyU19LedgerSnapshotBuilder(restarted_store)
+    ledger = builder.build(
+        group_id=group_id,
+        snapshot_id="FRESH34-POST-COMMIT-REBUILT",
+        as_of=AS_OF,
+    )
+    assert ledger.positions == (U19Position(instrument_id, Decimal("2")),)
+    assert ledger.pending_order_ids == (client_id,)
+    coordinator = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(tmp_path / "fresh34-post-commit-u19.sqlite3"),
+        settlement_store=restarted_store,
+    )
+    decision = coordinator.recover_from_settlement_store(
+        group_id=group_id,
+        broker_snapshot=U19BrokerPositionSnapshot(
+            group_id=group_id,
+            snapshot_id="FRESH34-POST-COMMIT-BROKER-PROXY",
+            as_of=AS_OF,
+            source="VALIDATION_ONLY:BROKER_EXCHANGE",
+            positions=ledger.positions,
+            complete=True,
+            capability_verified=True,
+            payload_sha256="f" * 64,
+        ),
+        snapshot_id="FRESH34-POST-COMMIT-U19",
+        as_of=AS_OF,
+        ledger_snapshot_builder=builder,
+    )
+    assert decision.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+    assert decision.restore_allowed is False
+    assert decision.new_entry_enabled is False
+    assert decision.order_submission_enabled is False
