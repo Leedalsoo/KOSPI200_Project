@@ -2804,3 +2804,109 @@ def test_fresh40_multiple_global_collisions_and_order_local_conflict_keep_all_u1
     )) == 2
     assert restarted_store.unresolved_reconciliations()[0]["status"] == "CONFLICT"
     assert len(restarted_store.load_execution_journal_records()) == journal_count_before_restart
+
+    # FRESH-44: a structurally valid validation-only packet may corroborate
+    # conflict lineage, but it must never resolve the global gate or U19 state.
+    from application.composition.validation_only_broker_evidence_packet import (
+        ValidationOnlyBrokerEvidencePacketValidator,
+    )
+
+    packet_as_of = AS_OF.isoformat()
+    packet = {
+        "packet_id": "SYNTHETIC:FRESH44:GLOBAL-CONFLICT-PACKET",
+        "source_namespace": "VALIDATION_ONLY:SYNTHETIC:FRESH44",
+        "provider_ref": "VALIDATION_ONLY:FRESH44:FIXTURE_PROVIDER",
+        "source_as_of": packet_as_of,
+        "collected_at": packet_as_of,
+        "snapshots": {
+            "orders": {"snapshot_id": "FRESH44-ORDERS", "payload_sha256": "1" * 64, "complete": True},
+            "executions": {"snapshot_id": "FRESH44-EXECUTIONS", "payload_sha256": "2" * 64, "complete": True},
+            "positions": {"snapshot_id": "FRESH44-POSITIONS", "payload_sha256": "3" * 64, "complete": True},
+        },
+        "identity_crosswalk": [
+            {
+                "source_identity": {
+                    "execution_id": item["execution_id"],
+                    "client_order_id": item["incoming_client_order_id"],
+                    "broker_order_id": item["incoming_broker_order_id"],
+                },
+                "internal_identity": {
+                    "execution_id": item["execution_id"],
+                    "scope_key": item["scope_key"],
+                },
+                "evidence_ref": f"VALIDATION_ONLY:FRESH44:CROSSWALK:{item['execution_id']}",
+            }
+            for item in global_history
+        ],
+        "conflict_links": [
+            {
+                "execution_id": item["execution_id"],
+                "scope_key": item["scope_key"],
+                "original_payload_sha256": item["original_payload_sha256"],
+                "incoming_payload_sha256": item["incoming_payload_sha256"],
+                "source_record_refs": [
+                    f"journal:{item['execution_id']}",
+                    f"conflict-event:{item['event_id']}",
+                ],
+            }
+            for item in global_history
+        ],
+    }
+    packet_result = ValidationOnlyBrokerEvidencePacketValidator(
+        validation_only=True
+    ).validate(packet=packet, as_of=AS_OF)
+    assert packet_result.is_valid
+    assert packet_result.manifest_sha256
+    assert packet_result.gate_release_permitted is False
+    assert packet_result.authoritative is False
+    assert packet_result.mutation_applied is False
+    packet_conflicts = {
+        (
+            item["execution_id"],
+            item["scope_key"],
+            item["original_payload_sha256"],
+            item["incoming_payload_sha256"],
+        )
+        for item in packet_result.manifest["conflict_links"]
+    }
+    journal_conflicts = {
+        (
+            item["execution_id"],
+            item["scope_key"],
+            item["original_payload_sha256"],
+            item["incoming_payload_sha256"],
+        )
+        for item in restarted_history
+        if item["event_type"] == "CONFLICT_DETECTED"
+    }
+    assert packet_conflicts == journal_conflicts
+
+    # Re-check every group after packet validation: no implicit adjudication.
+    for group_id, position, suffix in groups:
+        builder = ValidationOnlyU19LedgerSnapshotBuilder(restarted_store)
+        ledger = builder.build(
+            group_id=group_id,
+            snapshot_id=f"{suffix}-FRESH44-PACKET-CHECK",
+            as_of=AS_OF,
+        )
+        decision = restarted_coordinator.recover_from_settlement_store(
+            group_id=group_id,
+            broker_snapshot=U19BrokerPositionSnapshot(
+                group_id=group_id,
+                snapshot_id=f"{suffix}-FRESH44-BROKER-PROXY",
+                as_of=AS_OF,
+                source="VALIDATION_ONLY:BROKER_EXCHANGE",
+                positions=ledger.positions,
+                complete=True,
+                capability_verified=True,
+                payload_sha256=("a" if suffix in {"FRESH40-A", "FRESH40-B"} else "b") * 64,
+            ),
+            snapshot_id=f"{suffix}-FRESH44-PACKET-CHECK",
+            as_of=AS_OF,
+            ledger_snapshot_builder=builder,
+        )
+        assert decision.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+        assert decision.restore_allowed is False
+        assert decision.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
+        assert decision.new_entry_enabled is False
+        assert decision.order_submission_enabled is False
