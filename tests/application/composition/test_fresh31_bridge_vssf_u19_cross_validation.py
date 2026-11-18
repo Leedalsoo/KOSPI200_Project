@@ -162,7 +162,7 @@ def _digest(value):
 
 def test_actual_bridge_partial_fills_partial_and_full_close_reconcile_with_vssf_and_u19(tmp_path):
     assert ACCEPTED_DATASET.exists(), "accepted runtime-v2 source must be present"
-    dataset, fixture_manifest, source_ref = _build_fixture_dataset(tmp_path)
+    dataset, _fixture_manifest, source_ref = _build_fixture_dataset(tmp_path)
     adapter = SyntheticReplayAdapter(dataset)
     master = build_synthetic_option_master(dataset, validation_only_adapter=adapter)
     tick = next(HighSpeedReplayRunner(dataset, synthetic_adapter=adapter).events())
@@ -442,3 +442,284 @@ def test_actual_bridge_partial_fills_partial_and_full_close_reconcile_with_vssf_
     persisted = SqliteTrack2U19RecoveryStore(checkpoint_path).load_latest(group_id)
     assert persisted["status"] == U19RecoveryStatus.FLAT_CONFIRMED.value
     assert persisted["execution_events"] and len(persisted["execution_events"]) == 5
+
+def test_cancel_race_late_fill_replay_and_conflict_reconcile_bridge_vssf_u19(tmp_path):
+    from core.oms.track2_u19_recovery import (
+        U19BrokerPositionSnapshot,
+        U19ExecutionLedgerSnapshot,
+    )
+    import pytest
+
+    assert ACCEPTED_DATASET.exists(), "accepted runtime-v2 source must be present"
+    dataset, _fixture_manifest, source_ref = _build_fixture_dataset(tmp_path)
+    adapter = SyntheticReplayAdapter(dataset)
+    master = build_synthetic_option_master(dataset, validation_only_adapter=adapter)
+    tick = next(HighSpeedReplayRunner(dataset, synthetic_adapter=adapter).events())
+    identity = _identity(tick, master)
+    limit_price = Decimal(str(tick.bid_price)) - Decimal("1.00")
+    assert limit_price > 0
+
+    sources = SyntheticRuntimeSources()
+    bootstrap = create_virtual_runtime_bootstrap(
+        option_master=master, initial_capital=250_000_000.0,
+        risk_guard_status_source=sources,
+    )
+    if bootstrap.automated_loop is not None:
+        bootstrap.bundle.market.unsubscribe(bootstrap.automated_loop.on_tick)
+    loop = attach_standard_automated_loop(
+        bootstrap, strategy_keys=(("TRACK1_TAIL_DEFENSE", "1.2.0"),),
+        run_id="Q25-A8-FRESH32-CANCEL-LATE-FILL",
+        synthetic_runtime_sources=sources, track4_greeks_provider=sources,
+        risk_guard_status_source=sources,
+    )
+    bootstrap.bundle.market.unsubscribe(loop.on_tick)
+    bridge = loop.multi_leg_bridge
+    vssf = bootstrap.bundle.execution._authoritative_execute.__self__.vssf_runtime
+
+    def freshness(_plan, _leg, _identity, command):
+        observed = datetime.fromisoformat(tick.timestamp)
+        return FreshnessVerdict(
+            status=FreshnessStatus.FRESH,
+            reason="FRESH32_SYNTHETIC_FIXTURE_ONLY",
+            policy_version="Q25-A8-FRESH32-v1",
+            source="DERIVED_SCENARIO_TEST_FIXTURE",
+            tr_id="SYNTHETIC-REPLAY-TEST",
+            environment="VIRTUAL_VALIDATION_ONLY",
+            instrument_id=command.instrument_id,
+            symbol=command.broker_symbol,
+            source_instant=observed,
+            received_at=observed,
+            evidence_sha256=_digest({
+                "timestamp": observed.isoformat(),
+                "instrument_id": command.instrument_id,
+                "rule": "FRESH32",
+            }),
+        )
+
+    bridge.freshness_verdict_provider = freshness
+    _publish_contract_scoped_replay_quote(
+        tick, option_master=master, market=bootstrap.bundle.market,
+        order_book=vssf.order_book,
+    )
+    sources.set_tick(tick)
+    bootstrap.bundle.market.publish_replay_tick(tick)
+
+    group_id = "FRESH32-CANCEL-LATE-FILL-GROUP"
+    strategy_id = "track8_macro_regime_monthly_strangle"
+    plan = MultiLegExecutionPlan(
+        group_id=group_id,
+        strategy_id=strategy_id,
+        purpose="FRESH32_CANCEL_LATE_FILL_RECONCILIATION",
+        legs=(ExecutionLeg(
+            "late-fill-call", "BUY", 2, option_type="CALL",
+            strike=identity.strike, requested_price=limit_price,
+            instrument_identity=identity,
+        ),),
+    )
+    submitted = bridge.execute(plan)
+    assert submitted.pending_legs == 1
+    assert submitted.reports[0].status == "NEW"
+    client_order_id = submitted.reports[0].client_order_id
+    broker_command = bridge.pending_legs[client_order_id][2]
+    assert vssf.order_book.get_pending_order(client_order_id) is not None
+
+    anchor = datetime.fromisoformat(tick.timestamp)
+    if anchor.tzinfo is None:
+        anchor = anchor.replace(tzinfo=timezone.utc)
+    recovery_store = SqliteTrack2U19RecoveryStore(tmp_path / "fresh32-u19.sqlite3")
+    recovery = ValidationOnlyTrack2U19RecoveryCoordinator(recovery_store)
+
+    pending_broker = U19BrokerPositionSnapshot(
+        group_id=group_id, snapshot_id="FRESH32-BROKER-BEFORE-LATE-FILL",
+        as_of=anchor, source="VALIDATION_ONLY:BROKER_EXCHANGE",
+        positions=(), complete=True, capability_verified=True,
+        payload_sha256=_digest({"group": group_id, "positions": []}),
+    )
+    pending_ledger = U19ExecutionLedgerSnapshot(
+        group_id=group_id, snapshot_id="FRESH32-LEDGER-CANCEL-PENDING",
+        as_of=anchor, source="VALIDATION_ONLY:EXECUTION_LEDGER",
+        positions=(), complete=True,
+        payload_sha256=_digest({
+            "group": group_id, "positions": [], "pending": [client_order_id],
+        }),
+        pending_order_ids=(client_order_id,),
+    )
+    waiting = recovery.recover(
+        group_id=group_id, broker_snapshot=pending_broker,
+        ledger_snapshot=pending_ledger,
+    )
+    assert waiting.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+    assert waiting.restore_allowed is False
+    assert waiting.new_entry_enabled is False
+    assert waiting.order_submission_enabled is False
+
+    # Inject the late partial fill after the cancel request begins but before
+    # VSSF returns its terminal cancel acknowledgement.
+    original_cancel = vssf.cancel_order
+    race_fill_ids = []
+
+    def cancel_with_late_fill(order_id, *, lifecycle_reason="MANUAL"):
+        assert order_id == client_order_id
+        pending_command = vssf.order_book.get_pending_order(order_id)
+        assert pending_command is not None
+        vssf.order_book.update_bid_ask(
+            float(limit_price - Decimal("0.01")),
+            float(limit_price), identity.instrument_id,
+        )
+        late_execution = vssf._execute(
+            pending_command, float(limit_price), vssf._now(), quantity=1,
+        )
+        race_fill_ids.append(late_execution.exec_id)
+        return original_cancel(order_id, lifecycle_reason=lifecycle_reason)
+
+    vssf.cancel_order = cancel_with_late_fill
+    cancelled = bridge.cancel_pending_order(client_order_id, reason="FRESH32_CANCEL_RACE")
+    assert len(race_fill_ids) == 1
+    assert cancelled.pending_legs == 0
+    assert cancelled.reports[0].status == "CANCELLED"
+    assert cancelled.reports[0].filled_quantity == 1
+    assert cancelled.reports[0].remaining_quantity == 1
+    assert cancelled.reports[0].execution_id == race_fill_ids[0]
+    assert client_order_id not in bridge.pending_legs
+    assert vssf.order_book.get_pending_order(client_order_id) is None
+
+    fill_report = cancelled.reports[0]
+    assert len(fill_report.execution_fills) == 1
+    fill = fill_report.execution_fills[0]
+    assert fill.execution_id == race_fill_ids[0]
+    assert len(bridge.position_lot_store.history()) == 1
+    assert len(bridge.position_lot_store.open_lots()) == 1
+    assert len(bridge.fee_ledger.snapshot(run_id=bridge.run_id)) == 1
+    assert bridge.fee_ledger.snapshot(run_id=bridge.run_id)[0].execution_id == fill.execution_id
+    assert Decimal(str(vssf.account.positions[identity.instrument_id]["qty"])) == Decimal("1")
+    assert vssf.metrics["order_commands"] == 1
+
+    # Re-deliver the same canonical execution through the Bridge's reconciliation
+    # boundary: PositionLot, Fee Ledger and VSSF aggregates must remain unchanged.
+    before_history = bridge.position_lot_store.history()
+    before_fees = bridge.fee_ledger.snapshot(run_id=bridge.run_id)
+    before_position = dict(vssf.account.positions[identity.instrument_id])
+    bridge._apply_reconciled_execution(
+        plan=plan, leg=plan.legs[0], identity=identity,
+        broker_command=broker_command, report=fill_report,
+    )
+    assert bridge.position_lot_store.history() == before_history
+    assert bridge.fee_ledger.snapshot(run_id=bridge.run_id) == before_fees
+    assert vssf.account.positions[identity.instrument_id] == before_position
+    assert vssf.metrics["order_commands"] == 1
+
+    # Independently derive the ledger-side signed position from PositionLots.
+    lot = bridge.position_lot_store.open_lots()[0]
+    signed_quantity = Decimal(lot.remaining_quantity) * (
+        Decimal("1") if lot.side == "BUY" else Decimal("-1")
+    )
+    ledger_positions = (U19Position(identity.instrument_id, signed_quantity),)
+    vssf_position = vssf.account.positions[identity.instrument_id]
+    broker_signed_quantity = Decimal(str(vssf_position["qty"])) * (
+        Decimal("1") if str(vssf_position["side"]).upper() == "BUY" else Decimal("-1")
+    )
+    broker_positions = (U19Position(identity.instrument_id, broker_signed_quantity),)
+    event_fingerprint = _digest({
+        "execution_id": fill.execution_id,
+        "client_order_id": fill_report.client_order_id,
+        "instrument_id": identity.instrument_id,
+        "side": lot.side,
+        "quantity": fill.filled_quantity,
+        "price": str(fill.execution_price),
+        "fee": str(fill.fee),
+        "executed_at": fill.execution_timestamp.isoformat(),
+        "source_anchor_ref": source_ref,
+        "manifest_sha256": sha256((dataset / "manifest.json").read_bytes()).hexdigest(),
+    })
+    event = U19ExecutionEvent(fill.execution_id, event_fingerprint)
+    final_as_of = max(anchor, fill.execution_timestamp) + timedelta(seconds=1)
+    final_broker_payload = {
+        "group_id": group_id,
+        "positions": [(item.instrument_id, str(item.signed_quantity)) for item in broker_positions],
+    }
+    final_ledger_payload = {
+        "group_id": group_id,
+        "positions": [(item.instrument_id, str(item.signed_quantity)) for item in ledger_positions],
+        "execution_events": [(event.execution_id, event.fingerprint), (event.execution_id, event.fingerprint)],
+        "pending_order_ids": [],
+    }
+    reconciled = recovery.recover(
+        group_id=group_id,
+        broker_snapshot=U19BrokerPositionSnapshot(
+            group_id=group_id, snapshot_id="FRESH32-BROKER-AFTER-LATE-FILL",
+            as_of=final_as_of, source="VALIDATION_ONLY:BROKER_EXCHANGE",
+            positions=broker_positions, complete=True, capability_verified=True,
+            payload_sha256=_digest(final_broker_payload),
+        ),
+        ledger_snapshot=U19ExecutionLedgerSnapshot(
+            group_id=group_id, snapshot_id="FRESH32-LEDGER-AFTER-LATE-FILL",
+            as_of=final_as_of, source="VALIDATION_ONLY:EXECUTION_LEDGER",
+            positions=ledger_positions, complete=True,
+            payload_sha256=_digest(final_ledger_payload),
+            execution_events=(event, event), pending_order_ids=(),
+        ),
+    )
+    assert reconciled.status is U19RecoveryStatus.RESTORE_ALLOWED
+    assert reconciled.positions == broker_positions
+    assert reconciled.execution_events == (event,)
+    assert reconciled.pending_order_ids == ()
+    assert reconciled.new_entry_enabled is False
+    assert reconciled.order_submission_enabled is False
+    persisted = SqliteTrack2U19RecoveryStore(tmp_path / "fresh32-u19.sqlite3").load_latest(group_id)
+    assert persisted["status"] == U19RecoveryStatus.RESTORE_ALLOWED.value
+    assert len(persisted["execution_events"]) == 1
+    assert persisted["new_entry_enabled"] is False
+    assert persisted["order_submission_enabled"] is False
+
+    # Same execution ID with a different payload is a conflict, never a second fill.
+    conflict_event = U19ExecutionEvent(fill.execution_id, _digest({
+        "execution_id": fill.execution_id, "different_payload": True,
+    }))
+    conflict_payload = {
+        **final_ledger_payload,
+        "execution_events": [
+            (event.execution_id, event.fingerprint),
+            (conflict_event.execution_id, conflict_event.fingerprint),
+        ],
+    }
+    conflict = recovery.recover(
+        group_id=group_id,
+        broker_snapshot=U19BrokerPositionSnapshot(
+            group_id=group_id, snapshot_id="FRESH32-BROKER-CONFLICT-CHECK",
+            as_of=final_as_of + timedelta(seconds=1),
+            source="VALIDATION_ONLY:BROKER_EXCHANGE",
+            positions=broker_positions, complete=True, capability_verified=True,
+            payload_sha256=_digest(final_broker_payload),
+        ),
+        ledger_snapshot=U19ExecutionLedgerSnapshot(
+            group_id=group_id, snapshot_id="FRESH32-LEDGER-CONFLICT-CHECK",
+            as_of=final_as_of + timedelta(seconds=1),
+            source="VALIDATION_ONLY:EXECUTION_LEDGER",
+            positions=ledger_positions, complete=True,
+            payload_sha256=_digest(conflict_payload),
+            execution_events=(event, conflict_event), pending_order_ids=(),
+        ),
+    )
+    assert conflict.status is U19RecoveryStatus.EXECUTION_ID_CONFLICT
+    assert conflict.restore_allowed is False
+    assert conflict.new_entry_enabled is False
+    assert conflict.order_submission_enabled is False
+    assert len(bridge.position_lot_store.history()) == 1
+    assert len(bridge.fee_ledger.snapshot(run_id=bridge.run_id)) == 1
+    assert Decimal(str(vssf.account.positions[identity.instrument_id]["qty"])) == Decimal("1")
+    assert vssf.metrics["order_commands"] == 1
+
+    # The Bridge itself also rejects a changed payload for an already-seen execution.
+    conflicting_fill = replace(
+        fill, execution_price=Decimal(str(fill.execution_price)) + Decimal("0.01"),
+    )
+    conflicting_report = replace(fill_report, execution_fills=(conflicting_fill,))
+    with pytest.raises(RuntimeError, match="MULTI_LEG_EXECUTION_ID_CONFLICT_RECONCILIATION_REQUIRED"):
+        bridge._apply_reconciled_execution(
+            plan=plan, leg=plan.legs[0], identity=identity,
+            broker_command=broker_command, report=conflicting_report,
+        )
+    assert bridge.position_lot_store.history() == before_history
+    assert bridge.fee_ledger.snapshot(run_id=bridge.run_id) == before_fees
+    assert vssf.account.positions[identity.instrument_id] == before_position
+    assert vssf.metrics["order_commands"] == 1
