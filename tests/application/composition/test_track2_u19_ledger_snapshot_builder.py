@@ -2455,3 +2455,230 @@ def test_fresh39_cross_order_execution_id_collision_sets_global_u19_gate_for_bot
     assert len(store.load_execution_journal_records()) == 1
     assert original_position.qty == 1
     assert incoming_position.qty == 0
+
+
+def test_fresh40_multiple_global_collisions_and_order_local_conflict_keep_all_u19_groups_gated(
+    tmp_path
+):
+    store_path = tmp_path / "fresh40-settlement.sqlite3"
+    checkpoint_path = tmp_path / "fresh40-u19.sqlite3"
+    store = SQLiteSettlementStore(store_path)
+
+    def make_group(client, broker, instrument, group, leg, execution_id, price, quantity=2, fills=None):
+        position = LivePositionAggregate(instrument)
+        oms = _order_with_fill(
+            store,
+            client_id=client,
+            broker_id=broker,
+            instrument_id=instrument,
+            side="BUY",
+            leg_id=leg,
+            group_id=group,
+            fills=(
+                fills
+                if fills is not None
+                else ((execution_id, 1, 0, price),)
+            ),
+            order_quantity=quantity,
+            position_aggregate=position,
+        )
+        bridge = LiveExecutionPositionBridge(
+            order_state_machine=oms,
+            position_fill_adapter=LivePositionFillAdapter(position),
+            execution_event_deduplicator=ExecutionEventDeduplicator(
+                persistence_store=store
+            ),
+            position_aggregate=position,
+            settlement_store=store,
+        )
+        return oms, position, bridge
+
+    # Two separate cross-order journal collisions share one global gate.
+    oms_a, pos_a, bridge_a = make_group(
+        "FRESH40-A-CLIENT", "FRESH40-A-BROKER",
+        "SYNTHETIC_CONTRACT:FRESH40:A", "SYNTHETIC:GROUP:FRESH40-A",
+        "FRESH40-A-LEG", "SYNTHETIC:FRESH40:EXEC:GLOBAL-1", "10.00",
+    )
+    oms_b, pos_b, bridge_b = make_group(
+        "FRESH40-B-CLIENT", "FRESH40-B-BROKER",
+        "SYNTHETIC_CONTRACT:FRESH40:B", "SYNTHETIC:GROUP:FRESH40-B",
+        "FRESH40-B-LEG", "SYNTHETIC:FRESH40:EXEC:GLOBAL-1", "20.00",
+        quantity=1, fills=(),
+    )
+    oms_c, pos_c, bridge_c = make_group(
+        "FRESH40-C-CLIENT", "FRESH40-C-BROKER",
+        "SYNTHETIC_CONTRACT:FRESH40:C", "SYNTHETIC:GROUP:FRESH40-C",
+        "FRESH40-C-LEG", "SYNTHETIC:FRESH40:EXEC:GLOBAL-2", "30.00",
+    )
+    oms_d, pos_d, bridge_d = make_group(
+        "FRESH40-D-CLIENT", "FRESH40-D-BROKER",
+        "SYNTHETIC_CONTRACT:FRESH40:D", "SYNTHETIC:GROUP:FRESH40-D",
+        "FRESH40-D-LEG", "SYNTHETIC:FRESH40:EXEC:GLOBAL-2", "40.00",
+        quantity=1, fills=(),
+    )
+    for bridge, client, broker, group, leg, execution_id, price in (
+        (bridge_b, "FRESH40-B-CLIENT", "FRESH40-B-BROKER", "SYNTHETIC:GROUP:FRESH40-B", "FRESH40-B-LEG", "SYNTHETIC:FRESH40:EXEC:GLOBAL-1", "20.00"),
+        (bridge_d, "FRESH40-D-CLIENT", "FRESH40-D-BROKER", "SYNTHETIC:GROUP:FRESH40-D", "FRESH40-D-LEG", "SYNTHETIC:FRESH40:EXEC:GLOBAL-2", "40.00"),
+    ):
+        incoming = ExecutionReport(
+            client_order_id=client,
+            broker_order_id=broker,
+            execution_id=execution_id,
+            status="FILLED",
+            filled_quantity=1,
+            remaining_quantity=0,
+            execution_price=Decimal(price),
+            execution_timestamp=datetime(2026, 11, 18, 9, 45, tzinfo=timezone.utc),
+            fee=Decimal("5"),
+            group_id=group,
+            leg_id=leg,
+        )
+        with pytest.raises(SettlementStoreError, match="EXECUTION_ID_COLLISION"):
+            bridge.settle(incoming)
+
+    global_history = store.execution_journal_conflict_history(
+        scope_key="__runtime_bootstrap__"
+    )
+    assert len(global_history) == 2
+    assert {item["execution_id"] for item in global_history} == {
+        "SYNTHETIC:FRESH40:EXEC:GLOBAL-1",
+        "SYNTHETIC:FRESH40:EXEC:GLOBAL-2",
+    }
+
+    # A separate order-local late-fill conflict is resolved individually.
+    oms_e, pos_e, bridge_e = make_group(
+        "FRESH40-E-CLIENT", "FRESH40-E-BROKER",
+        "SYNTHETIC_CONTRACT:FRESH40:E", "SYNTHETIC:GROUP:FRESH40-E",
+        "FRESH40-E-LEG", "SYNTHETIC:FRESH40:EXEC:E-ENTRY", "9.00",
+    )
+    oms_e.apply_cancel(ExecutionReport(
+        client_order_id="FRESH40-E-CLIENT",
+        broker_order_id="FRESH40-E-BROKER",
+        execution_id=None,
+        status="CANCELLED",
+        filled_quantity=0,
+        remaining_quantity=1,
+        execution_price=None,
+        execution_timestamp=datetime(2026, 11, 18, 9, 35, tzinfo=timezone.utc),
+        group_id="SYNTHETIC:GROUP:FRESH40-E",
+        leg_id="FRESH40-E-LEG",
+    ))
+    late_e = ExecutionReport(
+        client_order_id="FRESH40-E-CLIENT",
+        broker_order_id="FRESH40-E-BROKER",
+        execution_id="SYNTHETIC:FRESH40:EXEC:E-LATE",
+        status="FILLED",
+        filled_quantity=1,
+        remaining_quantity=0,
+        execution_price=Decimal("9.10"),
+        execution_timestamp=datetime(2026, 11, 18, 9, 40, tzinfo=timezone.utc),
+        fee=Decimal("5"),
+        group_id="SYNTHETIC:GROUP:FRESH40-E",
+        leg_id="FRESH40-E-LEG",
+    )
+    conflicting_e = replace(late_e, execution_price=Decimal("9.20"))
+    with pytest.raises(OrderStateTransitionError, match="RECONCILIATION_PENDING"):
+        bridge_e.settle(late_e)
+    with pytest.raises(
+        SettlementStoreError,
+        match="RECONCILIATION_INBOX_EXECUTION_ID_COLLISION",
+    ):
+        bridge_e.settle(conflicting_e)
+    local_history = store.late_fill_conflict_history(
+        execution_id=late_e.execution_id
+    )[0]
+    evidence_e = "VALIDATION_ONLY:FRESH40:RESOLVE-ORDER-LOCAL-E"
+    assert store.prepare_validation_only_late_fill_conflict_resolution(
+        execution_id=late_e.execution_id,
+        scope_key="FRESH40-E-CLIENT",
+        original_payload_sha256=local_history["original_payload_sha256"],
+        conflicting_payload_sha256=local_history["conflicting_payload_sha256"],
+        selected_payload_sha256=local_history["original_payload_sha256"],
+        evidence_ref=evidence_e,
+    ) is True
+    bridge_e.settle_authoritatively_reconciled_fill(
+        late_e, authoritative_evidence_ref=evidence_e
+    )
+    assert pos_e.qty == 2
+    assert store.pending_reconciliation_events(scope_key="FRESH40-E-CLIENT") == ()
+    assert store.unresolved_reconciliations() == (
+        store.unresolved_reconciliations()[0],
+    )
+    assert store.unresolved_reconciliations()[0]["scope_key"] == "__runtime_bootstrap__"
+    assert store.unresolved_reconciliations()[0]["status"] == "CONFLICT"
+
+    groups = (
+        ("SYNTHETIC:GROUP:FRESH40-A", pos_a, "FRESH40-A"),
+        ("SYNTHETIC:GROUP:FRESH40-B", pos_b, "FRESH40-B"),
+        ("SYNTHETIC:GROUP:FRESH40-C", pos_c, "FRESH40-C"),
+        ("SYNTHETIC:GROUP:FRESH40-D", pos_d, "FRESH40-D"),
+        ("SYNTHETIC:GROUP:FRESH40-E", pos_e, "FRESH40-E"),
+    )
+    builders = {}
+    coordinator = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(checkpoint_path),
+        settlement_store=store,
+    )
+    for group_id, position, suffix in groups:
+        builder = ValidationOnlyU19LedgerSnapshotBuilder(store)
+        builders[group_id] = builder
+        ledger = builder.build(
+            group_id=group_id,
+            snapshot_id=f"{suffix}-LEDGER-GLOBAL-GATE",
+            as_of=AS_OF,
+        )
+        assert ledger.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
+        expected_position = (
+            U19Position(position.instrument_id, Decimal(str(position.qty)))
+            if position.qty
+            else None
+        )
+        assert ledger.positions == ((expected_position,) if expected_position else ())
+        decision = coordinator.recover_from_settlement_store(
+            group_id=group_id,
+            broker_snapshot=U19BrokerPositionSnapshot(
+                group_id=group_id,
+                snapshot_id=f"{suffix}-BROKER-PROXY",
+                as_of=AS_OF,
+                source="VALIDATION_ONLY:BROKER_EXCHANGE",
+                positions=ledger.positions,
+                complete=True,
+                capability_verified=True,
+                payload_sha256=("a" if suffix in {"FRESH40-A", "FRESH40-B"} else "b") * 64,
+            ),
+            snapshot_id=f"{suffix}-LEDGER-GLOBAL-GATE",
+            as_of=AS_OF,
+            ledger_snapshot_builder=builder,
+        )
+        assert decision.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+        assert decision.restore_allowed is False
+        assert decision.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
+        assert decision.new_entry_enabled is False
+        assert decision.order_submission_enabled is False
+
+    # Resolving one global collision is prohibited by cross-order identity mismatch;
+    # the other global collision and all group checkpoints remain gated.
+    first_global = global_history[0]
+    with pytest.raises(
+        SettlementStoreError,
+        match="EXECUTION_JOURNAL_CONFLICT_ORDER_IDENTITY_MISMATCH_REQUIRES_MANUAL_REVIEW",
+    ):
+        store.prepare_validation_only_execution_journal_conflict_resolution(
+            execution_id=first_global["execution_id"],
+            scope_key="__runtime_bootstrap__",
+            original_payload_sha256=first_global["original_payload_sha256"],
+            incoming_payload_sha256=first_global["incoming_payload_sha256"],
+            selected_payload_sha256=first_global["original_payload_sha256"],
+            evidence_ref="VALIDATION_ONLY:FRESH40:GLOBAL-COLLISION-RESOLUTION",
+        )
+    assert len(store.execution_journal_conflict_history(
+        scope_key="__runtime_bootstrap__"
+    )) == 2
+    assert store.unresolved_reconciliations()[0]["scope_key"] == "__runtime_bootstrap__"
+    for group_id, builder in builders.items():
+        ledger = builder.build(
+            group_id=group_id,
+            snapshot_id=f"{group_id}-RECHECK",
+            as_of=AS_OF,
+        )
+        assert ledger.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
