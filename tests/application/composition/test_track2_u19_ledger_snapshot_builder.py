@@ -2295,3 +2295,163 @@ def test_fresh38_journal_collision_preserves_both_payloads_and_confirms_original
                 "DELETE FROM execution_journal_conflict_events WHERE execution_id=?",
                 (original_report.execution_id,),
             )
+
+
+def test_fresh39_cross_order_execution_id_collision_sets_global_u19_gate_for_both_groups(
+    tmp_path
+):
+    store_path = tmp_path / "fresh39-settlement.sqlite3"
+    checkpoint_path = tmp_path / "fresh39-u19.sqlite3"
+    shared_execution_id = "SYNTHETIC:FRESH39:EXEC:SHARED-ID"
+    original_instrument = "SYNTHETIC_CONTRACT:FRESH39:GROUP-A:CALL"
+    incoming_instrument = "SYNTHETIC_CONTRACT:FRESH39:GROUP-B:PUT"
+    original_client = "FRESH39-CLIENT-A"
+    incoming_client = "FRESH39-CLIENT-B"
+    original_broker = "FRESH39-BROKER-A"
+    incoming_broker = "FRESH39-BROKER-B"
+    original_group = "SYNTHETIC:GROUP:FRESH39-A"
+    incoming_group = "SYNTHETIC:GROUP:FRESH39-B"
+    store = SQLiteSettlementStore(store_path)
+
+    original_position = LivePositionAggregate(original_instrument)
+    original_oms = _order_with_fill(
+        store,
+        client_id=original_client,
+        broker_id=original_broker,
+        instrument_id=original_instrument,
+        side="BUY",
+        leg_id="FRESH39-A-CALL",
+        group_id=original_group,
+        fills=((shared_execution_id, 1, 0, "11.00"),),
+        order_quantity=2,
+        position_aggregate=original_position,
+    )
+
+    incoming_position = LivePositionAggregate(incoming_instrument)
+    incoming_oms = _order_with_fill(
+        store,
+        client_id=incoming_client,
+        broker_id=incoming_broker,
+        instrument_id=incoming_instrument,
+        side="BUY",
+        leg_id="FRESH39-B-PUT",
+        group_id=incoming_group,
+        fills=(),
+        order_quantity=1,
+        position_aggregate=incoming_position,
+    )
+    incoming_bridge = LiveExecutionPositionBridge(
+        order_state_machine=incoming_oms,
+        position_fill_adapter=LivePositionFillAdapter(incoming_position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(
+            persistence_store=store
+        ),
+        position_aggregate=incoming_position,
+        settlement_store=store,
+    )
+    incoming_report = ExecutionReport(
+        client_order_id=incoming_client,
+        broker_order_id=incoming_broker,
+        execution_id=shared_execution_id,
+        status="FILLED",
+        filled_quantity=1,
+        remaining_quantity=0,
+        execution_price=Decimal("22.00"),
+        execution_timestamp=datetime(2026, 11, 18, 9, 45, tzinfo=timezone.utc),
+        fee=Decimal("5"),
+        group_id=incoming_group,
+        leg_id="FRESH39-B-PUT",
+    )
+
+    with pytest.raises(SettlementStoreError, match="EXECUTION_ID_COLLISION"):
+        incoming_bridge.settle(incoming_report)
+
+    history = store.execution_journal_conflict_history(
+        execution_id=shared_execution_id
+    )
+    assert len(history) == 1
+    detected = history[0]
+    assert detected["event_type"] == "CONFLICT_DETECTED"
+    assert detected["scope_key"] == "__runtime_bootstrap__"
+    assert detected["original_client_order_id"] == original_client
+    assert detected["incoming_client_order_id"] == incoming_client
+    assert detected["original_payload"]["group_id"] == original_group
+    assert detected["incoming_payload"]["group_id"] == incoming_group
+    assert store.has_execution(shared_execution_id)
+    assert len(store.load_execution_journal_records()) == 1
+    assert original_position.qty == 1
+    assert incoming_position.qty == 0
+    assert store.unresolved_reconciliations()[0]["scope_key"] == "__runtime_bootstrap__"
+
+    original_builder = ValidationOnlyU19LedgerSnapshotBuilder(store)
+    original_ledger = original_builder.build(
+        group_id=original_group,
+        snapshot_id="FRESH39-LEDGER-GROUP-A",
+        as_of=AS_OF,
+    )
+    incoming_builder = ValidationOnlyU19LedgerSnapshotBuilder(store)
+    incoming_ledger = incoming_builder.build(
+        group_id=incoming_group,
+        snapshot_id="FRESH39-LEDGER-GROUP-B",
+        as_of=AS_OF,
+    )
+    assert original_ledger.positions == (U19Position(original_instrument, Decimal("1")),)
+    assert incoming_ledger.positions == ()
+    assert original_ledger.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
+    assert incoming_ledger.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
+
+    coordinator = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(checkpoint_path),
+        settlement_store=store,
+    )
+    for group_id, ledger, snapshot_id in (
+        (original_group, original_ledger, "FRESH39-BROKER-GROUP-A"),
+        (incoming_group, incoming_ledger, "FRESH39-BROKER-GROUP-B"),
+    ):
+        decision = coordinator.recover_from_settlement_store(
+            group_id=group_id,
+            broker_snapshot=U19BrokerPositionSnapshot(
+                group_id=group_id,
+                snapshot_id=snapshot_id,
+                as_of=AS_OF,
+                source="VALIDATION_ONLY:BROKER_EXCHANGE",
+                positions=ledger.positions,
+                complete=True,
+                capability_verified=True,
+                payload_sha256=("a" if group_id == original_group else "b") * 64,
+            ),
+            snapshot_id=f"{snapshot_id}-LEDGER",
+            as_of=AS_OF,
+            ledger_snapshot_builder=(
+                original_builder if group_id == original_group else incoming_builder
+            ),
+        )
+        assert decision.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+        assert decision.restore_allowed is False
+        assert decision.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
+        assert decision.new_entry_enabled is False
+        assert decision.order_submission_enabled is False
+
+    with pytest.raises(
+        SettlementStoreError,
+        match="EXECUTION_JOURNAL_CONFLICT_ORDER_IDENTITY_MISMATCH_REQUIRES_MANUAL_REVIEW",
+    ):
+        store.prepare_validation_only_execution_journal_conflict_resolution(
+            execution_id=shared_execution_id,
+            scope_key="__runtime_bootstrap__",
+            original_payload_sha256=detected["original_payload_sha256"],
+            incoming_payload_sha256=detected["incoming_payload_sha256"],
+            selected_payload_sha256=detected["original_payload_sha256"],
+            evidence_ref="VALIDATION_ONLY:FRESH39:CROSS_ORDER_NOT_RESOLVABLE",
+        )
+
+    assert store.unresolved_reconciliations()[0]["status"] == "CONFLICT"
+    assert [
+        item["event_type"]
+        for item in store.execution_journal_conflict_history(
+            execution_id=shared_execution_id
+        )
+    ] == ["CONFLICT_DETECTED"]
+    assert len(store.load_execution_journal_records()) == 1
+    assert original_position.qty == 1
+    assert incoming_position.qty == 0
