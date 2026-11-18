@@ -1,0 +1,83 @@
+{
+  "account_execution_claim": false,
+  "duplicate_policy": "Preserve every source observation. Same contract+timestamp groups are not deduplicated because source_observation_id and (trading_date, source_line_number) remain unique; price variants are distinct source observations, not assumed duplicate errors.",
+  "inventory": {
+    "collected_at_reversals": 0,
+    "duplicate_contract_timestamp_groups": 183,
+    "duplicate_extra_rows": 299,
+    "duplicate_groups_price_variants": 134,
+    "duplicate_groups_same_prices": 49,
+    "event_time_reversals": 0,
+    "expiry_counts": {
+      "20261112": 2072
+    },
+    "invalid_quote_rows": 0,
+    "same_timestamp_underlying_mismatch_groups": 0,
+    "source_observation_ids_unique": 2072,
+    "timestamp_groups": 1596,
+    "trading_date_line_pairs_unique": 2072,
+    "unique_contract_identities": 77
+  },
+  "limits": [
+    "Full 2,072-row replay validates Virtual Market/quote projection only; no StrategyHub signal or order path was activated.",
+    "FRESH62 separately validates test-only 4-leg Virtual Execution Bridge entry/close.",
+    "Synthetic contract namespace and KRX multiplier assumption are not authoritative KIS identity or account contract facts.",
+    "No actual broker account, fee, tax, margin, slippage, profitability or Live readiness verification."
+  ],
+  "live_readiness_claim": false,
+  "production_authority_claim": false,
+  "report_sha256": "2283295ae82c691f04342e42050502b799707aa61e17864fb4f0a226351ca8ef",
+  "report_version": "Q25-A8-FRESH63-FULL-STREAM-VIRTUAL-MARKET-REPLAY-v1",
+  "run_date": "2026-11-19",
+  "scope": {
+    "decision_refs": [
+      "No.1534",
+      "No.1538",
+      "No.1554",
+      "No.1566"
+    ],
+    "new_collection_or_api_calls": false,
+    "order_submission_permitted": false,
+    "original_raw_canonical_accepted_runtime_modified": false,
+    "strategy_loop_subscribed": false,
+    "validation_only": true
+  },
+  "source": {
+    "fresh61_manifest_sha256": "ef4808d3fd6d730d7c070e30196c8558ccecd5a2654adb93ccb2547e6250b53c",
+    "fresh61_report_sha256": "da17f73b85eb7be8ecfcd8fbb6c1fc84ecdd759eb6f048e48675fd74f6fbd3a1",
+    "future_market_price_donors_after_fresh61": 0,
+    "sidecars": {
+      "20261012": {
+        "rows": 686,
+        "sha256": "56235743ca2688b0c3cebd525393e31369e6d85f5a1318aa8551010847a5dcf4"
+      },
+      "20261013": {
+        "rows": 1386,
+        "sha256": "23c78507448742701bfbb3a006e476bb5e2155595cebfdc2713ba811ed9d6737"
+      }
+    },
+    "total_rows": 2072
+  },
+  "source_mutation": false,
+  "tests": {
+    "combined_regression_passed": 151,
+    "compileall": "PASS",
+    "failed": 0,
+    "fresh62_four_leg_runtime": 1,
+    "fresh63_full_stream": 1,
+    "git_diff_check": "PASS",
+    "skipped": 0
+  },
+  "virtual_market": {
+    "final_positions": {},
+    "final_timestamp": "2026-10-13T15:33:30+09:00",
+    "order_commands": 0,
+    "pending_orders": 0,
+    "quote_source": "SYNTHETIC:DERIVED_SCENARIO",
+    "replay_ticks": 2072,
+    "synthetic_option_master_identities": 77,
+    "virtual_market_option_quotes_by_instrument_id": 77,
+    "virtual_market_strike_key_quotes": 77,
+    "vssf_orderbook_contract_books": 77
+  }
+}

@@ -221,4 +221,4 @@ def test_fresh61_corrected_four_leg_data_replays_through_virtual_runtime_bridge_
     assert len(bridge.fee_ledger.snapshot(run_id=bridge.run_id)) == 8
     assert manifest['output_sha256'] == sha256((root / '20261013.jsonl').read_bytes()).hexdigest()
     assert source_report['after']['future_market_price_donors'] == 0
-    assert all(row['scenario_metadata']['validation_only_no_lookahead'] is True for row in source_rows)\n
+    assert all(row['scenario_metadata']['validation_only_no_lookahead'] is True for row in source_rows)
