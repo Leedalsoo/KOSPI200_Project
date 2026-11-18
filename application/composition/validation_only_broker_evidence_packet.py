@@ -61,7 +61,8 @@ class ValidationOnlyBrokerEvidencePacketValidator:
         return re.fullmatch(r"[0-9a-f]{64}", str(value or "").strip().lower()) is not None
 
     def validate(
-        self, *, packet: Mapping[str, Any], as_of: datetime | str
+        self, *, packet: Mapping[str, Any], as_of: datetime | str,
+        max_source_age_seconds: int | None = None,
     ) -> ValidationOnlyBrokerEvidencePacketResult:
         issues: list[str] = []
         manifest: dict[str, Any] = {"manifest_version": self.MANIFEST_VERSION}
@@ -90,6 +91,11 @@ class ValidationOnlyBrokerEvidencePacketValidator:
                 issues.append("BROKER_EVIDENCE_COLLECTION_AFTER_VALIDATION_AS_OF")
             if source_as_of > validated_at:
                 issues.append("BROKER_EVIDENCE_FUTURE_SOURCE_AS_OF")
+            if max_source_age_seconds is not None:
+                if not isinstance(max_source_age_seconds, int) or isinstance(max_source_age_seconds, bool) or max_source_age_seconds <= 0:
+                    issues.append("BROKER_EVIDENCE_VALIDATION_SOURCE_AGE_LIMIT_INVALID")
+                elif collected_at >= source_as_of and (collected_at - source_as_of).total_seconds() > max_source_age_seconds:
+                    issues.append("BROKER_EVIDENCE_SOURCE_AGE_EXCEEDS_VALIDATION_LIMIT")
         except ValueError as exc:
             packet_id = str(packet.get("packet_id") or "")
             source_namespace = str(packet.get("source_namespace") or "")
@@ -185,6 +191,18 @@ class ValidationOnlyBrokerEvidencePacketValidator:
                 "source_record_refs": [str(ref).strip() for ref in refs],
             })
 
+        for conflict in normalized_conflicts:
+            matched_crosswalk = any(
+                row.get("internal_identity", {}).get("execution_id") == conflict["execution_id"]
+                and row.get("internal_identity", {}).get("scope_key") == conflict["scope_key"]
+                for row in normalized_crosswalk
+            )
+            if not matched_crosswalk:
+                issues.append(
+                    "BROKER_EVIDENCE_CONFLICT_IDENTITY_CROSSWALK_MISSING:"
+                    + conflict["execution_id"] + ":" + conflict["scope_key"]
+                )
+
         manifest.update({
             "packet_id": packet_id,
             "source_namespace": source_namespace,
@@ -192,6 +210,7 @@ class ValidationOnlyBrokerEvidencePacketValidator:
             "source_as_of": source_as_of.isoformat() if source_as_of else None,
             "collected_at": collected_at.isoformat() if collected_at else None,
             "validated_as_of": validated_at.isoformat() if validated_at else None,
+            "max_source_age_seconds": max_source_age_seconds,
             "snapshots": normalized_snapshots,
             "identity_crosswalk": normalized_crosswalk,
             "conflict_links": normalized_conflicts,

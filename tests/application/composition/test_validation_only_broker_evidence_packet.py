@@ -24,7 +24,7 @@ def packet():
         },
         "identity_crosswalk": [{
             "source_identity": {"source_order_ref": "SRC-ORDER-1", "source_execution_ref": "SRC-EXEC-1"},
-            "internal_identity": {"client_order_id": "SYNTHETIC:CLIENT-1", "execution_id": "SYNTHETIC:EXEC-1"},
+            "internal_identity": {"client_order_id": "SYNTHETIC:CLIENT-1", "execution_id": "SYNTHETIC:EXEC-1", "scope_key": "__runtime_bootstrap__"},
             "evidence_ref": "VALIDATION_ONLY:CROSSWALK:1",
         }],
         "conflict_links": [{
@@ -114,3 +114,19 @@ def test_duplicate_conflict_links_and_invalid_payload_hashes_are_rejected():
     assert result.status == "RECONCILIATION_REQUIRED"
     assert any(issue.startswith("BROKER_EVIDENCE_CONFLICT_PAYLOAD_HASH_INVALID") for issue in result.issues)
     assert any(issue.startswith("BROKER_EVIDENCE_CONFLICT_LINK_DUPLICATE") for issue in result.issues)
+
+
+def test_stale_source_anchor_requires_an_explicit_validation_age_limit():
+    value = packet()
+    result = validator().validate(packet=value, as_of=AS_OF, max_source_age_seconds=30)
+    assert result.status == "RECONCILIATION_REQUIRED"
+    assert "BROKER_EVIDENCE_SOURCE_AGE_EXCEEDS_VALIDATION_LIMIT" in result.issues
+    assert result.gate_release_permitted is False
+
+
+def test_conflict_link_requires_matching_internal_identity_crosswalk():
+    value = packet()
+    value["identity_crosswalk"][0]["internal_identity"]["execution_id"] = "SYNTHETIC:OTHER-EXEC"
+    result = validator().validate(packet=value, as_of=AS_OF)
+    assert result.status == "RECONCILIATION_REQUIRED"
+    assert "BROKER_EVIDENCE_CONFLICT_IDENTITY_CROSSWALK_MISSING:SYNTHETIC:EXEC-1:__runtime_bootstrap__" in result.issues

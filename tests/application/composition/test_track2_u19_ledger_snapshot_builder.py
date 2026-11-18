@@ -2910,3 +2910,107 @@ def test_fresh40_multiple_global_collisions_and_order_local_conflict_keep_all_u1
         assert decision.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
         assert decision.new_entry_enabled is False
         assert decision.order_submission_enabled is False
+
+    # FRESH-45: malformed/stale/future packets cannot alter preserved journal,
+    # positions, or global U19 state.
+    from copy import deepcopy
+    from datetime import timedelta
+
+    before_journal_count = len(restarted_store.load_execution_journal_records())
+    before_position_quantities = {suffix: position.qty for _, position, suffix in groups}
+    before_global_history = tuple(
+        (
+            item["execution_id"],
+            item["scope_key"],
+            item["original_payload_sha256"],
+            item["incoming_payload_sha256"],
+            item["event_type"],
+        )
+        for item in restarted_history
+    )
+    invalid_cases = []
+
+    missing_snapshot = deepcopy(packet)
+    missing_snapshot["snapshots"].pop("positions")
+    invalid_cases.append((missing_snapshot, {}))
+
+    duplicate_snapshot_id = deepcopy(packet)
+    duplicate_snapshot_id["snapshots"]["executions"]["snapshot_id"] = "FRESH44-ORDERS"
+    invalid_cases.append((duplicate_snapshot_id, {}))
+
+    invalid_snapshot_hash = deepcopy(packet)
+    invalid_snapshot_hash["snapshots"]["positions"]["payload_sha256"] = "invalid"
+    invalid_cases.append((invalid_snapshot_hash, {}))
+
+    mismatched_crosswalk = deepcopy(packet)
+    mismatched_crosswalk["identity_crosswalk"][0]["internal_identity"]["execution_id"] = "SYNTHETIC:UNLINKED"
+    invalid_cases.append((mismatched_crosswalk, {}))
+
+    stale_anchor = deepcopy(packet)
+    stale_anchor["source_as_of"] = (AS_OF - timedelta(seconds=60)).isoformat()
+    stale_anchor["collected_at"] = AS_OF.isoformat()
+    invalid_cases.append((stale_anchor, {"max_source_age_seconds": 30}))
+
+    future_anchor = deepcopy(packet)
+    future_at = (AS_OF + timedelta(seconds=60)).isoformat()
+    future_anchor["source_as_of"] = future_at
+    future_anchor["collected_at"] = future_at
+    invalid_cases.append((future_anchor, {}))
+
+    for invalid_packet, extra_args in invalid_cases:
+        invalid_result = ValidationOnlyBrokerEvidencePacketValidator(
+            validation_only=True
+        ).validate(packet=invalid_packet, as_of=AS_OF, **extra_args)
+        assert invalid_result.status == "RECONCILIATION_REQUIRED"
+        assert invalid_result.is_valid is False
+        assert invalid_result.gate_release_permitted is False
+        assert invalid_result.authoritative is False
+        assert invalid_result.mutation_applied is False
+
+    assert len(restarted_store.load_execution_journal_records()) == before_journal_count
+    assert {
+        suffix: position.qty for _, position, suffix in groups
+    } == before_position_quantities
+    after_global_history = tuple(
+        (
+            item["execution_id"],
+            item["scope_key"],
+            item["original_payload_sha256"],
+            item["incoming_payload_sha256"],
+            item["event_type"],
+        )
+        for item in restarted_store.execution_journal_conflict_history(
+            scope_key="__runtime_bootstrap__"
+        )
+    )
+    assert after_global_history == before_global_history
+    assert restarted_store.unresolved_reconciliations()[0]["status"] == "CONFLICT"
+
+    for group_id, position, suffix in groups:
+        builder = ValidationOnlyU19LedgerSnapshotBuilder(restarted_store)
+        ledger = builder.build(
+            group_id=group_id,
+            snapshot_id=f"{suffix}-FRESH45-INVALID-PACKET-CHECK",
+            as_of=AS_OF,
+        )
+        decision = restarted_coordinator.recover_from_settlement_store(
+            group_id=group_id,
+            broker_snapshot=U19BrokerPositionSnapshot(
+                group_id=group_id,
+                snapshot_id=f"{suffix}-FRESH45-BROKER-PROXY",
+                as_of=AS_OF,
+                source="VALIDATION_ONLY:BROKER_EXCHANGE",
+                positions=ledger.positions,
+                complete=True,
+                capability_verified=True,
+                payload_sha256=("e" if suffix in {"FRESH40-A", "FRESH40-B"} else "f") * 64,
+            ),
+            snapshot_id=f"{suffix}-FRESH45-INVALID-PACKET-CHECK",
+            as_of=AS_OF,
+            ledger_snapshot_builder=builder,
+        )
+        assert decision.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+        assert decision.restore_allowed is False
+        assert decision.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
+        assert decision.new_entry_enabled is False
+        assert decision.order_submission_enabled is False
