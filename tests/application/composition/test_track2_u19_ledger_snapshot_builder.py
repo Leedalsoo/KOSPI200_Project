@@ -2746,3 +2746,61 @@ def test_fresh40_multiple_global_collisions_and_order_local_conflict_keep_all_u1
         assert decision.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
         assert decision.new_entry_enabled is False
         assert decision.order_submission_enabled is False
+
+    # FRESH-42: generic evidence labels and baseline APIs cannot bypass the
+    # global collision gate; incoming-payload selection remains a manual
+    # position-adjustment review, not an automatic journal rewrite.
+    first_global = global_history[0]
+    with pytest.raises(
+        SettlementStoreError,
+        match="EXECUTION_JOURNAL_CONFLICT_INCOMING_CANDIDATE_REQUIRES_POSITION_ADJUSTMENT_REVIEW",
+    ):
+        restarted_store.prepare_validation_only_execution_journal_conflict_resolution(
+            execution_id=first_global["execution_id"],
+            scope_key="__runtime_bootstrap__",
+            original_payload_sha256=first_global["original_payload_sha256"],
+            incoming_payload_sha256=first_global["incoming_payload_sha256"],
+            selected_payload_sha256=first_global["incoming_payload_sha256"],
+            evidence_ref="VALIDATION_ONLY:FRESH42:INCOMING_REQUIRES_POSITION_REVIEW",
+        )
+
+    with pytest.raises(
+        SettlementStoreError,
+        match="GLOBAL_RECONCILIATION_REQUIRES_DEDICATED_EVIDENCE_API",
+    ):
+        restarted_store.resolve_reconciliation(
+            scope_key="__runtime_bootstrap__",
+            authoritative_evidence_ref="VALIDATION_ONLY:FRESH42:GENERIC_BYPASS",
+        )
+
+    baseline_kwargs = {
+        "positions_payload": (),
+        "orders_snapshot_id": "SYNTHETIC:FRESH42:ORDERS",
+        "executions_snapshot_id": "SYNTHETIC:FRESH42:EXECUTIONS",
+        "positions_snapshot_id": "SYNTHETIC:FRESH42:POSITIONS",
+        "as_of": AS_OF,
+        "source": "VALIDATION_ONLY:FRESH42:BASELINE",
+        "payload_sha256": "e" * 64,
+        "authoritative_evidence_ref": "VALIDATION_ONLY:FRESH42:BASELINE_EVIDENCE",
+    }
+    with pytest.raises(
+        SettlementStoreError,
+        match="RUNTIME_BOOTSTRAP_CONFLICT_REQUIRES_MANUAL_REVIEW",
+    ):
+        restarted_store.establish_authoritative_baseline_snapshot(**baseline_kwargs)
+    with pytest.raises(
+        SettlementStoreError,
+        match="RUNTIME_BOOTSTRAP_CONFLICT_REQUIRES_MANUAL_REVIEW",
+    ):
+        restarted_store.replace_validation_only_baseline_snapshot(
+            expected_previous_payload_sha256="f" * 64,
+            reset_reason="FRESH42 bypass attempt",
+            **baseline_kwargs,
+        )
+
+    assert restarted_store.authoritative_baseline_evidence() is None
+    assert len(restarted_store.execution_journal_conflict_history(
+        scope_key="__runtime_bootstrap__"
+    )) == 2
+    assert restarted_store.unresolved_reconciliations()[0]["status"] == "CONFLICT"
+    assert len(restarted_store.load_execution_journal_records()) == journal_count_before_restart
