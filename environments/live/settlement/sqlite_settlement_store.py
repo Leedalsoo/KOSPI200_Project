@@ -150,6 +150,33 @@ class SQLiteSettlementStore:
                 CREATE TRIGGER IF NOT EXISTS reconciliation_conflict_events_no_delete
                 BEFORE DELETE ON reconciliation_conflict_events
                 BEGIN SELECT RAISE(ABORT, 'RECONCILIATION_CONFLICT_EVENTS_APPEND_ONLY'); END;
+                CREATE TABLE IF NOT EXISTS execution_journal_conflict_events (
+                    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    execution_id TEXT NOT NULL,
+                    scope_key TEXT NOT NULL,
+                    original_client_order_id TEXT NOT NULL,
+                    original_broker_order_id TEXT,
+                    incoming_client_order_id TEXT NOT NULL,
+                    incoming_broker_order_id TEXT,
+                    original_payload_json TEXT NOT NULL,
+                    incoming_payload_json TEXT NOT NULL,
+                    original_payload_sha256 TEXT NOT NULL,
+                    incoming_payload_sha256 TEXT NOT NULL,
+                    event_type TEXT NOT NULL CHECK(event_type IN (
+                        'CONFLICT_DETECTED','ORIGINAL_CONFIRMED'
+                    )),
+                    selected_payload_sha256 TEXT,
+                    evidence_ref TEXT,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX IF NOT EXISTS execution_journal_conflict_events_lookup
+                    ON execution_journal_conflict_events(execution_id, scope_key, event_id);
+                CREATE TRIGGER IF NOT EXISTS execution_journal_conflict_events_no_update
+                BEFORE UPDATE ON execution_journal_conflict_events
+                BEGIN SELECT RAISE(ABORT, 'EXECUTION_JOURNAL_CONFLICT_EVENTS_APPEND_ONLY'); END;
+                CREATE TRIGGER IF NOT EXISTS execution_journal_conflict_events_no_delete
+                BEFORE DELETE ON execution_journal_conflict_events
+                BEGIN SELECT RAISE(ABORT, 'EXECUTION_JOURNAL_CONFLICT_EVENTS_APPEND_ONLY'); END;
                 CREATE TABLE IF NOT EXISTS validation_baseline_history (
                     generation_id INTEGER PRIMARY KEY AUTOINCREMENT,
                     event_type TEXT NOT NULL CHECK(event_type IN ('INITIAL_IMPORT','VALIDATION_ONLY_RESET')),
@@ -372,32 +399,274 @@ class SQLiteSettlementStore:
         broker_order_id: str | None,
         report_payload: Mapping[str, Any],
     ) -> bool:
-        """Return True only for an identical replay; flag identity collisions."""
+        """Return True for an identical replay; append evidence for journal collisions."""
         key = str(execution_id).strip()
         client = str(client_order_id).strip()
         encoded = encode_record(dict(report_payload))
+        incoming_hash = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
         with self._connection() as connection:
+            self._begin(connection)
             row = connection.execute(
-                "SELECT client_order_id,broker_order_id,report_json FROM execution_journal WHERE execution_id=?",
+                """SELECT client_order_id,broker_order_id,report_json
+                   FROM execution_journal WHERE execution_id=?""",
                 (key,),
             ).fetchone()
-        if row is None:
-            return False
-        if (
-            row["client_order_id"] == client
-            and row["broker_order_id"] == broker_order_id
-            and row["report_json"] == encoded
-        ):
-            return True
-        self.mark_reconciliation_pending(
-            scope_key=client,
-            client_order_id=client,
-            broker_order_id=broker_order_id,
-            reason="EXECUTION_ID_COLLISION",
-            payload={"execution_id": key, "collision": True},
-            conflict=True,
-        )
+            if row is None:
+                connection.rollback()
+                return False
+            if (
+                row["client_order_id"] == client
+                and row["broker_order_id"] == broker_order_id
+                and row["report_json"] == encoded
+            ):
+                connection.rollback()
+                return True
+
+            original_json = str(row["report_json"])
+            original_hash = hashlib.sha256(original_json.encode("utf-8")).hexdigest()
+            same_order_identity = (
+                row["client_order_id"] == client
+                and row["broker_order_id"] == broker_order_id
+            )
+            scope = client if same_order_identity else "__runtime_bootstrap__"
+
+            prior_confirmation = connection.execute(
+                """SELECT 1 FROM execution_journal_conflict_events
+                   WHERE execution_id=? AND scope_key=? AND event_type='ORIGINAL_CONFIRMED'
+                     AND original_payload_sha256=? AND incoming_payload_sha256=?
+                   LIMIT 1""",
+                (key, scope, original_hash, incoming_hash),
+            ).fetchone()
+            if prior_confirmation is not None:
+                connection.rollback()
+                raise SettlementStoreError("EXECUTION_ID_COLLISION")
+
+            prior_detection = connection.execute(
+                """SELECT 1 FROM execution_journal_conflict_events
+                   WHERE execution_id=? AND scope_key=? AND event_type='CONFLICT_DETECTED'
+                     AND original_payload_sha256=? AND incoming_payload_sha256=? LIMIT 1""",
+                (key, scope, original_hash, incoming_hash),
+            ).fetchone()
+            if prior_detection is None:
+                connection.execute(
+                    """INSERT INTO execution_journal_conflict_events
+                       (execution_id,scope_key,original_client_order_id,
+                        original_broker_order_id,incoming_client_order_id,
+                        incoming_broker_order_id,original_payload_json,
+                        incoming_payload_json,original_payload_sha256,
+                        incoming_payload_sha256,event_type)
+                       VALUES(?,?,?,?,?,?,?,?,?,?,'CONFLICT_DETECTED')""",
+                    (
+                        key, scope, row["client_order_id"], row["broker_order_id"],
+                        client, broker_order_id, original_json, encoded,
+                        original_hash, incoming_hash,
+                    ),
+                )
+
+            state = connection.execute(
+                "SELECT status,reason FROM reconciliation_state WHERE scope_key=?",
+                (scope,),
+            ).fetchone()
+            state_payload = encode_record({
+                "execution_id": key,
+                "collision": True,
+                "original_client_order_id": row["client_order_id"],
+                "incoming_client_order_id": client,
+                "original_payload_sha256": original_hash,
+                "incoming_payload_sha256": incoming_hash,
+            })
+            if state is None:
+                connection.execute(
+                    """INSERT INTO reconciliation_state
+                       (scope_key,client_order_id,broker_order_id,status,reason,
+                        payload_json,updated_at)
+                       VALUES(?,?,?,'CONFLICT','EXECUTION_ID_COLLISION',?,CURRENT_TIMESTAMP)""",
+                    (scope, scope, broker_order_id, state_payload),
+                )
+            elif state["status"] != "CONFLICT" or state["reason"] == "EXECUTION_ID_COLLISION":
+                connection.execute(
+                    """UPDATE reconciliation_state
+                       SET status='CONFLICT',reason='EXECUTION_ID_COLLISION',
+                           evidence_ref=NULL,payload_json=?,updated_at=CURRENT_TIMESTAMP
+                       WHERE scope_key=?""",
+                    (state_payload, scope),
+                )
+            connection.commit()
         raise SettlementStoreError("EXECUTION_ID_COLLISION")
+
+    def execution_journal_conflict_history(
+        self, *, execution_id: str | None = None, scope_key: str | None = None
+    ) -> tuple[dict[str, Any], ...]:
+        clauses = []
+        params: list[str] = []
+        if execution_id is not None:
+            clauses.append("execution_id=?")
+            params.append(str(execution_id).strip())
+        if scope_key is not None:
+            clauses.append("scope_key=?")
+            params.append(str(scope_key).strip())
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        with self._connection() as connection:
+            rows = connection.execute(
+                f"""SELECT event_id,execution_id,scope_key,
+                           original_client_order_id,original_broker_order_id,
+                           incoming_client_order_id,incoming_broker_order_id,
+                           original_payload_json,incoming_payload_json,
+                           original_payload_sha256,incoming_payload_sha256,
+                           event_type,selected_payload_sha256,evidence_ref,created_at
+                    FROM execution_journal_conflict_events {where}
+                    ORDER BY event_id""",
+                tuple(params),
+            ).fetchall()
+        return tuple({
+            "event_id": row["event_id"],
+            "execution_id": row["execution_id"],
+            "scope_key": row["scope_key"],
+            "original_client_order_id": row["original_client_order_id"],
+            "original_broker_order_id": row["original_broker_order_id"],
+            "incoming_client_order_id": row["incoming_client_order_id"],
+            "incoming_broker_order_id": row["incoming_broker_order_id"],
+            "original_payload": json.loads(row["original_payload_json"]),
+            "incoming_payload": json.loads(row["incoming_payload_json"]),
+            "original_payload_sha256": row["original_payload_sha256"],
+            "incoming_payload_sha256": row["incoming_payload_sha256"],
+            "event_type": row["event_type"],
+            "selected_payload_sha256": row["selected_payload_sha256"],
+            "evidence_ref": row["evidence_ref"],
+            "created_at": row["created_at"],
+        } for row in rows)
+
+    def prepare_validation_only_execution_journal_conflict_resolution(
+        self,
+        *,
+        execution_id: str,
+        scope_key: str,
+        original_payload_sha256: str,
+        incoming_payload_sha256: str,
+        selected_payload_sha256: str,
+        evidence_ref: str,
+    ) -> bool:
+        """Confirm the already-settled journal payload without changing any position."""
+        key = str(execution_id).strip()
+        scope = str(scope_key).strip()
+        evidence = str(evidence_ref).strip()
+        hashes = (
+            str(original_payload_sha256).strip().lower(),
+            str(incoming_payload_sha256).strip().lower(),
+            str(selected_payload_sha256).strip().lower(),
+        )
+        if not key or not scope:
+            raise ValueError("EXECUTION_JOURNAL_CONFLICT_IDENTITY_REQUIRED")
+        if not evidence.startswith("VALIDATION_ONLY:"):
+            raise SettlementStoreError("VALIDATION_ONLY_JOURNAL_CONFLICT_EVIDENCE_REQUIRED")
+        if any(re.fullmatch(r"[0-9a-f]{64}", value) is None for value in hashes):
+            raise ValueError("EXECUTION_JOURNAL_CONFLICT_PAYLOAD_SHA256_INVALID")
+        if hashes[2] != hashes[0]:
+            raise SettlementStoreError(
+                "EXECUTION_JOURNAL_CONFLICT_INCOMING_CANDIDATE_REQUIRES_POSITION_ADJUSTMENT_REVIEW"
+            )
+
+        with self._connection() as connection:
+            self._begin(connection)
+            detected = connection.execute(
+                """SELECT original_client_order_id,original_broker_order_id,
+                          incoming_client_order_id,incoming_broker_order_id,
+                          original_payload_json,incoming_payload_json
+                   FROM execution_journal_conflict_events
+                   WHERE execution_id=? AND scope_key=? AND event_type='CONFLICT_DETECTED'
+                     AND original_payload_sha256=? AND incoming_payload_sha256=?
+                   ORDER BY event_id DESC LIMIT 1""",
+                (key, scope, hashes[0], hashes[1]),
+            ).fetchone()
+            if detected is None:
+                connection.rollback()
+                raise SettlementStoreError("EXECUTION_JOURNAL_CONFLICT_CANDIDATE_HASH_MISMATCH")
+            if (
+                detected["original_client_order_id"] != scope
+                or detected["incoming_client_order_id"] != scope
+                or detected["original_broker_order_id"] != detected["incoming_broker_order_id"]
+            ):
+                connection.rollback()
+                raise SettlementStoreError(
+                    "EXECUTION_JOURNAL_CONFLICT_ORDER_IDENTITY_MISMATCH_REQUIRES_MANUAL_REVIEW"
+                )
+
+            previous = connection.execute(
+                """SELECT evidence_ref FROM execution_journal_conflict_events
+                   WHERE execution_id=? AND scope_key=? AND event_type='ORIGINAL_CONFIRMED'
+                     AND original_payload_sha256=? AND incoming_payload_sha256=?
+                   ORDER BY event_id DESC LIMIT 1""",
+                (key, scope, hashes[0], hashes[1]),
+            ).fetchone()
+            if previous is not None:
+                connection.rollback()
+                return False
+
+            state = connection.execute(
+                "SELECT status,reason FROM reconciliation_state WHERE scope_key=?",
+                (scope,),
+            ).fetchone()
+            if state is None or state["status"] != "CONFLICT" or state["reason"] != "EXECUTION_ID_COLLISION":
+                connection.rollback()
+                raise SettlementStoreError("EXECUTION_JOURNAL_CONFLICT_SCOPE_NOT_OPEN")
+
+            connection.execute(
+                """INSERT INTO execution_journal_conflict_events
+                   (execution_id,scope_key,original_client_order_id,
+                    original_broker_order_id,incoming_client_order_id,
+                    incoming_broker_order_id,original_payload_json,
+                    incoming_payload_json,original_payload_sha256,
+                    incoming_payload_sha256,event_type,selected_payload_sha256,evidence_ref)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,'ORIGINAL_CONFIRMED',?,?)""",
+                (
+                    key, scope,
+                    detected["original_client_order_id"],
+                    detected["original_broker_order_id"],
+                    detected["incoming_client_order_id"],
+                    detected["incoming_broker_order_id"],
+                    detected["original_payload_json"],
+                    detected["incoming_payload_json"],
+                    hashes[0], hashes[1], hashes[0], evidence,
+                ),
+            )
+
+            unresolved = connection.execute(
+                """SELECT COUNT(*) AS n
+                   FROM execution_journal_conflict_events detected
+                   WHERE detected.scope_key=? AND detected.event_type='CONFLICT_DETECTED'
+                     AND NOT EXISTS (
+                         SELECT 1 FROM execution_journal_conflict_events confirmed
+                         WHERE confirmed.execution_id=detected.execution_id
+                           AND confirmed.scope_key=detected.scope_key
+                           AND confirmed.event_type='ORIGINAL_CONFIRMED'
+                           AND confirmed.original_payload_sha256=detected.original_payload_sha256
+                           AND confirmed.incoming_payload_sha256=detected.incoming_payload_sha256
+                     )""",
+                (scope,),
+            ).fetchone()["n"]
+            open_inbox = connection.execute(
+                """SELECT COUNT(*) AS n FROM reconciliation_inbox
+                   WHERE scope_key=? AND status IN ('PENDING','CONFLICT')""",
+                (scope,),
+            ).fetchone()["n"]
+            if unresolved == 0 and open_inbox == 0:
+                connection.execute(
+                    """UPDATE reconciliation_state
+                       SET status='RESOLVED',evidence_ref=?,payload_json=?,updated_at=CURRENT_TIMESTAMP
+                       WHERE scope_key=? AND status='CONFLICT'
+                         AND reason='EXECUTION_ID_COLLISION'""",
+                    (
+                        evidence,
+                        encode_record({
+                            "execution_id": key,
+                            "confirmed_original_payload_sha256": hashes[0],
+                            "resolution": "VALIDATION_ONLY_ORIGINAL_JOURNAL_CONFIRMED",
+                        }),
+                        scope,
+                    ),
+                )
+            connection.commit()
+            return True
 
     def has_execution(self, execution_id: str) -> bool:
         key = str(execution_id).strip()
