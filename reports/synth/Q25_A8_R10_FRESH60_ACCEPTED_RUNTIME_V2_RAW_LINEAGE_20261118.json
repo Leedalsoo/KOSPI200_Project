@@ -1,0 +1,142 @@
+{
+  "report_version": "Q25-A8-VALIDATION-ONLY-ACCEPTED-RUNTIME-V2-RAW-LINEAGE-v1",
+  "scope": {
+    "trading_dates": [
+      "20261012",
+      "20261013"
+    ],
+    "accepted_runtime_root": "C:\\Users\\white\\Desktop\\MovingProject\\Q25_A8_R10\\data\\accepted_market_data\\runtime_v2",
+    "raw_source_root": "C:\\Users\\white\\Desktop\\MovingProject\\KOSPI200_Project\\data\\kis_market_data_restart",
+    "raw_and_accepted_data_read_only": true,
+    "new_collection_or_api_calls": false,
+    "canonical_artifact_rewrite": false,
+    "decision_refs": [
+      "No.1534",
+      "No.1535",
+      "No.1538",
+      "No.1554",
+      "No.1566"
+    ]
+  },
+  "manifest_rows_total": 2072,
+  "manifest_timestamp_groups": 1596,
+  "manifest_sha256": "7657c90f13a81a7f98a8ccd075a259c8ec9795477a2a0541366094cd87e0360f",
+  "days": [
+    {
+      "trading_date": "20261012",
+      "raw_sha256": "17940636bdf18c0b5ab8d128c524fd8c7593fb3db66dc9d5c6a696873a98145f",
+      "accepted_file_sha256": "c360b12e4c55551542490e73693ca59d42c3eb3135496d310cee7ee9fead62b5",
+      "expected_manifest_rows": 686,
+      "accepted_rows": 686,
+      "raw_frames": 636,
+      "raw_records": 686,
+      "matched_raw_rows": 686,
+      "unmatched_raw_rows": 0,
+      "remaining_raw_records": 0,
+      "source_observation_id_unique": 686,
+      "source_line_number_unique": 686,
+      "source_line_number_min": 1,
+      "source_line_number_max": 686,
+      "source_canonical_sha256": "d1ed2a00b8db6b067ff087d93e0500c30332b54341a27ee5556f20dc81908ebd",
+      "source_v1_sha256": "47ca718d2b015e65b9f0a4df24d1a1ebf1bf3fd5ddbd7f0f00c60bcb13f36bff",
+      "target_master_sha256_values": [
+        "f0205b443b0680bcfc93d310a30636d4fa4a08ebc2a63c3742ad59cf38bf557e"
+      ],
+      "target_master_snapshot_date": "20261014",
+      "underlying_source_rows": {
+        "KIS:H0UPCNT0": 655,
+        "KIS:H0UPCNT0:GROUP_MEDIAN": 31
+      },
+      "identity_status_rows": {
+        "KIS_MASTER_RESOLVED_POST_DATE_CORROBORATED": 686
+      },
+      "generated_field_rows": {
+        "contract_multiplier": 686,
+        "delta": 686,
+        "gamma": 686,
+        "implied_volatility": 686,
+        "order_book.ask_quantity": 686,
+        "order_book.bid_quantity": 686,
+        "theta": 686,
+        "vega": 686,
+        "underlying_price_group_consensus": 31
+      },
+      "errors": {},
+      "error_samples": []
+    },
+    {
+      "trading_date": "20261013",
+      "raw_sha256": "3432d42ad0a90ad453a703bce9b0d08421db085e36f2bdc31aaad2b9002b4b30",
+      "accepted_file_sha256": "331c01e819e9ddd4d0c39e98bf0c9d43b9a82e575743c0c34b74e8178f494cf5",
+      "expected_manifest_rows": 1386,
+      "accepted_rows": 1386,
+      "raw_frames": 1234,
+      "raw_records": 1386,
+      "matched_raw_rows": 1386,
+      "unmatched_raw_rows": 0,
+      "remaining_raw_records": 0,
+      "source_observation_id_unique": 1386,
+      "source_line_number_unique": 1386,
+      "source_line_number_min": 1,
+      "source_line_number_max": 1386,
+      "source_canonical_sha256": "5a62079c536b9ed38d49a53493abd88bc2940e97d972d5f1e72b4b4ca2045140",
+      "source_v1_sha256": "72d9878317f06994420d76466c119fc210f1b84c24f648473e69de87e1b017b1",
+      "target_master_sha256_values": [
+        "f0205b443b0680bcfc93d310a30636d4fa4a08ebc2a63c3742ad59cf38bf557e"
+      ],
+      "target_master_snapshot_date": "20261014",
+      "underlying_source_rows": {
+        "SYNTHETIC:KRX_SHOCK_V4_NEAREST_SPOT": 62,
+        "KIS:H0UPCNT0": 1239,
+        "KIS:H0UPCNT0:GROUP_MEDIAN": 85
+      },
+      "identity_status_rows": {
+        "KIS_MASTER_RESOLVED_POST_DATE_CORROBORATED": 1386
+      },
+      "generated_field_rows": {
+        "ask_price": 1,
+        "contract_multiplier": 1386,
+        "delta": 1386,
+        "gamma": 1386,
+        "implied_volatility": 1386,
+        "order_book.ask_quantity": 1386,
+        "order_book.bid_quantity": 1386,
+        "theta": 1386,
+        "underlying_price": 62,
+        "vega": 1386,
+        "underlying_price_group_consensus": 85
+      },
+      "errors": {},
+      "error_samples": []
+    }
+  ],
+  "source_hashes": {
+    "20261012/accepted_runtime": "c360b12e4c55551542490e73693ca59d42c3eb3135496d310cee7ee9fead62b5",
+    "20261012/daily_manifest": "b4355b6e21adcb92acd8d54ece72db88e8926fc0c7602939a935be4e2bf66231",
+    "20261012/raw": "17940636bdf18c0b5ab8d128c524fd8c7593fb3db66dc9d5c6a696873a98145f",
+    "20261012/raw_sidecar_manifest": "eeaca84fe4dfd605d7ffdd96b58b804a1dc0bc5e59f1b7e44c59f8c10b4d2f5b",
+    "20261013/accepted_runtime": "331c01e819e9ddd4d0c39e98bf0c9d43b9a82e575743c0c34b74e8178f494cf5",
+    "20261013/daily_manifest": "8820ef2aa3b03a9a82639386c2d73367d7898eb88a33eae4a43253f8e5b0b31a",
+    "20261013/raw": "3432d42ad0a90ad453a703bce9b0d08421db085e36f2bdc31aaad2b9002b4b30",
+    "20261013/raw_sidecar_manifest": "ebe6733898de41bfac5ca10c197586608d2c77dfbbb4b4f06520027f87cf39b3",
+    "accepted_runtime_manifest": "7657c90f13a81a7f98a8ccd075a259c8ec9795477a2a0541366094cd87e0360f",
+    "adapter_source_sha256": "d40fa0af5fdd2fbdaa5ef3b435fc07533c418f3d6b5d7ee3c47d36e79f1ca5d1",
+    "auditor_source_sha256": "87d57c107fc0252363524dde8293910968f10e29bf2ebc675f6446cededb5a81"
+  },
+  "aggregate_errors": {},
+  "source_canonical_artifact_materialized_in_current_worktrees": false,
+  "interpretation": [
+    "Accepted Runtime v2 rows were matched one-to-one to original same-day H0IOCNT0 Raw records using symbol/time/last/volume/bid, and ask when ask was not generated. Decimal normalization was used to avoid false mismatches caused only by formatting such as 33.60 vs 33.6.",
+    "source_canonical_sha256 is retained from accepted Runtime manifest and No.1535 lineage; the canonical-v2 source sidecar itself is not materialized in current inspected worktrees, so exact raw-field crosswalk is the alternative verification.",
+    "2026-10-14 KIS Master is post-date identity corroboration for 10-12/13, not the historical same-day Master. contract_multiplier remains KRX-spec-derived validation input, not authoritative KIS account/broker multiplier.",
+    "Synthetic KRX-derived underlying and deterministic ask/depth/Greeks/multiplier fields remain explicitly provenance-tagged DERIVED_SCENARIO.",
+    "An initial string-format comparison differed only on Decimal presentation (for example 33.60 vs 33.6); Decimal-normalized matching resolved it with 2,072/2,072 records matched.",
+    "underlying_price_group_consensus is an explicit generated-field provenance key of its own; it is not missing underlying_price provenance."
+  ],
+  "account_execution_claim": false,
+  "official_event_time_claim": false,
+  "production_authority_claim": false,
+  "gate_release_permitted": false,
+  "mutation_applied": false,
+  "report_sha256": "c91230731817572623d0625320265e0010e7ffae565611c068107ef8c6d2408c"
+}
