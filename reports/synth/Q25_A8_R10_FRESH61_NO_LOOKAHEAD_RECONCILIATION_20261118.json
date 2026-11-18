@@ -1,0 +1,134 @@
+{
+  "report_version": "Q25-A8-VALIDATION-ONLY-ACCEPTED-RUNTIME-NO-LOOKAHEAD-v1",
+  "scope": {
+    "source_accepted_runtime_unchanged": true,
+    "source_krx_scenario_unchanged": true,
+    "derived_sidecar_only": true,
+    "new_collection_or_api_calls": false,
+    "decision_refs": [
+      "No.1534",
+      "No.1535",
+      "No.1538",
+      "No.1554",
+      "No.1566"
+    ]
+  },
+  "before": {
+    "future_underlying_donors": 27,
+    "future_ask_donors": 1,
+    "total_future_market_price_donors": 28
+  },
+  "after": {
+    "future_market_price_donors": 0,
+    "underlying_future_anchor_replaced": 27,
+    "ask_future_anchor_replaced": 1,
+    "synthetic_ask_proxy_rows": 1
+  },
+  "days": [
+    {
+      "trading_date": "20261012",
+      "rows": 686,
+      "rows_with_future_donor_before": 0,
+      "future_donors_before": 0,
+      "rows_corrected": 0,
+      "underlying_future_anchor_replaced": 0,
+      "ask_future_anchor_replaced": 0,
+      "synthetic_ask_proxy_rows": 0,
+      "future_donors_after": 0,
+      "nonfuture_synthetic_underlying_rows": 0,
+      "underlying_prior_anchor_rows": 0,
+      "underlying_exact_anchor_rows": 0,
+      "source_observation_id_unique": 686,
+      "source_line_number_unique": 686,
+      "corrected_sidecar_sha256": "56235743ca2688b0c3cebd525393e31369e6d85f5a1318aa8551010847a5dcf4",
+      "underlying_prior_age_seconds": {
+        "min": null,
+        "max": null
+      },
+      "underlying_anchor_age_seconds": {
+        "min": null,
+        "max": null
+      }
+    },
+    {
+      "trading_date": "20261013",
+      "rows": 1386,
+      "rows_with_future_donor_before": 28,
+      "future_donors_before": 28,
+      "rows_corrected": 28,
+      "underlying_future_anchor_replaced": 27,
+      "ask_future_anchor_replaced": 1,
+      "synthetic_ask_proxy_rows": 1,
+      "future_donors_after": 0,
+      "nonfuture_synthetic_underlying_rows": 62,
+      "underlying_prior_anchor_rows": 60,
+      "underlying_exact_anchor_rows": 2,
+      "source_observation_id_unique": 1386,
+      "source_line_number_unique": 1386,
+      "corrected_sidecar_sha256": "23c78507448742701bfbb3a006e476bb5e2155595cebfdc2713ba811ed9d6737",
+      "underlying_prior_age_seconds": {
+        "min": 1.0,
+        "max": 283.0
+      },
+      "underlying_anchor_age_seconds": {
+        "min": 0.0,
+        "max": 283.0
+      }
+    }
+  ],
+  "ask_proxy": {
+    "target_contract": "B01611A01",
+    "target_strike": 1000.0,
+    "option_type": "CALL",
+    "expiry": "20261112",
+    "target_timestamp": "2026-10-13T08:45:00+09:00",
+    "donor_strike": 1032.5,
+    "strike_distance": 32.5,
+    "donor_spread": 0.5,
+    "target_raw_bid": 35.5,
+    "original_future_generated_ask": 37.45,
+    "synthetic_ask": 36.0,
+    "ask_change": -1.4500000000000028,
+    "donor_timestamp": "2026-10-13T08:45:00+09:00",
+    "source": "DERIVED_SCENARIO:KRX_SHOCK_V4_SAME_TIMESTAMP_NEAREST_STRIKE"
+  },
+  "krx_prior_anchor_policy": {
+    "same_day": true,
+    "timestamp_must_be_lte_target": true,
+    "bar_interval_minutes": 5,
+    "timezone": "Asia/Seoul",
+    "max_prior_age_seconds": 283.0
+  },
+  "source_hashes": {
+    "accepted_runtime_manifest": "7657c90f13a81a7f98a8ccd075a259c8ec9795477a2a0541366094cd87e0360f",
+    "accepted_20261012": "c360b12e4c55551542490e73693ca59d42c3eb3135496d310cee7ee9fead62b5",
+    "accepted_20261013": "331c01e819e9ddd4d0c39e98bf0c9d43b9a82e575743c0c34b74e8178f494cf5",
+    "krx_shock_v4_manifest": "d0405740cc7b90e791de2cef0fdb189af19880d28ae5f96b2a89ec74eba119e0",
+    "krx_shock_v4_20261013": "7343a9460d9889d224c33bd22f03f06b0c36f47eb32ce327145bd001b8703d2f",
+    "fresh60_report": "c91230731817572623d0625320265e0010e7ffae565611c068107ef8c6d2408c"
+  },
+  "derived_manifest_sha256": "ef4808d3fd6d730d7c070e30196c8558ccecd5a2654adb93ccb2547e6250b53c",
+  "corrected_sidecars": [
+    {
+      "file": "Q25_A8_R10_FRESH61_NO_LOOKAHEAD_20261012_20261118.jsonl",
+      "sha256": "56235743ca2688b0c3cebd525393e31369e6d85f5a1318aa8551010847a5dcf4"
+    },
+    {
+      "file": "Q25_A8_R10_FRESH61_NO_LOOKAHEAD_20261013_20261118.jsonl",
+      "sha256": "23c78507448742701bfbb3a006e476bb5e2155595cebfdc2713ba811ed9d6737"
+    }
+  ],
+  "future_donor_examples_before": [],
+  "interpretation": [
+    "27 future synthetic KRX spot anchors were replaced by same-day nearest-prior bars. No future KRX scenario price is retained as the selected underlying input.",
+    "One future same-symbol ask-spread donor at 08:45:15 was replaced by a same-timestamp, same-expiry, same-option-right nearest-strike KRX derived scenario spread. This produces a synthetic ask proxy 36.00 from raw bid 35.50; it is not an observed KIS ask.",
+    "The original future donor provenance is preserved in original_future_underlying_anchor/original_future_ask_anchor fields for audit, but the corrected tick fields use prior-only/same-time inputs.",
+    "The original Accepted Runtime v2 partitions and KRX scenario source files are unchanged. Corrected JSONL files are separately namespaced validation-only derived sidecars."
+  ],
+  "account_execution_claim": false,
+  "official_event_time_claim": false,
+  "production_authority_claim": false,
+  "gate_release_permitted": false,
+  "mutation_applied_to_sources": false,
+  "report_sha256": "da17f73b85eb7be8ecfcd8fbb6c1fc84ecdd759eb6f048e48675fd74f6fbd3a1"
+}

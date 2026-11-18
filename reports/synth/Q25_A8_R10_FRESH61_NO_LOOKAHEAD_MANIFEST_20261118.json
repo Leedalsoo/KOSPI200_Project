@@ -1,0 +1,29 @@
+{
+  "schema": "q25-a8-validation-only-no-lookahead-runtime-v2-v1",
+  "provenance": "DERIVED_SCENARIO",
+  "source_accepted_runtime_manifest_sha256": "7657c90f13a81a7f98a8ccd075a259c8ec9795477a2a0541366094cd87e0360f",
+  "source_krx_shock_v4_manifest_sha256": "d0405740cc7b90e791de2cef0fdb189af19880d28ae5f96b2a89ec74eba119e0",
+  "source_krx_20261013_file_sha256": "7343a9460d9889d224c33bd22f03f06b0c36f47eb32ce327145bd001b8703d2f",
+  "trading_dates": [
+    "20261012",
+    "20261013"
+  ],
+  "partitions": [
+    {
+      "date": "20261012",
+      "file": "Q25_A8_R10_FRESH61_NO_LOOKAHEAD_20261012_20261118.jsonl",
+      "rows": 686,
+      "sha256": "56235743ca2688b0c3cebd525393e31369e6d85f5a1318aa8551010847a5dcf4"
+    },
+    {
+      "date": "20261013",
+      "file": "Q25_A8_R10_FRESH61_NO_LOOKAHEAD_20261013_20261118.jsonl",
+      "rows": 1386,
+      "sha256": "23c78507448742701bfbb3a006e476bb5e2155595cebfdc2713ba811ed9d6737"
+    }
+  ],
+  "correction_policy": "same-day nearest-prior KRX spot; same-timestamp nearest-strike same-expiry/right KRX synthetic spread for future-generated ask; preserve original future anchor provenance",
+  "future_market_price_anchor_count_after": 0,
+  "validation_only": true,
+  "not_live_or_account_execution_evidence": true
+}
