@@ -99,6 +99,12 @@ class LiveExecutionPositionBridge:
         ):
             return state
             raise OrderStateTransitionError("DUPLICATE_EXECUTION_REQUIRES_RECONCILIATION")
+        self._store.validate_late_fill_conflict_resolution_selection(
+            execution_id=execution_id,
+            scope_key=report.client_order_id,
+            report_payload=report_payload,
+            evidence_ref=evidence,
+        )
         command = self._oms.get_broker_order_command(report.broker_order_id)
         if command.client_order_id != report.client_order_id:
             raise OrderStateTransitionError("CLIENT_ORDER_ID_MISMATCH")

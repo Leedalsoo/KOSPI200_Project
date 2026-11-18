@@ -1,4 +1,6 @@
 from datetime import datetime, timezone
+from dataclasses import replace
+import hashlib
 from decimal import Decimal
 import sqlite3
 
@@ -1628,3 +1630,451 @@ def test_fresh36_multi_late_fill_partial_settlement_restart_and_conflict_keep_u1
     assert latest_checkpoint["order_submission_enabled"] is False
     assert len(restarted_store.load_execution_journal_records()) == 3
     assert restarted_store.open_reconciliation_events(scope_key=client_id)[0]["status"] == "CONFLICT"
+
+
+def test_fresh37_late_fill_conflict_candidates_are_preserved_and_individually_resolved_with_u19(
+    tmp_path
+):
+    from environments.live.settlement.sqlite_settlement_store import encode_record
+
+    store_path = tmp_path / "fresh37-settlement.sqlite3"
+    checkpoint_path = tmp_path / "fresh37-u19.sqlite3"
+    instrument_id = "SYNTHETIC_CONTRACT:FRESH37:OPTION:CALL"
+    client_id = "FRESH37-CLIENT"
+    broker_id = "FRESH37-BROKER"
+    group_id = "SYNTHETIC:GROUP:FRESH37-CONFLICT-RESOLUTION"
+    position = LivePositionAggregate(instrument_id)
+    store = SQLiteSettlementStore(store_path)
+    oms = _order_with_fill(
+        store,
+        client_id=client_id,
+        broker_id=broker_id,
+        instrument_id=instrument_id,
+        side="BUY",
+        leg_id="FRESH37-CALL",
+        group_id=group_id,
+        fills=(("SYNTHETIC:FRESH37:EXEC:ENTRY", 1, 0, "10.00"),),
+        order_quantity=3,
+        position_aggregate=position,
+    )
+    oms.apply_cancel(ExecutionReport(
+        client_order_id=client_id,
+        broker_order_id=broker_id,
+        execution_id=None,
+        status="CANCELLED",
+        filled_quantity=0,
+        remaining_quantity=2,
+        execution_price=None,
+        execution_timestamp=datetime(2026, 11, 18, 9, 35, tzinfo=timezone.utc),
+        group_id=group_id,
+        leg_id="FRESH37-CALL",
+    ))
+    bridge = LiveExecutionPositionBridge(
+        order_state_machine=oms,
+        position_fill_adapter=LivePositionFillAdapter(position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(
+            persistence_store=store
+        ),
+        position_aggregate=position,
+        settlement_store=store,
+    )
+
+    late_a = ExecutionReport(
+        client_order_id=client_id,
+        broker_order_id=broker_id,
+        execution_id="SYNTHETIC:FRESH37:EXEC:LATE-A",
+        status="PARTIALLY_FILLED",
+        filled_quantity=1,
+        remaining_quantity=1,
+        execution_price=Decimal("10.20"),
+        execution_timestamp=datetime(2026, 11, 18, 9, 40, tzinfo=timezone.utc),
+        fee=Decimal("5"),
+        group_id=group_id,
+        leg_id="FRESH37-CALL",
+    )
+    conflict_a = replace(
+        late_a, execution_price=Decimal("10.30"),
+    )
+    late_b = ExecutionReport(
+        client_order_id=client_id,
+        broker_order_id=broker_id,
+        execution_id="SYNTHETIC:FRESH37:EXEC:LATE-B",
+        status="FILLED",
+        filled_quantity=1,
+        remaining_quantity=0,
+        execution_price=Decimal("10.25"),
+        execution_timestamp=datetime(2026, 11, 18, 9, 41, tzinfo=timezone.utc),
+        fee=Decimal("5"),
+        group_id=group_id,
+        leg_id="FRESH37-CALL",
+    )
+    conflict_b = replace(
+        late_b, execution_price=Decimal("10.35"),
+    )
+
+    for report in (late_a, late_b):
+        with pytest.raises(OrderStateTransitionError, match="RECONCILIATION_PENDING"):
+            bridge.settle(report)
+    for report in (conflict_a, conflict_b):
+        with pytest.raises(
+            SettlementStoreError,
+            match="RECONCILIATION_INBOX_EXECUTION_ID_COLLISION",
+        ):
+            bridge.settle(report)
+
+    history_a = store.late_fill_conflict_history(execution_id=late_a.execution_id)
+    history_b = store.late_fill_conflict_history(execution_id=late_b.execution_id)
+    assert len(history_a) == len(history_b) == 1
+    detected_a = history_a[0]
+    detected_b = history_b[0]
+    assert detected_a["event_type"] == detected_b["event_type"] == "CONFLICT_DETECTED"
+    assert detected_a["original_payload"]["execution_price"] == "10.20"
+    assert detected_a["conflicting_payload"]["execution_price"] == "10.30"
+    assert detected_b["original_payload"]["execution_price"] == "10.25"
+    assert detected_b["conflicting_payload"]["execution_price"] == "10.35"
+    assert detected_a["original_payload_sha256"] == hashlib.sha256(
+        encode_record(detected_a["original_payload"]).encode("utf-8")
+    ).hexdigest()
+    assert detected_a["conflicting_payload_sha256"] == hashlib.sha256(
+        encode_record(detected_a["conflicting_payload"]).encode("utf-8")
+    ).hexdigest()
+
+    with pytest.raises(
+        SettlementStoreError, match="VALIDATION_ONLY_CONFLICT_EVIDENCE_REQUIRED"
+    ):
+        store.prepare_validation_only_late_fill_conflict_resolution(
+            execution_id=late_a.execution_id,
+            scope_key=client_id,
+            original_payload_sha256=detected_a["original_payload_sha256"],
+            conflicting_payload_sha256=detected_a["conflicting_payload_sha256"],
+            selected_payload_sha256=detected_a["original_payload_sha256"],
+            evidence_ref="TEST_ONLY:NOT_VALIDATION_NAMESPACE",
+        )
+    with pytest.raises(
+        SettlementStoreError,
+        match="LATE_FILL_CONFLICT_SELECTION_NOT_A_PRESERVED_CANDIDATE",
+    ):
+        store.prepare_validation_only_late_fill_conflict_resolution(
+            execution_id=late_a.execution_id,
+            scope_key=client_id,
+            original_payload_sha256=detected_a["original_payload_sha256"],
+            conflicting_payload_sha256=detected_a["conflicting_payload_sha256"],
+            selected_payload_sha256="0" * 64,
+            evidence_ref="VALIDATION_ONLY:FRESH37:INVALID_SELECTION",
+        )
+    with pytest.raises(
+        SettlementStoreError, match="LATE_FILL_CONFLICT_EVENT_NOT_FOUND"
+    ):
+        store.prepare_validation_only_late_fill_conflict_resolution(
+            execution_id=late_a.execution_id,
+            scope_key="WRONG-ORDER-SCOPE",
+            original_payload_sha256=detected_a["original_payload_sha256"],
+            conflicting_payload_sha256=detected_a["conflicting_payload_sha256"],
+            selected_payload_sha256=detected_a["original_payload_sha256"],
+            evidence_ref="VALIDATION_ONLY:FRESH37:WRONG_SCOPE",
+        )
+    assert len(store.open_reconciliation_events(scope_key=client_id)) == 2
+    assert position.qty == 1
+    assert len(store.load_execution_journal_records()) == 1
+
+    evidence_a = "VALIDATION_ONLY:FRESH37:SELECT-ORIGINAL-LATE-A"
+    prepared_a = store.prepare_validation_only_late_fill_conflict_resolution(
+        execution_id=late_a.execution_id,
+        scope_key=client_id,
+        original_payload_sha256=detected_a["original_payload_sha256"],
+        conflicting_payload_sha256=detected_a["conflicting_payload_sha256"],
+        selected_payload_sha256=detected_a["original_payload_sha256"],
+        evidence_ref=evidence_a,
+    )
+    assert prepared_a is True
+    assert store.prepare_validation_only_late_fill_conflict_resolution(
+        execution_id=late_a.execution_id,
+        scope_key=client_id,
+        original_payload_sha256=detected_a["original_payload_sha256"],
+        conflicting_payload_sha256=detected_a["conflicting_payload_sha256"],
+        selected_payload_sha256=detected_a["original_payload_sha256"],
+        evidence_ref=evidence_a,
+    ) is False
+
+    with pytest.raises(
+        SettlementStoreError, match="LATE_FILL_CONFLICT_EVIDENCE_REF_MISMATCH"
+    ):
+        bridge.settle_authoritatively_reconciled_fill(
+            late_a, authoritative_evidence_ref="VALIDATION_ONLY:FRESH37:WRONG_EVIDENCE"
+        )
+    with pytest.raises(OrderStateTransitionError, match="RECONCILIATION_PENDING"):
+        bridge.settle(late_a)
+
+    # The other event remains CONFLICT. The selected A report must match the
+    # chosen original candidate; its competing payload is not accepted.
+    with pytest.raises(
+        SettlementStoreError,
+        match="LATE_FILL_CONFLICT_BRIDGE_REPORT_PAYLOAD_MISMATCH",
+    ):
+        bridge.settle_authoritatively_reconciled_fill(
+            conflict_a, authoritative_evidence_ref=evidence_a
+        )
+    assert len(store.load_execution_journal_records()) == 1
+    assert position.qty == 1
+    assert store.open_reconciliation_events(scope_key=client_id)[1]["status"] == "CONFLICT"
+
+    settled_a = bridge.settle_authoritatively_reconciled_fill(
+        late_a, authoritative_evidence_ref=evidence_a
+    )
+    assert settled_a.filled_quantity == 2
+    assert position.qty == 2
+    assert store.has_execution(late_a.execution_id)
+    assert not store.has_execution(late_b.execution_id)
+    assert [
+        (item["execution_id"], item["status"])
+        for item in store.open_reconciliation_events(scope_key=client_id)
+    ] == [(late_b.execution_id, "CONFLICT")]
+    assert store.unresolved_reconciliations()[0]["status"] == "CONFLICT"
+    assert [item["event_type"] for item in store.late_fill_conflict_history(
+        execution_id=late_a.execution_id
+    )] == ["CONFLICT_DETECTED", "RESOLUTION_SELECTED", "SETTLED"]
+
+    pending_builder = ValidationOnlyU19LedgerSnapshotBuilder(store)
+    pending_ledger = pending_builder.build(
+        group_id=group_id,
+        snapshot_id="FRESH37-LEDGER-FIRST-CONFLICT-RESOLVED",
+        as_of=AS_OF,
+    )
+    assert pending_ledger.positions == (U19Position(instrument_id, Decimal("2")),)
+    assert pending_ledger.pending_order_ids == (client_id,)
+    pending_coordinator = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(checkpoint_path),
+        settlement_store=store,
+    )
+    pending_decision = pending_coordinator.recover_from_settlement_store(
+        group_id=group_id,
+        broker_snapshot=U19BrokerPositionSnapshot(
+            group_id=group_id,
+            snapshot_id="FRESH37-BROKER-ONE-CONFLICT-REMAINS",
+            as_of=AS_OF,
+            source="VALIDATION_ONLY:BROKER_EXCHANGE",
+            positions=pending_ledger.positions,
+            complete=True,
+            capability_verified=True,
+            payload_sha256="d" * 64,
+        ),
+        snapshot_id="FRESH37-LEDGER-FIRST-CONFLICT-RESOLVED",
+        as_of=AS_OF,
+        ledger_snapshot_builder=pending_builder,
+    )
+    assert pending_decision.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+    assert pending_decision.restore_allowed is False
+    assert pending_decision.pending_order_ids == (client_id,)
+    assert pending_decision.new_entry_enabled is False
+    assert pending_decision.order_submission_enabled is False
+
+    # Restart between the two conflict resolutions. The second event selects
+    # the competing candidate, proving either preserved candidate can be chosen.
+    restarted_store = SQLiteSettlementStore(store_path)
+    restarted_oms = OrderStateMachine(persistence_store=restarted_store)
+    restarted_oms.restore_from_store()
+    restarted_position = LivePositionAggregate(instrument_id)
+    restarted_position.restore_persistence_record(
+        restarted_store.load_position_state(instrument_id)
+    )
+    restarted_bridge = LiveExecutionPositionBridge(
+        order_state_machine=restarted_oms,
+        position_fill_adapter=LivePositionFillAdapter(restarted_position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(
+            persistence_store=restarted_store
+        ),
+        position_aggregate=restarted_position,
+        settlement_store=restarted_store,
+    )
+    assert restarted_oms.get(client_id).filled_quantity == 2
+    assert restarted_position.qty == 2
+
+    evidence_b = "VALIDATION_ONLY:FRESH37:SELECT-CONFLICTING-LATE-B"
+    assert restarted_store.prepare_validation_only_late_fill_conflict_resolution(
+        execution_id=late_b.execution_id,
+        scope_key=client_id,
+        original_payload_sha256=detected_b["original_payload_sha256"],
+        conflicting_payload_sha256=detected_b["conflicting_payload_sha256"],
+        selected_payload_sha256=detected_b["conflicting_payload_sha256"],
+        evidence_ref=evidence_b,
+    ) is True
+
+    with pytest.raises(
+        SettlementStoreError,
+        match="LATE_FILL_CONFLICT_BRIDGE_REPORT_PAYLOAD_MISMATCH",
+    ):
+        restarted_bridge.settle_authoritatively_reconciled_fill(
+            late_b, authoritative_evidence_ref=evidence_b
+        )
+    assert restarted_position.qty == 2
+    assert len(restarted_store.load_execution_journal_records()) == 2
+
+    settled_b = restarted_bridge.settle_authoritatively_reconciled_fill(
+        conflict_b, authoritative_evidence_ref=evidence_b
+    )
+    assert settled_b.filled_quantity == 3
+    assert restarted_position.qty == 3
+    assert restarted_store.pending_reconciliation_events(scope_key=client_id) == ()
+    assert restarted_store.open_reconciliation_events(scope_key=client_id) == ()
+    assert restarted_store.unresolved_reconciliations() == ()
+    assert restarted_store.load_position_state(instrument_id)["qty"] == 3
+    assert len(restarted_store.load_execution_journal_records()) == 3
+    assert [item["event_type"] for item in restarted_store.late_fill_conflict_history(
+        execution_id=late_b.execution_id
+    )] == ["CONFLICT_DETECTED", "RESOLUTION_SELECTED", "SETTLED"]
+
+    # Conflict audit is append-only and each execution has its own resolution.
+    with sqlite3.connect(store_path) as connection:
+        with pytest.raises(sqlite3.IntegrityError, match="RECONCILIATION_CONFLICT_EVENTS_APPEND_ONLY"):
+            connection.execute(
+                "UPDATE reconciliation_conflict_events SET evidence_ref='tampered' WHERE execution_id=?",
+                (late_a.execution_id,),
+            )
+        with pytest.raises(sqlite3.IntegrityError, match="RECONCILIATION_CONFLICT_EVENTS_APPEND_ONLY"):
+            connection.execute(
+                "DELETE FROM reconciliation_conflict_events WHERE execution_id=?",
+                (late_a.execution_id,),
+            )
+
+    final_store = SQLiteSettlementStore(store_path)
+    builder = ValidationOnlyU19LedgerSnapshotBuilder(final_store)
+    ledger = builder.build(
+        group_id=group_id,
+        snapshot_id="FRESH37-LEDGER-ALL-CONFLICTS-RESOLVED",
+        as_of=AS_OF,
+    )
+    assert ledger.positions == (U19Position(instrument_id, Decimal("3")),)
+    assert ledger.pending_order_ids == ()
+    coordinator = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(checkpoint_path),
+        settlement_store=final_store,
+    )
+    decision = coordinator.recover_from_settlement_store(
+        group_id=group_id,
+        broker_snapshot=U19BrokerPositionSnapshot(
+            group_id=group_id,
+            snapshot_id="FRESH37-BROKER-VALIDATION-PROXY",
+            as_of=AS_OF,
+            source="VALIDATION_ONLY:BROKER_EXCHANGE",
+            positions=ledger.positions,
+            complete=True,
+            capability_verified=True,
+            payload_sha256="c" * 64,
+        ),
+        snapshot_id="FRESH37-LEDGER-ALL-CONFLICTS-RESOLVED",
+        as_of=AS_OF,
+        ledger_snapshot_builder=builder,
+    )
+    assert decision.status is U19RecoveryStatus.RESTORE_ALLOWED
+    assert decision.positions == ledger.positions
+    assert decision.pending_order_ids == ()
+    assert decision.new_entry_enabled is False
+    assert decision.order_submission_enabled is False
+    assert SqliteTrack2U19RecoveryStore(checkpoint_path).load_latest(group_id)[
+        "status"
+    ] == U19RecoveryStatus.RESTORE_ALLOWED.value
+
+
+def test_fresh37_conflict_selection_cannot_clear_unrelated_scope_conflict(tmp_path):
+    from environments.live.settlement.sqlite_settlement_store import encode_record
+
+    store_path = tmp_path / "fresh37-unrelated-conflict.sqlite3"
+    instrument_id = "SYNTHETIC_CONTRACT:FRESH37:OPTION:PUT"
+    client_id = "FRESH37-UNRELATED-CLIENT"
+    broker_id = "FRESH37-UNRELATED-BROKER"
+    group_id = "SYNTHETIC:GROUP:FRESH37-UNRELATED-CONFLICT"
+    position = LivePositionAggregate(instrument_id)
+    store = SQLiteSettlementStore(store_path)
+    oms = _order_with_fill(
+        store,
+        client_id=client_id,
+        broker_id=broker_id,
+        instrument_id=instrument_id,
+        side="BUY",
+        leg_id="FRESH37-PUT",
+        group_id=group_id,
+        fills=(("SYNTHETIC:FRESH37:EXEC:UNRELATED-ENTRY", 1, 0, "8.00"),),
+        order_quantity=2,
+        position_aggregate=position,
+    )
+    oms.apply_cancel(ExecutionReport(
+        client_order_id=client_id,
+        broker_order_id=broker_id,
+        execution_id=None,
+        status="CANCELLED",
+        filled_quantity=0,
+        remaining_quantity=1,
+        execution_price=None,
+        execution_timestamp=datetime(2026, 11, 18, 9, 35, tzinfo=timezone.utc),
+        group_id=group_id,
+        leg_id="FRESH37-PUT",
+    ))
+    bridge = LiveExecutionPositionBridge(
+        order_state_machine=oms,
+        position_fill_adapter=LivePositionFillAdapter(position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(
+            persistence_store=store
+        ),
+        position_aggregate=position,
+        settlement_store=store,
+    )
+    late_fill = ExecutionReport(
+        client_order_id=client_id,
+        broker_order_id=broker_id,
+        execution_id="SYNTHETIC:FRESH37:EXEC:UNRELATED-LATE",
+        status="FILLED",
+        filled_quantity=1,
+        remaining_quantity=0,
+        execution_price=Decimal("8.10"),
+        execution_timestamp=datetime(2026, 11, 18, 9, 40, tzinfo=timezone.utc),
+        fee=Decimal("5"),
+        group_id=group_id,
+        leg_id="FRESH37-PUT",
+    )
+    conflicting_fill = replace(
+        late_fill, execution_price=Decimal("8.20"),
+    )
+    with pytest.raises(OrderStateTransitionError, match="RECONCILIATION_PENDING"):
+        bridge.settle(late_fill)
+    with pytest.raises(SettlementStoreError, match="RECONCILIATION_INBOX_EXECUTION_ID_COLLISION"):
+        bridge.settle(conflicting_fill)
+    detected = store.late_fill_conflict_history(
+        execution_id=late_fill.execution_id
+    )[0]
+
+    # Simulate an unrelated reconciliation conflict sharing the same scope.
+    with sqlite3.connect(store_path) as connection:
+        connection.execute(
+            """UPDATE reconciliation_state
+               SET reason='UNRELATED_MANUAL_RECONCILIATION_CONFLICT',
+                   payload_json=?
+               WHERE scope_key=?""",
+            (
+                encode_record({"execution_id": "UNRELATED-OTHER-EVENT"}),
+                client_id,
+            ),
+        )
+
+    with pytest.raises(
+        SettlementStoreError,
+        match="LATE_FILL_CONFLICT_CANNOT_CLEAR_UNRELATED_SCOPE_CONFLICT",
+    ):
+        store.prepare_validation_only_late_fill_conflict_resolution(
+            execution_id=late_fill.execution_id,
+            scope_key=client_id,
+            original_payload_sha256=detected["original_payload_sha256"],
+            conflicting_payload_sha256=detected["conflicting_payload_sha256"],
+            selected_payload_sha256=detected["original_payload_sha256"],
+            evidence_ref="VALIDATION_ONLY:FRESH37:UNRELATED_CONFLICT_GUARD",
+        )
+    inbox = store.open_reconciliation_events(scope_key=client_id)
+    assert len(inbox) == 1
+    assert inbox[0]["status"] == "CONFLICT"
+    assert [item["event_type"] for item in store.late_fill_conflict_history(
+        execution_id=late_fill.execution_id
+    )] == ["CONFLICT_DETECTED"]
+    assert store.unresolved_reconciliations()[0]["reason"] == (
+        "UNRELATED_MANUAL_RECONCILIATION_CONFLICT"
+    )
+    assert len(store.load_execution_journal_records()) == 1
+    assert position.qty == 1

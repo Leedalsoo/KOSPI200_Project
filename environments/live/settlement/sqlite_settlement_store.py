@@ -127,6 +127,29 @@ class SQLiteSettlementStore:
                     evidence_ref TEXT,
                     received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
+                CREATE TABLE IF NOT EXISTS reconciliation_conflict_events (
+                    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    execution_id TEXT NOT NULL,
+                    scope_key TEXT NOT NULL,
+                    event_type TEXT NOT NULL CHECK(event_type IN (
+                        'CONFLICT_DETECTED','RESOLUTION_SELECTED','SETTLED'
+                    )),
+                    original_payload_json TEXT NOT NULL,
+                    conflicting_payload_json TEXT NOT NULL,
+                    original_payload_sha256 TEXT NOT NULL,
+                    conflicting_payload_sha256 TEXT NOT NULL,
+                    selected_payload_sha256 TEXT,
+                    evidence_ref TEXT,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX IF NOT EXISTS reconciliation_conflict_events_lookup
+                    ON reconciliation_conflict_events(execution_id, scope_key, event_id);
+                CREATE TRIGGER IF NOT EXISTS reconciliation_conflict_events_no_update
+                BEFORE UPDATE ON reconciliation_conflict_events
+                BEGIN SELECT RAISE(ABORT, 'RECONCILIATION_CONFLICT_EVENTS_APPEND_ONLY'); END;
+                CREATE TRIGGER IF NOT EXISTS reconciliation_conflict_events_no_delete
+                BEFORE DELETE ON reconciliation_conflict_events
+                BEGIN SELECT RAISE(ABORT, 'RECONCILIATION_CONFLICT_EVENTS_APPEND_ONLY'); END;
                 CREATE TABLE IF NOT EXISTS validation_baseline_history (
                     generation_id INTEGER PRIMARY KEY AUTOINCREMENT,
                     event_type TEXT NOT NULL CHECK(event_type IN ('INITIAL_IMPORT','VALIDATION_ONLY_RESET')),
@@ -478,6 +501,32 @@ class SQLiteSettlementStore:
                        WHERE execution_id=? AND scope_key=? AND status='PENDING'""",
                     (evidence, execution_key, scope),
                 )
+                selected_conflict = connection.execute(
+                    """SELECT original_payload_json,conflicting_payload_json,
+                              original_payload_sha256,conflicting_payload_sha256,
+                              selected_payload_sha256,evidence_ref
+                       FROM reconciliation_conflict_events
+                       WHERE execution_id=? AND scope_key=? AND event_type='RESOLUTION_SELECTED'
+                       ORDER BY event_id DESC LIMIT 1""",
+                    (execution_key, scope),
+                ).fetchone()
+                if selected_conflict is not None:
+                    connection.execute(
+                        """INSERT INTO reconciliation_conflict_events
+                           (execution_id,scope_key,event_type,original_payload_json,
+                            conflicting_payload_json,original_payload_sha256,
+                            conflicting_payload_sha256,selected_payload_sha256,evidence_ref)
+                           VALUES(?,?,'SETTLED',?,?,?,?,?,?)""",
+                        (
+                            execution_key, scope,
+                            selected_conflict["original_payload_json"],
+                            selected_conflict["conflicting_payload_json"],
+                            selected_conflict["original_payload_sha256"],
+                            selected_conflict["conflicting_payload_sha256"],
+                            selected_conflict["selected_payload_sha256"],
+                            selected_conflict["evidence_ref"],
+                        ),
+                    )
                 remaining_inbox = connection.execute(
                     "SELECT COUNT(*) AS n FROM reconciliation_inbox WHERE scope_key=? AND status IN ('PENDING','CONFLICT')",
                     (scope,),
@@ -703,6 +752,34 @@ class SQLiteSettlementStore:
                     "UPDATE reconciliation_inbox SET status='CONFLICT' WHERE execution_id=?",
                     (execution_key,),
                 )
+                original_payload_json = str(existing["payload_json"])
+                original_payload_sha256 = hashlib.sha256(
+                    original_payload_json.encode("utf-8")
+                ).hexdigest()
+                conflicting_payload_sha256 = hashlib.sha256(
+                    encoded.encode("utf-8")
+                ).hexdigest()
+                prior_conflict = connection.execute(
+                    """SELECT 1 FROM reconciliation_conflict_events
+                       WHERE execution_id=? AND scope_key=? AND event_type='CONFLICT_DETECTED'
+                         AND original_payload_sha256=? AND conflicting_payload_sha256=? LIMIT 1""",
+                    (
+                        execution_key, scope, original_payload_sha256,
+                        conflicting_payload_sha256,
+                    ),
+                ).fetchone()
+                if prior_conflict is None:
+                    connection.execute(
+                        """INSERT INTO reconciliation_conflict_events
+                           (execution_id,scope_key,event_type,original_payload_json,
+                            conflicting_payload_json,original_payload_sha256,
+                            conflicting_payload_sha256)
+                           VALUES(?,?,'CONFLICT_DETECTED',?,?,?,?)""",
+                        (
+                            execution_key, scope, original_payload_json, encoded,
+                            original_payload_sha256, conflicting_payload_sha256,
+                        ),
+                    )
                 connection.execute(
                     """INSERT INTO reconciliation_state
                        (scope_key,client_order_id,broker_order_id,status,reason,payload_json,updated_at)
@@ -823,6 +900,231 @@ class SQLiteSettlementStore:
                 (scope, client, broker_order_id, status, why, encode_record(dict(payload))),
             )
             connection.commit()
+
+    def late_fill_conflict_history(
+        self, *, execution_id: str | None = None, scope_key: str | None = None
+    ) -> tuple[dict[str, Any], ...]:
+        clauses = []
+        params: list[str] = []
+        if execution_id is not None:
+            clauses.append("execution_id=?")
+            params.append(str(execution_id).strip())
+        if scope_key is not None:
+            clauses.append("scope_key=?")
+            params.append(str(scope_key).strip())
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        with self._connection() as connection:
+            rows = connection.execute(
+                f"""SELECT event_id,execution_id,scope_key,event_type,
+                           original_payload_json,conflicting_payload_json,
+                           original_payload_sha256,conflicting_payload_sha256,
+                           selected_payload_sha256,evidence_ref,created_at
+                    FROM reconciliation_conflict_events {where}
+                    ORDER BY event_id""",
+                tuple(params),
+            ).fetchall()
+        return tuple({
+            "event_id": row["event_id"],
+            "execution_id": row["execution_id"],
+            "scope_key": row["scope_key"],
+            "event_type": row["event_type"],
+            "original_payload": json.loads(row["original_payload_json"]),
+            "conflicting_payload": json.loads(row["conflicting_payload_json"]),
+            "original_payload_sha256": row["original_payload_sha256"],
+            "conflicting_payload_sha256": row["conflicting_payload_sha256"],
+            "selected_payload_sha256": row["selected_payload_sha256"],
+            "evidence_ref": row["evidence_ref"],
+            "created_at": row["created_at"],
+        } for row in rows)
+
+    def prepare_validation_only_late_fill_conflict_resolution(
+        self,
+        *,
+        execution_id: str,
+        scope_key: str,
+        original_payload_sha256: str,
+        conflicting_payload_sha256: str,
+        selected_payload_sha256: str,
+        evidence_ref: str,
+    ) -> bool:
+        """Select one preserved late-fill candidate for validation-only settlement."""
+        execution_key = str(execution_id).strip()
+        scope = str(scope_key).strip()
+        evidence = str(evidence_ref).strip()
+        hashes = (
+            str(original_payload_sha256).strip().lower(),
+            str(conflicting_payload_sha256).strip().lower(),
+            str(selected_payload_sha256).strip().lower(),
+        )
+        if not execution_key or not scope:
+            raise ValueError("LATE_FILL_CONFLICT_EXECUTION_AND_SCOPE_REQUIRED")
+        if not evidence.startswith("VALIDATION_ONLY:"):
+            raise SettlementStoreError("VALIDATION_ONLY_CONFLICT_EVIDENCE_REQUIRED")
+        if any(re.fullmatch(r"[0-9a-f]{64}", value) is None for value in hashes):
+            raise ValueError("LATE_FILL_CONFLICT_PAYLOAD_SHA256_INVALID")
+
+        with self._connection() as connection:
+            self._begin(connection)
+            inbox = connection.execute(
+                """SELECT status,scope_key,client_order_id,payload_json
+                   FROM reconciliation_inbox WHERE execution_id=?""",
+                (execution_key,),
+            ).fetchone()
+            if inbox is None or inbox["scope_key"] != scope:
+                connection.rollback()
+                raise SettlementStoreError("LATE_FILL_CONFLICT_EVENT_NOT_FOUND")
+
+            detected = connection.execute(
+                """SELECT original_payload_json,conflicting_payload_json,
+                          original_payload_sha256,conflicting_payload_sha256
+                   FROM reconciliation_conflict_events
+                   WHERE execution_id=? AND scope_key=? AND event_type='CONFLICT_DETECTED'
+                     AND original_payload_sha256=? AND conflicting_payload_sha256=?
+                   ORDER BY event_id DESC LIMIT 1""",
+                (execution_key, scope, hashes[0], hashes[1]),
+            ).fetchone()
+            if detected is None:
+                connection.rollback()
+                raise SettlementStoreError("LATE_FILL_CONFLICT_CANDIDATE_HASH_MISMATCH")
+            if hashes[2] not in {hashes[0], hashes[1]}:
+                connection.rollback()
+                raise SettlementStoreError("LATE_FILL_CONFLICT_SELECTION_NOT_A_PRESERVED_CANDIDATE")
+
+            previous_selection = connection.execute(
+                """SELECT selected_payload_sha256,evidence_ref
+                   FROM reconciliation_conflict_events
+                   WHERE execution_id=? AND scope_key=? AND event_type='RESOLUTION_SELECTED'
+                     AND original_payload_sha256=? AND conflicting_payload_sha256=?
+                   ORDER BY event_id DESC LIMIT 1""",
+                (execution_key, scope, hashes[0], hashes[1]),
+            ).fetchone()
+            if previous_selection is not None:
+                if (
+                    previous_selection["selected_payload_sha256"] == hashes[2]
+                    and previous_selection["evidence_ref"] == evidence
+                    and inbox["status"] in {"PENDING", "RESOLVED"}
+                ):
+                    connection.rollback()
+                    return False
+                connection.rollback()
+                raise SettlementStoreError("LATE_FILL_CONFLICT_RESOLUTION_SELECTION_ALREADY_RECORDED")
+
+            if inbox["status"] != "CONFLICT":
+                connection.rollback()
+                raise SettlementStoreError("LATE_FILL_CONFLICT_EVENT_NOT_OPEN")
+
+            selected_json = (
+                detected["original_payload_json"]
+                if hashes[2] == hashes[0]
+                else detected["conflicting_payload_json"]
+            )
+            actual_selected_hash = hashlib.sha256(selected_json.encode("utf-8")).hexdigest()
+            if actual_selected_hash != hashes[2]:
+                connection.rollback()
+                raise SettlementStoreError("LATE_FILL_CONFLICT_SELECTED_PAYLOAD_HASH_MISMATCH")
+
+            connection.execute(
+                """INSERT INTO reconciliation_conflict_events
+                   (execution_id,scope_key,event_type,original_payload_json,
+                    conflicting_payload_json,original_payload_sha256,
+                    conflicting_payload_sha256,selected_payload_sha256,evidence_ref)
+                   VALUES(?,?,'RESOLUTION_SELECTED',?,?,?,?,?,?)""",
+                (
+                    execution_key, scope,
+                    detected["original_payload_json"],
+                    detected["conflicting_payload_json"],
+                    hashes[0], hashes[1], hashes[2], evidence,
+                ),
+            )
+            updated = connection.execute(
+                """UPDATE reconciliation_inbox
+                   SET status='PENDING',payload_json=?,evidence_ref=?
+                   WHERE execution_id=? AND scope_key=? AND status='CONFLICT'""",
+                (selected_json, evidence, execution_key, scope),
+            )
+            if updated.rowcount != 1:
+                raise SettlementStoreError("LATE_FILL_CONFLICT_SELECTION_INBOX_UPDATE_FAILED")
+
+            remaining_conflicts = connection.execute(
+                """SELECT COUNT(*) AS n FROM reconciliation_inbox
+                   WHERE scope_key=? AND status='CONFLICT'""",
+                (scope,),
+            ).fetchone()["n"]
+            if remaining_conflicts == 0:
+                state = connection.execute(
+                    "SELECT status,reason,payload_json FROM reconciliation_state WHERE scope_key=?",
+                    (scope,),
+                ).fetchone()
+                if state is not None and state["status"] == "CONFLICT":
+                    state_payload = json.loads(state["payload_json"])
+                    if (
+                        state["reason"] != "RECONCILIATION_INBOX_EXECUTION_ID_COLLISION"
+                        or state_payload.get("execution_id") != execution_key
+                    ):
+                        connection.rollback()
+                        raise SettlementStoreError(
+                            "LATE_FILL_CONFLICT_CANNOT_CLEAR_UNRELATED_SCOPE_CONFLICT"
+                        )
+                    connection.execute(
+                        """UPDATE reconciliation_state
+                           SET status='PENDING',
+                               reason='LATE_FILL_CONFLICT_SELECTED_FOR_VALIDATION_SETTLEMENT',
+                               evidence_ref=?,payload_json=?,updated_at=CURRENT_TIMESTAMP
+                           WHERE scope_key=? AND status='CONFLICT'""",
+                        (
+                            evidence,
+                            encode_record({
+                                "execution_id": execution_key,
+                                "selected_payload_sha256": hashes[2],
+                                "resolution": "VALIDATION_ONLY_PENDING_SETTLEMENT",
+                            }),
+                            scope,
+                        ),
+                    )
+            connection.commit()
+            return True
+
+    def validate_late_fill_conflict_resolution_selection(
+        self,
+        *,
+        execution_id: str,
+        scope_key: str,
+        report_payload: Mapping[str, Any],
+        evidence_ref: str,
+    ) -> bool:
+        """Require the Bridge report to match the explicitly selected preserved candidate."""
+        execution_key = str(execution_id).strip()
+        scope = str(scope_key).strip()
+        evidence = str(evidence_ref).strip()
+        with self._connection() as connection:
+            inbox = connection.execute(
+                """SELECT status,scope_key,payload_json,evidence_ref
+                   FROM reconciliation_inbox WHERE execution_id=?""",
+                (execution_key,),
+            ).fetchone()
+            selection = connection.execute(
+                """SELECT selected_payload_sha256,evidence_ref
+                   FROM reconciliation_conflict_events
+                   WHERE execution_id=? AND scope_key=? AND event_type='RESOLUTION_SELECTED'
+                   ORDER BY event_id DESC LIMIT 1""",
+                (execution_key, scope),
+            ).fetchone()
+        if selection is None:
+            if inbox is not None and inbox["status"] == "CONFLICT":
+                raise SettlementStoreError("LATE_FILL_CONFLICT_REQUIRES_EXPLICIT_SELECTION")
+            return False
+        if inbox is None or inbox["scope_key"] != scope or inbox["status"] != "PENDING":
+            raise SettlementStoreError("LATE_FILL_CONFLICT_SELECTION_NOT_PENDING")
+        if selection["evidence_ref"] != evidence or inbox["evidence_ref"] != evidence:
+            raise SettlementStoreError("LATE_FILL_CONFLICT_EVIDENCE_REF_MISMATCH")
+        selected_json = inbox["payload_json"]
+        selected_hash = hashlib.sha256(selected_json.encode("utf-8")).hexdigest()
+        if selected_hash != selection["selected_payload_sha256"]:
+            raise SettlementStoreError("LATE_FILL_CONFLICT_SELECTED_PAYLOAD_HASH_MISMATCH")
+        selected_payload = json.loads(selected_json)
+        if any(selected_payload.get(key) != value for key, value in dict(report_payload).items()):
+            raise SettlementStoreError("LATE_FILL_CONFLICT_BRIDGE_REPORT_PAYLOAD_MISMATCH")
+        return True
 
     def has_unresolved_reconciliation(self) -> bool:
         with self._connection() as connection:
