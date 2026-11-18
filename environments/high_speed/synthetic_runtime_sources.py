@@ -27,10 +27,32 @@ from contracts.trading_state import SensorLevel
 from core.option.option_master import InMemoryOptionContractMaster, KisOptionContractIdentity
 
 SYNTHETIC_SOURCE = "SYNTHETIC:high-speed-market-model-v2"
+VALIDATION_ONLY_PROVENANCE = "DERIVED_SCENARIO"
 
 
 class SyntheticRuntimeSources:
-    def __init__(self, *, track5_opening_gap_points: Decimal = Decimal("0"), clock: ClockProvider | None = None, calendar: Any | None = None) -> None:
+    """Manifest-aware provider for validation-only Virtual Runtime inputs."""
+
+    validation_only = True
+    provenance = VALIDATION_ONLY_PROVENANCE
+    production_runtime_eligible = False
+    identity_authority = "SYNTHETIC_ONLY"
+
+    def __init__(
+        self, *, track5_opening_gap_points: Decimal = Decimal("0"),
+        clock: ClockProvider | None = None, calendar: Any | None = None,
+        source_manifest_sha256: str | None = None, scenario_id: str | None = None,
+    ) -> None:
+        if source_manifest_sha256 is not None:
+            normalized_hash = str(source_manifest_sha256).lower()
+            if len(normalized_hash) != 64 or any(char not in "0123456789abcdef" for char in normalized_hash):
+                raise ValueError("SYNTHETIC_RUNTIME_SOURCE_MANIFEST_SHA256_INVALID")
+            source_manifest_sha256 = normalized_hash
+        if scenario_id is not None and not str(scenario_id).strip():
+            raise ValueError("SYNTHETIC_RUNTIME_SOURCE_SCENARIO_ID_INVALID")
+        self.source_manifest_sha256 = source_manifest_sha256
+        self.scenario_id = str(scenario_id).strip() if scenario_id is not None else None
+        self.provider_context_kind = "MANIFEST_BOUND" if source_manifest_sha256 else "FIXTURE_ONLY"
         self._clock = clock
         self._tick: Any | None = None
         self._iv: dict[tuple[str, str, Decimal], Decimal] = {}
@@ -271,9 +293,16 @@ class SyntheticRuntimeSources:
 
 
 class SyntheticTrack6VolatilitySource:
+    validation_only = True
+    provenance = VALIDATION_ONLY_PROVENANCE
+    production_runtime_eligible = False
+    identity_authority = "SYNTHETIC_ONLY"
+
     def __init__(self, runtime_source: SyntheticRuntimeSources, option_master: Any) -> None:
         self.runtime_source = runtime_source
         self.option_master = option_master
+        self.source_manifest_sha256 = runtime_source.source_manifest_sha256
+        self.scenario_id = runtime_source.scenario_id
 
     def snapshot(self, *, expiry: str, current_price: Decimal, observed_at: datetime):
         return self.runtime_source.get_track6_volatility(
@@ -285,8 +314,15 @@ class SyntheticTrack6VolatilitySource:
 
 
 class SyntheticEventRiskSource:
+    validation_only = True
+    provenance = VALIDATION_ONLY_PROVENANCE
+    production_runtime_eligible = False
+    identity_authority = "SYNTHETIC_ONLY"
+
     def __init__(self, source: SyntheticRuntimeSources) -> None:
         self.source = source
+        self.source_manifest_sha256 = source.source_manifest_sha256
+        self.scenario_id = source.scenario_id
 
     def snapshot(self, *, run_id: str, as_of) -> Track9EventRiskSnapshot:
         return self.source.event_risk(run_id=run_id, as_of=as_of)

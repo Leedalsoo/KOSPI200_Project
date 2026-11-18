@@ -64,8 +64,33 @@ from environments.high_speed.track6_validation_state_store import Track6Validati
 logger = logging.getLogger(__name__)
 
 
+def _is_validation_only_synthetic_provider(provider) -> bool:
+    return (
+        getattr(provider, "validation_only", False) is True
+        and getattr(provider, "provenance", None) == "DERIVED_SCENARIO"
+        and getattr(provider, "production_runtime_eligible", True) is False
+        and getattr(provider, "identity_authority", None) == "SYNTHETIC_ONLY"
+    )
+
+
+def _looks_synthetic_provider(provider) -> bool:
+    source_name = str(getattr(provider, "source_name", "") or "").upper()
+    provenance = str(getattr(provider, "provenance", "") or "").upper()
+    return source_name.startswith("SYNTHETIC:") or provenance in {"SYNTHETIC", "DERIVED_SCENARIO"}
+
+
 def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=None, strategy_keys=None, track9_iv_history_path=None, run_id=None, historical_observation_option_source=None, risk_guard_status_source: RiskGuardStatusSource | None = None, synthetic_runtime_sources=None, track4_greeks_provider=None, market_calendar_hub=None, validation_only_track6_signal_mode: bool = False, validation_only_track6_execution_gate=None, validation_only_s8_runtime_adapter=None, validation_only_s7_runtime_adapter: S7ValidationOnlyRuntimeAdapter | None = None, validation_only_s9_runtime_adapter=None, validation_only_track2_runtime_adapter=None, validation_only_track6_lifecycle_config: Track6LifecycleConfig | None = None, validation_only_u16_quote_policy: U16QuotePolicy | None = None, validation_only_u16_repair_price_resolver=None):
     """Attach all nine Standard strategies to the RuntimeController-owned VMS."""
+    if synthetic_runtime_sources is not None and not _is_validation_only_synthetic_provider(synthetic_runtime_sources):
+        raise ValueError("SYNTHETIC_RUNTIME_SOURCE_MUST_BE_VALIDATION_ONLY")
+    for provider_name, provider in (
+        ("track4_greeks_provider", track4_greeks_provider),
+        ("risk_guard_status_source", risk_guard_status_source),
+        ("historical_observation_option_source", historical_observation_option_source),
+    ):
+        if provider is not None and _looks_synthetic_provider(provider):
+            if not _is_validation_only_synthetic_provider(provider):
+                raise ValueError(f"{provider_name.upper()}_SYNTHETIC_PROVIDER_MUST_BE_VALIDATION_ONLY")
     selected_keys = tuple(strategy_keys) if strategy_keys else STANDARD_STRATEGY_KEYS
     selected_ids = {key[0] if isinstance(key, tuple) else str(key) for key in selected_keys}
     run_id = run_id or getattr(getattr(bootstrap, "run_context", None), "run_id", "")

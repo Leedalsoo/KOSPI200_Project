@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -113,6 +114,29 @@ def _publish_contract_scoped_replay_quote(tick, *, option_master, market, order_
     )
     # Never route this validation-only identity through a Standard instrument ID.
     order_book.update_bid_ask(bid, ask, instrument_id=synthetic_id)
+
+
+def _resolve_validation_only_provider_context(dataset: str | Path, manifest_candidates) -> tuple[str | None, str | None]:
+    """Bind synthetic Runtime providers to the first available input manifest."""
+    for candidate in manifest_candidates:
+        if candidate is None:
+            continue
+        path = Path(candidate).resolve()
+        if not path.is_file():
+            continue
+        payload = path.read_bytes()
+        digest = hashlib.sha256(payload).hexdigest()
+        try:
+            manifest = json.loads(payload.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            manifest = {}
+        scenario_id = manifest.get("scenario_id")
+        if scenario_id is None:
+            scenario_ids = manifest.get("scenario_ids")
+            if isinstance(scenario_ids, list) and len(scenario_ids) == 1:
+                scenario_id = scenario_ids[0]
+        return digest, str(scenario_id) if scenario_id is not None else None
+    return None, None
 
 
 class HighSpeedVirtualRuntimeReplayRunner:
@@ -260,10 +284,21 @@ class HighSpeedVirtualRuntimeReplayRunner:
                 for quote_tick in self.track2_validation_runtime_adapter.quote_scenario_ticks():
                     quote_batches[str(quote_tick.timestamp)].append(quote_tick)
             synthetic_quote_batches = {key: tuple(value) for key, value in quote_batches.items()}
+        provider_manifest_sha256, provider_scenario_id = _resolve_validation_only_provider_context(
+            self.dataset,
+            (
+                self.validation_only_synthetic_manifest,
+                self.validation_only_track2_manifest,
+                getattr(synthetic_adapter, "manifest_path", None),
+                self.dataset / "manifest.json",
+            ),
+        )
         synthetic_sources = SyntheticRuntimeSources(
             track5_opening_gap_points=self.track5_opening_gap_points,
             clock=self.clock,
             calendar=validation_calendar,
+            source_manifest_sha256=provider_manifest_sha256,
+            scenario_id=provider_scenario_id,
         )
         if self.validation_only_s7_risk_profile is not None:
             selected_ids = {key[0] if isinstance(key, tuple) else str(key) for key in (self.strategy_keys or ())}

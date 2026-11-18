@@ -64,6 +64,15 @@ class LiveRuntimeBootstrap:
         await self.execution.close_execution()
 
 def create_live_runtime_bootstrap(*, runtime_transport=None, tick_entry=None, recovery_service=None, **execution_dependencies):
+    forbidden_validation_inputs = sorted(
+        key for key in execution_dependencies
+        if key == "synthetic_runtime_sources" or key.startswith("validation_only_")
+    )
+    if forbidden_validation_inputs:
+        raise ValueError(
+            "LIVE_RUNTIME_VALIDATION_ONLY_PROVIDER_FORBIDDEN:"
+            + ",".join(forbidden_validation_inputs)
+        )
     execution = create_live_execution_runtime_composition(**execution_dependencies)
     if recovery_service is None:
         recovery_service = getattr(execution, "recovery_service", None)
