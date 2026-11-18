@@ -1,0 +1,136 @@
+{
+  "account_execution_claim": false,
+  "limits": [
+    "No natural StrategyHub signal-generation or S2 policy lifecycle certification.",
+    "Synthetic contract identities and multiplier are validation-only.",
+    "VSSF is a virtual broker proxy, not an actual KIS broker/account snapshot.",
+    "Zero-fee VSSF ledger rows verify lineage only; actual fees, taxes, margin, slippage and profitability are not verified.",
+    "No Live/REAL_VTS/account/order API readiness claim."
+  ],
+  "live_readiness_claim": false,
+  "production_authority_claim": false,
+  "report_sha256": "ca8803cb82941029201695d8a46da05eb692b1113b5da765b0999c67ccb05d9b",
+  "report_version": "Q25-A8-FRESH62-NO-LOOKAHEAD-VIRTUAL-RUNTIME-E2E-v1",
+  "results": {
+    "close_events": 4,
+    "entry_filled_legs": 4,
+    "entry_rejected_legs": 0,
+    "entry_routed_legs": 4,
+    "fee_ledger_records": 8,
+    "open_position_lots_final": 0,
+    "pending_bridge_legs_final": 0,
+    "position_lot_history": 4,
+    "replay_ticks": 4,
+    "synthetic_option_master_identities": 4,
+    "terminal_close_filled_legs": 4,
+    "terminal_close_rejected_legs": 0,
+    "terminal_close_routed_legs": 4,
+    "unique_close_execution_ids": 4,
+    "vssf_account_positions_final": {}
+  },
+  "run_date": "2026-11-19",
+  "runtime_path": {
+    "execution": "VSSF virtual execution engine",
+    "input_adapter": "SyntheticReplayAdapter",
+    "market": "Virtual Market contract-scoped replay quote publication",
+    "option_master": "SyntheticOptionContractMaster; synthetic identities only",
+    "risk_oms": "VirtualMultiLegExecutionBridge shared validation path",
+    "signal_source": "test-only deterministic MultiLegExecutionPlan; not natural StrategyHub signal",
+    "strategy_id": "track8_macro_regime_monthly_strangle"
+  },
+  "scope": {
+    "new_collection_or_api_calls": false,
+    "original_raw_canonical_accepted_runtime_modified": false,
+    "project200_or_master_modified": false,
+    "source_decisions": [
+      "No.1534",
+      "No.1538",
+      "No.1554",
+      "No.1566"
+    ],
+    "validation_only": true
+  },
+  "selected_replay_input": {
+    "contract_multiplier": 250000,
+    "contract_multiplier_authority": "KRX_REGULAR_KOSPI200_OPTION_CONTRACT_SPEC; validation fixture only, not verified KIS account fact",
+    "contracts": [
+      {
+        "ask": 60.25,
+        "bid": 58.65,
+        "expiry": "20261112",
+        "option_type": "PUT",
+        "source_code": "C01611950",
+        "source_collected_at": "2026-10-13T01:55:46.293518+00:00",
+        "source_line_number": 500,
+        "source_observation_id": "1af07205d2a8f16499ee8bf0",
+        "source_observed_at": "2026-10-13T10:55:46+09:00",
+        "strike": 950.0,
+        "underlying_price": 935.68
+      },
+      {
+        "ask": 59.55,
+        "bid": 56.3,
+        "expiry": "20261112",
+        "option_type": "CALL",
+        "source_code": "B01611930",
+        "source_collected_at": "2026-10-13T01:55:46.294892+00:00",
+        "source_line_number": 501,
+        "source_observation_id": "ce0a85362ccf1276b05f2d69",
+        "source_observed_at": "2026-10-13T10:55:46+09:00",
+        "strike": 930.0,
+        "underlying_price": 935.68
+      },
+      {
+        "ask": 61.55,
+        "bid": 56.9,
+        "expiry": "20261112",
+        "option_type": "CALL",
+        "source_code": "B01611927",
+        "source_collected_at": "2026-10-13T01:55:46.296373+00:00",
+        "source_line_number": 502,
+        "source_observation_id": "ba3d06e19634f4eae591e45a",
+        "source_observed_at": "2026-10-13T10:55:46+09:00",
+        "strike": 927.5,
+        "underlying_price": 935.68
+      },
+      {
+        "ask": 55.15,
+        "bid": 50.8,
+        "expiry": "20261112",
+        "option_type": "PUT",
+        "source_code": "C01611937",
+        "source_collected_at": "2026-10-13T01:55:46.297724+00:00",
+        "source_line_number": 503,
+        "source_observation_id": "b78477be10be8c3b69d904b1",
+        "source_observed_at": "2026-10-13T10:55:46+09:00",
+        "strike": 937.5,
+        "underlying_price": 935.68
+      }
+    ],
+    "rows": 4,
+    "same_timestamp": true,
+    "synthetic_contract_namespace": "SYNTHETIC_CONTRACT:FRESH62:",
+    "timestamp": "2026-10-13T10:55:46+09:00",
+    "trading_date": "2026-10-13",
+    "underlying_price": 935.68
+  },
+  "source": {
+    "future_market_price_donors_after_fresh61": 0,
+    "sidecar": "Q25_A8_R10_FRESH61_NO_LOOKAHEAD_20261013_20261118.jsonl",
+    "sidecar_rows": 1386,
+    "sidecar_sha256": "23c78507448742701bfbb3a006e476bb5e2155595cebfdc2713ba811ed9d6737",
+    "source_manifest": "Q25_A8_R10_FRESH61_NO_LOOKAHEAD_MANIFEST_20261118.json",
+    "source_manifest_sha256": "ef4808d3fd6d730d7c070e30196c8558ccecd5a2654adb93ccb2547e6250b53c",
+    "source_reconciliation_report": "Q25_A8_R10_FRESH61_NO_LOOKAHEAD_RECONCILIATION_20261118.json",
+    "source_reconciliation_report_sha256": "da17f73b85eb7be8ecfcd8fbb6c1fc84ecdd759eb6f048e48675fd74f6fbd3a1"
+  },
+  "source_mutation": false,
+  "tests": {
+    "combined_regression_passed": 150,
+    "compileall": "PASS",
+    "failed": 0,
+    "fresh62_test": 1,
+    "git_diff_check": "PASS",
+    "skipped": 0
+  }
+}
