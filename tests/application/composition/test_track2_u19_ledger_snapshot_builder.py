@@ -1370,3 +1370,261 @@ def test_fresh35_settlement_commit_checkpoint_crash_window_replay_and_checkpoint
     assert len(restarted_store.load_execution_journal_records()) == 2
     assert restarted_position.qty == 2
     assert restarted_store.pending_reconciliation_events(scope_key=client_id) == ()
+
+
+def test_fresh36_multi_late_fill_partial_settlement_restart_and_conflict_keep_u19_gated(
+    tmp_path
+):
+    store_path = tmp_path / "fresh36-settlement.sqlite3"
+    checkpoint_path = tmp_path / "fresh36-u19.sqlite3"
+    instrument_id = "SYNTHETIC_CONTRACT:FRESH36:OPTION:PUT"
+    client_id = "FRESH36-CLIENT"
+    broker_id = "FRESH36-BROKER"
+    group_id = "SYNTHETIC:GROUP:FRESH36-MULTI-LATE-FILL"
+    position = LivePositionAggregate(instrument_id)
+    store = SQLiteSettlementStore(store_path)
+    oms = _order_with_fill(
+        store,
+        client_id=client_id,
+        broker_id=broker_id,
+        instrument_id=instrument_id,
+        side="BUY",
+        leg_id="FRESH36-PUT",
+        group_id=group_id,
+        fills=(("SYNTHETIC:FRESH36:EXEC:ENTRY", 1, 0, "9.00"),),
+        order_quantity=4,
+        position_aggregate=position,
+    )
+    oms.apply_cancel(ExecutionReport(
+        client_order_id=client_id,
+        broker_order_id=broker_id,
+        execution_id=None,
+        status="CANCELLED",
+        filled_quantity=0,
+        remaining_quantity=3,
+        execution_price=None,
+        execution_timestamp=datetime(2026, 11, 18, 9, 35, tzinfo=timezone.utc),
+        group_id=group_id,
+        leg_id="FRESH36-PUT",
+    ))
+    bridge = LiveExecutionPositionBridge(
+        order_state_machine=oms,
+        position_fill_adapter=LivePositionFillAdapter(position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(
+            persistence_store=store
+        ),
+        position_aggregate=position,
+        settlement_store=store,
+    )
+
+    late_one = ExecutionReport(
+        client_order_id=client_id,
+        broker_order_id=broker_id,
+        execution_id="SYNTHETIC:FRESH36:EXEC:LATE-1",
+        status="PARTIALLY_FILLED",
+        filled_quantity=1,
+        remaining_quantity=2,
+        execution_price=Decimal("9.10"),
+        execution_timestamp=datetime(2026, 11, 18, 9, 40, tzinfo=timezone.utc),
+        fee=Decimal("5"),
+        group_id=group_id,
+        leg_id="FRESH36-PUT",
+    )
+    late_two = ExecutionReport(
+        client_order_id=client_id,
+        broker_order_id=broker_id,
+        execution_id="SYNTHETIC:FRESH36:EXEC:LATE-2",
+        status="PARTIALLY_FILLED",
+        filled_quantity=1,
+        remaining_quantity=1,
+        execution_price=Decimal("9.15"),
+        execution_timestamp=datetime(2026, 11, 18, 9, 41, tzinfo=timezone.utc),
+        fee=Decimal("5"),
+        group_id=group_id,
+        leg_id="FRESH36-PUT",
+    )
+    late_three = ExecutionReport(
+        client_order_id=client_id,
+        broker_order_id=broker_id,
+        execution_id="SYNTHETIC:FRESH36:EXEC:LATE-3",
+        status="FILLED",
+        filled_quantity=1,
+        remaining_quantity=0,
+        execution_price=Decimal("9.20"),
+        execution_timestamp=datetime(2026, 11, 18, 9, 42, tzinfo=timezone.utc),
+        fee=Decimal("5"),
+        group_id=group_id,
+        leg_id="FRESH36-PUT",
+    )
+    for report in (late_one, late_two, late_three):
+        with pytest.raises(OrderStateTransitionError, match="RECONCILIATION_PENDING"):
+            bridge.settle(report)
+
+    # A reused execution ID with a different payload is preserved as conflict.
+    conflicting_three = ExecutionReport(
+        client_order_id=client_id,
+        broker_order_id=broker_id,
+        execution_id=late_three.execution_id,
+        status="FILLED",
+        filled_quantity=1,
+        remaining_quantity=0,
+        execution_price=Decimal("9.30"),
+        execution_timestamp=late_three.execution_timestamp,
+        fee=Decimal("5"),
+        group_id=group_id,
+        leg_id="FRESH36-PUT",
+    )
+    with pytest.raises(
+        SettlementStoreError,
+        match="RECONCILIATION_INBOX_EXECUTION_ID_COLLISION",
+    ):
+        bridge.settle(conflicting_three)
+
+    inbox = store.open_reconciliation_events(scope_key=client_id)
+    assert [(item["execution_id"], item["status"]) for item in inbox] == [
+        (late_one.execution_id, "PENDING"),
+        (late_two.execution_id, "PENDING"),
+        (late_three.execution_id, "CONFLICT"),
+    ]
+    assert len(store.load_execution_journal_records()) == 1
+    assert position.qty == 1
+
+    # Resolve only the first event. Other pending/conflicting events must remain.
+    bridge.settle_authoritatively_reconciled_fill(
+        late_one,
+        authoritative_evidence_ref=(
+            "VALIDATION_ONLY:SYNTHETIC_RECONCILIATION_FIXTURE:FRESH36-LATE-1"
+        ),
+    )
+    assert position.qty == 2
+    assert store.has_execution(late_one.execution_id)
+    assert not store.has_execution(late_two.execution_id)
+    assert not store.has_execution(late_three.execution_id)
+    assert [
+        (item["execution_id"], item["status"])
+        for item in store.open_reconciliation_events(scope_key=client_id)
+    ] == [
+        (late_two.execution_id, "PENDING"),
+        (late_three.execution_id, "CONFLICT"),
+    ]
+    assert store.unresolved_reconciliations()[0]["status"] == "CONFLICT"
+
+    # Restart between partial settlements; persisted OMS and Position must agree.
+    restarted_store = SQLiteSettlementStore(store_path)
+    restarted_oms = OrderStateMachine(persistence_store=restarted_store)
+    restarted_oms.restore_from_store()
+    restarted_position = LivePositionAggregate(instrument_id)
+    restarted_position.restore_persistence_record(
+        restarted_store.load_position_state(instrument_id)
+    )
+    restarted_bridge = LiveExecutionPositionBridge(
+        order_state_machine=restarted_oms,
+        position_fill_adapter=LivePositionFillAdapter(restarted_position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(
+            persistence_store=restarted_store
+        ),
+        position_aggregate=restarted_position,
+        settlement_store=restarted_store,
+    )
+    assert restarted_oms.get(client_id).status == "CANCELLED"
+    assert restarted_oms.get(client_id).filled_quantity == 2
+    assert restarted_position.qty == 2
+    assert len(restarted_store.load_execution_journal_records()) == 2
+
+    builder = ValidationOnlyU19LedgerSnapshotBuilder(restarted_store)
+    first_ledger = builder.build(
+        group_id=group_id,
+        snapshot_id="FRESH36-LEDGER-AFTER-FIRST-SETTLEMENT",
+        as_of=AS_OF,
+    )
+    assert first_ledger.positions == (U19Position(instrument_id, Decimal("2")),)
+    assert first_ledger.pending_order_ids == (client_id,)
+    coordinator = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(checkpoint_path),
+        settlement_store=restarted_store,
+    )
+    first_decision = coordinator.recover_from_settlement_store(
+        group_id=group_id,
+        broker_snapshot=U19BrokerPositionSnapshot(
+            group_id=group_id,
+            snapshot_id="FRESH36-BROKER-AFTER-FIRST-SETTLEMENT",
+            as_of=AS_OF,
+            source="VALIDATION_ONLY:BROKER_EXCHANGE",
+            positions=first_ledger.positions,
+            complete=True,
+            capability_verified=True,
+            payload_sha256="a" * 64,
+        ),
+        snapshot_id="FRESH36-LEDGER-AFTER-FIRST-SETTLEMENT",
+        as_of=AS_OF,
+        ledger_snapshot_builder=builder,
+    )
+    assert first_decision.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+    assert first_decision.pending_order_ids == (client_id,)
+    assert first_decision.new_entry_enabled is False
+    assert first_decision.order_submission_enabled is False
+
+    # Settle the second pending event while the third remains conflicted.
+    restarted_bridge.settle_authoritatively_reconciled_fill(
+        late_two,
+        authoritative_evidence_ref=(
+            "VALIDATION_ONLY:SYNTHETIC_RECONCILIATION_FIXTURE:FRESH36-LATE-2"
+        ),
+    )
+    assert restarted_position.qty == 3
+    assert restarted_oms.get(client_id).filled_quantity == 3
+    assert restarted_store.has_execution(late_two.execution_id)
+    assert not restarted_store.has_execution(late_three.execution_id)
+    assert [
+        (item["execution_id"], item["status"])
+        for item in restarted_store.open_reconciliation_events(scope_key=client_id)
+    ] == [(late_three.execution_id, "CONFLICT")]
+    assert restarted_store.pending_reconciliation_events(scope_key=client_id) == ()
+    assert restarted_store.unresolved_reconciliations()[0]["status"] == "CONFLICT"
+
+    # Identical replay of both settled events is idempotent after restart.
+    journal_before_replay = restarted_store.load_execution_journal_records()
+    replay_one = restarted_bridge.settle(late_one)
+    replay_two = restarted_bridge.settle(late_two)
+    assert replay_one.filled_quantity == 3
+    assert replay_two.filled_quantity == 3
+    assert restarted_position.qty == 3
+    assert restarted_store.load_execution_journal_records() == journal_before_replay
+    assert len(journal_before_replay) == 3
+
+    final_ledger = builder.build(
+        group_id=group_id,
+        snapshot_id="FRESH36-LEDGER-SECOND-SETTLEMENT-CONFLICT-REMAINS",
+        as_of=AS_OF,
+    )
+    assert final_ledger.positions == (U19Position(instrument_id, Decimal("3")),)
+    assert final_ledger.pending_order_ids == (client_id,)
+    final_decision = coordinator.recover_from_settlement_store(
+        group_id=group_id,
+        broker_snapshot=U19BrokerPositionSnapshot(
+            group_id=group_id,
+            snapshot_id="FRESH36-BROKER-SECOND-SETTLEMENT",
+            as_of=AS_OF,
+            source="VALIDATION_ONLY:BROKER_EXCHANGE",
+            positions=final_ledger.positions,
+            complete=True,
+            capability_verified=True,
+            payload_sha256="b" * 64,
+        ),
+        snapshot_id="FRESH36-LEDGER-SECOND-SETTLEMENT-CONFLICT-REMAINS",
+        as_of=AS_OF,
+        ledger_snapshot_builder=builder,
+    )
+    assert final_decision.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+    assert final_decision.restore_allowed is False
+    assert final_decision.pending_order_ids == (client_id,)
+    assert final_decision.new_entry_enabled is False
+    assert final_decision.order_submission_enabled is False
+
+    latest_checkpoint = SqliteTrack2U19RecoveryStore(checkpoint_path).load_latest(group_id)
+    assert latest_checkpoint["checkpoint_id"] == final_decision.checkpoint_id
+    assert latest_checkpoint["status"] == U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED.value
+    assert latest_checkpoint["new_entry_enabled"] is False
+    assert latest_checkpoint["order_submission_enabled"] is False
+    assert len(restarted_store.load_execution_journal_records()) == 3
+    assert restarted_store.open_reconciliation_events(scope_key=client_id)[0]["status"] == "CONFLICT"
