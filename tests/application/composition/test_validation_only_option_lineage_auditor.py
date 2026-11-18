@@ -222,3 +222,70 @@ def test_execution_payload_hash_match_with_receive_time_mismatch_is_not_linked()
     report = _audit(orderbook_records=[raw_book], execution_records=[execution])
     assert report["executions"][0]["orderbook_lineage_linked"] is False
     assert "EXECUTION_ORDERBOOK_EVIDENCE_TIME_MISMATCH:EXEC-000001" in report["issues"]
+
+
+def test_18_contract_observed_orderbook_to_synthetic_execution_chain_stays_validation_only():
+    contracts = [
+        ("B01610A31", "CALL", "1085.0"), ("B01610A32", "CALL", "1090.0"),
+        ("B01610A34", "CALL", "1100.0"), ("B01610A39", "CALL", "1087.5"),
+        ("B01610A42", "CALL", "1102.5"), ("B01610A43", "CALL", "1105.0"),
+        ("C01610A29", "PUT", "1075.0"), ("C01610A30", "PUT", "1080.0"),
+        ("C01610A31", "PUT", "1085.0"), ("C01610A32", "PUT", "1090.0"),
+        ("C01610A33", "PUT", "1095.0"), ("C01610A34", "PUT", "1100.0"),
+        ("C01610A37", "PUT", "1077.5"), ("C01610A38", "PUT", "1082.5"),
+        ("C01610A39", "PUT", "1087.5"), ("C01610A40", "PUT", "1092.5"),
+        ("C01610A41", "PUT", "1097.5"), ("C01610A43", "PUT", "1105.0"),
+    ]
+    received_at = "2026-10-01T04:36:46.777810+00:00"
+    master_hash = "f" * 64
+    dataset_hash = "1" * 64
+    masters, quotes, books, executions = [], [], [], []
+    import hashlib
+    for symbol, right, strike in contracts:
+        anchor = hashlib.sha256(f"H0IOASP0|{symbol}".encode()).hexdigest()
+        identity = {"symbol": symbol, "expiry": "20261008", "option_type": right, "strike": strike, "master_sha256": master_hash}
+        masters.append({**identity, "source": "KRX_OPEN_API_VALIDATION_IDENTITY"})
+        quote_id = f"DERIVED_QUOTE:{symbol}"
+        quotes.append({
+            **identity, "record_id": quote_id, "source_timestamp": None,
+            "source_timestamp_raw": "133646", "generated_at": received_at,
+            "received_at": received_at, "provenance": "DERIVED:OBSERVED_KIS_H0IOASP0_TOP_OF_BOOK",
+            "synthetic": False, "source_anchor_sha256": anchor, "dataset_sha256": dataset_hash,
+        })
+        books.append({
+            **identity, "record_id": f"OBSERVED_ORDERBOOK:{symbol}", "quote_record_id": quote_id,
+            "quote_dataset_sha256": dataset_hash, "source_timestamp": None,
+            "source_timestamp_raw": "133646", "generated_at": received_at,
+            "received_at": received_at, "provenance": "OBSERVED_KIS_VTS:H0IOASP0",
+            "synthetic": False, "source_anchor_sha256": anchor, "dataset_sha256": dataset_hash,
+            "evidence_sha256": anchor,
+            "levels": {"bids": [{"price": "10.00", "quantity": "1"}], "asks": [{"price": "10.05", "quantity": "1"}]},
+        })
+        executions.append({
+            "execution_id": f"VALIDATION_ONLY:SYNTHETIC:{symbol}",
+            "client_order_id": f"VALIDATION_ONLY:ORDER:{symbol}",
+            "instrument_id": symbol, "broker_symbol": symbol,
+            "instrument_identity": {
+                "expiry": "20261008", "option_type": right, "strike": strike,
+                "contract_multiplier": "250000",
+                "multiplier_source": "KRX_STANDARD_MULTIPLIER_VALIDATION_ONLY",
+            },
+            "master_sha256": master_hash, "execution_timestamp": received_at,
+            "adapter": "SYNTHETIC:DERIVED_SCENARIO",
+            "execution_kind": "VALIDATION_ONLY_SYNTHETIC_FILL",
+            "orderbook_evidence_sha256": anchor, "validation_only": True,
+        })
+    report = ValidationOnlyOptionLineageAuditor(validation_only=True).audit(
+        master_records=masters, quote_records=quotes, orderbook_records=books,
+        execution_records=executions,
+        source_manifest_hashes={"krx": master_hash, "quote": dataset_hash, "orderbook": dataset_hash},
+    )
+    assert report["counts"]["quote_identity_matches"] == 18
+    assert report["counts"]["orderbook_identity_matches"] == 18
+    assert report["counts"]["orderbook_quote_lineage_matches"] == 18
+    assert report["counts"]["execution_identity_matches"] == 18
+    assert report["counts"]["execution_orderbook_evidence_matches"] == 18
+    assert report["chain_judgement"]["real_execution_evidence"] is False
+    assert report["chain_judgement"]["authoritative_multiplier_proven"] is False
+    assert report["gate_release_permitted"] is False
+    assert report["issues"] == []
