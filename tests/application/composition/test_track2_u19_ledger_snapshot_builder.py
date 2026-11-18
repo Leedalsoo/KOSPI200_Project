@@ -2682,3 +2682,67 @@ def test_fresh40_multiple_global_collisions_and_order_local_conflict_keep_all_u1
             as_of=AS_OF,
         )
         assert ledger.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
+
+    # FRESH-41: reopen both SQLite stores after partial adjudication attempts.
+    # Cross-order journal collisions are intentionally not resolvable by the
+    # same-order validation-only confirmer; the global gate must survive restart.
+    journal_count_before_restart = len(store.load_execution_journal_records())
+    for conflict in global_history:
+        with pytest.raises(
+            SettlementStoreError,
+            match="EXECUTION_JOURNAL_CONFLICT_ORDER_IDENTITY_MISMATCH_REQUIRES_MANUAL_REVIEW",
+        ):
+            store.prepare_validation_only_execution_journal_conflict_resolution(
+                execution_id=conflict["execution_id"],
+                scope_key="__runtime_bootstrap__",
+                original_payload_sha256=conflict["original_payload_sha256"],
+                incoming_payload_sha256=conflict["incoming_payload_sha256"],
+                selected_payload_sha256=conflict["original_payload_sha256"],
+                evidence_ref=f"VALIDATION_ONLY:FRESH41:{conflict['execution_id']}:PARTIAL",
+            )
+
+    restarted_store = SQLiteSettlementStore(store_path)
+    restarted_history = restarted_store.execution_journal_conflict_history(
+        scope_key="__runtime_bootstrap__"
+    )
+    assert len(restarted_history) == 2
+    assert {item["event_type"] for item in restarted_history} == {"CONFLICT_DETECTED"}
+    assert len(restarted_store.load_execution_journal_records()) == journal_count_before_restart
+    assert len(restarted_store.unresolved_reconciliations()) == 1
+    assert restarted_store.unresolved_reconciliations()[0]["scope_key"] == "__runtime_bootstrap__"
+    assert restarted_store.unresolved_reconciliations()[0]["status"] == "CONFLICT"
+    assert restarted_store.pending_reconciliation_events(scope_key="FRESH40-E-CLIENT") == ()
+
+    restarted_coordinator = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(checkpoint_path),
+        settlement_store=restarted_store,
+    )
+    for group_id, position, suffix in groups:
+        builder = ValidationOnlyU19LedgerSnapshotBuilder(restarted_store)
+        ledger = builder.build(
+            group_id=group_id,
+            snapshot_id=f"{suffix}-FRESH41-RESTART",
+            as_of=AS_OF,
+        )
+        assert ledger.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
+        decision = restarted_coordinator.recover_from_settlement_store(
+            group_id=group_id,
+            broker_snapshot=U19BrokerPositionSnapshot(
+                group_id=group_id,
+                snapshot_id=f"{suffix}-FRESH41-BROKER-PROXY",
+                as_of=AS_OF,
+                source="VALIDATION_ONLY:BROKER_EXCHANGE",
+                positions=ledger.positions,
+                complete=True,
+                capability_verified=True,
+                payload_sha256=("c" if suffix in {"FRESH40-A", "FRESH40-B"} else "d") * 64,
+            ),
+            snapshot_id=f"{suffix}-FRESH41-RESTART",
+            as_of=AS_OF,
+            ledger_snapshot_builder=builder,
+        )
+        assert decision.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+        assert decision.restore_allowed is False
+        assert decision.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
+        assert decision.new_entry_enabled is False
+        assert decision.order_submission_enabled is False
