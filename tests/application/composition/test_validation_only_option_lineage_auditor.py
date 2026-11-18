@@ -181,3 +181,44 @@ def test_orderbook_execution_reference_without_order_or_execution_link_is_not_di
     execution["orderbook_record_id"] = "SYNTHETIC:B01611887:fresh_two_sided"
     report = _audit(execution_records=[execution])
     assert report["executions"][0]["orderbook_lineage_linked"] is False
+
+
+def test_execution_payload_hash_and_exact_receive_time_link_raw_websocket_orderbook():
+    execution = _execution()
+    execution["orderbook_evidence_sha256"] = "9" * 64
+    execution["execution_timestamp"] = "2026-10-21T00:01:16.106074+00:00"
+    raw_book = {
+        "record_id": "OBSERVED_WS_ORDERBOOK:B01611887:20261021:3628",
+        "symbol": "B01611887", "expiry": "20261112", "option_type": "CALL", "strike": "887.50",
+        "master_sha256": MASTER_HASH_B,
+        "evidence_sha256": "9" * 64,
+        "source_timestamp": None, "source_timestamp_raw": "090115",
+        "source_timestamp_candidate": "2026-10-21T09:01:15+09:00",
+        "source_timestamp_semantics": "RAW_HHMMSS_CANDIDATE_NOT_PROMOTED_TO_EVENT_TIME",
+        "received_at": "2026-10-21T00:01:16.106074+00:00",
+        "provenance": "OBSERVED_KIS_VTS:H0IOASP0", "synthetic": False,
+        "levels": {"bids": [{"price": "35.00", "quantity": "1"}], "asks": [{"price": "37.65", "quantity": "1"}]},
+    }
+    report = _audit(orderbook_records=[raw_book], execution_records=[execution])
+    result = report["executions"][0]
+    assert result["orderbook_lineage_linked"] is True
+    assert result["orderbook_link_method"] == "PAYLOAD_SHA256_IDENTITY_AND_EXACT_RECEIVE_TIME"
+    assert result["orderbook_linked_record_id"] == raw_book["record_id"]
+    assert result["execution_to_orderbook_receive_lag_seconds"] == 0.0
+    assert report["chain_judgement"]["real_execution_evidence"] is False
+    assert report["gate_release_permitted"] is False
+
+
+def test_execution_payload_hash_match_with_receive_time_mismatch_is_not_linked():
+    execution = _execution()
+    execution["orderbook_evidence_sha256"] = "9" * 64
+    raw_book = {
+        "record_id": "OBSERVED_WS_ORDERBOOK:B01611887:20261021:3628",
+        "symbol": "B01611887", "expiry": "20261112", "option_type": "CALL", "strike": "887.50",
+        "master_sha256": MASTER_HASH_B, "evidence_sha256": "9" * 64,
+        "received_at": "2026-10-21T00:01:17.000000+00:00",
+        "provenance": "OBSERVED_KIS_VTS:H0IOASP0", "synthetic": False,
+    }
+    report = _audit(orderbook_records=[raw_book], execution_records=[execution])
+    assert report["executions"][0]["orderbook_lineage_linked"] is False
+    assert "EXECUTION_ORDERBOOK_EVIDENCE_TIME_MISMATCH:EXEC-000001" in report["issues"]

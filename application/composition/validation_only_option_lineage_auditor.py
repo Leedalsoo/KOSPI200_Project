@@ -162,6 +162,9 @@ class ValidationOnlyOptionLineageAuditor:
             orderbook_by_id[record_id] = row
             orderbook_rows.append({
                 "record_id": record_id,
+                "evidence_sha256": row.get("evidence_sha256") or row.get("payload_sha256"),
+                "source_timestamp_candidate": row.get("source_timestamp_candidate"),
+                "source_timestamp_semantics": row.get("source_timestamp_semantics"),
                 "symbol": symbol,
                 "master_link": master_status,
                 "identity_match": ok,
@@ -222,6 +225,27 @@ class ValidationOnlyOptionLineageAuditor:
                     or str(row.get("client_order_id") or "") in [str(x) for x in (linked_book.get("client_order_ids") or [])]
                 )
             )
+            link_method = "EXPLICIT_ORDERBOOK_REFERENCE" if direct_book_link else None
+            evidence_hash = str(row.get("orderbook_evidence_sha256") or "")
+            if not direct_book_link and evidence_hash:
+                evidence_candidates = [
+                    candidate for candidate in orderbook_records
+                    if evidence_hash == str(candidate.get("evidence_sha256") or candidate.get("payload_sha256") or "")
+                    and str(candidate.get("symbol") or candidate.get("instrument_id") or "") == instrument_id
+                    and self._identity(candidate) == self._identity(normalized)
+                ]
+                exact_receive_matches = [
+                    candidate for candidate in evidence_candidates
+                    if self._time(candidate.get("received_at"), "ORDERBOOK_EVIDENCE_RECEIVED_AT") == execution_time
+                ]
+                if len(exact_receive_matches) == 1:
+                    linked_book = exact_receive_matches[0]
+                    direct_book_link = True
+                    link_method = "PAYLOAD_SHA256_IDENTITY_AND_EXACT_RECEIVE_TIME"
+                elif evidence_candidates:
+                    issues.append(f"EXECUTION_ORDERBOOK_EVIDENCE_TIME_MISMATCH:{row.get('execution_id')}")
+                elif evidence_hash:
+                    issues.append(f"EXECUTION_ORDERBOOK_EVIDENCE_NOT_FOUND:{row.get('execution_id')}")
             execution_rows.append({
                 "execution_id": row.get("execution_id"),
                 "client_order_id": row.get("client_order_id"),
@@ -239,6 +263,13 @@ class ValidationOnlyOptionLineageAuditor:
                 "orderbook_evidence_sha256": row.get("orderbook_evidence_sha256"),
                 "multiplier_source": multiplier_source,
                 "orderbook_lineage_linked": direct_book_link,
+                "orderbook_link_method": link_method,
+                "orderbook_linked_record_id": linked_book.get("record_id") if direct_book_link and linked_book else None,
+                "execution_to_orderbook_receive_lag_seconds": (
+                    (execution_time - self._time(linked_book.get("received_at"), "ORDERBOOK_LINKED_RECEIVED_AT")).total_seconds()
+                    if direct_book_link and linked_book and execution_time is not None and self._time(linked_book.get("received_at"), "ORDERBOOK_LINKED_RECEIVED_AT") is not None
+                    else None
+                ),
                 "validation_only": bool(row.get("validation_only")),
             })
             counts["execution_records"] += 1
@@ -246,6 +277,8 @@ class ValidationOnlyOptionLineageAuditor:
                 counts["execution_identity_matches"] += 1
             if multiplier_status == "VALIDATION_ONLY_ASSUMPTION":
                 counts["execution_validation_only_multiplier"] += 1
+            if direct_book_link:
+                counts["execution_orderbook_evidence_matches"] += 1
 
         report = {
             "report_version": self.REPORT_VERSION,
