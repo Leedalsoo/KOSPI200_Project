@@ -3158,3 +3158,119 @@ def test_fresh40_multiple_global_collisions_and_order_local_conflict_keep_all_u1
         )
     ) == before_global_history
     assert restarted_store.unresolved_reconciliations()[0]["status"] == "CONFLICT"
+
+    # FRESH-48: event-time order and overlapping snapshot coverage are audited
+    # against synthetic packet timelines; global U19 reconciliation stays open.
+    from datetime import timedelta
+    from application.composition.validation_only_evidence_timeline_auditor import (
+        ValidationOnlyEvidenceTimelineAuditor,
+    )
+
+    def _timeline_packet(packet_id, source_as_of, window_start):
+        window_end = window_start + timedelta(seconds=20)
+        snapshot_rows = {}
+        event_rows = []
+        for event_index, kind in enumerate(("orders", "executions", "positions")):
+            snapshot_id = f"{packet_id}-{kind}"
+            snapshot_rows[kind] = {
+                "snapshot_id": snapshot_id,
+                "snapshot_as_of": window_end.isoformat(),
+                "coverage_start": window_start.isoformat(),
+                "coverage_end": window_end.isoformat(),
+                "event_count": 1,
+            }
+            event_time = window_start + timedelta(seconds=event_index * 5)
+            event_rows.append({
+                "event_id": f"{packet_id}-{kind}-EVENT",
+                "event_time": event_time.isoformat(),
+                "received_at": (event_time + timedelta(seconds=1)).isoformat(),
+                "snapshot_kind": kind,
+                "snapshot_id": snapshot_id,
+                "payload_sha256": str(event_index + 1) * 64,
+            })
+        return {
+            "packet_id": packet_id,
+            "source_as_of": source_as_of.isoformat(),
+            "collected_at": (window_end + timedelta(seconds=2)).isoformat(),
+            "snapshots": snapshot_rows,
+            "event_observations": event_rows,
+        }
+
+    timeline_start = datetime(2026, 11, 18, 9, 59, 0, tzinfo=timezone.utc)
+    timeline_packet_a = _timeline_packet(
+        "FRESH48-PACKET-A",
+        timeline_start + timedelta(seconds=20),
+        timeline_start,
+    )
+    timeline_packet_b = _timeline_packet(
+        "FRESH48-PACKET-B",
+        timeline_start + timedelta(seconds=30),
+        timeline_start + timedelta(seconds=10),
+    )
+    required_windows = {
+        kind: {
+            "start": timeline_start.isoformat(),
+            "end": (timeline_start + timedelta(seconds=30)).isoformat(),
+        }
+        for kind in ("orders", "executions", "positions")
+    }
+    timeline_auditor = ValidationOnlyEvidenceTimelineAuditor(validation_only=True)
+    timeline_pass = timeline_auditor.audit(
+        packets=(timeline_packet_a, timeline_packet_b),
+        as_of=AS_OF,
+        required_coverage=required_windows,
+    )
+    assert timeline_pass.is_valid
+    assert all(
+        timeline_pass.report["snapshot_coverage"][kind]["required"]["covered"]
+        for kind in ("orders", "executions", "positions")
+    )
+    assert timeline_pass.gate_release_permitted is False
+    assert timeline_pass.authoritative is False
+    assert timeline_pass.mutation_applied is False
+
+    reversed_packet_b = deepcopy(timeline_packet_b)
+    reversed_packet_b["event_observations"][1], reversed_packet_b["event_observations"][2] = (
+        reversed_packet_b["event_observations"][2],
+        reversed_packet_b["event_observations"][1],
+    )
+    timeline_reversed = timeline_auditor.audit(
+        packets=(reversed_packet_b, timeline_packet_a),
+        as_of=AS_OF,
+        required_coverage=required_windows,
+    )
+    assert timeline_reversed.status == "RECONCILIATION_REQUIRED"
+    assert any("PACKET_SOURCE_TIME_ORDER_REVERSED" in issue for issue in timeline_reversed.issues)
+    assert any("EVENT_TIME_ORDER_REVERSED" in issue for issue in timeline_reversed.issues)
+    assert timeline_reversed.gate_release_permitted is False
+
+    assert len(restarted_store.load_execution_journal_records()) == before_journal_count
+    assert restarted_store.unresolved_reconciliations()[0]["status"] == "CONFLICT"
+    for group_id, position, suffix in groups:
+        builder = ValidationOnlyU19LedgerSnapshotBuilder(restarted_store)
+        ledger = builder.build(
+            group_id=group_id,
+            snapshot_id=f"{suffix}-FRESH48-TIMELINE-CHECK",
+            as_of=AS_OF,
+        )
+        decision = restarted_coordinator.recover_from_settlement_store(
+            group_id=group_id,
+            broker_snapshot=U19BrokerPositionSnapshot(
+                group_id=group_id,
+                snapshot_id=f"{suffix}-FRESH48-BROKER-PROXY",
+                as_of=AS_OF,
+                source="VALIDATION_ONLY:BROKER_EXCHANGE",
+                positions=ledger.positions,
+                complete=True,
+                capability_verified=True,
+                payload_sha256=("a" if suffix in {"FRESH40-A", "FRESH40-B"} else "b") * 64,
+            ),
+            snapshot_id=f"{suffix}-FRESH48-TIMELINE-CHECK",
+            as_of=AS_OF,
+            ledger_snapshot_builder=builder,
+        )
+        assert decision.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+        assert decision.restore_allowed is False
+        assert decision.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
+        assert decision.new_entry_enabled is False
+        assert decision.order_submission_enabled is False
