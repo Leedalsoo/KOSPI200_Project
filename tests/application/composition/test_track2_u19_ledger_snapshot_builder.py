@@ -3103,3 +3103,58 @@ def test_fresh40_multiple_global_collisions_and_order_local_conflict_keep_all_u1
         assert decision.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
         assert decision.new_entry_enabled is False
         assert decision.order_submission_enabled is False
+
+    # FRESH-47: deterministic report hashes survive comparator reconstruction
+    # and an append-only JSONL archive round-trip.
+    import hashlib
+    import json
+
+    replayed_comparison = ValidationOnlyBrokerEvidencePacketComparator(
+        validation_only=True
+    ).compare(packets=(packet, second_packet), as_of=AS_OF)
+    assert replayed_comparison.report_sha256 == comparison.report_sha256
+
+    archive_path = tmp_path / "fresh47-evidence-comparison.jsonl"
+    with archive_path.open("a", encoding="utf-8") as archive:
+        for result in (replayed_comparison, disagreement):
+            archive.write(json.dumps({
+                "report_sha256": result.report_sha256,
+                "report": result.report,
+            }, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n")
+
+    archived = [
+        json.loads(line)
+        for line in archive_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert len(archived) == 2
+    for record in archived:
+        encoded_report = json.dumps(
+            record["report"], sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        )
+        assert hashlib.sha256(encoded_report.encode("utf-8")).hexdigest() == record["report_sha256"]
+
+    tampered_report = deepcopy(archived[0]["report"])
+    tampered_report["append_only_observations"] = []
+    tampered_encoded = json.dumps(
+        tampered_report, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    )
+    assert hashlib.sha256(tampered_encoded.encode("utf-8")).hexdigest() != archived[0]["report_sha256"]
+    assert archived[0]["report_sha256"] != archived[1]["report_sha256"]
+    assert replayed_comparison.gate_release_permitted is False
+    assert disagreement.gate_release_permitted is False
+
+    assert len(restarted_store.load_execution_journal_records()) == before_journal_count
+    assert tuple(
+        (
+            item["execution_id"],
+            item["scope_key"],
+            item["original_payload_sha256"],
+            item["incoming_payload_sha256"],
+            item["event_type"],
+        )
+        for item in restarted_store.execution_journal_conflict_history(
+            scope_key="__runtime_bootstrap__"
+        )
+    ) == before_global_history
+    assert restarted_store.unresolved_reconciliations()[0]["status"] == "CONFLICT"
