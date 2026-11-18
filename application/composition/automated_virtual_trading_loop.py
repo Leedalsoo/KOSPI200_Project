@@ -98,6 +98,7 @@ class AutomatedVirtualTradingLoop:
                  multi_leg_executor: Callable[[MultiLegExecutionPlan], object] | None = None,
                  pending_multi_leg_processor: Callable[[object], object] | None = None,
                  risk_config: RiskConfig | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None,
+                 risk_engine: RiskEngine | None = None, runtime_stop_switch=None,
                  signal_observation_only: bool = False) -> None:
         if not run_id.strip():
             raise ValueError("AUTOMATED_RUNTIME_RUN_ID_REQUIRED")
@@ -118,10 +119,66 @@ class AutomatedVirtualTradingLoop:
         self.broker_adapter = _VirtualBrokerAckAdapter(bundle.broker)
         self.router = StandardOrderRouter(order_state_machine=self.fsm, broker_adapter=self.broker_adapter)
         vssf = bundle.execution._authoritative_execute.__self__.vssf_runtime
-        self.risk_gate = RiskGate(RiskEngine(risk_config or RiskConfig(), margin_engine=vssf.margin_engine), risk_guard_status_source=risk_guard_status_source)
+        self.risk_engine = risk_engine or RiskEngine(risk_config or RiskConfig(), margin_engine=vssf.margin_engine)
+        self.runtime_stop_switch = runtime_stop_switch
+        self.risk_gate = RiskGate(self.risk_engine, risk_guard_status_source=risk_guard_status_source)
         self._last_result: AutomatedTickResult | None = None
         self._last_strategy_status: tuple[StrategyRuntimeStatus, ...] = ()
         self._quote_only_events: list[dict[str, object]] = []
+
+    def _trip_runtime_stop(self, reason: str) -> bool:
+        try:
+            self.runtime_stop_switch.trip(reason)
+        except Exception as exc:  # noqa: BLE001 - stop this tick rather than permit an order
+            raise RuntimeError("X2_RUNTIME_STOP_COULD_NOT_BE_LATCHED") from exc
+        return True
+
+    def _runtime_orders_blocked(self) -> bool:
+        if self.runtime_stop_switch is None:
+            return False
+        try:
+            if self.runtime_stop_switch.snapshot().status != "ARMED":
+                return True
+            status_source = self.risk_gate.risk_guard_status_source
+            if status_source is None:
+                return self._trip_runtime_stop("X2_RISK_GUARD_STATUS_SOURCE_UNAVAILABLE")
+            guard_snapshot = status_source.snapshot()
+            if guard_snapshot is None:
+                return self._trip_runtime_stop("X2_RISK_GUARD_STATUS_UNAVAILABLE")
+            if not guard_snapshot.admission_allowed or guard_snapshot.kill_switch_engaged:
+                return self._trip_runtime_stop(
+                    "X2_RISK_GUARD_BLOCKED:" + str(guard_snapshot.reason or "UNKNOWN")
+                )
+            if self.risk_engine.is_kill_switch_active():
+                return self._trip_runtime_stop("X2_RISK_ENGINE_KILL_SWITCH_ACTIVE")
+            return False
+        except RuntimeError as exc:
+            if str(exc) == "X2_RUNTIME_STOP_COULD_NOT_BE_LATCHED":
+                raise
+            return self._trip_runtime_stop("X2_RUNTIME_STOP_STATUS_UNAVAILABLE:RuntimeError")
+        except Exception:  # noqa: BLE001 - inability to verify X2/RiskGuard must not permit submission
+            return self._trip_runtime_stop("X2_RUNTIME_STOP_STATUS_UNAVAILABLE")
+
+    def _process_pending_multi_leg_if_admitted(self, tick) -> tuple[object, ...]:
+        if (
+            self.pending_multi_leg_processor is None
+            or self.signal_observation_only
+            or self._runtime_orders_blocked()
+        ):
+            return ()
+        parameters = inspect.signature(self.pending_multi_leg_processor).parameters
+        result = (
+            self.pending_multi_leg_processor(tick)
+            if parameters else self.pending_multi_leg_processor()
+        )
+        return tuple(result) if isinstance(result, (tuple, list)) else ()
+
+    def _execute_multi_leg_if_admitted(self, plan: MultiLegExecutionPlan) -> tuple[bool, object | None]:
+        if self._runtime_orders_blocked():
+            return False, None
+        if self.multi_leg_executor is None:
+            raise RuntimeError("MULTI_LEG_EXECUTOR_REQUIRED")
+        return True, self.multi_leg_executor(plan)
 
     @property
     def quote_only_events(self) -> tuple[dict[str, object], ...]:
@@ -226,12 +283,7 @@ class AutomatedVirtualTradingLoop:
             })()},
             quality={},
         )
-        pending_execution_results: tuple[object, ...] = ()
-        if self.pending_multi_leg_processor is not None and not self.signal_observation_only:
-            processor_parameters = inspect.signature(self.pending_multi_leg_processor).parameters
-            pending_result = (self.pending_multi_leg_processor(tick) if processor_parameters else self.pending_multi_leg_processor())
-            if isinstance(pending_result, (tuple, list)):
-                pending_execution_results = tuple(pending_result)
+        pending_execution_results = self._process_pending_multi_leg_if_admitted(tick)
         pending_routed, pending_filled, pending_execution_ids = summarize_pending_multi_leg_results(
             pending_execution_results
         )
@@ -317,6 +369,9 @@ class AutomatedVirtualTradingLoop:
         execution_ids: list[str] = list(pending_execution_ids)
 
         for cancel_request in decision.cancel_requests:
+            if self._runtime_orders_blocked():
+                rejected += len(cancel_request.client_order_ids)
+                continue
             status = status_by_strategy.get(cancel_request.strategy_id, StrategyRuntimeStatus(cancel_request.strategy_id))
             for client_order_id in cancel_request.client_order_ids:
                 report = self.broker_adapter.cancel(client_order_id)
@@ -340,7 +395,10 @@ class AutomatedVirtualTradingLoop:
                 multi_leg_plan = execution_plan.multi_leg_plan
                 if multi_leg_plan is None:
                     raise RuntimeError("MULTI_LEG_EXECUTION_PLAN_REQUIRED")
-                executed = self.multi_leg_executor(multi_leg_plan)
+                admitted, executed = self._execute_multi_leg_if_admitted(multi_leg_plan)
+                if not admitted:
+                    rejected += 1
+                    continue
                 routed_legs = getattr(executed, "routed_legs", 0)
                 filled_legs = getattr(executed, "filled_legs", 0)
                 routed += routed_legs

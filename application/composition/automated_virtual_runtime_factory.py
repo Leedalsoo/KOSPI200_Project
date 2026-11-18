@@ -8,6 +8,11 @@ from decimal import Decimal
 from pathlib import Path
 
 from application.composition.automated_virtual_trading_loop import AutomatedVirtualTradingLoop
+from application.composition.validation_only_runtime_auto_stop_switch import (
+    ValidationOnlyRuntimeAutoStopSwitch,
+    ValidationOnlyRuntimeStopAdmissionSource,
+)
+from core.risk.risk_engine import RiskEngine
 from application.composition.standard_runtime_input_provider import StandardRuntimeInputProvider
 from application.composition.option_expiry_source import KisOptionMasterExpirySource
 from application.composition.virtual_track3_runtime_input_source import VirtualTrack3RuntimeInputSource
@@ -79,10 +84,16 @@ def _looks_synthetic_provider(provider) -> bool:
     return source_name.startswith("SYNTHETIC:") or provenance in {"SYNTHETIC", "DERIVED_SCENARIO"}
 
 
-def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=None, strategy_keys=None, track9_iv_history_path=None, run_id=None, historical_observation_option_source=None, risk_guard_status_source: RiskGuardStatusSource | None = None, synthetic_runtime_sources=None, track4_greeks_provider=None, market_calendar_hub=None, validation_only_track6_signal_mode: bool = False, validation_only_track6_execution_gate=None, validation_only_s8_runtime_adapter=None, validation_only_s7_runtime_adapter: S7ValidationOnlyRuntimeAdapter | None = None, validation_only_s9_runtime_adapter=None, validation_only_track2_runtime_adapter=None, validation_only_track6_lifecycle_config: Track6LifecycleConfig | None = None, validation_only_u16_quote_policy: U16QuotePolicy | None = None, validation_only_u16_repair_price_resolver=None):
+def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=None, strategy_keys=None, track9_iv_history_path=None, run_id=None, historical_observation_option_source=None, risk_guard_status_source: RiskGuardStatusSource | None = None, risk_engine: RiskEngine | None = None, validation_only_runtime_stop_switch: ValidationOnlyRuntimeAutoStopSwitch | None = None, synthetic_runtime_sources=None, track4_greeks_provider=None, market_calendar_hub=None, validation_only_track6_signal_mode: bool = False, validation_only_track6_execution_gate=None, validation_only_s8_runtime_adapter=None, validation_only_s7_runtime_adapter: S7ValidationOnlyRuntimeAdapter | None = None, validation_only_s9_runtime_adapter=None, validation_only_track2_runtime_adapter=None, validation_only_track6_lifecycle_config: Track6LifecycleConfig | None = None, validation_only_u16_quote_policy: U16QuotePolicy | None = None, validation_only_u16_repair_price_resolver=None):
     """Attach all nine Standard strategies to the RuntimeController-owned VMS."""
     if synthetic_runtime_sources is not None and not _is_validation_only_synthetic_provider(synthetic_runtime_sources):
         raise ValueError("SYNTHETIC_RUNTIME_SOURCE_MUST_BE_VALIDATION_ONLY")
+    if validation_only_runtime_stop_switch is not None:
+        if risk_engine is None or risk_guard_status_source is None:
+            raise ValueError("X2_RUNTIME_WIRING_REQUIRES_SHARED_RISK_ENGINE_AND_BASE_STATUS_SOURCE")
+        risk_guard_status_source = ValidationOnlyRuntimeStopAdmissionSource(
+            risk_guard_status_source, validation_only_runtime_stop_switch,
+        )
     for provider_name, provider in (
         ("track4_greeks_provider", track4_greeks_provider),
         ("risk_guard_status_source", risk_guard_status_source),
@@ -1066,6 +1077,8 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         multi_leg_executor=multi_leg_bridge.execute,
         pending_multi_leg_processor=process_pending_multi_leg,
         risk_guard_status_source=(risk_guard_status_source or synthetic_runtime_sources),
+        risk_engine=risk_engine,
+        runtime_stop_switch=validation_only_runtime_stop_switch,
         signal_observation_only=validation_only_track6_signal_mode,
     )
     loop.standard_runtime_input_provider = provider

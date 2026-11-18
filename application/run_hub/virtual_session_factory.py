@@ -1,6 +1,8 @@
 from __future__ import annotations
 from contracts.trading_date import parse_trading_date
 
+import hashlib
+import os
 from decimal import Decimal
 from datetime import date
 from pathlib import Path
@@ -25,6 +27,11 @@ from contracts.types import EnvironmentType
 from contracts.risk_guard import RiskGuardStatusSource
 from core.risk.risk_config import RiskConfig
 from core.risk.risk_engine import RiskEngine
+from core.risk.risk_guard import RiskGuard
+from application.composition.validation_only_runtime_auto_stop_switch import (
+    SqliteRuntimeStopSwitchStateStore,
+    ValidationOnlyRuntimeAutoStopSwitch,
+)
 from environments.virtual.execution.vssf_command_context_provider import CanonicalVSSFCommandContextProvider
 from infrastructure.kis.track2_option_iv_source import KISTrack2OptionIVSource
 from infrastructure.kis.track4_kis_greeks_source import KISTrack4GreeksRealtimeSource
@@ -102,6 +109,15 @@ def create_virtual_run_session(context: RunContext, option_master: Any, risk_gua
             scenario_engine.set_scenario(context.scenario)
     vssf = bundle.execution._authoritative_execute.__self__.vssf_runtime
     risk_engine = RiskEngine(config=RiskConfig(), margin_engine=vssf.margin_engine)
+    stop_state_root = Path(
+        os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local")
+    ) / "KOSPI200_Project" / "validation_only_runtime_stop_switch"
+    run_key = hashlib.sha256(context.run_id.encode("utf-8")).hexdigest()
+    runtime_stop_switch = ValidationOnlyRuntimeAutoStopSwitch(
+        risk_guard=RiskGuard(),
+        risk_engine=risk_engine,
+        state_store=SqliteRuntimeStopSwitchStateStore(stop_state_root / f"{run_key}.sqlite3"),
+    )
     strategy_hub = None
     track3_replay_source = None
     if historical_observation_option_source is not None:
@@ -117,11 +133,14 @@ def create_virtual_run_session(context: RunContext, option_master: Any, risk_gua
         run_id=context.run_id,
         historical_observation_option_source=historical_observation_option_source,
         risk_guard_status_source=virtual_risk_guard,
+        risk_engine=risk_engine,
+        validation_only_runtime_stop_switch=runtime_stop_switch,
         market_calendar_hub=market_calendar_hub,
         track4_greeks_provider=track4_greeks_source,
         track3_runtime_input_source=track3_replay_source,
     )
     strategy_hub = loop.strategy_hub
+    loop.runtime_stop_state_path = stop_state_root / f"{run_key}.sqlite3"
     execution_bridge = loop.multi_leg_bridge
     bundle.broker_api.attach_group_read_model(
         snapshot_reader=execution_bridge.position_groups.snapshot,

@@ -328,3 +328,28 @@ class ValidationOnlyRuntimeAutoStopSwitch:
             order_admission_blocked=latch_confirmed,
             persistence_confirmed=self._persistence_confirmed,
         )
+
+
+class ValidationOnlyRuntimeStopAdmissionSource:
+    """Overlay X2's durable latch on the existing Virtual RiskGuard status source."""
+
+    def __init__(self, base_source: Any, stop_switch: ValidationOnlyRuntimeAutoStopSwitch) -> None:
+        if not callable(getattr(base_source, "snapshot", None)):
+            raise TypeError("X2_BASE_RISK_GUARD_STATUS_SOURCE_REQUIRED")
+        if not isinstance(stop_switch, ValidationOnlyRuntimeAutoStopSwitch):
+            raise TypeError("X2_STOP_SWITCH_REQUIRED")
+        self._base_source = base_source
+        self._stop_switch = stop_switch
+
+    def snapshot(self) -> RiskGuardStatusSnapshot | None:
+        stop = self._stop_switch.snapshot()
+        if stop.status == "ARMED":
+            return self._base_source.snapshot()
+        return RiskGuardStatusSnapshot(
+            observed_at=datetime.now(UTC),
+            admission_allowed=False,
+            kill_switch_engaged=True,
+            health_level=SensorLevel.RED,
+            reason="X2_RUNTIME_STOP_LATCHED:" + ";".join(stop.reasons),
+            decision_version=self._stop_switch.VERSION,
+        )
