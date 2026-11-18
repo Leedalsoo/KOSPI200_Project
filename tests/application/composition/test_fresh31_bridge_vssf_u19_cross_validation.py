@@ -443,6 +443,66 @@ def test_actual_bridge_partial_fills_partial_and_full_close_reconcile_with_vssf_
     assert persisted["status"] == U19RecoveryStatus.FLAT_CONFIRMED.value
     assert persisted["execution_events"] and len(persisted["execution_events"]) == 5
 
+    # X1 composes the existing ledger comparator and U19 result without mutating runtime state.
+    from application.composition.validation_only_runtime_invariant_checker import (
+        ValidationOnlyRuntimeInvariantChecker,
+    )
+    orders_by_client_id = {}
+    for row in executions:
+        client_id = row["client_order_id"]
+        order = orders_by_client_id.setdefault(client_id, {
+            "client_order_id": client_id,
+            "group_id": row["group_id"],
+            "leg_id": row["leg_id"],
+            "instrument_id": row["instrument_id"],
+            "side": row["side"],
+            "quantity": 0,
+            "filled_quantity": 0,
+            "status": "FILLED",
+        })
+        order["quantity"] += row["quantity"]
+        order["filled_quantity"] += row["quantity"]
+    invariant_report = ValidationOnlyRuntimeInvariantChecker().check(
+        order_commands=tuple(orders_by_client_id.values()),
+        executions=executions,
+        ledger_evidence={
+            "opening_lots": (),
+            "executions": executions,
+            "expected_fee_records": expected_fees,
+            "actual_position_lot_history": bridge.position_lot_store.history(),
+            "actual_open_position_lots": bridge.position_lot_store.open_lots(),
+            "actual_close_events": bridge.position_lot_store.close_events(),
+            "actual_fee_records": fee_records,
+            "vssf_positions": vssf.account.positions,
+            "vssf_realized_pnl_delta": vssf.account.realized_pnl,
+            "vssf_unrealized_pnl": vssf.account.unrealized_pnl,
+            "mark_prices": {},
+            "source_namespace": "SYNTHETIC:FRESH31",
+            "deterministic_rule_id": "BRIDGE-VSSF-U19-CROSSCHECK-v1",
+            "source_manifest_sha256": sha256((dataset / "manifest.json").read_bytes()).hexdigest(),
+            "source_anchor_refs": (f"ACCEPTED_RUNTIME_V2:{source_ref}",),
+            "source_anchor_as_of": datetime.fromisoformat(tick.timestamp),
+            "scenario_timestamp": max(row["executed_at"] for row in executions) + timedelta(seconds=1),
+            "evidence_refs": ("TEST:VIRTUALMULTILEG_BRIDGE", "TEST:VSSF_ACCOUNT", "TEST:U19"),
+        },
+        u19_decision=decision,
+        source_namespace="SYNTHETIC:FRESH31",
+        deterministic_rule_id="BRIDGE-VSSF-U19-CROSSCHECK-v1",
+        source_manifest_sha256=sha256((dataset / "manifest.json").read_bytes()).hexdigest(),
+        source_anchor_refs=(f"ACCEPTED_RUNTIME_V2:{source_ref}",),
+        source_anchor_as_of=datetime.fromisoformat(tick.timestamp),
+        scenario_timestamp=max(row["executed_at"] for row in executions) + timedelta(seconds=1),
+        evidence_refs=("TEST:VIRTUALMULTILEG_BRIDGE", "TEST:VSSF_ACCOUNT", "TEST:U19"),
+    )
+    assert invariant_report.status == ValidationOnlyRuntimeInvariantChecker.PASS, invariant_report.issues
+    assert invariant_report.checks == {
+        "provenance_and_time": "PASS",
+        "order_execution_lineage_and_quantity": "PASS",
+        "position_fee_vssf_ledger": "PASS",
+        "u19_recovery_and_flat_state": "PASS",
+        "validation_only_no_side_effects": "PASS",
+    }
+
 def test_cancel_race_late_fill_replay_and_conflict_reconcile_bridge_vssf_u19(tmp_path):
     from core.oms.track2_u19_recovery import (
         U19BrokerPositionSnapshot,

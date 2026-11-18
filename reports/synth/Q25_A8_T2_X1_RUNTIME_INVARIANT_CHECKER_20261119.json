@@ -1,0 +1,94 @@
+{
+  "code_files": [
+    "application/composition/validation_only_runtime_invariant_checker.py",
+    "tests/application/composition/test_validation_only_runtime_invariant_checker.py",
+    "tests/application/composition/test_fresh31_bridge_vssf_u19_cross_validation.py"
+  ],
+  "decision_references": [
+    "No.1534",
+    "No.1535",
+    "No.1538",
+    "No.1554",
+    "No.1558",
+    "No.1566"
+  ],
+  "graphify": {
+    "api_free_update": "PASS",
+    "communities": 435,
+    "edges": 26376,
+    "existing_warnings_preserved": [
+      "application/composition/virtual_composition_root.py syntax warning at line 54",
+      "29 code files with no extracted symbols"
+    ],
+    "modified_outputs": [
+      "graphify-out/GRAPH_REPORT.md",
+      "graphify-out/graph.json"
+    ],
+    "nodes": 8934,
+    "outputs_modified_by_t2": true,
+    "outputs_staged": false,
+    "topology_changed": true
+  },
+  "implementation": {
+    "composes_existing": "ValidationOnlyRuntimeLedgerComparator + U19RecoveryDecision; no duplicate FIFO/PnL or recovery implementation.",
+    "integration_test_modified": "tests/application/composition/test_fresh31_bridge_vssf_u19_cross_validation.py",
+    "invariants": [
+      "synthetic namespace, deterministic rule, manifest SHA-256, source anchors/evidence refs, timezone-aware source/scenario times and no future anchor",
+      "unique order IDs and required group/leg/instrument/side/quantity contract",
+      "execution ID uniqueness/conflict, order existence, group/leg/instrument/side lineage and positive quantity/price/multiplier/time",
+      "cumulative fills do not exceed order quantity; FILLED/PARTIALLY_FILLED/REJECTED status quantity consistency",
+      "active orders must appear in U19 pending set; terminal orders cannot remain pending; pending IDs must map to known order IDs",
+      "FIFO PositionLot history/open lots/close events, fee coverage/values, VSSF aggregate positions and PnL via existing comparator",
+      "U19 execution ID set, pending state, FLAT_CONFIRMED/RESTORE_ALLOWED consistency and validation-only no-submit/no-entry/no-restore flags",
+      "input evidence remains unchanged after checking"
+    ],
+    "live_readiness_claim": false,
+    "module": "application/composition/validation_only_runtime_invariant_checker.py",
+    "production_authority_claim": false,
+    "report_status": "VALIDATION_ONLY_RUNTIME_INVARIANTS_PASS or RECONCILIATION_REQUIRED",
+    "unit_tests": "tests/application/composition/test_validation_only_runtime_invariant_checker.py"
+  },
+  "limitations": [
+    "X1 verifies consistency of validation-only evidence and does not certify actual KIS broker/account truth.",
+    "RESTORE_ALLOWED is an evidence decision only; runtime restore is not performed and new entry/order submission remain false.",
+    "A consistent pending order may pass invariant consistency while remaining non-restorable; the report status is not a trading-readiness signal.",
+    "Synthetic multiplier/identity/fees/marks are validation fixtures and not authoritative actual-account values."
+  ],
+  "report_sha256": "85e41d60de06890004d72b4932c237a5bd9145681b181528fc10c192fbfb27ff",
+  "roadmap_reference": "No.1546 / Track 4 / T2 (X1 invariant checker)",
+  "run_date": "2026-11-19",
+  "schema": "Q25-A8-TRACK4-T2-X1-RUNTIME-INVARIANT-AUDIT-v1",
+  "scope": {
+    "live_or_real_vts_api_calls": false,
+    "new_market_data_collection": false,
+    "order_submission": false,
+    "original_raw_canonical_accepted_runtime_modified": false,
+    "production_runtime_mutations": false,
+    "read_only": true,
+    "t1_immutability_baseline_file_count": 64,
+    "t1_immutability_baseline_sha256": "823dc1ecc37debb674a9e2b202fa92bff34b83f0d40a1564cc998ce60effd5ab",
+    "t1_protected_files_changed_or_missing": [],
+    "validation_only": true
+  },
+  "tests": {
+    "actual_fresh31_bridge_vssf_positionlot_fee_u19_integration": {
+      "failed": 0,
+      "passed": 2,
+      "skipped": 0
+    },
+    "compileall": "PASS",
+    "cross_component_regression": {
+      "failed": 0,
+      "files": 9,
+      "passed": 146,
+      "skipped": 0
+    },
+    "git_diff_check": "PASS",
+    "ruff_new_module_and_test": "PASS",
+    "x1_unit_fault_matrix": {
+      "failed": 0,
+      "passed": 17,
+      "skipped": 0
+    }
+  }
+}
