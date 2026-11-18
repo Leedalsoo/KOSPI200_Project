@@ -1123,3 +1123,250 @@ def test_fresh34_post_commit_memory_projection_failure_rebuilds_from_sqlite_and_
     assert decision.restore_allowed is False
     assert decision.new_entry_enabled is False
     assert decision.order_submission_enabled is False
+
+
+def test_fresh35_settlement_commit_checkpoint_crash_window_replay_and_checkpoint_retry(
+    tmp_path
+):
+    store_path = tmp_path / "fresh35-settlement.sqlite3"
+    checkpoint_path = tmp_path / "fresh35-u19.sqlite3"
+    instrument_id = "SYNTHETIC_CONTRACT:FRESH35:OPTION:CALL"
+    client_id = "FRESH35-CLIENT"
+    broker_id = "FRESH35-BROKER"
+    group_id = "SYNTHETIC:GROUP:FRESH35-CHECKPOINT-CRASH"
+    position = LivePositionAggregate(instrument_id)
+    store = SQLiteSettlementStore(store_path)
+    oms = _order_with_fill(
+        store,
+        client_id=client_id,
+        broker_id=broker_id,
+        instrument_id=instrument_id,
+        side="BUY",
+        leg_id="FRESH35-CALL",
+        group_id=group_id,
+        fills=(("SYNTHETIC:FRESH35:EXEC:ENTRY", 1, 0, "10.00"),),
+        order_quantity=3,
+        position_aggregate=position,
+    )
+    oms.apply_cancel(ExecutionReport(
+        client_order_id=client_id,
+        broker_order_id=broker_id,
+        execution_id=None,
+        status="CANCELLED",
+        filled_quantity=0,
+        remaining_quantity=2,
+        execution_price=None,
+        execution_timestamp=datetime(2026, 11, 18, 9, 35, tzinfo=timezone.utc),
+        group_id=group_id,
+        leg_id="FRESH35-CALL",
+    ))
+    bridge = LiveExecutionPositionBridge(
+        order_state_machine=oms,
+        position_fill_adapter=LivePositionFillAdapter(position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(
+            persistence_store=store
+        ),
+        position_aggregate=position,
+        settlement_store=store,
+    )
+    late_fill = ExecutionReport(
+        client_order_id=client_id,
+        broker_order_id=broker_id,
+        execution_id="SYNTHETIC:FRESH35:EXEC:LATE",
+        status="PARTIALLY_FILLED",
+        filled_quantity=1,
+        remaining_quantity=1,
+        execution_price=Decimal("10.25"),
+        execution_timestamp=datetime(2026, 11, 18, 9, 40, tzinfo=timezone.utc),
+        fee=Decimal("5"),
+        group_id=group_id,
+        leg_id="FRESH35-CALL",
+    )
+    with pytest.raises(OrderStateTransitionError, match="RECONCILIATION_PENDING"):
+        bridge.settle(late_fill)
+
+    # Persist the pending U19 decision before resolving the late fill.
+    pending_builder = ValidationOnlyU19LedgerSnapshotBuilder(store)
+    pending_ledger = pending_builder.build(
+        group_id=group_id,
+        snapshot_id="FRESH35-LEDGER-PENDING",
+        as_of=AS_OF,
+    )
+    assert pending_ledger.positions == (U19Position(instrument_id, Decimal("1")),)
+    assert pending_ledger.pending_order_ids == (client_id,)
+    checkpoint_store = SqliteTrack2U19RecoveryStore(checkpoint_path)
+    coordinator = ValidationOnlyTrack2U19RecoveryCoordinator(
+        checkpoint_store, settlement_store=store
+    )
+    pending_decision = coordinator.recover(
+        group_id=group_id,
+        broker_snapshot=U19BrokerPositionSnapshot(
+            group_id=group_id,
+            snapshot_id="FRESH35-BROKER-PENDING",
+            as_of=AS_OF,
+            source="VALIDATION_ONLY:BROKER_EXCHANGE",
+            positions=pending_ledger.positions,
+            complete=True,
+            capability_verified=True,
+            payload_sha256="a" * 64,
+        ),
+        ledger_snapshot=pending_ledger,
+    )
+    assert pending_decision.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+    pending_checkpoint = checkpoint_store.load_latest(group_id)
+    assert pending_checkpoint["checkpoint_id"] == pending_decision.checkpoint_id
+    assert pending_checkpoint["status"] == U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED.value
+
+    # Settlement DB commits first. Simulate a process crash before U19 checkpoint
+    # update by not invoking the coordinator in this process.
+    settled = bridge.settle_authoritatively_reconciled_fill(
+        late_fill,
+        authoritative_evidence_ref=(
+            "VALIDATION_ONLY:SYNTHETIC_RECONCILIATION_FIXTURE:FRESH35"
+        ),
+    )
+    assert settled.filled_quantity == 2
+    assert store.has_execution(late_fill.execution_id)
+    assert len(store.load_execution_journal_records()) == 2
+    assert store.load_position_state(instrument_id)["qty"] == 2
+    assert store.pending_reconciliation_events(scope_key=client_id) == ()
+    assert checkpoint_store.load_latest(group_id)["checkpoint_id"] == pending_decision.checkpoint_id
+
+    # Restart settlement projections from SQLite. Replay is recognized as the
+    # same committed event and cannot change journal, fee payload, or position.
+    restarted_store = SQLiteSettlementStore(store_path)
+    restarted_oms = OrderStateMachine(persistence_store=restarted_store)
+    restarted_oms.restore_from_store()
+    restarted_position = LivePositionAggregate(instrument_id)
+    restarted_position.restore_persistence_record(
+        restarted_store.load_position_state(instrument_id)
+    )
+    restarted_bridge = LiveExecutionPositionBridge(
+        order_state_machine=restarted_oms,
+        position_fill_adapter=LivePositionFillAdapter(restarted_position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(
+            persistence_store=restarted_store
+        ),
+        position_aggregate=restarted_position,
+        settlement_store=restarted_store,
+    )
+    before_journal = restarted_store.load_execution_journal_records()
+    replay_state = restarted_bridge.settle(late_fill)
+    assert replay_state.filled_quantity == 2
+    assert restarted_position.qty == 2
+    assert restarted_store.load_execution_journal_records() == before_journal
+    assert len(before_journal) == 2
+    assert restarted_store.pending_reconciliation_events(scope_key=client_id) == ()
+
+    final_builder = ValidationOnlyU19LedgerSnapshotBuilder(restarted_store)
+    final_ledger = final_builder.build(
+        group_id=group_id,
+        snapshot_id="FRESH35-LEDGER-SETTLED",
+        as_of=AS_OF,
+    )
+    assert final_ledger.positions == (U19Position(instrument_id, Decimal("2")),)
+    assert final_ledger.pending_order_ids == ()
+
+    # Fail the U19 checkpoint insert. Settlement remains committed, but the
+    # previously persisted pending checkpoint remains the latest safe decision.
+    with sqlite3.connect(checkpoint_path) as connection:
+        connection.execute("""
+            CREATE TRIGGER inject_fresh35_checkpoint_failure
+            BEFORE INSERT ON track2_u19_recovery_checkpoint
+            BEGIN SELECT RAISE(ABORT, 'FRESH35_CHECKPOINT_INSERT_FAILURE'); END
+        """)
+    restarted_coordinator = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(checkpoint_path),
+        settlement_store=restarted_store,
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="FRESH35_CHECKPOINT_INSERT_FAILURE"):
+        restarted_coordinator.recover_from_settlement_store(
+            group_id=group_id,
+            broker_snapshot=U19BrokerPositionSnapshot(
+                group_id=group_id,
+                snapshot_id="FRESH35-BROKER-SETTLED",
+                as_of=AS_OF,
+                source="VALIDATION_ONLY:BROKER_EXCHANGE",
+                positions=final_ledger.positions,
+                complete=True,
+                capability_verified=True,
+                payload_sha256="b" * 64,
+            ),
+            snapshot_id="FRESH35-LEDGER-SETTLED",
+            as_of=AS_OF,
+            ledger_snapshot_builder=final_builder,
+        )
+    still_pending = SqliteTrack2U19RecoveryStore(checkpoint_path).load_latest(group_id)
+    assert still_pending["checkpoint_id"] == pending_decision.checkpoint_id
+    assert still_pending["status"] == U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED.value
+    assert len(restarted_store.load_execution_journal_records()) == 2
+    assert restarted_store.load_position_state(instrument_id)["qty"] == 2
+    assert restarted_store.pending_reconciliation_events(scope_key=client_id) == ()
+
+    # Remove the injected storage fault and retry from persisted settlement
+    # evidence. The checkpoint advances only after a complete U19 evaluation.
+    with sqlite3.connect(checkpoint_path) as connection:
+        connection.execute("DROP TRIGGER inject_fresh35_checkpoint_failure")
+    recovered_coordinator = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(checkpoint_path),
+        settlement_store=restarted_store,
+    )
+    recovered = recovered_coordinator.recover_from_settlement_store(
+        group_id=group_id,
+        broker_snapshot=U19BrokerPositionSnapshot(
+            group_id=group_id,
+            snapshot_id="FRESH35-BROKER-SETTLED",
+            as_of=AS_OF,
+            source="VALIDATION_ONLY:BROKER_EXCHANGE",
+            positions=final_ledger.positions,
+            complete=True,
+            capability_verified=True,
+            payload_sha256="b" * 64,
+        ),
+        snapshot_id="FRESH35-LEDGER-SETTLED",
+        as_of=AS_OF,
+        ledger_snapshot_builder=final_builder,
+    )
+    assert recovered.status is U19RecoveryStatus.RESTORE_ALLOWED
+    assert recovered.positions == final_ledger.positions
+    assert recovered.pending_order_ids == ()
+    assert recovered.new_entry_enabled is False
+    assert recovered.order_submission_enabled is False
+    final_checkpoint = SqliteTrack2U19RecoveryStore(checkpoint_path).load_latest(group_id)
+    assert final_checkpoint["checkpoint_id"] == recovered.checkpoint_id
+    assert final_checkpoint["status"] == U19RecoveryStatus.RESTORE_ALLOWED.value
+    assert final_checkpoint["new_entry_enabled"] is False
+    assert final_checkpoint["order_submission_enabled"] is False
+
+    # Repeated recovery with identical snapshots is checkpoint-idempotent.
+    with sqlite3.connect(checkpoint_path) as connection:
+        before_count = connection.execute(
+            "SELECT COUNT(*) FROM track2_u19_recovery_checkpoint WHERE group_id=?",
+            (group_id,),
+        ).fetchone()[0]
+    repeated = recovered_coordinator.recover_from_settlement_store(
+        group_id=group_id,
+        broker_snapshot=U19BrokerPositionSnapshot(
+            group_id=group_id,
+            snapshot_id="FRESH35-BROKER-SETTLED",
+            as_of=AS_OF,
+            source="VALIDATION_ONLY:BROKER_EXCHANGE",
+            positions=final_ledger.positions,
+            complete=True,
+            capability_verified=True,
+            payload_sha256="b" * 64,
+        ),
+        snapshot_id="FRESH35-LEDGER-SETTLED",
+        as_of=AS_OF,
+        ledger_snapshot_builder=final_builder,
+    )
+    with sqlite3.connect(checkpoint_path) as connection:
+        after_count = connection.execute(
+            "SELECT COUNT(*) FROM track2_u19_recovery_checkpoint WHERE group_id=?",
+            (group_id,),
+        ).fetchone()[0]
+    assert repeated.checkpoint_id == recovered.checkpoint_id
+    assert after_count == before_count == 2
+    assert len(restarted_store.load_execution_journal_records()) == 2
+    assert restarted_position.qty == 2
+    assert restarted_store.pending_reconciliation_events(scope_key=client_id) == ()
