@@ -3014,3 +3014,92 @@ def test_fresh40_multiple_global_collisions_and_order_local_conflict_keep_all_u1
         assert decision.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
         assert decision.new_entry_enabled is False
         assert decision.order_submission_enabled is False
+
+    # FRESH-46: compare multiple independently captured packets against the
+    # same immutable global journal history; retain every observation.
+    from application.composition.validation_only_broker_evidence_packet_comparator import (
+        ValidationOnlyBrokerEvidencePacketComparator,
+    )
+
+    second_packet = deepcopy(packet)
+    second_packet["packet_id"] = "SYNTHETIC:FRESH46:SECOND-PACKET"
+    for kind in ("orders", "executions", "positions"):
+        second_packet["snapshots"][kind]["snapshot_id"] = f"FRESH46-SECOND-{kind.upper()}"
+        second_packet["snapshots"][kind]["payload_sha256"] = "8" * 64
+    second_packet["identity_crosswalk"][0]["source_identity"]["capture_ref"] = "FRESH46-SECOND-CAPTURE"
+    second_packet["identity_crosswalk"][0]["evidence_ref"] = "VALIDATION_ONLY:FRESH46:SECOND-CROSSWALK"
+    second_packet["conflict_links"][0]["source_record_refs"] = ["FRESH46-SECOND-RECORD"]
+
+    packet_comparator = ValidationOnlyBrokerEvidencePacketComparator(validation_only=True)
+    comparison = packet_comparator.compare(
+        packets=(packet, second_packet),
+        as_of=AS_OF,
+    )
+    assert comparison.is_comparable
+    assert len(comparison.report["append_only_observations"]) == 2
+    assert comparison.report["conflict_comparisons"][0]["payload_pair_count"] == 1
+    assert comparison.gate_release_permitted is False
+    assert comparison.authoritative is False
+    assert comparison.mutation_applied is False
+
+    conflicting_packet = deepcopy(second_packet)
+    conflicting_packet["packet_id"] = "SYNTHETIC:FRESH46:CONFLICTING-PACKET"
+    conflicting_packet["conflict_links"][0]["incoming_payload_sha256"] = "7" * 64
+    disagreement = packet_comparator.compare(
+        packets=(packet, conflicting_packet),
+        as_of=AS_OF,
+    )
+    assert disagreement.status == "RECONCILIATION_REQUIRED"
+    assert any(
+        issue.startswith("BROKER_EVIDENCE_CONFLICT_PAYLOAD_DISAGREEMENT")
+        for issue in disagreement.issues
+    )
+    assert len(disagreement.report["append_only_observations"]) == 2
+
+    assert len(restarted_store.load_execution_journal_records()) == before_journal_count
+    assert {
+        suffix: position.qty for _, position, suffix in groups
+    } == before_position_quantities
+    final_history = restarted_store.execution_journal_conflict_history(
+        scope_key="__runtime_bootstrap__"
+    )
+    assert tuple(
+        (
+            item["execution_id"],
+            item["scope_key"],
+            item["original_payload_sha256"],
+            item["incoming_payload_sha256"],
+            item["event_type"],
+        )
+        for item in final_history
+    ) == before_global_history
+    assert restarted_store.unresolved_reconciliations()[0]["status"] == "CONFLICT"
+
+    for group_id, position, suffix in groups:
+        builder = ValidationOnlyU19LedgerSnapshotBuilder(restarted_store)
+        ledger = builder.build(
+            group_id=group_id,
+            snapshot_id=f"{suffix}-FRESH46-COMPARISON-CHECK",
+            as_of=AS_OF,
+        )
+        decision = restarted_coordinator.recover_from_settlement_store(
+            group_id=group_id,
+            broker_snapshot=U19BrokerPositionSnapshot(
+                group_id=group_id,
+                snapshot_id=f"{suffix}-FRESH46-BROKER-PROXY",
+                as_of=AS_OF,
+                source="VALIDATION_ONLY:BROKER_EXCHANGE",
+                positions=ledger.positions,
+                complete=True,
+                capability_verified=True,
+                payload_sha256=("9" if suffix in {"FRESH40-A", "FRESH40-B"} else "0") * 64,
+            ),
+            snapshot_id=f"{suffix}-FRESH46-COMPARISON-CHECK",
+            as_of=AS_OF,
+            ledger_snapshot_builder=builder,
+        )
+        assert decision.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+        assert decision.restore_allowed is False
+        assert decision.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
+        assert decision.new_entry_enabled is False
+        assert decision.order_submission_enabled is False
