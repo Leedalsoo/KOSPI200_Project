@@ -125,7 +125,8 @@ def _build_fixture_dataset(tmp_path):
                 if day.weekday() < 5
                 and day <= datetime.strptime(source_tick["expiry"], "%Y%m%d").date()
             ],
-        },        "source_registry_id": source_manifest["registry_id"],
+        },
+        "source_registry_id": source_manifest["registry_id"],
         "source_manifest_sha256": sha256(source_manifest_path.read_bytes()).hexdigest(),
         "source_anchor_ref": source_ref,
         "source_anchor_timestamp": source_tick["timestamp"],
