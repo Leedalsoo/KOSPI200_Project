@@ -2962,3 +2962,148 @@ def test_multi_group_local_conflict_resolution_isolated_from_global_collision_af
     assert len(replacement_restart.load_execution_journal_records()) == 11
     assert replacement_restart.load_position_state(replacement_instrument)["qty"] == 3
     assert replacement_restart.load_order_replacement_links() == replacement_links_after
+
+    # Cross-group race: both GROUP ONE and GROUP TWO independently receive a
+    # partial fill, cancel, replacement fill and late fill while global
+    # execution-ID collisions remain unresolved.
+    def seed_cross_group_replacement_race(group_id, prefix, instrument, base_price):
+        old_client = f"{prefix}-OLD-CLIENT"
+        old_broker = f"{prefix}-OLD-BROKER"
+        new_client = f"{prefix}-NEW-CLIENT"
+        new_broker = f"{prefix}-NEW-BROKER"
+        leg = f"{prefix}-LEG"
+        old_execution = f"{prefix}:OLD-FILL"
+        new_execution = f"{prefix}:NEW-FILL"
+        late_execution = f"{prefix}:OLD-LATE-FILL"
+        old_oms = _seed_order(
+            after_restart, client_id=old_client, broker_id=old_broker,
+            instrument=instrument, quantity=2, leg_id=leg,
+            fills=((old_execution, 1, str(base_price)),),
+            group_id=group_id, side="BUY",
+        )
+        old_oms.apply_cancel(ExecutionReport(
+            client_order_id=old_client, broker_order_id=old_broker,
+            execution_id=None, status="CANCELLED", filled_quantity=0,
+            remaining_quantity=1, execution_price=None,
+            execution_timestamp=AS_OF - timedelta(seconds=15),
+            group_id=group_id, leg_id=leg,
+        ))
+        new_oms = _seed_order(
+            after_restart, client_id=new_client, broker_id=new_broker,
+            instrument=instrument, quantity=1, leg_id=leg,
+            fills=(), group_id=group_id, side="BUY",
+        )
+        link_id = f"{prefix}:REPLACEMENT-LINK"
+        assert after_restart.record_order_replacement_link(
+            link_id=link_id,
+            original_client_order_id=old_client, original_broker_order_id=old_broker,
+            replacement_client_order_id=new_client, replacement_broker_order_id=new_broker,
+            group_id=group_id, leg_id=leg,
+            cancel_request_ref=f"VALIDATION_ONLY:{prefix}:CANCEL-REQUEST",
+            cancel_ack_ref=f"VALIDATION_ONLY:{prefix}:CANCEL-ACK",
+            source="VALIDATION_ONLY:CROSS-GROUP-REPLACEMENT-RACE",
+            payload={"group_id": group_id, "scenario": "partial-cancel-replace-late-fill"},
+        ) is True
+        position = LivePositionAggregate(instrument)
+        position.restore_persistence_record(after_restart.load_position_state(instrument))
+        new_bridge = LiveExecutionPositionBridge(
+            order_state_machine=new_oms,
+            position_fill_adapter=LivePositionFillAdapter(position),
+            execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=after_restart),
+            position_aggregate=position, settlement_store=after_restart,
+        )
+        old_bridge = LiveExecutionPositionBridge(
+            order_state_machine=old_oms,
+            position_fill_adapter=LivePositionFillAdapter(position),
+            execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=after_restart),
+            position_aggregate=position, settlement_store=after_restart,
+        )
+        replacement_report = ExecutionReport(
+            client_order_id=new_client, broker_order_id=new_broker,
+            execution_id=new_execution, status="FILLED",
+            filled_quantity=1, remaining_quantity=0,
+            execution_price=Decimal(str(Decimal(str(base_price)) + Decimal("0.10"))),
+            execution_timestamp=AS_OF - timedelta(seconds=10), fee=Decimal("2"),
+            group_id=group_id, leg_id=leg,
+        )
+        late_report = ExecutionReport(
+            client_order_id=old_client, broker_order_id=old_broker,
+            execution_id=late_execution, status="FILLED",
+            filled_quantity=1, remaining_quantity=0,
+            execution_price=Decimal(str(Decimal(str(base_price)) + Decimal("0.05"))),
+            execution_timestamp=AS_OF - timedelta(seconds=5), fee=Decimal("2"),
+            group_id=group_id, leg_id=leg,
+        )
+        return {
+            "group_id": group_id, "instrument": instrument, "link_id": link_id,
+            "old_client": old_client, "old_bridge": old_bridge,
+            "new_bridge": new_bridge, "position": position,
+            "replacement_report": replacement_report, "late_report": late_report,
+            "new_execution": new_execution, "old_execution": old_execution,
+            "late_execution": late_execution,
+        }
+
+    cross_group_races = (
+        seed_cross_group_replacement_race(
+            GROUP_ID, "SYNTHETIC:G1-CROSS-RACE",
+            "SYNTHETIC_CONTRACT:KOSPI200_G1_CROSS_REPLACEMENT", "14.00",
+        ),
+        seed_cross_group_replacement_race(
+            GROUP_TWO, "SYNTHETIC:G2-CROSS-RACE",
+            "SYNTHETIC_CONTRACT:KOSPI200_G2_CROSS_REPLACEMENT", "15.00",
+        ),
+    )
+    for race in cross_group_races:
+        race["new_bridge"].settle(race["replacement_report"])
+        assert race["position"].qty == 2
+    for race in cross_group_races:
+        with pytest.raises(OrderStateTransitionError, match="RECONCILIATION_PENDING"):
+            race["old_bridge"].settle(race["late_report"])
+    for race in cross_group_races:
+        race["old_bridge"].settle_authoritatively_reconciled_fill(
+            race["late_report"],
+            authoritative_evidence_ref=f"VALIDATION_ONLY:{race['group_id']}:CROSS-GROUP-LATE-FILL",
+        )
+        assert race["position"].qty == 3
+        assert after_restart.open_reconciliation_events(scope_key=race["old_client"]) == ()
+
+    cross_group_links = after_restart.load_order_replacement_links()
+    assert {item["link_id"] for item in cross_group_links}.issuperset({
+        "SYNTHETIC:G1-CROSS-RACE:REPLACEMENT-LINK",
+        "SYNTHETIC:G2-CROSS-RACE:REPLACEMENT-LINK",
+    })
+    assert after_restart.execution_journal_conflict_history(
+        scope_key="__runtime_bootstrap__",
+    ) == final_global_conflicts
+    assert len(after_restart.load_execution_journal_records()) == 17
+    assert [item["scope_key"] for item in after_restart.unresolved_reconciliations()] == [
+        "__runtime_bootstrap__",
+    ]
+    for race in cross_group_races:
+        assert after_restart.load_position_state(race["instrument"])["qty"] == 3
+        ledger = ValidationOnlyU19LedgerSnapshotBuilder(after_restart).build(
+            group_id=race["group_id"],
+            snapshot_id=f"{race['group_id']}:CROSS-GROUP-RACE-GLOBAL-GATE",
+            as_of=AS_OF,
+        )
+        assert ledger.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
+        assert {
+            event.execution_id for event in ledger.execution_events
+        }.issuperset({
+            race["old_execution"], race["new_execution"], race["late_execution"],
+        })
+
+    cross_group_restart = SQLiteSettlementStore(store.path)
+    assert cross_group_restart.execution_journal_conflict_history(
+        scope_key="__runtime_bootstrap__",
+    ) == final_global_conflicts
+    assert len(cross_group_restart.load_execution_journal_records()) == 17
+    assert cross_group_restart.load_order_replacement_links() == cross_group_links
+    for race in cross_group_races:
+        assert cross_group_restart.load_position_state(race["instrument"])["qty"] == 3
+        ledger = ValidationOnlyU19LedgerSnapshotBuilder(cross_group_restart).build(
+            group_id=race["group_id"],
+            snapshot_id=f"{race['group_id']}:CROSS-GROUP-RACE-RESTART",
+            as_of=AS_OF,
+        )
+        assert ledger.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
