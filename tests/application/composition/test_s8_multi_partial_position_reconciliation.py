@@ -247,3 +247,46 @@ def test_partial_fill_order_execution_position_lots_reconcile_through_u19_checkp
     ]
     assert {item["execution_id"] for item in persisted["execution_events"]} == set(lot_by_execution)
     assert persisted["pending_order_ids"] == []
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        (
+            "group_id",
+            "SYNTHETIC:WRONG-GROUP",
+            "MULTI_LEG_EXECUTION_GROUP_LINEAGE_MISMATCH",
+        ),
+        (
+            "leg_id",
+            "SYNTHETIC:WRONG-LEG",
+            "MULTI_LEG_EXECUTION_LEG_LINEAGE_MISMATCH",
+        ),
+        (
+            "client_order_id",
+            "SYNTHETIC:WRONG-ORDER",
+            "MULTI_LEG_EXECUTION_ORDER_LINEAGE_MISMATCH",
+        ),
+    ],
+)
+def test_execution_lineage_mismatch_fails_closed_before_any_position_or_fee_mutation(
+    field, value, message
+):
+    bridge = _bridge()
+    plan, leg, identity, command, report = _inputs()
+    conflicting = replace(report, **{field: value})
+
+    with pytest.raises(RuntimeError, match=message):
+        bridge._apply_reconciled_execution(
+            plan=plan,
+            leg=leg,
+            identity=identity,
+            broker_command=command,
+            report=conflicting,
+        )
+
+    assert bridge.position_lot_store.history() == ()
+    assert bridge.leg_positions == {}
+    assert bridge.execution_legs == {}
+    assert bridge.provenance == {}
+    assert bridge.fee_ledger.query(run_id=bridge.run_id) == ()

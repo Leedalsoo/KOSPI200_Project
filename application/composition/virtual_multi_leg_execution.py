@@ -870,6 +870,13 @@ class VirtualMultiLegExecutionBridge:
         self, *, plan: MultiLegExecutionPlan, leg: Any, identity: Any,
         broker_command: BrokerOrderCommand, report: ExecutionReport,
     ) -> None:
+        if report.client_order_id != broker_command.client_order_id:
+            raise RuntimeError("MULTI_LEG_EXECUTION_ORDER_LINEAGE_MISMATCH")
+        if report.group_id is not None and report.group_id != plan.group_id:
+            raise RuntimeError("MULTI_LEG_EXECUTION_GROUP_LINEAGE_MISMATCH")
+        if report.leg_id is not None and report.leg_id != leg.leg_id:
+            raise RuntimeError("MULTI_LEG_EXECUTION_LEG_LINEAGE_MISMATCH")
+
         fill_reports = self._execution_fill_reports(report)
         if not fill_reports:
             self.provenance[report.client_order_id] = {
