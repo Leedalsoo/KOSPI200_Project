@@ -1106,3 +1106,63 @@ def test_individual_fill_fees_are_journaled_once_across_replay(tmp_path):
     replayed = store.load_execution_journal_records()
     assert len(replayed) == 2
     assert [__import__("json").loads(row["report_json"])["fee"] for row in replayed] == ["0.12", "0.24"]
+
+
+def test_sqlite_busy_timeout_does_not_partially_settle_and_retry_after_unlock_succeeds(tmp_path):
+    store, oms, position, dedup, bridge = _prepared(tmp_path)
+    store.timeout_seconds = 0.05
+    lock = sqlite3.connect(store.path, timeout=1, isolation_level=None)
+    lock.execute("BEGIN IMMEDIATE")
+    report = _fill(execution_id="busy-timeout-fill", quantity=1, remaining=2)
+    try:
+        with pytest.raises(sqlite3.OperationalError, match="database is locked"):
+            bridge.settle(report)
+        assert not store.has_execution("busy-timeout-fill")
+        assert oms.get("client-1").filled_quantity == 0
+        assert position.qty == 0
+        assert not dedup.contains("busy-timeout-fill")
+    finally:
+        lock.rollback()
+        lock.close()
+
+    settled = bridge.settle(report)
+    assert settled.filled_quantity == 1
+    assert position.qty == 1
+    assert [row["execution_id"] for row in store.load_execution_journal_records()] == ["busy-timeout-fill"]
+
+
+def test_concurrent_identical_execution_commits_serialize_to_one_journal_row(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    database = tmp_path / "concurrent-writers.sqlite3"
+    stores = (SQLiteSettlementStore(database), SQLiteSettlementStore(database))
+    barrier = Barrier(2)
+    payload = {
+        "execution_id": "concurrent-same-fill",
+        "client_order_id": "concurrent-order",
+        "filled_quantity": 1,
+        "execution_price": "12.50",
+    }
+    order_state = {"client_order_id": "concurrent-order", "filled_quantity": 1}
+    position_state = {"instrument_id": "CONCURRENT-FUT", "side": "LONG", "qty": 1, "avg_price": "12.50"}
+
+    def commit(store):
+        barrier.wait(timeout=2)
+        return store.commit_fill(
+            execution_id="concurrent-same-fill",
+            client_order_id="concurrent-order",
+            broker_order_id="concurrent-broker",
+            report_payload=payload,
+            order_state_payload=order_state,
+            position_payload=position_state,
+            instrument_id="CONCURRENT-FUT",
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = tuple(pool.map(commit, stores))
+
+    assert sorted(results) == [False, True]
+    assert len(stores[0].load_execution_journal_records()) == 1
+    assert stores[0].load_order_state_payloads() == (order_state,)
+    assert stores[0].load_position_state("CONCURRENT-FUT") == position_state
