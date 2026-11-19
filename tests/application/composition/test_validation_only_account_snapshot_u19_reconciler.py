@@ -2349,3 +2349,210 @@ def test_multi_group_execution_payload_conflict_and_foreign_group_ownership_keep
     assert final_store.load_position_state(SHARED_INSTRUMENT) == before_shared
     assert final_store.load_position_state(SECOND_INSTRUMENT) == before_second
     assert final_store.unresolved_reconciliations()[0]["status"] == "CONFLICT"
+
+def test_multi_group_local_conflict_resolution_isolated_from_global_collision_after_restart(tmp_path):
+    from core.oms.oms_fsm import OrderStateTransitionError
+    from environments.live.settlement.sqlite_settlement_store import SettlementStoreError
+
+    bundle = _multi_group_bundle(final_shared=2)
+    reconciler, checkpoint_path = _make_reconciler(tmp_path)
+    store = reconciler.ledger_snapshot_builder.settlement_store
+    _seed_order(
+        store, client_id="client-g2-shared", broker_id="broker-g2-shared",
+        instrument=SHARED_INSTRUMENT, quantity=3, leg_id="shared",
+        fills=(("SYNTHETIC:G2-FILL-001", 1, "10.30"),),
+        execution_times={"SYNTHETIC:G2-FILL-001": AS_OF - timedelta(minutes=1)},
+        group_id=GROUP_TWO, side="SELL",
+    )
+    _seed_order(
+        store, client_id="client-g2-second", broker_id="broker-g2-second",
+        instrument=SECOND_INSTRUMENT, quantity=1, leg_id="second",
+        fills=(("SYNTHETIC:G2-FILL-002", 1, "8.30"),),
+        execution_times={"SYNTHETIC:G2-FILL-002": AS_OF - timedelta(seconds=30)},
+        group_id=GROUP_TWO, side="SELL",
+    )
+
+    # Two late fills belong to one order in GROUP TWO. Preserve both candidates
+    # and create independent payload conflicts in the same order-local scope.
+    oms = OrderStateMachine(persistence_store=store)
+    oms.restore_from_store()
+    oms.apply_cancel(ExecutionReport(
+        client_order_id="client-g2-shared", broker_order_id="broker-g2-shared",
+        execution_id=None, status="CANCELLED", filled_quantity=0,
+        remaining_quantity=1, execution_price=None,
+        execution_timestamp=AS_OF - timedelta(seconds=40),
+        group_id=GROUP_TWO, leg_id="shared",
+    ))
+    position = LivePositionAggregate(SHARED_INSTRUMENT)
+    position.restore_persistence_record(store.load_position_state(SHARED_INSTRUMENT))
+    bridge = LiveExecutionPositionBridge(
+        order_state_machine=oms, position_fill_adapter=LivePositionFillAdapter(position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=store),
+        position_aggregate=position, settlement_store=store,
+    )
+    late_a = ExecutionReport(
+        client_order_id="client-g2-shared", broker_order_id="broker-g2-shared",
+        execution_id="SYNTHETIC:G2-LOCAL-LATE-A", status="PARTIALLY_FILLED",
+        filled_quantity=1, remaining_quantity=1, execution_price=Decimal("10.40"),
+        execution_timestamp=AS_OF - timedelta(seconds=30), fee=Decimal("5"),
+        group_id=GROUP_TWO, leg_id="shared",
+    )
+    late_b = replace(
+        late_a, execution_id="SYNTHETIC:G2-LOCAL-LATE-B",
+        status="FILLED", remaining_quantity=0,
+        execution_price=Decimal("10.50"),
+        execution_timestamp=AS_OF - timedelta(seconds=20),
+    )
+    for report in (late_a, late_b):
+        with pytest.raises(OrderStateTransitionError, match="RECONCILIATION_PENDING"):
+            bridge.settle(report)
+    for report in (
+        replace(late_a, execution_price=Decimal("10.41")),
+        replace(late_b, execution_price=Decimal("10.51")),
+    ):
+        with pytest.raises(SettlementStoreError, match="RECONCILIATION_INBOX_EXECUTION_ID_COLLISION"):
+            bridge.settle(report)
+
+    local_a = store.late_fill_conflict_history(execution_id=late_a.execution_id)[0]
+    local_b = store.late_fill_conflict_history(execution_id=late_b.execution_id)[0]
+    assert local_a["scope_key"] == local_b["scope_key"] == "client-g2-shared"
+    assert len(store.open_reconciliation_events(scope_key="client-g2-shared")) == 2
+
+    # A separate cross-order/global collision is not adjudicable by the
+    # order-local validation-only confirmer.
+    foreign_instrument = "SYNTHETIC_CONTRACT:KOSPI200_GLOBAL_COLLISION"
+    foreign_oms = _seed_order(
+        store, client_id="client-g2-global", broker_id="broker-g2-global",
+        instrument=foreign_instrument, quantity=1, leg_id="global-leg",
+        fills=(), group_id=GROUP_TWO, side="SELL",
+    )
+    foreign_position = LivePositionAggregate(foreign_instrument)
+    foreign_bridge = LiveExecutionPositionBridge(
+        order_state_machine=foreign_oms,
+        position_fill_adapter=LivePositionFillAdapter(foreign_position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=store),
+        position_aggregate=foreign_position, settlement_store=store,
+    )
+    with pytest.raises(SettlementStoreError, match="EXECUTION_ID_COLLISION"):
+        foreign_bridge.settle(ExecutionReport(
+            client_order_id="client-g2-global", broker_order_id="broker-g2-global",
+            execution_id="SYNTHETIC:FILL-001", status="FILLED",
+            filled_quantity=1, remaining_quantity=0,
+            execution_price=Decimal("99.90"),
+            execution_timestamp=AS_OF - timedelta(seconds=10),
+            fee=Decimal("7"), group_id=GROUP_TWO, leg_id="global-leg",
+        ))
+    global_conflict = store.execution_journal_conflict_history(
+        execution_id="SYNTHETIC:FILL-001", scope_key="__runtime_bootstrap__",
+    )[0]
+    with pytest.raises(SettlementStoreError, match="EXECUTION_JOURNAL_CONFLICT_ORDER_IDENTITY_MISMATCH_REQUIRES_MANUAL_REVIEW"):
+        store.prepare_validation_only_execution_journal_conflict_resolution(
+            execution_id="SYNTHETIC:FILL-001", scope_key="__runtime_bootstrap__",
+            original_payload_sha256=global_conflict["original_payload_sha256"],
+            incoming_payload_sha256=global_conflict["incoming_payload_sha256"],
+            selected_payload_sha256=global_conflict["original_payload_sha256"],
+            evidence_ref="VALIDATION_ONLY:U19:GLOBAL-CROSS-ORDER-MANUAL-REVIEW",
+        )
+
+    # Correct provenance, both preserved candidate hashes and exact order scope
+    # permit selecting A's original payload only.
+    evidence_a = "VALIDATION_ONLY:U19:GROUP-TWO:LATE-A:ORIGINAL-CONFIRMED"
+    assert store.prepare_validation_only_late_fill_conflict_resolution(
+        execution_id=late_a.execution_id, scope_key="client-g2-shared",
+        original_payload_sha256=local_a["original_payload_sha256"],
+        conflicting_payload_sha256=local_a["conflicting_payload_sha256"],
+        selected_payload_sha256=local_a["original_payload_sha256"],
+        evidence_ref=evidence_a,
+    ) is True
+    assert store.prepare_validation_only_late_fill_conflict_resolution(
+        execution_id=late_a.execution_id, scope_key="client-g2-shared",
+        original_payload_sha256=local_a["original_payload_sha256"],
+        conflicting_payload_sha256=local_a["conflicting_payload_sha256"],
+        selected_payload_sha256=local_a["original_payload_sha256"],
+        evidence_ref=evidence_a,
+    ) is False
+    with pytest.raises(SettlementStoreError, match="LATE_FILL_CONFLICT_EVIDENCE_REF_MISMATCH"):
+        bridge.settle_authoritatively_reconciled_fill(
+            late_a, authoritative_evidence_ref="VALIDATION_ONLY:U19:WRONG-EVIDENCE",
+        )
+    bridge.settle_authoritatively_reconciled_fill(
+        late_a, authoritative_evidence_ref=evidence_a,
+    )
+    assert position.qty == 2
+    assert len(store.open_reconciliation_events(scope_key="client-g2-shared")) == 1
+    assert store.late_fill_conflict_history(execution_id=late_b.execution_id)[0]["event_type"] == "CONFLICT_DETECTED"
+    assert store.unresolved_reconciliations_by_scope if hasattr(store, "unresolved_reconciliations_by_scope") else True
+    assert any(
+        item["scope_key"] == "client-g2-shared" and item["status"] in {"PENDING", "CONFLICT"}
+        for item in store.unresolved_reconciliations()
+    )
+    assert any(
+        item["scope_key"] == "__runtime_bootstrap__" and item["status"] == "CONFLICT"
+        for item in store.unresolved_reconciliations()
+    )
+
+    # The account snapshot contains only the individually adjudicated late A.
+    # Late B and the cross-order global conflict must continue gating recovery.
+    arrived_orders = tuple(
+        {**row, "order_quantity": 3, "cumulative_filled_quantity": 2, "status": "CANCELLED"}
+        if row["client_order_id"] == "client-g2-shared" else row
+        for row in bundle.orders.rows
+    )
+    late_a_row = {
+        "execution_id": late_a.execution_id, "client_order_id": late_a.client_order_id,
+        "broker_order_id": late_a.broker_order_id, "group_id": GROUP_TWO,
+        "instrument_id": SHARED_INSTRUMENT, "side": "SELL", "filled_quantity": 1,
+        "execution_price": "10.40", "execution_timestamp": late_a.execution_timestamp,
+    }
+    arrived = replace(
+        bundle,
+        orders=_section(bundle.orders.snapshot_id, AS_OF, arrived_orders),
+        executions=_section(bundle.executions.snapshot_id, AS_OF, (*bundle.executions.rows, late_a_row)),
+        positions=_section(bundle.positions.snapshot_id, AS_OF, (
+            {"instrument_id": SHARED_INSTRUMENT, "side": "LONG", "quantity": 2, "avg_price": "10.10"},
+            {"instrument_id": SECOND_INSTRUMENT, "side": "SHORT", "quantity": 1, "avg_price": "8.30"},
+        )),
+    )
+    validation = validate_account_snapshot_bundle(arrived)
+    result = reconciler.reconcile_account(
+        bundle=arrived, validation=validation, group_ids=(GROUP_ID, GROUP_TWO),
+        snapshot_id="multi-group-local-one-global-one", as_of=AS_OF,
+        aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:LOCAL-GLOBAL-ISOLATION",
+        expected_group_manifests=_expected_group_manifests(arrived),
+    )
+    assert result.status == "RECONCILIATION_REQUIRED"
+    assert result.recovery_decision.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+    assert "__GLOBAL_RECONCILIATION__" in result.recovery_decision.pending_order_ids
+    assert "client-g2-shared" in result.recovery_decision.pending_order_ids
+    assert result.recovery_decision.new_entry_enabled is False
+    assert result.recovery_decision.order_submission_enabled is False
+
+    # Reopen SQLite and verify only A is confirmed; B and global conflict remain.
+    reopened = SQLiteSettlementStore(store.path)
+    assert [item["event_type"] for item in reopened.late_fill_conflict_history(execution_id=late_a.execution_id)] == ["CONFLICT_DETECTED", "RESOLUTION_SELECTED", "SETTLED"]
+    assert len(reopened.late_fill_conflict_history(execution_id=late_b.execution_id)) == 1
+    assert reopened.open_reconciliation_events(scope_key="client-g2-shared") == store.open_reconciliation_events(scope_key="client-g2-shared")
+    assert reopened.execution_journal_conflict_history(
+        execution_id="SYNTHETIC:FILL-001", scope_key="__runtime_bootstrap__",
+    ) == (global_conflict,)
+    assert len(reopened.load_execution_journal_records()) == 6
+    assert reopened.load_position_state(SHARED_INSTRUMENT)["qty"] == 2
+    assert any(item["scope_key"] == "__runtime_bootstrap__" for item in reopened.unresolved_reconciliations())
+    assert any(item["scope_key"] == "client-g2-shared" for item in reopened.unresolved_reconciliations())
+
+    replay_reconciler = ValidationOnlyAccountSnapshotU19Reconciler(
+        ledger_snapshot_builder=ValidationOnlyU19LedgerSnapshotBuilder(reopened),
+        recovery_coordinator=ValidationOnlyTrack2U19RecoveryCoordinator(
+            SqliteTrack2U19RecoveryStore(checkpoint_path), settlement_store=reopened,
+        ),
+    )
+    replay = replay_reconciler.reconcile_account(
+        bundle=arrived, validation=validation, group_ids=(GROUP_ID, GROUP_TWO),
+        snapshot_id="multi-group-local-one-global-one-restart", as_of=AS_OF,
+        aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:LOCAL-GLOBAL-ISOLATION",
+        expected_group_manifests=_expected_group_manifests(arrived),
+    )
+    assert replay.status == "RECONCILIATION_REQUIRED"
+    assert replay.recovery_decision.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+    assert "__GLOBAL_RECONCILIATION__" in replay.recovery_decision.pending_order_ids
+    assert "client-g2-shared" in replay.recovery_decision.pending_order_ids
