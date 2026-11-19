@@ -462,3 +462,28 @@ def test_kis_recovery_normalize_preserves_context_group_leg_for_each_delta():
     assert len(reports) == 2
     assert all(report.group_id == context.group_id for report in reports)
     assert all(report.leg_id == context.leg_id for report in reports)
+def test_kis_recovery_legacy_correlation_without_group_leg_remains_compatible():
+    legacy_context = SimpleNamespace(
+        client_order_id="legacy-client-order",
+        order_quantity=3,
+        prior_filled_quantity=0,
+        prior_average_price=None,
+    )
+    reports = KISFuturesExecutionRecoveryAdapter().normalize(
+        {
+            "output1": [
+                {
+                    "odno": "legacy-broker-order",
+                    "tot_ccld_qty": "1",
+                    "avg_idx": "10.25",
+                    "ord_dt": "20261118",
+                    "ord_tmd": "093000",
+                }
+            ]
+        },
+        lambda _order_id: legacy_context,
+    )
+
+    assert len(reports) == 1
+    assert reports[0].group_id is None
+    assert reports[0].leg_id is None

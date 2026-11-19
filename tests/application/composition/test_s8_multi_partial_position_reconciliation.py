@@ -290,3 +290,62 @@ def test_execution_lineage_mismatch_fails_closed_before_any_position_or_fee_muta
     assert bridge.execution_legs == {}
     assert bridge.provenance == {}
     assert bridge.fee_ledger.query(run_id=bridge.run_id) == ()
+
+def test_legacy_execution_report_without_group_leg_uses_active_plan_lineage():
+    bridge = _bridge()
+    plan, leg, identity, command, report = _inputs()
+    legacy_report = replace(report, group_id=None, leg_id=None)
+
+    bridge._apply_reconciled_execution(
+        plan=plan,
+        leg=leg,
+        identity=identity,
+        broker_command=command,
+        report=legacy_report,
+    )
+
+    lots = bridge.position_lot_store.history()
+    assert len(lots) == 2
+    assert all(lot.group_id == plan.group_id for lot in lots)
+    assert all(lot.leg_id == leg.leg_id for lot in lots)
+    assert all(lot.client_order_id == command.client_order_id for lot in lots)
+
+
+def test_multi_fill_expansion_preserves_outer_group_leg_order_lineage():
+    report = ExecutionReport(
+        client_order_id="SYNTHETIC:MULTI-FILL-ORDER",
+        broker_order_id="SYNTHETIC:MULTI-FILL-BROKER",
+        execution_id=None,
+        status="PARTIALLY_FILLED",
+        filled_quantity=3,
+        remaining_quantity=1,
+        execution_price=Decimal("10.5"),
+        execution_timestamp=datetime(2026, 11, 19, 9, 30),
+        fee=Decimal("0.2"),
+        group_id="SYNTHETIC:MULTI-FILL-GROUP",
+        leg_id="SYNTHETIC:MULTI-FILL-LEG",
+        execution_fills=(
+            ExecutionFill(
+                execution_id="SYNTHETIC:FILL-1",
+                filled_quantity=1,
+                execution_price=Decimal("10.0"),
+                execution_timestamp=datetime(2026, 11, 19, 9, 30),
+                fee=Decimal("0.1"),
+            ),
+            ExecutionFill(
+                execution_id="SYNTHETIC:FILL-2",
+                filled_quantity=2,
+                execution_price=Decimal("10.75"),
+                execution_timestamp=datetime(2026, 11, 19, 9, 30, 1),
+                fee=Decimal("0.1"),
+            ),
+        ),
+    )
+
+    expanded = VirtualMultiLegExecutionBridge._execution_fill_reports(report)
+
+    assert len(expanded) == 2
+    assert sum(item.filled_quantity for item in expanded) == report.filled_quantity
+    assert all(item.group_id == report.group_id for item in expanded)
+    assert all(item.leg_id == report.leg_id for item in expanded)
+    assert all(item.client_order_id == report.client_order_id for item in expanded)
