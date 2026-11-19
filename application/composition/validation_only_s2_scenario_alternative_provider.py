@@ -13,6 +13,7 @@ from contracts.market_data_freshness import (
     evaluate_freshness,
 )
 from core.oms.track2_u19_recovery import U19BrokerPositionSnapshot, U19Position
+from environments.virtual.market.canonical import ReferenceCanonicalMarketTick
 
 
 class ValidationOnlyS2ScenarioAlternativeProvider:
@@ -187,6 +188,72 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
         except (TypeError, ValueError, ArithmeticError):
             return False
         return tick_time == candidate_time and tick_underlying == candidate_underlying
+
+
+    def option_quotes_at(self, observed_at: datetime) -> dict[tuple[str, float, str], dict[str, Any]]:
+        """Return the exact four synthetic sidecar quotes only at the scenario instant."""
+        _manifest, candidate, _profile, quotes, _hashes = self._load_verified_sources()
+        scenario_time = self._aware(candidate.get("observed_at"), "T7_SCENARIO_TIMESTAMP_INVALID")
+        if self._aware(observed_at, "T7_QUOTE_PROVIDER_TIMESTAMP_INVALID") != scenario_time:
+            return {}
+        payload: dict[tuple[str, float, str], dict[str, Any]] = {}
+        for row in quotes:
+            option_type = str(row["option_type"]).upper()
+            strike = float(Decimal(str(row["strike"])))
+            expiry = str(row["expiry"])
+            instrument_id = str(row["instrument_id"])
+            payload[(option_type, strike, expiry)] = {
+                "instrument_id": instrument_id,
+                "option_type": option_type,
+                "strike": strike,
+                "expiry": expiry,
+                "bid": float(Decimal(str(row["bid"]))),
+                "ask": float(Decimal(str(row["ask"]))),
+                "last": float(Decimal(str(row["last"]))),
+                "timestamp": str(row["timestamp"]),
+                "contract_multiplier": float(Decimal(str(row["contract_multiplier"]))),
+                "source": "SYNTHETIC:DERIVED_SCENARIO",
+                "validation_only": True,
+                "contract_identity_authority": "SYNTHETIC_ONLY_NOT_KIS_MASTER",
+            }
+        if len(payload) != 4:
+            raise ValueError("T10_S2_MARKET_QUOTE_PROVIDER_REQUIRES_FOUR_UNIQUE_LEGS")
+        return payload
+
+    def build_quote_only_tick(self, *, seq_id: int = 1) -> ReferenceCanonicalMarketTick:
+        """Build one quote-only event to evaluate the scenario without trade/order fields."""
+        _manifest, candidate, _profile, quotes, _hashes = self._load_verified_sources()
+        row = quotes[0]
+        observed_at = self._aware(candidate.get("observed_at"), "T7_SCENARIO_TIMESTAMP_INVALID")
+        instrument_id = str(row["instrument_id"])
+        return ReferenceCanonicalMarketTick(
+            timestamp=observed_at.isoformat(),
+            underlying_price=float(Decimal(str(candidate["underlying_price"]))),
+            underlying_symbol="KOSPI200",
+            underlying_source="SYNTHETIC:ACCEPTED_RUNTIME_V2_SCENARIO_INPUT",
+            strike_price=float(Decimal(str(row["strike"]))),
+            option_type=str(row["option_type"]).upper(),
+            contract_multiplier=float(Decimal(str(row["contract_multiplier"]))),
+            bid_price=float(Decimal(str(row["bid"]))),
+            ask_price=float(Decimal(str(row["ask"]))),
+            last_price=None,
+            volume=None,
+            bid_quantity=int(row["bid_quantity"]),
+            ask_quantity=int(row["ask_quantity"]),
+            seq_id=seq_id,
+            expiry=str(row["expiry"]),
+            symbol=instrument_id,
+            option_observed_hour=observed_at.strftime("%H"),
+            option_source="SYNTHETIC:DERIVED_SCENARIO",
+            instrument_id=instrument_id,
+            synthetic_contract_id=instrument_id,
+            instrument_identity_status="SYNTHETIC_VALIDATION_ONLY",
+            contract_class="synthetic_validation",
+            validation_only=True,
+            scenario_id=str(candidate.get("scenario_id") or self.candidate_id),
+            scenario_group_id=str(candidate.get("scenario_group_id") or self.candidate_id),
+            scenario_regime=str(candidate.get("scenario_regime") or "S2_VALIDATION_ONLY"),
+        )
 
     def __call__(self, tick: Any, attempts: tuple[str, ...] = ()):
         del attempts  # The alternative is deterministic and does not alter its source selection.

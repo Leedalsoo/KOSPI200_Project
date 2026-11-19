@@ -204,6 +204,24 @@ class AutomatedVirtualTradingLoop:
         ask_price = getattr(tick, "ask_price", None)
         event["bid_price"] = bid_price
         event["ask_price"] = ask_price
+        if self.runtime_evidence_supervisor is not None:
+            try:
+                supervision = self.runtime_evidence_supervisor.evaluate(tick)
+                self.last_runtime_evidence_supervision = supervision
+                stop_snapshot = getattr(supervision, "stop_snapshot", None)
+                event["evidence_candidate_source"] = getattr(supervision, "candidate_source", None)
+                event["evidence_stop_status"] = getattr(stop_snapshot, "status", None)
+                if getattr(stop_snapshot, "status", None) != "ARMED":
+                    event["status"] = "BLOCKED"
+                    event["reason"] = "X2_RUNTIME_STOP_LATCH_NOT_ARMED"
+                    self._quote_only_events.append(event)
+                    return event
+            except Exception as exc:  # noqa: BLE001 - quote-only evidence failure must latch X2
+                self._trip_runtime_stop(f"X2_T5_QUOTE_ONLY_EVIDENCE_FAILED:{type(exc).__name__}")
+                event["status"] = "EVIDENCE_SUPERVISION_FAILED"
+                event["reason"] = f"{type(exc).__name__}:{exc}"
+                self._quote_only_events.append(event)
+                return event
         try:
             valid_book = (
                 bid_price is not None
@@ -222,6 +240,15 @@ class AutomatedVirtualTradingLoop:
         underlying_price = getattr(tick, "underlying_price", None)
         if underlying_price is None or Decimal(str(underlying_price)) <= 0:
             event["reason"] = "AUTHORITATIVE_UNDERLYING_PRICE_UNAVAILABLE"
+            self._quote_only_events.append(event)
+            return event
+
+        if getattr(self, "validation_only_s2_replay", False):
+            event["status"] = "EVIDENCE_VALIDATED_NO_EXECUTION"
+            event["reason"] = (
+                "S2_X1_U19_FRESHNESS_EVIDENCE_VALIDATED; "
+                "NO STRATEGY/DECISION/ORDER PATH INVOKED"
+            )
             self._quote_only_events.append(event)
             return event
 

@@ -46,7 +46,60 @@ from interfaces.control_tower.virtual_test_controller import VirtualTestControll
 from application.composition.virtual_risk_guard_status_source import VirtualRiskGuardStatusSource
 
 
-def create_virtual_run_session(context: RunContext, option_master: Any, risk_guard_status_source: RiskGuardStatusSource | None = None, track4_greeks_source: KISTrack4GreeksRealtimeSource | None = None, runtime_evidence_supervisor=None) -> RunSession:
+def attach_validation_only_s2_quote_only_replay(loop, bundle, evidence_chain):
+    """Attach one no-trade S2 scenario quote event to an isolated Virtual loop."""
+    loop.runtime_evidence_supervisor = evidence_chain.supervisor
+    loop.validation_only_s2_evidence_chain = evidence_chain
+    bundle.market.set_authoritative_option_quote_provider(
+        evidence_chain.alternative_provider.option_quotes_at
+    )
+    candidate_tick = evidence_chain.alternative_provider.build_quote_only_tick()
+    loop.validation_only_s2_candidate_tick = candidate_tick
+
+    def replay_validation_only_s2_candidate():
+        before = len(loop.quote_only_events)
+        bundle.market.publish_replay_tick(candidate_tick)
+        events = loop.quote_only_events
+        return events[-1] if len(events) > before else None
+
+    loop.replay_validation_only_s2_candidate = replay_validation_only_s2_candidate
+    loop.validation_only_s2_replay = True
+    loop.signal_observation_only = True
+    return candidate_tick
+
+
+def create_virtual_run_session(
+    context: RunContext,
+    option_master: Any,
+    risk_guard_status_source: RiskGuardStatusSource | None = None,
+    track4_greeks_source: KISTrack4GreeksRealtimeSource | None = None,
+    runtime_evidence_supervisor=None,
+    *,
+    validation_only_s2_replay: bool = False,
+    validation_only_s2_original_source_root: str | Path | None = None,
+    validation_only_s2_notion_decision_refs: tuple[str, ...] = (
+        "No.1534", "No.1535", "No.1538", "No.1554", "No.1555",
+    ),
+) -> RunSession:
+    if validation_only_s2_replay:
+        if str(context.environment).upper() != "VIRTUAL":
+            raise ValueError("T10_S2_REPLAY_VIRTUAL_ENVIRONMENT_REQUIRED")
+        if str(context.scenario or "").upper() != "CALM":
+            raise ValueError("T10_S2_REPLAY_CALM_SCENARIO_REQUIRED")
+        if runtime_evidence_supervisor is not None:
+            raise ValueError("T10_S2_REPLAY_SUPERVISOR_IS_FACTORY_MANAGED")
+        if option_master is not None:
+            raise ValueError("T10_S2_REPLAY_EXTERNAL_OPTION_MASTER_FORBIDDEN")
+        if context.historical_store_path is not None:
+            raise ValueError("T10_S2_REPLAY_USES_PINNED_SCENARIO_TICK_ONLY")
+        if context.strategy_keys:
+            raise ValueError("T10_S2_REPLAY_STRATEGIES_MUST_BE_EMPTY")
+        if validation_only_s2_original_source_root is None:
+            raise ValueError("T10_S2_REPLAY_ORIGINAL_SOURCE_ROOT_REQUIRED")
+        if not Path(validation_only_s2_original_source_root).is_dir():
+            raise ValueError("T10_S2_REPLAY_ORIGINAL_SOURCE_ROOT_NOT_FOUND")
+    elif validation_only_s2_original_source_root is not None:
+        raise ValueError("T10_S2_SOURCE_ROOT_REQUIRES_EXPLICIT_REPLAY_MODE")
     dependencies = VirtualCompositionDependencies(
         contract_registry=None,
         option_master=option_master,
@@ -143,6 +196,32 @@ def create_virtual_run_session(context: RunContext, option_master: Any, risk_gua
     strategy_hub = loop.strategy_hub
     loop.runtime_stop_state_path = stop_state_root / f"{run_key}.sqlite3"
     execution_bridge = loop.multi_leg_bridge
+    validation_only_s2_evidence_chain = None
+    if validation_only_s2_replay:
+        from application.composition.validation_only_s2_source_evidence_providers import (
+            build_validation_only_s2_runtime_evidence_chain,
+        )
+
+        vssf_runtime = bundle.execution._authoritative_execute.__self__.vssf_runtime
+        u19_state_root = stop_state_root.parent / "validation_only_runtime_u19_recovery"
+        validation_only_s2_evidence_chain = build_validation_only_s2_runtime_evidence_chain(
+            project_root=Path(__file__).resolve().parents[2],
+            original_source_root=validation_only_s2_original_source_root,
+            run_id=context.run_id,
+            bridge=execution_bridge,
+            vssf_runtime=vssf_runtime,
+            stop_switch=runtime_stop_switch,
+            risk_guard_status_source=virtual_risk_guard,
+            u19_state_store_path=u19_state_root / f"{run_key}.sqlite3",
+            notion_decision_refs=validation_only_s2_notion_decision_refs,
+        )
+        if validation_only_s2_evidence_chain.supervisor.stop_switch is not runtime_stop_switch:
+            raise ValueError("T10_S2_SUPERVISOR_X2_INSTANCE_MISMATCH")
+        attach_validation_only_s2_quote_only_replay(
+            loop,
+            bundle,
+            validation_only_s2_evidence_chain,
+        )
     bundle.broker_api.attach_group_read_model(
         snapshot_reader=execution_bridge.position_groups.snapshot,
         reports_reader=execution_bridge.group_reports,

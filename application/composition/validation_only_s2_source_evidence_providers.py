@@ -256,3 +256,104 @@ class ValidationOnlyS2NotionSourceReconciliationProvider(_ScopedS2EvidenceProvid
         return result
 
 Path(r'C:\Users\white\Desktop\MovingProject\Q25_A8_R10\application\composition\validation_only_s2_source_evidence_providers.py').write_text(Path(__file__).read_text(encoding='utf-8'), encoding='utf-8')
+
+
+from dataclasses import dataclass
+
+from application.composition.track2_u19_recovery import (
+    ValidationOnlyTrack2U19RecoveryCoordinator,
+)
+from application.composition.validation_only_runtime_evidence_supervisor import (
+    ValidationOnlyRuntimeEvidenceSupervisor,
+)
+from application.composition.validation_only_runtime_invariant_checker import (
+    ValidationOnlyRuntimeInvariantChecker,
+)
+from application.composition.validation_only_s2_scenario_alternative_provider import (
+    ValidationOnlyS2ScenarioAlternativeProvider,
+)
+from application.composition.validation_only_vssf_runtime_evidence_adapter import (
+    ValidationOnlyVSSFRuntimeEvidenceAdapter,
+)
+from environments.virtual.position.track2_u19_recovery_store import (
+    SqliteTrack2U19RecoveryStore,
+)
+
+
+@dataclass(frozen=True)
+class ValidationOnlyS2RuntimeEvidenceChain:
+    supervisor: Any
+    vssf_adapter: Any
+    primary_provider: Any
+    reconciliation_provider: Any
+    alternative_provider: Any
+    recovery_coordinator: Any
+    recovery_store: Any
+
+
+def build_validation_only_s2_runtime_evidence_chain(
+    *,
+    project_root: str | Path,
+    original_source_root: str | Path,
+    run_id: str,
+    bridge: Any,
+    vssf_runtime: Any,
+    stop_switch: Any,
+    risk_guard_status_source: Any,
+    u19_state_store_path: str | Path,
+    notion_decision_refs: tuple[str, ...] = (
+        "No.1534", "No.1535", "No.1538", "No.1554", "No.1555",
+    ),
+) -> ValidationOnlyS2RuntimeEvidenceChain:
+    """Build the complete S2 provider chain for an explicitly isolated Virtual replay."""
+    if not str(run_id).strip() or str(getattr(bridge, "run_id", "")) != str(run_id):
+        raise ValueError("T10_S2_VSSF_BRIDGE_RUN_ID_MISMATCH")
+    if not Path(original_source_root).is_dir():
+        raise ValueError("T10_S2_ORIGINAL_SOURCE_ROOT_REQUIRED")
+    snapshot_reader = getattr(stop_switch, "snapshot", None)
+    if not callable(snapshot_reader) or snapshot_reader().status != "ARMED":
+        raise ValueError("T10_S2_X2_NOT_ARMED")
+    state_path = Path(u19_state_store_path)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+
+    vssf_adapter = ValidationOnlyVSSFRuntimeEvidenceAdapter(
+        bridge=bridge,
+        vssf_runtime=vssf_runtime,
+        run_id=run_id,
+    )
+    alternative = ValidationOnlyS2ScenarioAlternativeProvider(
+        project_root=project_root,
+        run_id=run_id,
+        vssf_adapter=vssf_adapter,
+        position_phase="PRE_ENTRY",
+    )
+    primary = ValidationOnlyS2AcceptedOriginalPrimaryProvider(
+        project_root=project_root,
+        scope_provider=alternative,
+    )
+    reconciliation = ValidationOnlyS2NotionSourceReconciliationProvider(
+        project_root=project_root,
+        original_source_root=original_source_root,
+        scope_provider=alternative,
+        notion_decision_refs=notion_decision_refs,
+    )
+    recovery_store = SqliteTrack2U19RecoveryStore(state_path)
+    recovery_coordinator = ValidationOnlyTrack2U19RecoveryCoordinator(recovery_store)
+    supervisor = ValidationOnlyRuntimeEvidenceSupervisor(
+        stop_switch=stop_switch,
+        invariant_checker=ValidationOnlyRuntimeInvariantChecker(),
+        u19_recovery_coordinator=recovery_coordinator,
+        risk_guard_status_source=risk_guard_status_source,
+        primary_provider=primary,
+        reconciliation_provider=reconciliation,
+        alternative_provider=alternative,
+    )
+    return ValidationOnlyS2RuntimeEvidenceChain(
+        supervisor=supervisor,
+        vssf_adapter=vssf_adapter,
+        primary_provider=primary,
+        reconciliation_provider=reconciliation,
+        alternative_provider=alternative,
+        recovery_coordinator=recovery_coordinator,
+        recovery_store=recovery_store,
+    )

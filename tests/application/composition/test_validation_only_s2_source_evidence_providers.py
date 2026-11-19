@@ -20,6 +20,7 @@ from application.composition.validation_only_s2_scenario_alternative_provider im
 from application.composition.validation_only_s2_source_evidence_providers import (
     ValidationOnlyS2AcceptedOriginalPrimaryProvider,
     ValidationOnlyS2NotionSourceReconciliationProvider,
+    build_validation_only_s2_runtime_evidence_chain,
 )
 from application.composition.validation_only_vssf_runtime_evidence_adapter import (
     ValidationOnlyVSSFRuntimeEvidenceAdapter,
@@ -151,9 +152,9 @@ def test_t9_reconciliation_requires_mandatory_no_1534(tmp_path):
 
 
 
-def _pre_entry_alternative():
+def _pre_entry_alternative(run_id="SYNTHETIC:T9:PRE_ENTRY"):
     bridge = SimpleNamespace(
-        run_id="SYNTHETIC:T9:PRE_ENTRY",
+        run_id=run_id,
         groups={},
         provenance={},
         execution_legs={},
@@ -175,11 +176,11 @@ def _pre_entry_alternative():
     adapter = ValidationOnlyVSSFRuntimeEvidenceAdapter(
         bridge=bridge,
         vssf_runtime=runtime,
-        run_id="SYNTHETIC:T9:PRE_ENTRY",
+        run_id=run_id,
     )
     return ValidationOnlyS2ScenarioAlternativeProvider(
         project_root=ROOT,
-        run_id="SYNTHETIC:T9:PRE_ENTRY",
+        run_id=run_id,
         vssf_adapter=adapter,
     )
 
@@ -249,3 +250,74 @@ def test_t9_supervisor_runs_primary_then_source_reconciliation_then_synthetic_fa
     assert len(stop.calls) == 1
 
 Path(r'C:\Users\white\Desktop\MovingProject\Q25_A8_R10\tests\application\composition\test_validation_only_s2_source_evidence_providers.py').write_text(Path(__file__).read_text(encoding='utf-8'), encoding='utf-8')
+
+
+def test_t10_builder_creates_complete_isolated_pre_entry_provider_chain(tmp_path):
+    import pytest
+
+    original = ROOT.parent / "KOSPI200_Project" / "data" / "kis_market_data_restart"
+    if not original.is_dir():
+        pytest.skip("original read-only KIS source fixture is not mounted")
+    project = ROOT
+    alternative = _pre_entry_alternative("SYNTHETIC:T10:PRE_ENTRY")
+
+    class _StopSwitch:
+        def __init__(self):
+            self.calls = []
+
+        def snapshot(self):
+            return SimpleNamespace(status="ARMED")
+
+        def evaluate(self, **kwargs):
+            self.calls.append(kwargs)
+            return SimpleNamespace(status="ARMED")
+
+    stop = _StopSwitch()
+    chain = build_validation_only_s2_runtime_evidence_chain(
+        project_root=project,
+        original_source_root=original,
+        run_id="SYNTHETIC:T10:PRE_ENTRY",
+        bridge=alternative.vssf_adapter.bridge,
+        vssf_runtime=alternative.vssf_adapter.vssf_runtime,
+        stop_switch=stop,
+        risk_guard_status_source=SimpleNamespace(
+            snapshot=lambda: SimpleNamespace(
+                admission_allowed=True,
+                kill_switch_engaged=False,
+                reason="HEALTHY",
+            )
+        ),
+        u19_state_store_path=tmp_path / "u19" / "state.sqlite3",
+        notion_decision_refs=DECISIONS,
+    )
+
+    assert chain.supervisor.stop_switch is stop
+    assert chain.alternative_provider.position_phase == "PRE_ENTRY"
+    result = chain.supervisor.evaluate(TICK)
+    assert result.candidate_source == "PROVENANCE_PRESERVING_ALTERNATIVE"
+    assert result.u19_decision.status is U19RecoveryStatus.FLAT_CONFIRMED
+    assert result.invariant_report.status == ValidationOnlyRuntimeInvariantChecker.PASS
+    assert result.stop_snapshot.status == "ARMED"
+    assert chain.recovery_store.load_latest(result.u19_decision.group_id) is not None
+    assert len(stop.calls) == 1
+
+
+def test_t10_builder_rejects_non_armed_x2(tmp_path):
+    import pytest
+
+    project = ROOT
+    original = tmp_path
+    alternative = _pre_entry_alternative("SYNTHETIC:T10:PRE_ENTRY")
+
+    with pytest.raises(ValueError, match="T10_S2_X2_NOT_ARMED"):
+        build_validation_only_s2_runtime_evidence_chain(
+            project_root=project,
+            original_source_root=original,
+            run_id="SYNTHETIC:T10:PRE_ENTRY",
+            bridge=alternative.vssf_adapter.bridge,
+            vssf_runtime=alternative.vssf_adapter.vssf_runtime,
+            stop_switch=SimpleNamespace(snapshot=lambda: SimpleNamespace(status="TRIPPED")),
+            risk_guard_status_source=SimpleNamespace(snapshot=lambda: None),
+            u19_state_store_path=tmp_path / "u19" / "state.sqlite3",
+            notion_decision_refs=DECISIONS,
+        )
