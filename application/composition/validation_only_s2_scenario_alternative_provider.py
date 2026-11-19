@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -14,6 +15,11 @@ from contracts.market_data_freshness import (
 )
 from core.oms.track2_u19_recovery import U19BrokerPositionSnapshot, U19Position
 from environments.virtual.market.canonical import ReferenceCanonicalMarketTick
+
+
+@dataclass(frozen=True)
+class ValidationOnlyS2CandidateTick(ReferenceCanonicalMarketTick):
+    candidate_id: str = ""
 
 
 class ValidationOnlyS2ScenarioAlternativeProvider:
@@ -226,7 +232,7 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
         row = quotes[0]
         observed_at = self._aware(candidate.get("observed_at"), "T7_SCENARIO_TIMESTAMP_INVALID")
         instrument_id = str(row["instrument_id"])
-        return ReferenceCanonicalMarketTick(
+        return ValidationOnlyS2CandidateTick(
             timestamp=observed_at.isoformat(),
             underlying_price=float(Decimal(str(candidate["underlying_price"]))),
             underlying_symbol="KOSPI200",
@@ -253,6 +259,7 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
             scenario_id=str(candidate.get("scenario_id") or self.candidate_id),
             scenario_group_id=str(candidate.get("scenario_group_id") or self.candidate_id),
             scenario_regime=str(candidate.get("scenario_regime") or "S2_VALIDATION_ONLY"),
+            candidate_id=self.candidate_id,
         )
 
     def __call__(self, tick: Any, attempts: tuple[str, ...] = ()):

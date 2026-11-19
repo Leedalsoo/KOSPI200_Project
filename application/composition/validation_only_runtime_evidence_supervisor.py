@@ -102,6 +102,9 @@ class ValidationOnlyRuntimeEvidenceSupervisor:
         attempts: list[str] = []
         selected: tuple[str, Any, Any, Any] | None = None
         applicable_count = 0
+        last_invariant_report = None
+        last_u19_decision = None
+        last_freshness_verdict = None
         for source_name, provider in self.providers:
             if provider is None:
                 continue
@@ -141,11 +144,23 @@ class ValidationOnlyRuntimeEvidenceSupervisor:
                 invariant_inputs = dict(candidate.invariant_inputs)
                 invariant_inputs["u19_decision"] = decision
                 report = self.invariant_checker.check(**invariant_inputs)
+                last_invariant_report = report
+                last_u19_decision = decision
+                last_freshness_verdict = candidate.freshness_verdict
                 if not self._candidate_is_valid(report, decision, candidate.freshness_verdict):
                     issues = tuple(getattr(report, "issues", ()))
+                    freshness_value = getattr(candidate.freshness_verdict, "status", None)
+                    freshness_status = str(
+                        getattr(freshness_value, "value", freshness_value) or ""
+                    ).upper()
+                    rejection_reasons = list(issues)
+                    if freshness_status and freshness_status != "FRESH":
+                        rejection_reasons.append(f"FRESHNESS_NOT_FRESH:{freshness_status}")
+                    if not rejection_reasons:
+                        rejection_reasons.append(decision.status.value)
                     attempts.append(
                         f"{source_name}:RECONCILIATION_REQUIRED:"
-                        + (",".join(issues) if issues else decision.status.value)
+                        + ",".join(rejection_reasons)
                     )
                     continue
                 selected = (source_name, candidate, decision, report)
@@ -172,10 +187,10 @@ class ValidationOnlyRuntimeEvidenceSupervisor:
 
         if selected is None:
             stop = self.stop_switch.evaluate(
-                invariant_report=None,
-                u19_decision=None,
+                invariant_report=last_invariant_report,
+                u19_decision=last_u19_decision,
                 risk_guard_snapshot=risk_guard_snapshot,
-                freshness_verdict=None,
+                freshness_verdict=last_freshness_verdict,
                 manual_stop_reason="T5_EVIDENCE_RECONCILIATION_EXHAUSTED:" + "|".join(attempts),
             )
             return RuntimeEvidenceSupervisionResult(
