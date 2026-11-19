@@ -1012,6 +1012,22 @@ os._exit(74)
     assert recovered_oms.get("child-order").filled_quantity == 1
     assert recovered_position.qty == 1
     assert recovered_position.avg_price == Decimal("21.50")
+    replay_bridge = LiveExecutionPositionBridge(
+        order_state_machine=recovered_oms,
+        position_fill_adapter=LivePositionFillAdapter(recovered_position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=recovered_store),
+        position_aggregate=recovered_position,
+        settlement_store=recovered_store,
+    )
+    replay_report = ExecutionReport(
+        client_order_id="child-order", broker_order_id="child-broker", execution_id="hard-crash-fill",
+        status="PARTIALLY_FILLED", filled_quantity=1, remaining_quantity=1,
+        execution_price=Decimal("21.50"), execution_timestamp=datetime(2026, 10, 29, 8, 54, tzinfo=timezone.utc),
+    )
+    replayed = replay_bridge.settle(replay_report)
+    assert replayed.filled_quantity == 1
+    assert recovered_position.qty == 1
+    assert len(recovered_store.load_execution_journal_records()) == 1
 
 
 def test_cross_order_execution_id_collision_persists_global_conflict_history(tmp_path):
