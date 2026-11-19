@@ -68,6 +68,8 @@ class KISExecutionRecoveryContext:
     order_quantity: int
     prior_filled_quantity: int = 0
     prior_average_price: Decimal | None = None
+    group_id: str | None = None
+    leg_id: str | None = None
 
     def __post_init__(self) -> None:
         if not self.client_order_id.strip():
@@ -121,6 +123,8 @@ class KISFuturesExecutionRecoveryAdapter:
             remaining_quantity=context.order_quantity - cumulative,
             execution_price=price,
             execution_timestamp=self._timestamp_or_none(row),
+            group_id=context.group_id,
+            leg_id=context.leg_id,
             source_freshness=DataQuality(
                 is_fresh=True,
                 is_complete=False,
@@ -156,6 +160,8 @@ class KISFuturesExecutionRecoveryAdapter:
                 order_quantity=base_context.order_quantity,
                 prior_filled_quantity=cumulative_by_order[order_id],
                 prior_average_price=average_by_order[order_id],
+                group_id=getattr(base_context, "group_id", None),
+                leg_id=getattr(base_context, "leg_id", None),
             )
             report = self.to_execution_report(row, current_context)
             if report is not None:

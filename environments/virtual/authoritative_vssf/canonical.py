@@ -33,6 +33,8 @@ class VSSFOrderResult:
     lifecycle_reason: Optional[str] = None
     executed_at: Optional[str] = None
     execution_fills: tuple[VSSFExecutionFill, ...] = ()
+    group_id: str = ""
+    leg_id: str = ""
 
 __all__ = [
     "CanonicalAccountSummary", "CanonicalAssetType", "CanonicalExecutionReport",

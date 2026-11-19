@@ -63,7 +63,10 @@ def test_unfilled_order_waits_until_timeout_then_is_cancelled_and_confirmed():
     command = _command()
     submitted = runtime.process_order(command)
     assert submitted.status == "NEW"
-    assert runtime.query_order(command.client_order_id).status == "NEW"
+    assert (submitted.group_id, submitted.leg_id) == (command.group_id, command.leg_id)
+    pending = runtime.query_order(command.client_order_id)
+    assert pending.status == "NEW"
+    assert (pending.group_id, pending.leg_id) == (command.group_id, command.leg_id)
 
     clock.sleep_policy(599)
     runtime.process_market_data(_tick(clock))
@@ -73,6 +76,7 @@ def test_unfilled_order_waits_until_timeout_then_is_cancelled_and_confirmed():
     runtime.process_market_data(_tick(clock))
     confirmed = runtime.query_order(command.client_order_id)
     assert confirmed.status == "CANCELLED"
+    assert (confirmed.group_id, confirmed.leg_id) == (command.group_id, command.leg_id)
     assert confirmed.remaining_qty == 1
     assert runtime.order_book.get_pending_order(command.client_order_id) is None
 
@@ -113,11 +117,14 @@ def test_execution_adapter_requeries_after_cancel_and_maps_confirmed_status():
     command = _command("order-adapter")
     submitted = adapter.execute(command)
     assert submitted.status == "NEW"
+    assert (submitted.group_id, submitted.leg_id) == (command.group_id, command.leg_id)
+    adapter = VSSFExecutionAdapter(CommandContext(), runtime)
 
     clock.sleep_policy(600)
     runtime.process_timeouts()
     cancelled = adapter.cancel(command.client_order_id)
     assert cancelled.status == "CANCELLED"
+    assert (cancelled.group_id, cancelled.leg_id) == (command.group_id, command.leg_id)
     assert adapter.query(command.client_order_id).status == "CANCELLED"
 
 
@@ -134,3 +141,100 @@ def test_execution_adapter_cancel_reconciles_fill_winning_race():
     assert result.filled_quantity == 1
     assert result.execution_id
     assert result.fee == Decimal("0.0")
+
+def test_virtual_execution_cancel_and_query_preserve_prior_group_leg_metadata():
+    from contracts.types import DataQuality, ExecutionReport
+    from environments.virtual.execution.virtual_execution import VirtualExecutionEngine
+
+    engine = VirtualExecutionEngine(position=None, account=None)
+    prior = ExecutionReport(
+        client_order_id="virtual-lineage-order",
+        broker_order_id="virtual-broker-order",
+        execution_id="virtual-execution-1",
+        status="PARTIALLY_FILLED",
+        filled_quantity=1,
+        remaining_quantity=1,
+        execution_price=Decimal("10"),
+        execution_timestamp=datetime(2026, 11, 3, 9, 0),
+        fee=Decimal("0"),
+        source_freshness=DataQuality(
+            is_fresh=True,
+            is_complete=False,
+            source_available=True,
+            reason="synthetic test",
+        ),
+        group_id="SYNTHETIC:GROUP-1",
+        leg_id="SYNTHETIC:LEG-1",
+    )
+    engine._reports[prior.client_order_id] = prior
+
+    cancelled = engine.cancel(prior.client_order_id)
+    queried = engine.query(prior.client_order_id)
+
+    assert (cancelled.group_id, cancelled.leg_id) == (
+        "SYNTHETIC:GROUP-1",
+        "SYNTHETIC:LEG-1",
+    )
+    assert queried is not None
+    assert (queried.group_id, queried.leg_id) == (
+        "SYNTHETIC:GROUP-1",
+        "SYNTHETIC:LEG-1",
+    )
+
+def test_virtual_query_cancel_keep_prior_group_leg_when_report_omits_them():
+    from contracts.types import DataQuality, ExecutionReport
+    from environments.virtual.execution.virtual_execution import VirtualExecutionEngine
+
+    prior = ExecutionReport(
+        client_order_id="virtual-authoritative-lineage-order",
+        broker_order_id="virtual-broker-order",
+        execution_id="virtual-execution-1",
+        status="PARTIALLY_FILLED",
+        filled_quantity=1,
+        remaining_quantity=1,
+        execution_price=Decimal("10"),
+        execution_timestamp=datetime(2026, 11, 3, 9, 0),
+        fee=Decimal("0"),
+        group_id="SYNTHETIC:GROUP-2",
+        leg_id="SYNTHETIC:LEG-2",
+    )
+
+    def lifecycle_report(status):
+        return ExecutionReport(
+            client_order_id=prior.client_order_id,
+            broker_order_id=prior.broker_order_id,
+            execution_id=None,
+            status=status,
+            filled_quantity=prior.filled_quantity,
+            remaining_quantity=prior.remaining_quantity,
+            execution_price=None,
+            execution_timestamp=None,
+            source_freshness=DataQuality(
+                is_fresh=True,
+                is_complete=False,
+                source_available=True,
+                reason="synthetic lifecycle projection",
+            ),
+        )
+
+    engine = VirtualExecutionEngine(
+        position=None,
+        account=None,
+        authoritative_query=lambda _client_order_id: lifecycle_report("CANCELLED"),
+        authoritative_cancel=lambda _client_order_id: lifecycle_report("CANCELLED"),
+    )
+    engine._reports[prior.client_order_id] = prior
+
+    queried = engine.query(prior.client_order_id)
+    engine._reports[prior.client_order_id] = prior
+    cancelled = engine.cancel(prior.client_order_id)
+
+    assert queried is not None
+    assert (queried.group_id, queried.leg_id) == (
+        "SYNTHETIC:GROUP-2",
+        "SYNTHETIC:LEG-2",
+    )
+    assert (cancelled.group_id, cancelled.leg_id) == (
+        "SYNTHETIC:GROUP-2",
+        "SYNTHETIC:LEG-2",
+    )

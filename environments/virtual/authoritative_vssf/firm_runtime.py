@@ -109,6 +109,8 @@ class VirtualSecuritiesFirmRuntime:
                 remaining_qty=int(command.qty), track_id=command.track_id,
                 asset_type=command.asset_type, side=command.side,
                 symbol=getattr(command, "symbol", "KOSPI200"),
+                group_id=getattr(command, "group_id", "") or "",
+                leg_id=getattr(command, "leg_id", "") or "",
             )
             self._lifecycle_results[command.client_order_id] = result
             return result
@@ -169,6 +171,8 @@ class VirtualSecuritiesFirmRuntime:
             lifecycle_reason=None,
             executed_at=executed_at,
             execution_fills=fills,
+            group_id=getattr(command, "group_id", "") or "",
+            leg_id=getattr(command, "leg_id", "") or "",
         )
         if status == "FILLED":
             self.order_book.remove_pending_order(command.client_order_id)
@@ -282,6 +286,8 @@ class VirtualSecuritiesFirmRuntime:
                 track_id=pending.track_id,
                 asset_type=pending.asset_type, side=pending.side,
                 symbol=getattr(pending, "symbol", "KOSPI200"),
+                group_id=getattr(pending, "group_id", "") or "",
+                leg_id=getattr(pending, "leg_id", "") or "",
             )
         lifecycle = self._lifecycle_results.get(client_order_id)
         if lifecycle is not None and lifecycle.status in {"FILLED", "CANCELLED", "REJECTED", "RECONCILIATION_REQUIRED"}:
@@ -324,6 +330,8 @@ class VirtualSecuritiesFirmRuntime:
             asset_type=command.asset_type, side=command.side,
             symbol=getattr(command, "symbol", "KOSPI200"),
             lifecycle_reason=(None if filled == int(command.qty) and filled > 0 else lifecycle_reason),
+            group_id=getattr(command, "group_id", "") or "",
+            leg_id=getattr(command, "leg_id", "") or "",
         )
         self._lifecycle_results[client_order_id] = result
         return result

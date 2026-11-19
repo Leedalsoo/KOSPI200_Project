@@ -66,3 +66,68 @@ def test_query_and_cancel_keep_original_group_and_leg_metadata():
     assert queried is not None
     assert (queried.group_id, queried.leg_id) == ("group-1", "leg-1")
     assert (cancelled.group_id, cancelled.leg_id) == ("group-1", "leg-1")
+def test_vssf_group_leg_metadata_survives_adapter_recreation_and_cancel_query():
+    from dataclasses import replace
+
+    runtime = _Runtime()
+    runtime.result = replace(
+        runtime.result,
+        group_id="group-1",
+        leg_id="leg-1",
+    )
+    first_adapter = VSSFExecutionAdapter(_Context(), runtime)
+    order = SimpleNamespace(
+        client_order_id="client-1",
+        group_id="group-1",
+        leg_id="leg-1",
+    )
+    first_adapter.execute(order)
+
+    restarted_adapter = VSSFExecutionAdapter(_Context(), runtime)
+    queried = restarted_adapter.query("client-1")
+    cancelled = restarted_adapter.cancel(
+        "client-1",
+        lifecycle_reason="VALIDATION_ONLY_RESTART_TEST",
+    )
+
+    assert queried is not None
+    assert (queried.group_id, queried.leg_id) == ("group-1", "leg-1")
+    assert (cancelled.group_id, cancelled.leg_id) == ("group-1", "leg-1")
+
+def test_canonical_execution_report_mapping_preserves_group_and_leg_metadata():
+    from shared.contracts.canonical import (
+        CanonicalAssetType,
+        CanonicalExecutionReport,
+        CanonicalOptionType,
+        CanonicalOrderSide,
+    )
+
+    canonical = CanonicalExecutionReport(
+        exec_id="canonical-exec-1",
+        client_order_id="client-1",
+        track_id="track-1",
+        asset_type=CanonicalAssetType.OPTION,
+        side=CanonicalOrderSide.BUY,
+        executed_qty=1,
+        executed_price=42.25,
+        fee=0.0,
+        slippage=0.0,
+        timestamp=STAMP,
+        symbol="SYNTHETIC-CALL",
+        option_type=CanonicalOptionType.CALL,
+        strike=500.0,
+        expiry="20261105",
+        strategy_id="strategy-1",
+        group_id="group-canonical",
+        leg_id="leg-canonical",
+        instrument_id="SYNTHETIC-CALL",
+        contract_multiplier=250000.0,
+        identity_source="SYNTHETIC_VALIDATION_ONLY",
+    )
+
+    report = VSSFExecutionAdapter(_Context(), _Runtime())._map(canonical)
+
+    assert (report.group_id, report.leg_id) == (
+        "group-canonical",
+        "leg-canonical",
+    )

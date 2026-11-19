@@ -398,3 +398,67 @@ def test_snapshot_event_resolution_releases_u19_u16_and_router_only_after_last_e
     response = router.register_and_route(command, object(), freshness_verdict=freshness)
     assert response.accepted is True
     assert broker.calls == 1
+
+def test_kis_recovery_report_preserves_context_group_and_leg_lineage():
+    from environments.live.execution.kis_futures_execution_recovery_adapter import (
+        KISExecutionRecoveryContext,
+    )
+
+    report = KISFuturesExecutionRecoveryAdapter().to_execution_report(
+        {
+            "odno": "broker-order-lineage",
+            "tot_ccld_qty": "2",
+            "avg_idx": "10.50",
+            "ord_dt": "20261118",
+            "ord_tmd": "093000",
+        },
+        KISExecutionRecoveryContext(
+            client_order_id="client-order-lineage",
+            order_quantity=5,
+            group_id="SYNTHETIC:RECOVERY-GROUP",
+            leg_id="SYNTHETIC:RECOVERY-LEG",
+        ),
+    )
+
+    assert report is not None
+    assert report.group_id == "SYNTHETIC:RECOVERY-GROUP"
+    assert report.leg_id == "SYNTHETIC:RECOVERY-LEG"
+
+def test_kis_recovery_normalize_preserves_context_group_leg_for_each_delta():
+    from environments.live.execution.kis_futures_execution_recovery_adapter import (
+        KISExecutionRecoveryContext,
+    )
+
+    context = KISExecutionRecoveryContext(
+        client_order_id="client-order-lineage",
+        order_quantity=5,
+        prior_filled_quantity=1,
+        prior_average_price=Decimal("10.00"),
+        group_id="SYNTHETIC:RECOVERY-GROUP",
+        leg_id="SYNTHETIC:RECOVERY-LEG",
+    )
+    reports = KISFuturesExecutionRecoveryAdapter().normalize(
+        {
+            "output1": [
+                {
+                    "odno": "broker-order-lineage",
+                    "tot_ccld_qty": "2",
+                    "avg_idx": "10.50",
+                    "ord_dt": "20261118",
+                    "ord_tmd": "093000",
+                },
+                {
+                    "odno": "broker-order-lineage",
+                    "tot_ccld_qty": "3",
+                    "avg_idx": "10.60",
+                    "ord_dt": "20261118",
+                    "ord_tmd": "093001",
+                },
+            ]
+        },
+        lambda _order_id: context,
+    )
+
+    assert len(reports) == 2
+    assert all(report.group_id == context.group_id for report in reports)
+    assert all(report.leg_id == context.leg_id for report in reports)

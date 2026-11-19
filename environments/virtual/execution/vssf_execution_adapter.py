@@ -34,6 +34,8 @@ class VSSFExecutionAdapter:
                 execution_price=result.executed_price,
                 execution_timestamp=datetime.fromisoformat(result.timestamp),
                 fee=Decimal(str(result.fee)),
+                group_id=getattr(result, "group_id", None) or None,
+                leg_id=getattr(result, "leg_id", None) or None,
                 source_freshness=DataQuality(is_fresh=True, is_complete=True,
                     source_available=True, reason="vssf_authoritative_execution"),
             )
@@ -49,6 +51,8 @@ class VSSFExecutionAdapter:
                     source_available=True, reason="vssf_authoritative_order_lifecycle"),
                 submitted_at=datetime.fromisoformat(result.submitted_at),
                 lifecycle_reason=result.lifecycle_reason,
+                group_id=getattr(result, "group_id", None) or None,
+                leg_id=getattr(result, "leg_id", None) or None,
                 execution_fills=tuple(
                     ExecutionFill(
                         execution_id=fill.exec_id,

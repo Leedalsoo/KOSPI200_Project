@@ -37,14 +37,27 @@ class VirtualExecutionEngine(ExecutionProvider):
                 )
             else:
                 report = self._authoritative_cancel(client_order_id)
+            prior = self._reports.get(client_order_id)
+            if (
+                isinstance(report, ExecutionReport)
+                and isinstance(prior, ExecutionReport)
+            ):
+                report = replace(
+                    report,
+                    group_id=report.group_id or prior.group_id,
+                    leg_id=report.leg_id or prior.leg_id,
+                )
             self._reports[client_order_id] = report
             return report
+        prior = self._reports.get(client_order_id)
         report = ExecutionReport(
             client_order_id=client_order_id, broker_order_id=client_order_id,
             execution_id=None, status="CANCELLED", filled_quantity=0,
             remaining_quantity=0, execution_price=None, execution_timestamp=None,
             source_freshness=DataQuality(is_fresh=True, is_complete=False,
                 source_available=True, reason="virtual_execution_cancel_policy"),
+            group_id=prior.group_id if prior is not None else None,
+            leg_id=prior.leg_id if prior is not None else None,
         )
         self._reports[client_order_id] = report
         return report
@@ -78,6 +91,15 @@ class VirtualExecutionEngine(ExecutionProvider):
                         ),
                         fee=report.fee if report.fee is not None else prior.fee,
                         source_freshness=report.source_freshness or prior.source_freshness,
+                    )
+                if (
+                    isinstance(report, ExecutionReport)
+                    and isinstance(prior, ExecutionReport)
+                ):
+                    report = replace(
+                        report,
+                        group_id=report.group_id or prior.group_id,
+                        leg_id=report.leg_id or prior.leg_id,
                     )
                 self._reports[client_order_id] = report
                 return report
