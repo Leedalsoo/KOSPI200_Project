@@ -352,6 +352,25 @@ class ValidationOnlyAccountSnapshotU19Reconciler:
             payload_sha256=broker_hash,
         )
 
+        account_manifest = None
+        if expected_group_manifest is not None:
+            account_manifest = _compose_account_expected_group_manifest(
+                group_manifests=(expected_group_manifest,),
+                group_ids=(group_id,),
+                aggregate_group_id=group_id,
+                opening_positions=_positions(opening),
+                opening_evidence_sha256=bundle.opening_positions.payload_sha256,
+            )
+            if account_manifest is None:
+                issues.append("ACCOUNT_EXPECTED_GROUP_MANIFEST_INVALID_OR_GROUP_SET_MISMATCH")
+            elif account_manifest.expected_positions != projected_positions:
+                issues.append("ACCOUNT_EXPECTED_GROUP_MANIFEST_POSITION_PROJECTION_MISMATCH")
+            if any(issue.startswith("ACCOUNT_EXPECTED_GROUP_MANIFEST_") for issue in issues):
+                return AccountSnapshotU19Reconciliation(
+                    "RECONCILIATION_REQUIRED", tuple(issues), ledger,
+                    projected_ledger, broker_snapshot, None, (), account_manifest,
+                )
+
         if "ACCOUNT_U19_EXECUTION_ID_SET_MISMATCH" in issues or "ACCOUNT_EXECUTION_ID_NOT_UNIQUE" in issues:
             return AccountSnapshotU19Reconciliation(
                 "RECONCILIATION_REQUIRED", tuple(issues), ledger,
@@ -362,7 +381,7 @@ class ValidationOnlyAccountSnapshotU19Reconciler:
             group_id=group_id,
             broker_snapshot=broker_snapshot,
             ledger_snapshot=projected_ledger,
-            expected_group_manifest=expected_group_manifest,
+            expected_group_manifest=account_manifest,
         )
         if decision.status.value not in {"RESTORE_ALLOWED", "FLAT_CONFIRMED"}:
             issues.append(f"U19_RECOVERY_{decision.status.value}")
@@ -372,7 +391,7 @@ class ValidationOnlyAccountSnapshotU19Reconciler:
             status = "VALIDATION_ONLY_U19_RECONCILED"
         return AccountSnapshotU19Reconciliation(
             status, tuple(issues), ledger, projected_ledger, broker_snapshot, decision,
-            (), expected_group_manifest,
+            (), account_manifest,
         )
 
     def reconcile_account(

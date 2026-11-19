@@ -111,6 +111,35 @@ def _bundle(*, final_quantity=4, executions=None):
     )
 
 
+def _single_group_expected_manifest(bundle, group_id=GROUP_ID):
+    leg_ids = tuple(sorted({
+        str(row.get("instrument_id") or "").strip()
+        for row in (*bundle.orders.rows, *bundle.executions.rows)
+        if str(row.get("instrument_id") or "").strip()
+    }))
+    quantities = {}
+    for row in bundle.executions.rows:
+        instrument = str(row.get("instrument_id") or "").strip()
+        side = str(row.get("side") or "").upper()
+        quantity = int(row.get("filled_quantity"))
+        signed = quantity if side in {"BUY", "LONG"} else -quantity if side in {"SELL", "SHORT"} else 0
+        quantities[instrument] = quantities.get(instrument, 0) + signed
+    positions = tuple(
+        U19Position(instrument, Decimal(quantity))
+        for instrument, quantity in sorted(quantities.items()) if quantity
+    )
+    manifest = U19ExpectedGroupManifest(
+        group_id=group_id,
+        manifest_id=f"SYNTHETIC:EXPECTED:{group_id}",
+        source="VALIDATION_ONLY:EXPECTED_GROUP_MANIFEST",
+        provenance="VALIDATION_ONLY:DERIVED_SCENARIO_SIDECAR",
+        leg_instrument_ids=leg_ids,
+        expected_positions=positions,
+        payload_sha256="0" * 64,
+    )
+    return replace(manifest, payload_sha256=_expected_group_manifest_digest(manifest))
+
+
 def _seed_order(
     store, *, client_id, broker_id, instrument, quantity, leg_id, fills,
     group_id=GROUP_ID, side="BUY", execution_times=None,
@@ -225,6 +254,43 @@ def test_account_snapshot_bundle_reconciles_four_ways_through_u19_and_checkpoint
     }
     assert checkpoint["new_entry_enabled"] is False
     assert checkpoint["order_submission_enabled"] is False
+
+
+def test_single_group_strict_recovery_passes_independent_expected_manifest(tmp_path):
+    bundle = _bundle()
+    validation = validate_account_snapshot_bundle(bundle)
+    reconciler, _ = _make_reconciler(tmp_path, require_expected_group_manifest=True)
+
+    result = reconciler.reconcile(
+        bundle=bundle, validation=validation, group_id=GROUP_ID,
+        snapshot_id="single-group-manifest-valid", as_of=AS_OF,
+        expected_group_manifest=_single_group_expected_manifest(bundle),
+    )
+
+    assert result.is_valid
+    assert result.expected_group_manifest is not None
+    assert result.expected_group_manifest.leg_instrument_ids == (
+        "SYNTHETIC_CONTRACT:KOSPI200_CALL_202612",
+    )
+    assert result.recovery_decision.status is U19RecoveryStatus.RESTORE_ALLOWED
+    assert result.recovery_decision.expected_group_manifest_id == result.expected_group_manifest.manifest_id
+    assert result.recovery_decision.expected_group_manifest_sha256 == result.expected_group_manifest.payload_sha256
+
+
+def test_single_group_strict_recovery_keeps_missing_manifest_unavailable(tmp_path):
+    bundle = _bundle()
+    validation = validate_account_snapshot_bundle(bundle)
+    reconciler, _ = _make_reconciler(tmp_path, require_expected_group_manifest=True)
+
+    result = reconciler.reconcile(
+        bundle=bundle, validation=validation, group_id=GROUP_ID,
+        snapshot_id="single-group-manifest-missing", as_of=AS_OF,
+    )
+
+    assert result.status == "RECONCILIATION_REQUIRED"
+    assert result.recovery_decision.status is U19RecoveryStatus.EXPECTED_GROUP_MANIFEST_UNAVAILABLE
+    assert result.recovery_decision.new_entry_enabled is False
+    assert result.recovery_decision.order_submission_enabled is False
 
 
 def test_account_snapshot_u19_mismatch_is_reconciliation_required_not_immediate_block(tmp_path):
