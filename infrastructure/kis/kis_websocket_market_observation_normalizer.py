@@ -194,15 +194,19 @@ class KISWebSocketMarketObservationNormalizer:
             identity_metadata = tuple(metadata_provider(market.shrn_iscd))
 
         tr_id = market.source.split(":")[-1]
+        # H0IOCNT0 is documented as live-only; a VTS-labelled capture does not prove feed capability.
+        # Keep the KST/trading-date construction as a replay candidate until environment, clock and date semantics are verified.
         is_exchange_event_time = timestamp_semantics == "KIS_BSOP_HOUR"
-        source_timestamp_timezone = "Asia/Seoul" if is_exchange_event_time else "UNVERIFIED"
-        source_timestamp_date_resolution = "TRADING_DATE" if is_exchange_event_time else "UNRESOLVED"
-        source_to_receipt_lag_ms = ""
+        source_timestamp_timezone = "UNVERIFIED"
+        source_timestamp_date_resolution = "UNVERIFIED"
+        candidate_source_clock_timezone = "Asia/Seoul" if is_exchange_event_time else ""
+        candidate_source_date_basis = "TRADING_DATE" if is_exchange_event_time else ""
+        candidate_source_to_receipt_lag_ms = ""
         if is_exchange_event_time:
-            lag_ms = (
+            candidate_lag_ms = (
                 received_at.astimezone(UTC) - observed_at.astimezone(UTC)
             ).total_seconds() * 1000
-            source_to_receipt_lag_ms = f"{lag_ms:.3f}"
+            candidate_source_to_receipt_lag_ms = f"{candidate_lag_ms:.3f}"
         metadata = (
             ("transport", "websocket"),
             ("source_timestamp_semantics", timestamp_semantics),
@@ -211,9 +215,13 @@ class KISWebSocketMarketObservationNormalizer:
             ("source_timestamp_format", "HHMMSS"),
             ("source_timestamp_timezone", source_timestamp_timezone),
             ("source_timestamp_date_resolution", source_timestamp_date_resolution),
-            ("source_timestamp_absolute", str(is_exchange_event_time).lower()),
-            ("observed_at_semantics", "EXCHANGE_EVENT_TIME" if is_exchange_event_time else "RECEIPT_TIME_FALLBACK_SOURCE_TIME_UNVERIFIED"),
-            ("source_to_receipt_lag_ms", source_to_receipt_lag_ms),
+            ("source_timestamp_absolute", "false"),
+            ("source_timestamp_interpretation", "CANDIDATE_ONLY" if is_exchange_event_time else "UNVERIFIED"),
+            ("source_capability_status", "UNVERIFIED_FOR_VTS_OFFICIAL_SAMPLE_SAYS_LIVE_ONLY"),
+            ("candidate_source_clock_timezone", candidate_source_clock_timezone),
+            ("candidate_source_date_basis", candidate_source_date_basis),
+            ("candidate_source_to_receipt_lag_ms", candidate_source_to_receipt_lag_ms),
+            ("observed_at_semantics", "CANDIDATE_SOURCE_EVENT_TIME_UNVERIFIED" if is_exchange_event_time else "RECEIPT_TIME_FALLBACK_SOURCE_TIME_UNVERIFIED"),
             ("frame_record_index", str(record_index)),
             ("received_at", received_at.isoformat()),
             ("receipt_timestamp", received_at.isoformat()),

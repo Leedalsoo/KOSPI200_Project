@@ -249,8 +249,9 @@ def test_h0ioasp0_normalizes_five_price_and_quantity_levels_without_fake_greeks(
     assert metadata["source_timestamp_semantics"] == "KIS_H0IOASP0_HHMMSS_CANDIDATE_UNVERIFIED"
     assert metadata["source_timestamp_field"] == "H0IOASP0.HHMMSS"
     assert metadata["source_timestamp_timezone"] == "UNVERIFIED"
-    assert metadata["source_timestamp_date_resolution"] == "UNRESOLVED"
+    assert metadata["source_timestamp_date_resolution"] == "UNVERIFIED"
     assert metadata["source_timestamp_absolute"] == "false"
+    assert metadata["source_capability_status"] == "UNVERIFIED_FOR_VTS_OFFICIAL_SAMPLE_SAYS_LIVE_ONLY"
     assert metadata["observed_at_semantics"] == "RECEIPT_TIME_FALLBACK_SOURCE_TIME_UNVERIFIED"
     assert metadata["receipt_timezone"] == "UTC"
 
@@ -353,11 +354,15 @@ def test_h0iocnt0_uses_exchange_event_time_and_unique_record_ids() -> None:
     metadata = dict(observations[0].provenance.metadata)
     assert metadata["source_timestamp_field"] == "BSOP_HOUR"
     assert metadata["source_timestamp_raw"] == "091501"
-    assert metadata["source_timestamp_timezone"] == "Asia/Seoul"
-    assert metadata["source_timestamp_date_resolution"] == "TRADING_DATE"
-    assert metadata["source_timestamp_absolute"] == "true"
-    assert metadata["observed_at_semantics"] == "EXCHANGE_EVENT_TIME"
-    assert metadata["source_to_receipt_lag_ms"] == "1000.000"
+    assert metadata["source_timestamp_timezone"] == "UNVERIFIED"
+    assert metadata["source_timestamp_date_resolution"] == "UNVERIFIED"
+    assert metadata["source_timestamp_absolute"] == "false"
+    assert metadata["source_timestamp_interpretation"] == "CANDIDATE_ONLY"
+    assert metadata["source_capability_status"] == "UNVERIFIED_FOR_VTS_OFFICIAL_SAMPLE_SAYS_LIVE_ONLY"
+    assert metadata["candidate_source_clock_timezone"] == "Asia/Seoul"
+    assert metadata["candidate_source_date_basis"] == "TRADING_DATE"
+    assert metadata["observed_at_semantics"] == "CANDIDATE_SOURCE_EVENT_TIME_UNVERIFIED"
+    assert metadata["candidate_source_to_receipt_lag_ms"] == "1000.000"
     assert metadata["receipt_timezone"] == "UTC"
 
 
@@ -409,6 +414,6 @@ def test_t13_ws_future_source_time_preserves_negative_clock_skew_without_clampin
         session_date=date(2026, 10, 12),
     )[0]
     metadata = dict(observation.provenance.metadata)
-    assert metadata['source_to_receipt_lag_ms'] == '-1000.000'
+    assert metadata['candidate_source_to_receipt_lag_ms'] == '-1000.000'
     assert observation.observed_at.isoformat() == '2026-10-12T09:15:03+09:00'
     assert observation.collected_at == received_at

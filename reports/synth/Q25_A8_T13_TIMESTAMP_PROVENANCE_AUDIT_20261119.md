@@ -63,3 +63,16 @@ Source: original `data/kis_market_data_restart/<trading_date>/kis_vts_websocket_
 - Original WS/REST Raw and accepted Runtime v2 partitions remain unchanged.
 - Next T14: reconcile REST time-only source values against independently verified KIS field/date/session semantics and nearest WS source observations; until then, REST source time stays unresolved and cannot independently authorize freshness.
 - Existing unrelated T2 invariant-checker working diff and Graphify outputs remain uncommitted and preserved.
+
+
+## T14 correction — WS source capability and absolute timestamp semantics (2026-11-19)
+
+The T13 WS lag statistics above are exploratory candidate lags, not verified absolute source ages. The original 2026-10-13 `kis_vts_websocket_timing.jsonl` records all 1,234 H0IOCNT0 rows with:
+- `source_capability_status=UNVERIFIED_FOR_VTS_OFFICIAL_SAMPLE_SAYS_LIVE_ONLY`
+- `source_clock_timezone=UNVERIFIED`
+- `source_date_semantics=UNVERIFIED`
+
+The raw daily manifest labels the run `vts-rest-daily-2026-10-13`, but the raw event schema contains no independent account/environment field. The official KIS sample code documents both H0IOCNT0 and H0IOASP0 as real-account-only, with virtual trading unsupported:
+https://github.com/koreainvestment/open-trading-api/blob/74b0a082fa67a0be5bf53f561719c853890ed2df/examples_user/domestic_futureoption/domestic_futureoption_functions_ws.py
+
+This is a source-environment conflict, not a reason to discard or rewrite the original records. The accepted partition hashes still establish raw-file lineage, but do not prove VTS capability or absolute source clock/date semantics. The prior KST + trading_date lag calculations must therefore be read as candidate-only. The WS normalizer metadata has been corrected to mark source capability, timezone and date semantics UNVERIFIED; the KST/trading-date calculation is now separately labeled as a candidate interpretation. No VTS or REAL authority is inferred.
