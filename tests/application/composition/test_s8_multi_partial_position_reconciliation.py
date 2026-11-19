@@ -1,4 +1,4 @@
-from dataclasses import replace
+﻿from dataclasses import replace
 import hashlib
 import json
 from datetime import datetime, timezone
@@ -349,3 +349,56 @@ def test_multi_fill_expansion_preserves_outer_group_leg_order_lineage():
     assert all(item.group_id == report.group_id for item in expanded)
     assert all(item.leg_id == report.leg_id for item in expanded)
     assert all(item.client_order_id == report.client_order_id for item in expanded)
+
+@pytest.mark.parametrize(
+    ("fill_mutation", "expected_error"),
+    [
+        (
+            lambda report: (
+                report.execution_fills[0],
+                replace(report.execution_fills[1], execution_id=report.execution_fills[0].execution_id),
+            ),
+            "MULTI_LEG_EXECUTION_FILL_ID_DUPLICATE",
+        ),
+        (
+            lambda report: (
+                report.execution_fills[0],
+                replace(report.execution_fills[1], filled_quantity=1),
+            ),
+            "MULTI_LEG_EXECUTION_FILL_TOTAL_MISMATCH",
+        ),
+    ],
+)
+def test_invalid_multi_fill_expansion_is_rejected_before_position_or_fee_mutation(
+    fill_mutation, expected_error,
+):
+    bridge = _bridge()
+    plan, leg, identity, command, report = _inputs()
+    conflicting = replace(report, execution_fills=fill_mutation(report))
+
+    with pytest.raises(RuntimeError, match=expected_error):
+        bridge._apply_reconciled_execution(
+            plan=plan, leg=leg, identity=identity,
+            broker_command=command, report=conflicting,
+        )
+
+    assert bridge.position_lot_store.history() == ()
+    assert bridge.leg_positions == {}
+    assert bridge.execution_legs == {}
+    assert bridge.provenance == {}
+    assert bridge.fee_ledger.query(run_id=bridge.run_id) == ()
+
+
+def test_legacy_aggregate_only_execution_report_keeps_single_event_compatibility():
+    _, _, _, _, report = _inputs()
+    aggregate_only = replace(
+        report,
+        execution_id="S8-LEGACY-AGGREGATE-FILL",
+        execution_fills=(),
+    )
+
+    expanded = VirtualMultiLegExecutionBridge._execution_fill_reports(aggregate_only)
+
+    assert expanded == (aggregate_only,)
+    assert expanded[0].execution_id == "S8-LEGACY-AGGREGATE-FILL"
+    assert expanded[0].filled_quantity == aggregate_only.filled_quantity
