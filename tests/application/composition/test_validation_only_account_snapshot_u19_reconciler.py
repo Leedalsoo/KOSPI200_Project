@@ -2442,17 +2442,45 @@ def test_multi_group_local_conflict_resolution_isolated_from_global_collision_af
             execution_timestamp=AS_OF - timedelta(seconds=10),
             fee=Decimal("7"), group_id=GROUP_TWO, leg_id="global-leg",
         ))
-    global_conflict = store.execution_journal_conflict_history(
-        execution_id="SYNTHETIC:FILL-001", scope_key="__runtime_bootstrap__",
-    )[0]
-    with pytest.raises(SettlementStoreError, match="EXECUTION_JOURNAL_CONFLICT_ORDER_IDENTITY_MISMATCH_REQUIRES_MANUAL_REVIEW"):
-        store.prepare_validation_only_execution_journal_conflict_resolution(
-            execution_id="SYNTHETIC:FILL-001", scope_key="__runtime_bootstrap__",
-            original_payload_sha256=global_conflict["original_payload_sha256"],
-            incoming_payload_sha256=global_conflict["incoming_payload_sha256"],
-            selected_payload_sha256=global_conflict["original_payload_sha256"],
-            evidence_ref="VALIDATION_ONLY:U19:GLOBAL-CROSS-ORDER-MANUAL-REVIEW",
-        )
+    foreign_instrument_2 = "SYNTHETIC_CONTRACT:KOSPI200_GLOBAL_COLLISION_2"
+    foreign_oms_2 = _seed_order(
+        store, client_id="client-g1-global-2", broker_id="broker-g1-global-2",
+        instrument=foreign_instrument_2, quantity=1, leg_id="global-leg-2",
+        fills=(), group_id=GROUP_ID, side="BUY",
+    )
+    foreign_position_2 = LivePositionAggregate(foreign_instrument_2)
+    foreign_bridge_2 = LiveExecutionPositionBridge(
+        order_state_machine=foreign_oms_2,
+        position_fill_adapter=LivePositionFillAdapter(foreign_position_2),
+        execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=store),
+        position_aggregate=foreign_position_2, settlement_store=store,
+    )
+    with pytest.raises(SettlementStoreError, match="EXECUTION_ID_COLLISION"):
+        foreign_bridge_2.settle(ExecutionReport(
+            client_order_id="client-g1-global-2", broker_order_id="broker-g1-global-2",
+            execution_id="SYNTHETIC:G2-FILL-002", status="FILLED",
+            filled_quantity=1, remaining_quantity=0,
+            execution_price=Decimal("88.80"),
+            execution_timestamp=AS_OF - timedelta(seconds=9),
+            fee=Decimal("7"), group_id=GROUP_ID, leg_id="global-leg-2",
+        ))
+
+    global_conflicts = store.execution_journal_conflict_history(
+        scope_key="__runtime_bootstrap__",
+    )
+    assert len(global_conflicts) == 2
+    assert {item["execution_id"] for item in global_conflicts} == {
+        "SYNTHETIC:FILL-001", "SYNTHETIC:G2-FILL-002",
+    }
+    for global_conflict in global_conflicts:
+        with pytest.raises(SettlementStoreError, match="EXECUTION_JOURNAL_CONFLICT_ORDER_IDENTITY_MISMATCH_REQUIRES_MANUAL_REVIEW"):
+            store.prepare_validation_only_execution_journal_conflict_resolution(
+                execution_id=global_conflict["execution_id"], scope_key="__runtime_bootstrap__",
+                original_payload_sha256=global_conflict["original_payload_sha256"],
+                incoming_payload_sha256=global_conflict["incoming_payload_sha256"],
+                selected_payload_sha256=global_conflict["original_payload_sha256"],
+                evidence_ref=f"VALIDATION_ONLY:U19:GLOBAL-CROSS-ORDER-MANUAL-REVIEW:{global_conflict['execution_id']}",
+            )
 
     # Correct provenance, both preserved candidate hashes and exact order scope
     # permit selecting A's original payload only.
@@ -2481,7 +2509,7 @@ def test_multi_group_local_conflict_resolution_isolated_from_global_collision_af
     assert position.qty == 2
     assert len(store.open_reconciliation_events(scope_key="client-g2-shared")) == 1
     assert store.late_fill_conflict_history(execution_id=late_b.execution_id)[0]["event_type"] == "CONFLICT_DETECTED"
-    assert store.unresolved_reconciliations_by_scope if hasattr(store, "unresolved_reconciliations_by_scope") else True
+
     assert any(
         item["scope_key"] == "client-g2-shared" and item["status"] in {"PENDING", "CONFLICT"}
         for item in store.unresolved_reconciliations()
@@ -2532,9 +2560,7 @@ def test_multi_group_local_conflict_resolution_isolated_from_global_collision_af
     assert [item["event_type"] for item in reopened.late_fill_conflict_history(execution_id=late_a.execution_id)] == ["CONFLICT_DETECTED", "RESOLUTION_SELECTED", "SETTLED"]
     assert len(reopened.late_fill_conflict_history(execution_id=late_b.execution_id)) == 1
     assert reopened.open_reconciliation_events(scope_key="client-g2-shared") == store.open_reconciliation_events(scope_key="client-g2-shared")
-    assert reopened.execution_journal_conflict_history(
-        execution_id="SYNTHETIC:FILL-001", scope_key="__runtime_bootstrap__",
-    ) == (global_conflict,)
+    assert reopened.execution_journal_conflict_history(scope_key="__runtime_bootstrap__") == global_conflicts
     assert len(reopened.load_execution_journal_records()) == 6
     assert reopened.load_position_state(SHARED_INSTRUMENT)["qty"] == 2
     assert any(item["scope_key"] == "__runtime_bootstrap__" for item in reopened.unresolved_reconciliations())
@@ -2556,3 +2582,16 @@ def test_multi_group_local_conflict_resolution_isolated_from_global_collision_af
     assert replay.recovery_decision.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
     assert "__GLOBAL_RECONCILIATION__" in replay.recovery_decision.pending_order_ids
     assert "client-g2-shared" in replay.recovery_decision.pending_order_ids
+    checkpoint = SqliteTrack2U19RecoveryStore(checkpoint_path).load_latest(
+        "SYNTHETIC:ACCOUNT_AGGREGATE:LOCAL-GLOBAL-ISOLATION"
+    )
+    assert checkpoint["status"] == U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED.value
+    for group_id in (GROUP_ID, GROUP_TWO):
+        ledger = replay_reconciler.ledger_snapshot_builder.build(
+            group_id=group_id, snapshot_id=f"{group_id}:LOCAL-GLOBAL-REPLAY", as_of=AS_OF,
+        )
+        assert "__GLOBAL_RECONCILIATION__" in ledger.pending_order_ids
+    group_two_ledger = replay_reconciler.ledger_snapshot_builder.build(
+        group_id=GROUP_TWO, snapshot_id="GROUP-TWO:LOCAL-GLOBAL-REPLAY", as_of=AS_OF,
+    )
+    assert "client-g2-shared" in group_two_ledger.pending_order_ids
