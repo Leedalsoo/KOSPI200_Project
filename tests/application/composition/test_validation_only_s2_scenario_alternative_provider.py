@@ -127,6 +127,7 @@ def _provider(tick_timestamp: str):
         project_root=ROOT,
         run_id=RUN_ID,
         vssf_adapter=adapter,
+        position_phase="POST_ENTRY",
     )
 
 
@@ -245,3 +246,125 @@ def test_t7_s2_alternative_runs_after_primary_and_reconciliation_are_unavailable
     assert result.invariant_report.status == ValidationOnlyRuntimeInvariantChecker.PASS
     assert result.stop_snapshot.status == "ARMED"
     assert len(stop_switch.calls) == 1
+
+
+def test_t8_pre_entry_alternative_uses_flat_independent_broker_snapshot():
+    tick = SimpleNamespace(
+        timestamp="2026-10-12T09:26:00+09:00",
+        underlying_price=1034.62,
+    )
+    bridge = SimpleNamespace(
+        run_id=RUN_ID,
+        groups={},
+        provenance={},
+        execution_legs={},
+        pending_legs={},
+        position_lot_store=SimpleNamespace(
+            history=lambda: (),
+            open_lots=lambda: (),
+            close_events=lambda: (),
+        ),
+        fee_ledger=SimpleNamespace(snapshot=lambda *, run_id: ()),
+    )
+    runtime = SimpleNamespace(
+        account=SimpleNamespace(
+            positions={},
+            realized_pnl=Decimal(0),
+            unrealized_pnl=Decimal(0),
+        )
+    )
+    adapter = ValidationOnlyVSSFRuntimeEvidenceAdapter(
+        bridge=bridge, vssf_runtime=runtime, run_id=RUN_ID,
+    )
+    provider = ValidationOnlyS2ScenarioAlternativeProvider(
+        project_root=ROOT,
+        run_id=RUN_ID,
+        vssf_adapter=adapter,
+    )
+
+    assert provider.is_applicable(tick)
+    candidate = provider(tick, ())
+
+    assert candidate is not None
+    assert candidate.broker_snapshot.positions == ()
+    assert candidate.ledger_snapshot.positions == ()
+    assert candidate.ledger_snapshot.execution_events == ()
+    decision = evaluate_u19_recovery(
+        group_id=candidate.group_id,
+        broker_snapshot=candidate.broker_snapshot,
+        ledger_snapshot=candidate.ledger_snapshot,
+    )
+    assert decision.status is U19RecoveryStatus.FLAT_CONFIRMED
+    invariant_inputs = dict(candidate.invariant_inputs)
+    invariant_inputs["u19_decision"] = decision
+    result = ValidationOnlyRuntimeInvariantChecker().check(**invariant_inputs)
+    assert result.status == ValidationOnlyRuntimeInvariantChecker.PASS
+
+
+def test_t8_provider_matches_real_replay_tick_without_candidate_id():
+    provider = _provider("2026-10-12T09:26:00+09:00")
+    tick = SimpleNamespace(
+        timestamp="2026-10-12T09:26:00+09:00",
+        underlying_price=1034.62,
+    )
+    assert provider.is_applicable(tick)
+    candidate = provider(tick, ())
+    assert candidate is not None
+
+
+def test_t8_supervisor_skips_ticks_outside_all_evidence_scopes():
+    from application.composition.validation_only_runtime_evidence_supervisor import (
+        ValidationOnlyRuntimeEvidenceSupervisor,
+    )
+    provider = _provider("2026-10-12T09:26:00+09:00")
+
+    class _ScopedUnavailable:
+        def is_applicable(self, tick):
+            return provider.is_applicable(tick)
+
+        def __call__(self, tick, *args):
+            return None
+
+    class _StopSwitch:
+        def __init__(self):
+            self.evaluate_calls = 0
+
+        def snapshot(self):
+            return SimpleNamespace(status="ARMED")
+
+        def evaluate(self, **kwargs):
+            self.evaluate_calls += 1
+            return SimpleNamespace(status="TRIPPED")
+
+    class _Recovery:
+        def recover(self, *, group_id, broker_snapshot, ledger_snapshot):
+            return evaluate_u19_recovery(
+                group_id=group_id,
+                broker_snapshot=broker_snapshot,
+                ledger_snapshot=ledger_snapshot,
+            )
+
+    stop = _StopSwitch()
+    scoped = _ScopedUnavailable()
+    supervisor = ValidationOnlyRuntimeEvidenceSupervisor(
+        stop_switch=stop,
+        invariant_checker=ValidationOnlyRuntimeInvariantChecker(),
+        u19_recovery_coordinator=_Recovery(),
+        risk_guard_status_source=SimpleNamespace(snapshot=lambda: None),
+        primary_provider=scoped,
+        reconciliation_provider=scoped,
+        alternative_provider=provider,
+    )
+
+    result = supervisor.evaluate(SimpleNamespace(
+        timestamp="2026-10-12T09:27:00+09:00",
+        underlying_price=1034.70,
+    ))
+
+    assert result.stop_snapshot.status == "ARMED"
+    assert result.attempts == (
+        "PRIMARY_ACCEPTED_ORIGINAL:TICK_OUTSIDE_EVIDENCE_SCOPE",
+        "NOTION_AND_SOURCE_RECONCILIATION:TICK_OUTSIDE_EVIDENCE_SCOPE",
+        "PROVENANCE_PRESERVING_ALTERNATIVE:TICK_OUTSIDE_EVIDENCE_SCOPE",
+    )
+    assert stop.evaluate_calls == 0

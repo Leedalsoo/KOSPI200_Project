@@ -40,6 +40,7 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
         vssf_adapter: Any,
         candidate_id: str = "S2-CANDIDATE-001",
         scenario_quantity: int = 1,
+        position_phase: str = "PRE_ENTRY",
     ) -> None:
         if not str(run_id).strip():
             raise ValueError("T7_RUN_ID_REQUIRED")
@@ -51,7 +52,11 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
         self.run_id = str(run_id)
         self.vssf_adapter = vssf_adapter
         self.candidate_id = candidate_id
+        phase = str(position_phase).strip().upper()
+        if phase not in {"PRE_ENTRY", "POST_ENTRY"}:
+            raise ValueError("T7_POSITION_PHASE_INVALID")
         self.scenario_quantity = scenario_quantity
+        self.position_phase = phase
         self.scenario_dir = (
             self.root / "data" / "derived_scenario"
             / "q25_a8_p2_recovered_track2_four_leg_quotes_v3_market_calibrated_r3_20261115"
@@ -156,10 +161,36 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
             raise ValueError("T7_SCENARIO_MUST_HAVE_EXACTLY_FOUR_QUOTES")
         return manifest, candidate, profile, selected_quotes, actual_hashes
 
+    def is_applicable(self, tick: Any) -> bool:
+        explicit_id = str(getattr(tick, "candidate_id", "") or "").strip()
+        if explicit_id:
+            return explicit_id == self.candidate_id
+        timestamp = getattr(tick, "timestamp", None)
+        underlying = getattr(tick, "underlying_price", None)
+        if timestamp is None or underlying is None:
+            return False
+        try:
+            tick_time = self._aware(timestamp, "T7_TICK_TIMESTAMP_INVALID")
+            tick_underlying = Decimal(str(underlying))
+        except (TypeError, ValueError, ArithmeticError):
+            return False
+        candidates_path = self.scenario_dir / "candidate_inputs.json"
+        if not candidates_path.is_file():
+            return False
+        candidates = json.loads(candidates_path.read_text(encoding="utf-8"))
+        candidate = next((row for row in candidates if row.get("candidate_id") == self.candidate_id), None)
+        if candidate is None:
+            return False
+        try:
+            candidate_time = self._aware(candidate.get("observed_at"), "T7_SCENARIO_TIMESTAMP_INVALID")
+            candidate_underlying = Decimal(str(candidate.get("underlying_price")))
+        except (TypeError, ValueError, ArithmeticError):
+            return False
+        return tick_time == candidate_time and tick_underlying == candidate_underlying
+
     def __call__(self, tick: Any, attempts: tuple[str, ...] = ()):
         del attempts  # The alternative is deterministic and does not alter its source selection.
-        tick_candidate_id = str(getattr(tick, "candidate_id", "") or "").strip()
-        if tick_candidate_id != self.candidate_id:
+        if not self.is_applicable(tick):
             return None
         manifest, candidate, profile, quotes, hashes = self._load_verified_sources()
         scenario_time = self._aware(candidate.get("observed_at"), "T7_SCENARIO_TIMESTAMP_INVALID")
@@ -234,11 +265,12 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
             multiplier = Decimal(str(row.get("contract_multiplier")))
             if multiplier <= 0:
                 raise ValueError("T7_SYNTHETIC_MULTIPLIER_INVALID")
-            side = self.ROLE_SIDE[role]
-            positions.append(U19Position(
-                instrument_id,
-                Decimal(self.scenario_quantity if side == "BUY" else -self.scenario_quantity),
-            ))
+            if self.position_phase == "POST_ENTRY":
+                side = self.ROLE_SIDE[role]
+                positions.append(U19Position(
+                    instrument_id,
+                    Decimal(self.scenario_quantity if side == "BUY" else -self.scenario_quantity),
+                ))
         if seen_roles != set(self.ROLE_SIDE):
             raise ValueError("T7_SCENARIO_FOUR_LEG_COVERAGE_INCOMPLETE")
 
@@ -257,7 +289,8 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
             ],
             "source_manifest_sha256": hashes["scenario_manifest"],
             "role_mapping": self.ROLE_SIDE,
-            "scenario_quantity_per_leg": self.scenario_quantity,
+            "scenario_quantity_per_leg": self.scenario_quantity if self.position_phase == "POST_ENTRY" else 0,
+            "position_phase": self.position_phase,
             "validation_only": True,
         }
         broker_snapshot = U19BrokerPositionSnapshot(

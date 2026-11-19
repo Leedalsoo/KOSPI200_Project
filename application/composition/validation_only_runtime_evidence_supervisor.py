@@ -101,9 +101,21 @@ class ValidationOnlyRuntimeEvidenceSupervisor:
     def evaluate(self, tick: Any) -> RuntimeEvidenceSupervisionResult:
         attempts: list[str] = []
         selected: tuple[str, Any, Any, Any] | None = None
+        applicable_count = 0
         for source_name, provider in self.providers:
             if provider is None:
                 continue
+            scope_check = getattr(provider, "is_applicable", None)
+            if callable(scope_check):
+                try:
+                    if not scope_check(tick):
+                        attempts.append(f"{source_name}:TICK_OUTSIDE_EVIDENCE_SCOPE")
+                        continue
+                except Exception as exc:  # noqa: BLE001 - a broken scope check is evidence failure
+                    attempts.append(f"{source_name}:SCOPE_CHECK_ERROR:{type(exc).__name__}")
+                    applicable_count += 1
+                    continue
+            applicable_count += 1
             try:
                 candidate = (
                     provider(tick)
@@ -136,6 +148,16 @@ class ValidationOnlyRuntimeEvidenceSupervisor:
                 break
             except Exception as exc:  # noqa: BLE001 - continue evidence reconciliation before X2
                 attempts.append(f"{source_name}:PROVIDER_OR_VALIDATION_ERROR:{type(exc).__name__}")
+
+        if applicable_count == 0:
+            snapshot = self.stop_switch.snapshot()
+            return RuntimeEvidenceSupervisionResult(
+                candidate_source=None,
+                attempts=tuple(attempts) or ("TICK_OUTSIDE_EVIDENCE_SCOPE",),
+                invariant_report=None,
+                u19_decision=None,
+                stop_snapshot=snapshot,
+            )
 
         risk_guard_snapshot = None
         try:
