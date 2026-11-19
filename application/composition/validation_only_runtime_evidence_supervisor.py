@@ -123,7 +123,12 @@ class ValidationOnlyRuntimeEvidenceSupervisor:
                     else provider(tick, tuple(attempts))
                 )
                 if candidate is None:
-                    attempts.append(f"{source_name}:EVIDENCE_UNAVAILABLE")
+                    diagnostic = str(getattr(provider, "last_diagnostic", "") or "").strip()
+                    attempts.append(
+                        f"{source_name}:{diagnostic}"
+                        if diagnostic and diagnostic != "NOT_EVALUATED"
+                        else f"{source_name}:EVIDENCE_UNAVAILABLE"
+                    )
                     continue
                 if not isinstance(candidate, ValidationOnlyRuntimeEvidenceCandidate):
                     attempts.append(f"{source_name}:EVIDENCE_CONTRACT_INVALID")
