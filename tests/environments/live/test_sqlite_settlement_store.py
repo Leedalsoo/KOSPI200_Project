@@ -942,3 +942,143 @@ def test_shared_settlement_store_isolates_multiple_orders_and_instruments(tmp_pa
         restored = LivePositionAggregate(instrument_id)
         restored.restore_persistence_record(restarted_store.load_position_state(instrument_id))
         assert restored.qty == expected_qty
+
+
+def test_subprocess_hard_crash_after_sqlite_commit_recovers_from_wal(tmp_path):
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    database = tmp_path / "hard-crash.sqlite3"
+    child = r'''
+import os
+import sys
+from datetime import datetime, timezone
+from decimal import Decimal
+from pathlib import Path
+from contracts.futures_contract_spec import FuturesProductType
+from contracts.futures_identity_source_port import FuturesInstrumentIdentity
+from contracts.types import BrokerOrderCommand, ExecutionReport, OrderAckEvent
+from core.oms.oms_fsm import OrderStateMachine
+from environments.live.execution.execution_event_deduplicator import ExecutionEventDeduplicator
+from environments.live.position.live_execution_position_bridge import LiveExecutionPositionBridge, LivePositionFillAdapter
+from environments.live.position.live_position_aggregate import LivePositionAggregate
+from environments.live.settlement.sqlite_settlement_store import SQLiteSettlementStore
+store = SQLiteSettlementStore(Path(sys.argv[1]))
+oms = OrderStateMachine(persistence_store=store)
+oms.apply_intent(type("Intent", (), {"client_order_id": "child-order", "quantity": 2})())
+command = BrokerOrderCommand(
+    client_order_id="child-order", instrument_id="CHILD-FUT", side="BUY", quantity=2,
+    order_type="LIMIT", broker_symbol="CHILD-FUT", asset_type="FUTURES",
+    instrument_identity=FuturesInstrumentIdentity(
+        instrument_id="CHILD-FUT", symbol="CHILD-FUT", product_type=FuturesProductType.MINI,
+        contract_multiplier=Decimal("50000"), identity_source="TEST_FIXTURE",
+    ), strategy_id="HARD-CRASH-TEST",
+)
+oms.register_broker_order_command(command)
+oms.apply_ack(OrderAckEvent(client_order_id="child-order", accepted=True, broker_order_id="child-broker"))
+position = LivePositionAggregate("CHILD-FUT")
+bridge = LiveExecutionPositionBridge(
+    order_state_machine=oms, position_fill_adapter=LivePositionFillAdapter(position),
+    execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=store),
+    position_aggregate=position, settlement_store=store,
+)
+report = ExecutionReport(
+    client_order_id="child-order", broker_order_id="child-broker", execution_id="hard-crash-fill",
+    status="PARTIALLY_FILLED", filled_quantity=1, remaining_quantity=1,
+    execution_price=Decimal("21.50"), execution_timestamp=datetime(2026, 10, 29, 8, 54, tzinfo=timezone.utc),
+)
+def terminate_after_commit(_snapshot):
+    os._exit(73)
+position.restore_snapshot = terminate_after_commit
+bridge.settle(report)
+os._exit(74)
+'''
+    completed = subprocess.run(
+        [sys.executable, "-c", child, str(database)],
+        cwd=Path.cwd(),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 73, completed.stderr
+
+    recovered_store = SQLiteSettlementStore(database)
+    assert [row["execution_id"] for row in recovered_store.load_execution_journal_records()] == ["hard-crash-fill"]
+    recovered_oms = OrderStateMachine(persistence_store=recovered_store)
+    recovered_oms.restore_from_store()
+    recovered_position = LivePositionAggregate("CHILD-FUT")
+    recovered_position.restore_persistence_record(recovered_store.load_position_state("CHILD-FUT"))
+    assert recovered_oms.get("child-order").filled_quantity == 1
+    assert recovered_position.qty == 1
+    assert recovered_position.avg_price == Decimal("21.50")
+
+
+def test_cross_order_execution_id_collision_persists_global_conflict_history(tmp_path):
+    store, oms, position, dedup, first_bridge = _prepared(tmp_path)
+    first_bridge.settle(_fill(execution_id="shared-execution-id", quantity=1, remaining=2))
+
+    oms.apply_intent(type("Intent", (), {"client_order_id": "client-2", "quantity": 2})())
+    second_command = BrokerOrderCommand(
+        client_order_id="client-2", instrument_id="FUT-2", side="BUY", quantity=2,
+        order_type="LIMIT", broker_symbol="FUT-2", asset_type="FUTURES",
+        instrument_identity=FuturesInstrumentIdentity(
+            instrument_id="FUT-2", symbol="FUT-2", product_type=FuturesProductType.MINI,
+            contract_multiplier=Decimal("50000"), identity_source="TEST_FIXTURE",
+        ), strategy_id="SYNTHETIC-COLLISION",
+    )
+    oms.register_broker_order_command(second_command)
+    oms.apply_ack(OrderAckEvent(client_order_id="client-2", accepted=True, broker_order_id="broker-2"))
+    second_position = LivePositionAggregate("FUT-2")
+    second_bridge = LiveExecutionPositionBridge(
+        order_state_machine=oms,
+        position_fill_adapter=LivePositionFillAdapter(second_position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=store),
+        position_aggregate=second_position,
+        settlement_store=store,
+    )
+    conflicting_report = ExecutionReport(
+        client_order_id="client-2", broker_order_id="broker-2", execution_id="shared-execution-id",
+        status="PARTIALLY_FILLED", filled_quantity=1, remaining_quantity=1,
+        execution_price=Decimal("8.25"), execution_timestamp=datetime(2026, 10, 29, 8, 55, tzinfo=timezone.utc),
+    )
+    with pytest.raises(SettlementStoreError, match="EXECUTION_ID_COLLISION"):
+        second_bridge.settle(conflicting_report)
+
+    history = store.execution_journal_conflict_history(execution_id="shared-execution-id")
+    assert len(history) == 1
+    assert history[0]["scope_key"] == "__runtime_bootstrap__"
+    assert history[0]["original_client_order_id"] == "client-1"
+    assert history[0]["incoming_client_order_id"] == "client-2"
+    assert history[0]["original_payload_sha256"] != history[0]["incoming_payload_sha256"]
+    assert [row["execution_id"] for row in store.load_execution_journal_records()] == ["shared-execution-id"]
+    assert oms.get("client-1").filled_quantity == 1
+    assert oms.get("client-2").filled_quantity == 0
+    assert position.qty == 1
+    assert second_position.qty == 0
+    assert any(
+        item["scope_key"] == "__runtime_bootstrap__" and item["status"] == "CONFLICT"
+        for item in store.unresolved_reconciliations()
+    )
+
+
+def test_individual_fill_fees_are_journaled_once_across_replay(tmp_path):
+    from dataclasses import replace
+
+    store, oms, position, dedup, bridge = _prepared(tmp_path)
+    first = replace(_fill(execution_id="fee-fill-1", quantity=1, remaining=2, price="14.75"), fee=Decimal("0.12"))
+    second = replace(_fill(execution_id="fee-fill-2", quantity=2, remaining=0, price="14.85", status="FILLED"), fee=Decimal("0.24"))
+    bridge.settle(first)
+    final_state = bridge.settle(second)
+    records = store.load_execution_journal_records()
+    assert [row["execution_id"] for row in records] == ["fee-fill-1", "fee-fill-2"]
+    assert [__import__("json").loads(row["report_json"])["fee"] for row in records] == ["0.12", "0.24"]
+    assert final_state.filled_quantity == 3
+    assert position.qty == 3
+    assert oms.get("client-1").filled_quantity == 3
+
+    bridge.settle(first)
+    bridge.settle(second)
+    replayed = store.load_execution_journal_records()
+    assert len(replayed) == 2
+    assert [__import__("json").loads(row["report_json"])["fee"] for row in replayed] == ["0.12", "0.24"]
