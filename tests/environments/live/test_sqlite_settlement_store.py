@@ -735,3 +735,69 @@ def test_live_composition_reapplies_startup_gate_after_restart(tmp_path):
     assert store.has_unresolved_reconciliation()
     unresolved = store.unresolved_reconciliations()
     assert any(item["scope_key"] == "__startup_reconciliation__" and item["status"] == "PENDING" for item in unresolved)
+
+
+def test_individual_multifill_journal_oms_position_restart_replay_exactly_once(tmp_path):
+    store, oms, position, dedup, bridge = _prepared(tmp_path)
+    first = _fill(execution_id="multi-fill-1", quantity=1, remaining=2, price="14.75")
+    second = _fill(
+        execution_id="multi-fill-2",
+        quantity=2,
+        remaining=0,
+        price="14.85",
+        status="FILLED",
+    )
+
+    first_state = bridge.settle(first)
+    assert first_state.filled_quantity == 1
+    assert first_state.average_execution_price == Decimal("14.75")
+    assert position.qty == 1
+    assert position.avg_price == Decimal("14.75")
+    first_rows = store.load_execution_journal_records()
+    assert [row["execution_id"] for row in first_rows] == ["multi-fill-1"]
+    first_fingerprint = first_rows[0]["report_json"]
+
+    # Simulate process restart between two distinct individual fill events.
+    restarted_store = SQLiteSettlementStore(tmp_path / "settlement.sqlite3")
+    restarted_oms = OrderStateMachine(persistence_store=restarted_store)
+    restarted_oms.restore_from_store()
+    restarted_position = LivePositionAggregate("FUT-1")
+    restarted_position.restore_persistence_record(restarted_store.load_position_state("FUT-1"))
+    restarted_bridge = LiveExecutionPositionBridge(
+        order_state_machine=restarted_oms,
+        position_fill_adapter=LivePositionFillAdapter(restarted_position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=restarted_store),
+        position_aggregate=restarted_position,
+        settlement_store=restarted_store,
+    )
+
+    final_state = restarted_bridge.settle(second)
+    expected_average = (Decimal("14.75") + Decimal("14.85") * 2) / Decimal(3)
+    assert final_state.status == "FILLED"
+    assert final_state.filled_quantity == 3
+    assert final_state.average_execution_price == expected_average
+    assert restarted_position.qty == 3
+    assert restarted_position.avg_price == expected_average
+
+    rows = restarted_store.load_execution_journal_records()
+    assert [row["execution_id"] for row in rows] == ["multi-fill-1", "multi-fill-2"]
+    assert rows[0]["report_json"] == first_fingerprint
+    fingerprints = {
+        row["execution_id"]: __import__("hashlib").sha256(row["report_json"].encode("utf-8")).hexdigest()
+        for row in rows
+    }
+    assert len(set(fingerprints.values())) == 2
+
+    # Replaying either committed fill after restart must not alter OMS or position.
+    replay_first = restarted_bridge.settle(first)
+    replay_second = restarted_bridge.settle(second)
+    assert replay_first.filled_quantity == replay_second.filled_quantity == 3
+    assert restarted_position.qty == 3
+    assert restarted_position.avg_price == expected_average
+    assert len(restarted_store.load_execution_journal_records()) == 2
+    persisted_order = restarted_store.load_order_state_payloads()[0]
+    persisted_position = restarted_store.load_position_state("FUT-1")
+    assert persisted_order["filled_quantity"] == 3
+    assert persisted_order["average_execution_price"] == str(expected_average)
+    assert persisted_position["qty"] == 3
+    assert persisted_position["avg_price"] == str(expected_average)
