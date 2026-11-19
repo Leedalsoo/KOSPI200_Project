@@ -2707,3 +2707,78 @@ def test_multi_group_local_conflict_resolution_isolated_from_global_collision_af
             group_id=group_id, snapshot_id=f"{group_id}:TWO-GLOBAL-RESTART", as_of=AS_OF,
         )
         assert ledger.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
+
+    # Global conflict cannot be cleared by generic reconciliation, baseline
+    # replacement, or either journal-candidate selection path.
+    final_global_conflicts = after_restart.execution_journal_conflict_history(
+        scope_key="__runtime_bootstrap__",
+    )
+    assert len(final_global_conflicts) == 2
+    for conflict in final_global_conflicts:
+        with pytest.raises(
+            SettlementStoreError,
+            match="EXECUTION_JOURNAL_CONFLICT_ORDER_IDENTITY_MISMATCH_REQUIRES_MANUAL_REVIEW",
+        ):
+            after_restart.prepare_validation_only_execution_journal_conflict_resolution(
+                execution_id=conflict["execution_id"],
+                scope_key="__runtime_bootstrap__",
+                original_payload_sha256=conflict["original_payload_sha256"],
+                incoming_payload_sha256=conflict["incoming_payload_sha256"],
+                selected_payload_sha256=conflict["original_payload_sha256"],
+                evidence_ref=f"VALIDATION_ONLY:U19:MANUAL-REVIEW-REQUIRED:{conflict['execution_id']}",
+            )
+        with pytest.raises(
+            SettlementStoreError,
+            match="EXECUTION_JOURNAL_CONFLICT_INCOMING_CANDIDATE_REQUIRES_POSITION_ADJUSTMENT_REVIEW",
+        ):
+            after_restart.prepare_validation_only_execution_journal_conflict_resolution(
+                execution_id=conflict["execution_id"],
+                scope_key="__runtime_bootstrap__",
+                original_payload_sha256=conflict["original_payload_sha256"],
+                incoming_payload_sha256=conflict["incoming_payload_sha256"],
+                selected_payload_sha256=conflict["incoming_payload_sha256"],
+                evidence_ref=f"VALIDATION_ONLY:U19:POSITION-REVIEW-REQUIRED:{conflict['execution_id']}",
+            )
+
+    with pytest.raises(
+        SettlementStoreError,
+        match="GLOBAL_RECONCILIATION_REQUIRES_DEDICATED_EVIDENCE_API",
+    ):
+        after_restart.resolve_reconciliation(
+            scope_key="__runtime_bootstrap__",
+            authoritative_evidence_ref="VALIDATION_ONLY:U19:GENERIC-RESOLUTION-BYPASS",
+        )
+
+    baseline_kwargs = {
+        "positions_payload": (),
+        "orders_snapshot_id": "SYNTHETIC:U19:MANUAL-GATE:ORDERS",
+        "executions_snapshot_id": "SYNTHETIC:U19:MANUAL-GATE:EXECUTIONS",
+        "positions_snapshot_id": "SYNTHETIC:U19:MANUAL-GATE:POSITIONS",
+        "as_of": AS_OF,
+        "source": "VALIDATION_ONLY:U19:MANUAL-GATE:BASELINE",
+        "payload_sha256": "e" * 64,
+        "authoritative_evidence_ref": "VALIDATION_ONLY:U19:MANUAL-GATE:BASELINE-EVIDENCE",
+    }
+    with pytest.raises(
+        SettlementStoreError,
+        match="RUNTIME_BOOTSTRAP_CONFLICT_REQUIRES_MANUAL_REVIEW",
+    ):
+        after_restart.establish_authoritative_baseline_snapshot(**baseline_kwargs)
+    with pytest.raises(
+        SettlementStoreError,
+        match="RUNTIME_BOOTSTRAP_CONFLICT_REQUIRES_MANUAL_REVIEW",
+    ):
+        after_restart.replace_validation_only_baseline_snapshot(
+            expected_previous_payload_sha256="f" * 64,
+            reset_reason="U19 manual gate bypass attempt",
+            **baseline_kwargs,
+        )
+
+    assert after_restart.authoritative_baseline_evidence() is None
+    assert after_restart.execution_journal_conflict_history(
+        scope_key="__runtime_bootstrap__",
+    ) == final_global_conflicts
+    assert len(after_restart.load_execution_journal_records()) == 7
+    assert after_restart.load_position_state(SHARED_INSTRUMENT)["qty"] == 3
+    assert after_restart.unresolved_reconciliations()[0]["scope_key"] == "__runtime_bootstrap__"
+    assert after_restart.unresolved_reconciliations()[0]["status"] == "CONFLICT"
