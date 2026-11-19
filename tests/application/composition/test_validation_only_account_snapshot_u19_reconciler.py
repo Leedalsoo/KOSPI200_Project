@@ -1944,6 +1944,8 @@ def test_validation_baseline_lineage_audit_detects_current_generation_hash_repla
 
 PRE_ENTRY_GROUP = "SYNTHETIC:GROUP:PRE-ENTRY"
 PRE_ENTRY_INSTRUMENT = "SYNTHETIC_CONTRACT:KOSPI200_PUT_202612"
+ZERO_FILL_GROUP = "SYNTHETIC:GROUP:ZERO-FILL-CANCEL"
+ZERO_FILL_INSTRUMENT = "SYNTHETIC_CONTRACT:KOSPI200_CALL_202703"
 
 
 def _pre_entry_expected_manifest():
@@ -2010,3 +2012,81 @@ def test_multi_group_pre_entry_without_independent_manifest_remains_unreconciled
     assert "ACCOUNT_ORDER_GROUP_SET_MISMATCH" in result.issues
     assert result.recovery_decision is None
     assert result.expected_group_manifest is None
+
+
+def test_multi_group_zero_fill_cancel_pre_entry_netting_and_late_fill_gate_are_cross_validated(tmp_path):
+    bundle = _multi_group_bundle()
+    zero_fill_order = {
+        "client_order_id": "client-zero-fill-cancel",
+        "broker_order_id": "broker-zero-fill-cancel",
+        "group_id": ZERO_FILL_GROUP,
+        "instrument_id": ZERO_FILL_INSTRUMENT,
+        "side": "BUY", "order_quantity": 1,
+        "cumulative_filled_quantity": 0, "status": "CANCELLED",
+    }
+    bundle = replace(
+        bundle,
+        orders=_section(bundle.orders.snapshot_id, AS_OF, (*bundle.orders.rows, zero_fill_order)),
+    )
+    validation = validate_account_snapshot_bundle(bundle)
+    assert validation.is_valid
+    reconciler, _ = _make_reconciler(tmp_path, require_expected_group_manifest=True)
+    _seed_second_group(reconciler)
+    zero_fill_oms = _seed_order(
+        reconciler.ledger_snapshot_builder.settlement_store,
+        client_id="client-zero-fill-cancel", broker_id="broker-zero-fill-cancel",
+        instrument=ZERO_FILL_INSTRUMENT, quantity=1, leg_id="zero-fill-leg",
+        fills=(), group_id=ZERO_FILL_GROUP, side="BUY",
+    )
+    cancelled = zero_fill_oms.apply_cancel(ExecutionReport(
+        client_order_id="client-zero-fill-cancel", broker_order_id="broker-zero-fill-cancel",
+        execution_id="SYNTHETIC:ZERO-FILL-CANCEL-ACK", status="CANCELLED",
+        filled_quantity=0, remaining_quantity=1, execution_price=None,
+        execution_timestamp=AS_OF, group_id=ZERO_FILL_GROUP, leg_id="zero-fill-leg",
+    ))
+    assert cancelled.status == "CANCELLED"
+    reconciler.ledger_snapshot_builder.settlement_store.record_late_fill_pending(
+        execution_id="SYNTHETIC:G2-LATE-FILL-PENDING-CROSS",
+        client_order_id="client-g2-shared", broker_order_id="broker-g2-shared",
+        payload={"execution_id": "SYNTHETIC:G2-LATE-FILL-PENDING-CROSS", "source": "VALIDATION_ONLY"},
+    )
+
+    group_ids = (GROUP_ID, GROUP_TWO, PRE_ENTRY_GROUP, ZERO_FILL_GROUP)
+    manifests = (
+        *_expected_group_manifests(bundle, (GROUP_ID, GROUP_TWO, ZERO_FILL_GROUP)),
+        _pre_entry_expected_manifest(),
+    )
+    result = reconciler.reconcile_account(
+        bundle=bundle, validation=validation, group_ids=group_ids,
+        snapshot_id="multi-group-zero-fill-pre-entry-netting-late-fill", as_of=AS_OF,
+        aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:ZERO-PRE-NET-LATE",
+        expected_group_manifests=manifests,
+    )
+
+    assert result.status == "RECONCILIATION_REQUIRED"
+    assert result.recovery_decision.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+    assert "client-g2-shared" in result.recovery_decision.pending_order_ids
+    assert result.recovery_decision.new_entry_enabled is False
+    assert result.recovery_decision.order_submission_enabled is False
+    assert result.expected_group_manifest is not None
+    assert set(result.expected_group_manifest.leg_instrument_ids) == {
+        SHARED_INSTRUMENT, SECOND_INSTRUMENT, ZERO_FILL_INSTRUMENT,
+    }
+    assert result.expected_group_manifest.expected_positions == result.projected_ledger_snapshot.positions
+    assert {item.instrument_id: item.signed_quantity for item in result.projected_ledger_snapshot.positions} == {
+        SHARED_INSTRUMENT: Decimal("3"), SECOND_INSTRUMENT: Decimal("-1"),
+    }
+    pre_entry_ledger = next(
+        item for item in result.group_ledger_snapshots if item.group_id == PRE_ENTRY_GROUP
+    )
+    assert pre_entry_ledger.complete is True
+    assert pre_entry_ledger.execution_events == ()
+    assert pre_entry_ledger.positions == ()
+    assert pre_entry_ledger.pending_order_ids == ()
+    zero_fill_ledger = next(
+        item for item in result.group_ledger_snapshots if item.group_id == ZERO_FILL_GROUP
+    )
+    assert zero_fill_ledger.complete is True
+    assert zero_fill_ledger.execution_events == ()
+    assert zero_fill_ledger.positions == ()
+    assert zero_fill_ledger.pending_order_ids == ()
