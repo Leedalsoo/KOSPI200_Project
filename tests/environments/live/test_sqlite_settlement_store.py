@@ -1061,6 +1061,14 @@ def test_cross_order_execution_id_collision_persists_global_conflict_history(tmp
         for item in store.unresolved_reconciliations()
     )
 
+    reopened = SQLiteSettlementStore(tmp_path / "settlement.sqlite3")
+    persisted_history = reopened.execution_journal_conflict_history(execution_id="shared-execution-id")
+    assert persisted_history == history
+    assert any(
+        item["scope_key"] == "__runtime_bootstrap__" and item["status"] == "CONFLICT"
+        for item in reopened.unresolved_reconciliations()
+    )
+
 
 def test_individual_fill_fees_are_journaled_once_across_replay(tmp_path):
     from dataclasses import replace
