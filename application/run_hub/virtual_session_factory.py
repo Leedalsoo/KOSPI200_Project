@@ -46,7 +46,7 @@ from interfaces.control_tower.virtual_test_controller import VirtualTestControll
 from application.composition.virtual_risk_guard_status_source import VirtualRiskGuardStatusSource
 
 
-def create_virtual_run_session(context: RunContext, option_master: Any, risk_guard_status_source: RiskGuardStatusSource | None = None, track4_greeks_source: KISTrack4GreeksRealtimeSource | None = None) -> RunSession:
+def create_virtual_run_session(context: RunContext, option_master: Any, risk_guard_status_source: RiskGuardStatusSource | None = None, track4_greeks_source: KISTrack4GreeksRealtimeSource | None = None, runtime_evidence_supervisor=None) -> RunSession:
     dependencies = VirtualCompositionDependencies(
         contract_registry=None,
         option_master=option_master,
@@ -135,6 +135,7 @@ def create_virtual_run_session(context: RunContext, option_master: Any, risk_gua
         risk_guard_status_source=virtual_risk_guard,
         risk_engine=risk_engine,
         validation_only_runtime_stop_switch=runtime_stop_switch,
+        runtime_evidence_supervisor=runtime_evidence_supervisor,
         market_calendar_hub=market_calendar_hub,
         track4_greeks_provider=track4_greeks_source,
         track3_runtime_input_source=track3_replay_source,

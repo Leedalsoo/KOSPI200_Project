@@ -84,10 +84,15 @@ def _looks_synthetic_provider(provider) -> bool:
     return source_name.startswith("SYNTHETIC:") or provenance in {"SYNTHETIC", "DERIVED_SCENARIO"}
 
 
-def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=None, strategy_keys=None, track9_iv_history_path=None, run_id=None, historical_observation_option_source=None, risk_guard_status_source: RiskGuardStatusSource | None = None, risk_engine: RiskEngine | None = None, validation_only_runtime_stop_switch: ValidationOnlyRuntimeAutoStopSwitch | None = None, synthetic_runtime_sources=None, track4_greeks_provider=None, market_calendar_hub=None, validation_only_track6_signal_mode: bool = False, validation_only_track6_execution_gate=None, validation_only_s8_runtime_adapter=None, validation_only_s7_runtime_adapter: S7ValidationOnlyRuntimeAdapter | None = None, validation_only_s9_runtime_adapter=None, validation_only_track2_runtime_adapter=None, validation_only_track6_lifecycle_config: Track6LifecycleConfig | None = None, validation_only_u16_quote_policy: U16QuotePolicy | None = None, validation_only_u16_repair_price_resolver=None):
+def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=None, strategy_keys=None, track9_iv_history_path=None, run_id=None, historical_observation_option_source=None, risk_guard_status_source: RiskGuardStatusSource | None = None, risk_engine: RiskEngine | None = None, validation_only_runtime_stop_switch: ValidationOnlyRuntimeAutoStopSwitch | None = None, runtime_evidence_supervisor=None, synthetic_runtime_sources=None, track4_greeks_provider=None, market_calendar_hub=None, validation_only_track6_signal_mode: bool = False, validation_only_track6_execution_gate=None, validation_only_s8_runtime_adapter=None, validation_only_s7_runtime_adapter: S7ValidationOnlyRuntimeAdapter | None = None, validation_only_s9_runtime_adapter=None, validation_only_track2_runtime_adapter=None, validation_only_track6_lifecycle_config: Track6LifecycleConfig | None = None, validation_only_u16_quote_policy: U16QuotePolicy | None = None, validation_only_u16_repair_price_resolver=None):
     """Attach all nine Standard strategies to the RuntimeController-owned VMS."""
     if synthetic_runtime_sources is not None and not _is_validation_only_synthetic_provider(synthetic_runtime_sources):
         raise ValueError("SYNTHETIC_RUNTIME_SOURCE_MUST_BE_VALIDATION_ONLY")
+    if runtime_evidence_supervisor is not None:
+        if validation_only_runtime_stop_switch is None:
+            raise ValueError("T5_EVIDENCE_SUPERVISOR_REQUIRES_X2_STOP_SWITCH")
+        if getattr(runtime_evidence_supervisor, "stop_switch", None) is not validation_only_runtime_stop_switch:
+            raise ValueError("T5_EVIDENCE_SUPERVISOR_MUST_SHARE_X2_STOP_SWITCH")
     if validation_only_runtime_stop_switch is not None:
         if risk_engine is None or risk_guard_status_source is None:
             raise ValueError("X2_RUNTIME_WIRING_REQUIRES_SHARED_RISK_ENGINE_AND_BASE_STATUS_SOURCE")
@@ -1079,6 +1084,7 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         risk_guard_status_source=(risk_guard_status_source or synthetic_runtime_sources),
         risk_engine=risk_engine,
         runtime_stop_switch=validation_only_runtime_stop_switch,
+        runtime_evidence_supervisor=runtime_evidence_supervisor,
         signal_observation_only=validation_only_track6_signal_mode,
     )
     loop.standard_runtime_input_provider = provider

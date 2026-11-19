@@ -98,7 +98,7 @@ class AutomatedVirtualTradingLoop:
                  multi_leg_executor: Callable[[MultiLegExecutionPlan], object] | None = None,
                  pending_multi_leg_processor: Callable[[object], object] | None = None,
                  risk_config: RiskConfig | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None,
-                 risk_engine: RiskEngine | None = None, runtime_stop_switch=None,
+                 risk_engine: RiskEngine | None = None, runtime_stop_switch=None, runtime_evidence_supervisor=None,
                  signal_observation_only: bool = False) -> None:
         if not run_id.strip():
             raise ValueError("AUTOMATED_RUNTIME_RUN_ID_REQUIRED")
@@ -121,6 +121,8 @@ class AutomatedVirtualTradingLoop:
         vssf = bundle.execution._authoritative_execute.__self__.vssf_runtime
         self.risk_engine = risk_engine or RiskEngine(risk_config or RiskConfig(), margin_engine=vssf.margin_engine)
         self.runtime_stop_switch = runtime_stop_switch
+        self.runtime_evidence_supervisor = runtime_evidence_supervisor
+        self.last_runtime_evidence_supervision = None
         self.risk_gate = RiskGate(self.risk_engine, risk_guard_status_source=risk_guard_status_source)
         self._last_result: AutomatedTickResult | None = None
         self._last_strategy_status: tuple[StrategyRuntimeStatus, ...] = ()
@@ -283,6 +285,11 @@ class AutomatedVirtualTradingLoop:
             })()},
             quality={},
         )
+        if self.runtime_evidence_supervisor is not None:
+            try:
+                self.last_runtime_evidence_supervision = self.runtime_evidence_supervisor.evaluate(tick)
+            except Exception as exc:  # noqa: BLE001 - evidence supervision failure must latch X2
+                self._trip_runtime_stop(f"X2_T5_EVIDENCE_SUPERVISOR_FAILED:{type(exc).__name__}")
         pending_execution_results = self._process_pending_multi_leg_if_admitted(tick)
         pending_routed, pending_filled, pending_execution_ids = summarize_pending_multi_leg_results(
             pending_execution_results
