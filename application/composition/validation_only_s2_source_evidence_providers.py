@@ -119,6 +119,7 @@ class ValidationOnlyS2AcceptedOriginalPrimaryProvider(_ScopedS2EvidenceProvider)
         self.candidate_builder = candidate_builder
 
     def __call__(self, tick: Any):
+        self.last_diagnostic = "IN_PROGRESS"
         if not self.is_applicable(tick):
             self.last_diagnostic = "TICK_OUTSIDE_EVIDENCE_SCOPE"
             return None
@@ -170,6 +171,7 @@ class ValidationOnlyS2NotionSourceReconciliationProvider(_ScopedS2EvidenceProvid
 
     def __call__(self, tick: Any, attempts: tuple[str, ...] = ()):
         del attempts
+        self.last_diagnostic = "IN_PROGRESS"
         if not self.is_applicable(tick):
             self.last_diagnostic = "TICK_OUTSIDE_EVIDENCE_SCOPE"
             return None

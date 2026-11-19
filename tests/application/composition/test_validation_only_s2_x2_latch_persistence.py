@@ -123,3 +123,73 @@ def test_t11_freshness_expiry_trips_durable_x2_and_new_run_recovers_without_rese
     assert recovered.invariant_report.status == "VALIDATION_ONLY_RUNTIME_INVARIANTS_PASS"
     assert recovered_stop.snapshot().status == "ARMED"
     assert reopened.snapshot().status == "TRIPPED"
+
+
+
+
+def _scoped_tick(timestamp, underlying_price=1034.62):
+    return SimpleNamespace(
+        timestamp=timestamp,
+        underlying_price=underlying_price,
+        candidate_id="S2-CANDIDATE-001",
+    )
+
+
+@pytest.mark.skipif(not ORIGINAL_ROOT.is_dir(), reason="original KIS source inventory is not mounted")
+def test_t12_exact_five_second_boundary_is_fresh_and_duplicate_tick_is_idempotent(tmp_path):
+    chain, stop = _chain("SYNTHETIC:T12:BOUNDARY", tmp_path)
+
+    first = chain.supervisor.evaluate(_scoped_tick("2026-10-12T09:26:00+09:00"))
+    duplicate = chain.supervisor.evaluate(_scoped_tick("2026-10-12T09:26:00+09:00"))
+    boundary = chain.supervisor.evaluate(_scoped_tick("2026-10-12T09:26:05+09:00"))
+
+    assert first.stop_snapshot.status == "ARMED"
+    assert duplicate.stop_snapshot.status == "ARMED"
+    assert duplicate.attempts[-1] == "PROVENANCE_PRESERVING_ALTERNATIVE:VALIDATED"
+    assert boundary.stop_snapshot.status == "ARMED"
+    assert boundary.attempts[-1] == "PROVENANCE_PRESERVING_ALTERNATIVE:VALIDATED"
+    assert stop.snapshot().persistence_confirmed is True
+
+
+@pytest.mark.skipif(not ORIGINAL_ROOT.is_dir(), reason="original KIS source inventory is not mounted")
+def test_t12_underlying_anchor_mismatch_and_time_reversal_trip_x2(tmp_path):
+    chain, stop = _chain("SYNTHETIC:T12:INVALID-TICK", tmp_path)
+
+    mismatch = chain.supervisor.evaluate(
+        _scoped_tick("2026-10-12T09:26:00+09:00", underlying_price=1034.70)
+    )
+    assert mismatch.stop_snapshot.status == "TRIPPED"
+    assert any("T7_TICK_UNDERLYING_ANCHOR_MISMATCH" in item for item in mismatch.attempts)
+
+    reverse_chain, reverse_stop = _chain(
+        "SYNTHETIC:T12:TIME-REVERSAL",
+        tmp_path / "reverse",
+    )
+    reversed_result = reverse_chain.supervisor.evaluate(
+        _scoped_tick("2026-10-12T09:25:59+09:00")
+    )
+    assert reversed_result.stop_snapshot.status == "TRIPPED"
+    assert any("T7_TICK_PRECEDES_SYNTHETIC_SCENARIO" in item for item in reversed_result.attempts)
+    assert stop.snapshot().cancel_orders_requested is False
+    assert reverse_stop.snapshot().runtime_stop_requested is False
+
+
+@pytest.mark.skipif(not ORIGINAL_ROOT.is_dir(), reason="original KIS source inventory is not mounted")
+def test_t12_repeated_stale_tick_keeps_x2_tripped_without_duplicate_side_effects(tmp_path):
+    chain, stop = _chain("SYNTHETIC:T12:REPEATED-STALE", tmp_path)
+    stale_tick = _scoped_tick("2026-10-12T09:26:06+09:00")
+
+    first = chain.supervisor.evaluate(stale_tick)
+    first_snapshot = stop.snapshot()
+    second = chain.supervisor.evaluate(stale_tick)
+    second_snapshot = stop.snapshot()
+
+    assert first.stop_snapshot.status == "TRIPPED"
+    assert second.stop_snapshot.status == "TRIPPED"
+    assert "MARKET_DATA_FRESHNESS_NOT_FRESH:STALE" in second_snapshot.reasons
+    assert second_snapshot.reasons == first_snapshot.reasons
+    assert second_snapshot.persistence_confirmed is True
+    assert second_snapshot.latch_confirmed is True
+    assert second_snapshot.cancel_orders_requested is False
+    assert second_snapshot.flatten_positions_requested is False
+    assert second_snapshot.runtime_stop_requested is False

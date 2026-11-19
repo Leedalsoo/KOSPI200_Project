@@ -167,7 +167,12 @@ class ValidationOnlyRuntimeEvidenceSupervisor:
                 attempts.append(f"{source_name}:VALIDATED")
                 break
             except Exception as exc:  # noqa: BLE001 - continue evidence reconciliation before X2
-                attempts.append(f"{source_name}:PROVIDER_OR_VALIDATION_ERROR:{type(exc).__name__}")
+                diagnostic = str(getattr(provider, "last_diagnostic", "") or "").strip()
+                attempts.append(
+                    f"{source_name}:{diagnostic}"
+                    if diagnostic and diagnostic not in {"NOT_EVALUATED", "IN_PROGRESS"}
+                    else f"{source_name}:PROVIDER_OR_VALIDATION_ERROR:{type(exc).__name__}"
+                )
 
         if applicable_count == 0:
             snapshot = self.stop_switch.snapshot()

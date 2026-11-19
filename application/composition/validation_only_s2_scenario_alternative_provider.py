@@ -64,6 +64,7 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
             raise ValueError("T7_POSITION_PHASE_INVALID")
         self.scenario_quantity = scenario_quantity
         self.position_phase = phase
+        self.last_diagnostic = "NOT_EVALUATED"
         self.scenario_dir = (
             self.root / "data" / "derived_scenario"
             / "q25_a8_p2_recovered_track2_four_leg_quotes_v3_market_calibrated_r3_20261115"
@@ -264,13 +265,23 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
 
     def __call__(self, tick: Any, attempts: tuple[str, ...] = ()):
         del attempts  # The alternative is deterministic and does not alter its source selection.
+        self.last_diagnostic = "IN_PROGRESS"
         if not self.is_applicable(tick):
+            self.last_diagnostic = "TICK_OUTSIDE_EVIDENCE_SCOPE"
             return None
         manifest, candidate, profile, quotes, hashes = self._load_verified_sources()
         scenario_time = self._aware(candidate.get("observed_at"), "T7_SCENARIO_TIMESTAMP_INVALID")
         as_of = self._aware(getattr(tick, "timestamp", None), "T7_TICK_TIMESTAMP_INVALID")
         if as_of < scenario_time:
-            raise ValueError("T7_TICK_PRECEDES_SYNTHETIC_SCENARIO")
+            self.last_diagnostic = "T7_TICK_PRECEDES_SYNTHETIC_SCENARIO"
+            raise ValueError(self.last_diagnostic)
+        tick_underlying_value = getattr(tick, "underlying_price", None)
+        if as_of == scenario_time and tick_underlying_value is not None:
+            tick_underlying = Decimal(str(tick_underlying_value))
+            candidate_underlying = Decimal(str(candidate.get("underlying_price")))
+            if tick_underlying != candidate_underlying:
+                self.last_diagnostic = "T7_TICK_UNDERLYING_ANCHOR_MISMATCH"
+                raise ValueError(self.last_diagnostic)
 
         expected_legs = {
             str(leg["role"]): (str(leg["option_type"]).upper(), str(leg["strike"]))
@@ -417,7 +428,7 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
             expected_environment="VIRTUAL",
         )
 
-        return self.vssf_adapter.build_candidate(
+        candidate_result = self.vssf_adapter.build_candidate(
             as_of=as_of,
             broker_snapshot=broker_snapshot,
             freshness_verdict=freshness_verdict,
@@ -438,3 +449,5 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
                 f"synthetic_profile.json#sha256={hashes['profile']}",
             ),
         )
+        self.last_diagnostic = "SYNTHETIC_CANDIDATE_BUILT"
+        return candidate_result
