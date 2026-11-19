@@ -162,6 +162,10 @@ class KISRestMarketObservationNormalizer:
                     ("source_timestamp_date_resolution", "UNRESOLVED_TIME_ONLY"),
                     ("source_timestamp_absolute", "false"),
                     ("source_timestamp_status", "TIME_OF_DAY_ONLY" if source_timestamp else "UNKNOWN"),
+                    ("source_capability_status", "UNVERIFIED"),
+                    ("source_environment", "UNKNOWN"),
+                    ("source_environment_status", "UNVERIFIED"),
+                    ("source_time_semantics_verified", "false"),
                     ("source_timestamp_raw_price", raw_price_timestamp),
                     ("source_timestamp_raw_order_book", raw_asking_timestamp),
                     ("source_timestamp_zero_or_malformed_not_promoted", str(

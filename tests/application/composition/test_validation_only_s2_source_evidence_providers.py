@@ -41,7 +41,7 @@ SCENARIO_DIR = (
 )
 
 
-def _source_fixture(tmp_path: Path) -> tuple[Path, Path]:
+def _source_fixture(tmp_path: Path, *, source_capability_verified: bool = False) -> tuple[Path, Path]:
     project = tmp_path / "project"
     accepted_root = project / "data" / "accepted_market_data" / "runtime_v2"
     scenario_source = ROOT / "data" / "derived_scenario" / SCENARIO_DIR
@@ -85,6 +85,18 @@ def _source_fixture(tmp_path: Path) -> tuple[Path, Path]:
     ]
     for row in rows:
         row["scenario_metadata"]["source_raw_sha256"] = raw_digest
+        if source_capability_verified:
+            row["scenario_metadata"].update(
+                {
+                    "source_capability_status": "VERIFIED_KIS_REAL",
+                    "source_environment": "KIS_REAL",
+                    "source_environment_status": "VERIFIED",
+                    "source_timestamp_absolute": "true",
+                    "source_timestamp_timezone": "Asia/Seoul",
+                    "source_timestamp_date_resolution": "TRADING_DATE",
+                    "source_time_semantics_verified": "true",
+                }
+            )
     partition = accepted_root / "20261012.jsonl"
     partition.write_text(
         "\n".join(json.dumps(row, separators=(",", ":")) for row in rows) + "\n",
@@ -321,3 +333,186 @@ def test_t10_builder_rejects_non_armed_x2(tmp_path):
             u19_state_store_path=tmp_path / "u19" / "state.sqlite3",
             notion_decision_refs=DECISIONS,
         )
+
+def test_t15_primary_provider_requires_verified_capability_and_absolute_source_time(tmp_path):
+    project, _original = _source_fixture(tmp_path)
+    calls = []
+
+    class _FourLegPrimaryProvider(ValidationOnlyS2AcceptedOriginalPrimaryProvider):
+        @staticmethod
+        def _matching_original_rows(rows, candidate, timestamp):
+            return tuple(rows[:4])
+
+    def builder(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(candidate_source="ORIGINAL_ACCEPTED")
+
+    provider = _FourLegPrimaryProvider(
+        project_root=project,
+        scope_provider=_provider(TICK.timestamp),
+        candidate_builder=builder,
+    )
+
+    assert provider(TICK) is None
+    assert provider.last_diagnostic == "ACCEPTED_ORIGINAL_SOURCE_CAPABILITY_OR_TIME_SEMANTICS_UNVERIFIED"
+    assert calls == []
+
+
+def test_t15_primary_provider_accepts_only_explicitly_verified_source_provenance(tmp_path):
+    project, _original = _source_fixture(tmp_path, source_capability_verified=True)
+    calls = []
+
+    class _FourLegPrimaryProvider(ValidationOnlyS2AcceptedOriginalPrimaryProvider):
+        @staticmethod
+        def _matching_original_rows(rows, candidate, timestamp):
+            return tuple(rows[:4])
+
+    def builder(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(candidate_source="ORIGINAL_ACCEPTED")
+
+    provider = _FourLegPrimaryProvider(
+        project_root=project,
+        scope_provider=_provider(TICK.timestamp),
+        candidate_builder=builder,
+    )
+
+    result = provider(TICK)
+
+    assert result.candidate_source == "ORIGINAL_ACCEPTED"
+    assert provider.last_diagnostic == "ACCEPTED_ORIGINAL_CANDIDATE_BUILT"
+    assert len(calls) == 1
+    assert len(calls[0]["original_rows"]) == 4
+
+
+def test_t15_notion_reconciliation_rejects_unverified_raw_ws_capability_even_with_verified_partition_metadata(tmp_path):
+    project, original = _source_fixture(tmp_path, source_capability_verified=True)
+    timing_path = original / "20261012" / "kis_vts_websocket_timing.jsonl"
+    timing_path.write_text(
+        json.dumps(
+            {
+                "tr_id": "H0IOCNT0",
+                "source_capability_status": "UNVERIFIED_FOR_VTS_OFFICIAL_SAMPLE_SAYS_LIVE_ONLY",
+                "source_clock_timezone": "UNVERIFIED",
+                "source_date_semantics": "UNVERIFIED",
+            }
+        ) + chr(10),
+        encoding="utf-8",
+    )
+    calls = []
+
+    class _FourLegReconciliationProvider(ValidationOnlyS2NotionSourceReconciliationProvider):
+        @staticmethod
+        def _matching_original_rows(rows, candidate, timestamp):
+            return tuple(rows[:4])
+
+    def builder(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(candidate_source="ORIGINAL_RECONCILED")
+
+    provider = _FourLegReconciliationProvider(
+        project_root=project,
+        original_source_root=original,
+        scope_provider=_provider(TICK.timestamp),
+        notion_decision_refs=DECISIONS,
+        candidate_builder=builder,
+    )
+
+    assert provider(TICK, ()) is None
+    assert "SOURCE_CAPABILITY_OR_TIME_SEMANTICS_UNVERIFIED" in provider.last_diagnostic
+    assert calls == []
+
+
+def test_t15_unverified_ws_capability_falls_through_to_synthetic_without_x2_trip(tmp_path):
+    primary_project, _ = _source_fixture(tmp_path / "primary", source_capability_verified=False)
+    reconcile_project, reconcile_original = _source_fixture(
+        tmp_path / "reconcile",
+        source_capability_verified=True,
+    )
+    timing_path = reconcile_original / "20261012" / "kis_vts_websocket_timing.jsonl"
+    timing_path.write_text(
+        json.dumps(
+            {
+                "tr_id": "H0IOCNT0",
+                "source_capability_status": "UNVERIFIED_FOR_VTS_OFFICIAL_SAMPLE_SAYS_LIVE_ONLY",
+                "source_clock_timezone": "UNVERIFIED",
+                "source_date_semantics": "UNVERIFIED",
+            }
+        ) + chr(10),
+        encoding="utf-8",
+    )
+    alternative = _pre_entry_alternative("SYNTHETIC:T15:CAPABILITY_FALLBACK")
+    calls = []
+
+    class _FourLegPrimaryProvider(ValidationOnlyS2AcceptedOriginalPrimaryProvider):
+        @staticmethod
+        def _matching_original_rows(rows, candidate, timestamp):
+            return tuple(rows[:4])
+
+    class _FourLegReconciliationProvider(ValidationOnlyS2NotionSourceReconciliationProvider):
+        @staticmethod
+        def _matching_original_rows(rows, candidate, timestamp):
+            return tuple(rows[:4])
+
+    def builder(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(candidate_source="ORIGINAL")
+
+    primary = _FourLegPrimaryProvider(
+        project_root=primary_project,
+        scope_provider=alternative,
+        candidate_builder=builder,
+    )
+    reconciliation = _FourLegReconciliationProvider(
+        project_root=reconcile_project,
+        original_source_root=reconcile_original,
+        scope_provider=alternative,
+        notion_decision_refs=DECISIONS,
+        candidate_builder=builder,
+    )
+
+    class _StopSwitch:
+        def __init__(self):
+            self.calls = []
+
+        def snapshot(self):
+            return SimpleNamespace(status="ARMED")
+
+        def evaluate(self, **kwargs):
+            self.calls.append(kwargs)
+            return SimpleNamespace(status="ARMED")
+
+    class _Recovery:
+        def recover(self, *, group_id, broker_snapshot, ledger_snapshot):
+            return evaluate_u19_recovery(
+                group_id=group_id,
+                broker_snapshot=broker_snapshot,
+                ledger_snapshot=ledger_snapshot,
+            )
+
+    stop = _StopSwitch()
+    supervisor = ValidationOnlyRuntimeEvidenceSupervisor(
+        stop_switch=stop,
+        invariant_checker=ValidationOnlyRuntimeInvariantChecker(),
+        u19_recovery_coordinator=_Recovery(),
+        risk_guard_status_source=SimpleNamespace(
+            snapshot=lambda: SimpleNamespace(
+                admission_allowed=True,
+                kill_switch_engaged=False,
+                reason="HEALTHY",
+            )
+        ),
+        primary_provider=primary,
+        reconciliation_provider=reconciliation,
+        alternative_provider=alternative,
+    )
+
+    result = supervisor.evaluate(TICK)
+
+    assert result.candidate_source == "PROVENANCE_PRESERVING_ALTERNATIVE"
+    assert "SOURCE_CAPABILITY_OR_TIME_SEMANTICS_UNVERIFIED" in result.attempts[0]
+    assert "SOURCE_CAPABILITY_OR_TIME_SEMANTICS_UNVERIFIED" in result.attempts[1]
+    assert result.attempts[2] == "PROVENANCE_PRESERVING_ALTERNATIVE:VALIDATED"
+    assert result.stop_snapshot.status == "ARMED"
+    assert calls == []
+    assert len(stop.calls) == 1

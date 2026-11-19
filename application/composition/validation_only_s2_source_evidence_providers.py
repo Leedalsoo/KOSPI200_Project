@@ -101,6 +101,51 @@ class _ScopedS2EvidenceProvider:
                 matches.append(found[0])
         return tuple(matches)
 
+    @staticmethod
+    def _accepted_source_provenance_verified(rows: tuple[dict[str, Any], ...]) -> bool:
+        if not rows:
+            return False
+        for row in rows:
+            metadata = row.get("scenario_metadata", {})
+            capability = str(metadata.get("source_capability_status", "")).upper()
+            environment = str(metadata.get("source_environment", "")).upper()
+            if not capability.startswith("VERIFIED"):
+                return False
+            if environment in {"", "UNKNOWN", "UNVERIFIED", "UNKNOWN_CONFLICT"}:
+                return False
+            if str(metadata.get("source_timestamp_absolute", "")).lower() != "true":
+                return False
+            if str(metadata.get("source_timestamp_timezone", "")).upper() == "UNVERIFIED":
+                return False
+            if str(metadata.get("source_timestamp_date_resolution", "")).upper() == "UNVERIFIED":
+                return False
+            if str(metadata.get("source_time_semantics_verified", "")).lower() != "true":
+                return False
+        return True
+
+    @staticmethod
+    def _raw_ws_timing_provenance_verified(timing_path: Path) -> bool:
+        if not timing_path.is_file():
+            return False
+        seen = 0
+        for line in timing_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if row.get("tr_id") != "H0IOCNT0":
+                continue
+            seen += 1
+            capability = str(row.get("source_capability_status", "")).upper()
+            timezone = str(row.get("source_clock_timezone", "")).upper()
+            date_semantics = str(row.get("source_date_semantics", "")).upper()
+            if not capability.startswith("VERIFIED"):
+                return False
+            if timezone in {"", "UNVERIFIED", "UNKNOWN"}:
+                return False
+            if date_semantics in {"", "UNVERIFIED", "UNKNOWN"}:
+                return False
+        return seen > 0
+
 
 class ValidationOnlyS2AcceptedOriginalPrimaryProvider(_ScopedS2EvidenceProvider):
     """Use exact accepted source observations only; never synthesize a primary quote."""
@@ -132,6 +177,9 @@ class ValidationOnlyS2AcceptedOriginalPrimaryProvider(_ScopedS2EvidenceProvider)
         exact = self._matching_original_rows(rows, candidate, tick_time.isoformat())
         if len(exact) != 4:
             self.last_diagnostic = f"ACCEPTED_ORIGINAL_SYNCHRONOUS_LEG_COVERAGE_{len(exact)}_OF_4"
+            return None
+        if not self._accepted_source_provenance_verified(exact):
+            self.last_diagnostic = "ACCEPTED_ORIGINAL_SOURCE_CAPABILITY_OR_TIME_SEMANTICS_UNVERIFIED"
             return None
         if self.candidate_builder is None:
             self.last_diagnostic = "ACCEPTED_QUOTES_PRESENT_INDEPENDENT_BROKER_AND_FRESHNESS_SOURCES_REQUIRED"
@@ -237,18 +285,30 @@ class ValidationOnlyS2NotionSourceReconciliationProvider(_ScopedS2EvidenceProvid
             raise ValueError("T9_SCENARIO_ANCHOR_NOT_FOUND_IN_ACCEPTED_ORIGINAL_LINEAGE")
 
         exact = self._matching_original_rows(rows, candidate, as_of.isoformat())
-        if len(exact) != 4:
-            self.last_diagnostic = (
-                "NOTION_SOURCE_RECONCILIATION_VERIFIED:"
-                + ",".join(self.notion_decision_refs)
-                + ":RAW_WS_SHA256_MATCHED:ANCHORS_"
-                + str(len(anchor_ids))
-                + "_OF_"
-                + str(len(anchor_ids))
-                + ":ORIGINAL_LEG_COVERAGE_"
-                + str(len(exact))
-                + "_OF_4"
+        source_capability_verified = (
+            self._accepted_source_provenance_verified(exact)
+            and self._raw_ws_timing_provenance_verified(
+                day_root / "kis_vts_websocket_timing.jsonl"
             )
+        )
+        capability_marker = (
+            "SOURCE_CAPABILITY_VERIFIED"
+            if source_capability_verified
+            else "SOURCE_CAPABILITY_OR_TIME_SEMANTICS_UNVERIFIED"
+        )
+        self.last_diagnostic = (
+            "NOTION_SOURCE_RECONCILIATION_VERIFIED:"
+            + ",".join(self.notion_decision_refs)
+            + ":RAW_WS_SHA256_MATCHED:ANCHORS_"
+            + str(len(anchor_ids & accepted_observation_ids))
+            + "_OF_"
+            + str(len(anchor_ids))
+            + f":{capability_marker}"
+            + f":ORIGINAL_LEG_COVERAGE_{len(exact)}_OF_4"
+        )
+        if len(exact) != 4:
+            return None
+        if not source_capability_verified:
             return None
         if self.candidate_builder is None:
             self.last_diagnostic = "ORIGINAL_4LEG_QUOTES_PRESENT_INDEPENDENT_BROKER_SNAPSHOT_REQUIRED"

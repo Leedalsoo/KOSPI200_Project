@@ -148,6 +148,10 @@ def test_t13_rest_source_time_remains_time_only_and_unresolved():
     assert metadata["source_timestamp_date_resolution"] == "UNRESOLVED_TIME_ONLY"
     assert metadata["source_timestamp_absolute"] == "false"
     assert metadata["source_timestamp_status"] == "TIME_OF_DAY_ONLY"
+    assert metadata["source_capability_status"] == "UNVERIFIED"
+    assert metadata["source_environment"] == "UNKNOWN"
+    assert metadata["source_environment_status"] == "UNVERIFIED"
+    assert metadata["source_time_semantics_verified"] == "false"
     assert metadata["receipt_timezone"] == "UTC"
     assert metadata["observed_at_semantics"] == "RECEIPT_TIME_ONLY_SOURCE_INSTANT_UNRESOLVED"
 
