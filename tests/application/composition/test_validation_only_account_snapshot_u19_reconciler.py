@@ -3489,3 +3489,131 @@ def test_multi_group_duplicate_execution_foreign_group_and_instrument_mismatch_a
     assert "ACCOUNT_EXECUTION_GROUP_INVALID:SYNTHETIC:G2-FILL-001" in foreign_result.issues
     assert foreign_result.recovery_decision is None
     assert SqliteTrack2U19RecoveryStore(checkpoint_path).load_latest(aggregate_id) is None
+
+def _rewrite_validation_only_journal_report(store, execution_id, mutate):
+    import json
+
+    connection = sqlite3.connect(store.path)
+    try:
+        row = connection.execute(
+            "SELECT report_json FROM execution_journal WHERE execution_id=?",
+            (execution_id,),
+        ).fetchone()
+        assert row is not None
+        report = json.loads(row[0])
+        mutate(report)
+        connection.execute(
+            "UPDATE execution_journal SET report_json=? WHERE execution_id=?",
+            (json.dumps(report, sort_keys=True, separators=(",", ":")), execution_id),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected_error"),
+    [
+        ("group_id", "SYNTHETIC:WRONG-GROUP", "U19_EXECUTION_GROUP_ID_CONFLICT"),
+        ("leg_id", "SYNTHETIC:WRONG-LEG", "U19_EXECUTION_LEG_ID_CONFLICT"),
+    ],
+)
+def test_u19_journal_report_group_leg_conflict_is_rejected_but_missing_legacy_metadata_is_compatible(
+    tmp_path, field, value, expected_error,
+):
+    bundle = _bundle()
+    validation = validate_account_snapshot_bundle(bundle)
+    assert validation.is_valid
+    reconciler, checkpoint_path = _make_reconciler(tmp_path)
+    store = reconciler.ledger_snapshot_builder.settlement_store
+
+    _rewrite_validation_only_journal_report(
+        store, "SYNTHETIC:FILL-001", lambda report: report.update({field: value}),
+    )
+    conflict = reconciler.reconcile(
+        bundle=bundle, validation=validation, group_id=GROUP_ID,
+        snapshot_id=f"journal-report-{field}-conflict", as_of=AS_OF,
+    )
+    assert conflict.status == "RECONCILIATION_REQUIRED"
+    assert any(expected_error in issue for issue in conflict.issues)
+    assert conflict.recovery_decision is None
+    assert SqliteTrack2U19RecoveryStore(checkpoint_path).load_latest(GROUP_ID) is None
+
+    # The canonical ExecutionReport contract allows absent group/leg metadata
+    # for legacy adapters; the active persisted order command remains the
+    # authoritative fallback lineage.
+    legacy_root = tmp_path / f"legacy-{field}"
+    legacy_reconciler, legacy_checkpoint = _make_reconciler(legacy_root)
+    legacy_store = legacy_reconciler.ledger_snapshot_builder.settlement_store
+    _rewrite_validation_only_journal_report(
+        legacy_store,
+        "SYNTHETIC:FILL-001",
+        lambda report: (report.pop("group_id", None), report.pop("leg_id", None)),
+    )
+    legacy = legacy_reconciler.reconcile(
+        bundle=bundle, validation=validation, group_id=GROUP_ID,
+        snapshot_id=f"journal-report-{field}-legacy-absent", as_of=AS_OF,
+    )
+    assert legacy.status == "VALIDATION_ONLY_U19_RECONCILED", legacy.issues
+    assert legacy.recovery_decision is not None
+    assert SqliteTrack2U19RecoveryStore(legacy_checkpoint).load_latest(GROUP_ID) is not None
+
+
+@pytest.mark.parametrize("field", ["quantity", "price", "timestamp"])
+def test_u19_journal_report_quantity_price_timestamp_mismatch_never_creates_checkpoint(
+    tmp_path, field,
+):
+    bundle = _bundle(final_quantity=5 if field == "quantity" else 4)
+    executions = list(bundle.executions.rows)
+    if field == "quantity":
+        executions[0] = {
+            **executions[0],
+            "filled_quantity": 2,
+        }
+        orders = tuple(
+            {**row, "cumulative_filled_quantity": 3}
+            if row["client_order_id"] == "client-old" else row
+            for row in bundle.orders.rows
+        )
+        bundle = replace(
+            bundle,
+            orders=_section(bundle.orders.snapshot_id, AS_OF, orders),
+            executions=_section(bundle.executions.snapshot_id, AS_OF, tuple(executions)),
+        )
+        expected_issue = "ACCOUNT_U19_EXECUTION_QUANTITY_MISMATCH:SYNTHETIC:FILL-001"
+    elif field == "price":
+        executions[0] = {**executions[0], "execution_price": "10.55"}
+        bundle = replace(
+            bundle,
+            executions=_section(bundle.executions.snapshot_id, AS_OF, tuple(executions)),
+        )
+        expected_issue = "ACCOUNT_U19_EXECUTION_PRICE_MISMATCH:SYNTHETIC:FILL-001"
+    else:
+        executions[0] = {
+            **executions[0],
+            "execution_timestamp": AS_OF - timedelta(minutes=5, seconds=1),
+        }
+        bundle = replace(
+            bundle,
+            executions=_section(bundle.executions.snapshot_id, AS_OF, tuple(executions)),
+        )
+        expected_issue = "ACCOUNT_U19_EXECUTION_TIME_MISMATCH:SYNTHETIC:FILL-001"
+
+    validation = validate_account_snapshot_bundle(bundle)
+    assert validation.is_valid, validation.issues
+    reconciler, checkpoint_path = _make_reconciler(tmp_path)
+    result = reconciler.reconcile(
+        bundle=bundle, validation=validation, group_id=GROUP_ID,
+        snapshot_id=f"journal-report-{field}-mismatch", as_of=AS_OF,
+    )
+    assert result.status == "RECONCILIATION_REQUIRED"
+    assert expected_issue in result.issues
+    assert result.recovery_decision is not None
+    assert result.recovery_decision.restore_allowed is False
+    checkpoint = SqliteTrack2U19RecoveryStore(checkpoint_path).load_latest(GROUP_ID)
+    assert checkpoint is not None
+    if field == "quantity":
+        assert result.recovery_decision.status is U19RecoveryStatus.POSITION_LEDGER_MISMATCH
+    else:
+        assert result.recovery_decision.status is U19RecoveryStatus.LEDGER_SNAPSHOT_UNVERIFIED
+        assert result.projected_ledger_snapshot.complete is False

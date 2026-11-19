@@ -377,6 +377,38 @@ class ValidationOnlyAccountSnapshotU19Reconciler:
                 projected_ledger, broker_snapshot, None,
             )
 
+        recovery_hard_block_prefixes = (
+            "ACCOUNT_U19_EXECUTION_ID_SET_MISMATCH",
+            "ACCOUNT_EXECUTION_ID_NOT_UNIQUE",
+            "ACCOUNT_U19_EXECUTION_MISSING_FROM_JOURNAL:",
+            "ACCOUNT_U19_EXECUTION_LINEAGE_MISMATCH:",
+            "ACCOUNT_U19_ORDER_LINEAGE_MISMATCH:",
+            "ACCOUNT_U19_ORDER_CUMULATIVE_FILL_MISMATCH:",
+            "OPENING_POSITION_CANNOT_BE_PROJECTED:",
+            "FINAL_POSITION_CANNOT_BE_PROJECTED:",
+            "U19_LEDGER_POSITION_CANNOT_BE_PROJECTED",
+        )
+        if any(issue.startswith(recovery_hard_block_prefixes) for issue in issues):
+            return AccountSnapshotU19Reconciliation(
+                "RECONCILIATION_REQUIRED", tuple(dict.fromkeys(issues)), ledger,
+                projected_ledger, broker_snapshot, None, (), account_manifest,
+            )
+
+        execution_evidence_mismatch_prefixes = (
+            "ACCOUNT_U19_EXECUTION_QUANTITY_MISMATCH:",
+            "ACCOUNT_U19_EXECUTION_PRICE_MISMATCH:",
+            "ACCOUNT_U19_EXECUTION_PRICE_UNVERIFIABLE:",
+            "ACCOUNT_U19_EXECUTION_TIME_MISMATCH:",
+            "ACCOUNT_U19_EXECUTION_TIME_UNVERIFIABLE:",
+        )
+        if (
+            any(issue.startswith(execution_evidence_mismatch_prefixes) for issue in issues)
+            and "ACCOUNT_POSITION_U19_LEDGER_PROJECTION_MISMATCH" not in issues
+            and "ACCOUNT_U19_SNAPSHOT_AS_OF_MISMATCH" not in issues
+        ):
+            # Keep a diagnostic checkpoint, but make the ledger ineligible for
+            # RESTORE_ALLOWED until the execution evidence is reconciled.
+            projected_ledger = replace(projected_ledger, complete=False)
         decision = self.recovery_coordinator.recover(
             group_id=group_id,
             broker_snapshot=broker_snapshot,
