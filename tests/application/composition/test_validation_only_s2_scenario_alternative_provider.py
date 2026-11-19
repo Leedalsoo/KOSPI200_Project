@@ -368,3 +368,106 @@ def test_t8_supervisor_skips_ticks_outside_all_evidence_scopes():
         "PROVENANCE_PRESERVING_ALTERNATIVE:TICK_OUTSIDE_EVIDENCE_SCOPE",
     )
     assert stop.evaluate_calls == 0
+
+def test_t17_market_calibrated_quotes_are_four_leg_synthetic_and_exact_time_scoped():
+    from datetime import timedelta
+
+    provider = _provider("2026-10-12T09:26:00+09:00")
+    scenario_time = datetime.fromisoformat("2026-10-12T09:26:00+09:00")
+
+    quotes = provider.option_quotes_at(scenario_time)
+
+    assert len(quotes) == 4
+    assert {key[0] for key in quotes} == {"CALL", "PUT"}
+    assert all(
+        row["source"] == "SYNTHETIC:DERIVED_SCENARIO"
+        for row in quotes.values()
+    )
+    assert all(row["validation_only"] is True for row in quotes.values())
+    assert all(
+        row["contract_identity_authority"] == "SYNTHETIC_ONLY_NOT_KIS_MASTER"
+        for row in quotes.values()
+    )
+    assert provider.option_quotes_at(scenario_time + timedelta(seconds=1)) == {}
+
+
+def test_t17_synthetic_evidence_retains_anchor_lineage_and_no_lookahead():
+    import json
+
+    tick = SimpleNamespace(
+        candidate_id="S2-CANDIDATE-001",
+        timestamp="2026-10-12T09:26:00+09:00",
+    )
+    provider = _provider(tick.timestamp)
+    candidate = provider(tick, ())
+    assert candidate is not None
+
+    inputs = candidate.invariant_inputs
+    ledger = inputs["ledger_evidence"]
+    scenario_time = datetime.fromisoformat("2026-10-12T09:26:00+09:00")
+    anchor_time = ledger["source_anchor_as_of"]
+
+    assert inputs["source_namespace"] == "SYNTHETIC:DERIVED_SCENARIO"
+    assert inputs["deterministic_rule_id"] == provider.VERSION
+    assert len(inputs["source_manifest_sha256"]) == 64
+    assert anchor_time.tzinfo is not None
+    assert anchor_time <= scenario_time
+    assert ledger["scenario_timestamp"] == scenario_time
+    assert inputs["source_anchor_refs"]
+    assert inputs["evidence_refs"]
+    allowed_prefixes = (
+        "accepted_runtime_v2_manifest#",
+        "s2_scenario_manifest#",
+        "source_anchor:",
+        "source_observation:",
+    )
+    assert all(
+        ref.startswith(allowed_prefixes)
+        for ref in inputs["source_anchor_refs"]
+    )
+
+    scenario_dir = (
+        ROOT
+        / "data"
+        / "derived_scenario"
+        / "q25_a8_p2_recovered_track2_four_leg_quotes_v3_market_calibrated_r3_20261115"
+    )
+    quote_path = scenario_dir / "four_leg_quotes.jsonl"
+    quote_rows = [
+        json.loads(line)
+        for line in quote_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    quote_rows = [
+        row for row in quote_rows
+        if row["candidate_id"] == "S2-CANDIDATE-001"
+    ]
+    assert len(quote_rows) == 4
+
+    for row in quote_rows:
+        calibration = row["market_calibration"]
+        anchor_values = (
+            tuple(calibration["iv_anchor_timestamps"])
+            + tuple(calibration["spread_anchor_timestamps"])
+        )
+        assert anchor_values
+        assert all(
+            datetime.fromisoformat(value) <= scenario_time
+            for value in anchor_values
+        )
+        assert len(calibration["iv_anchor_observation_ids"]) == len(
+            calibration["iv_anchor_timestamps"]
+        )
+        assert len(calibration["spread_anchor_observation_ids"]) == len(
+            calibration["spread_anchor_timestamps"]
+        )
+
+
+def test_t17_synthetic_freshness_exact_five_second_boundary_is_fresh():
+    tick = SimpleNamespace(
+        candidate_id="S2-CANDIDATE-001",
+        timestamp="2026-10-12T09:26:05+09:00",
+    )
+    candidate = _provider(tick.timestamp)(tick, ())
+
+    assert candidate.freshness_verdict.status.value == "FRESH"
