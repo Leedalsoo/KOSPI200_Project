@@ -2782,3 +2782,68 @@ def test_multi_group_local_conflict_resolution_isolated_from_global_collision_af
     assert after_restart.load_position_state(SHARED_INSTRUMENT)["qty"] == 3
     assert after_restart.unresolved_reconciliations()[0]["scope_key"] == "__runtime_bootstrap__"
     assert after_restart.unresolved_reconciliations()[0]["status"] == "CONFLICT"
+
+    # A separate order-local late fill can be reconciled while the global
+    # cross-order collision remains open; replacement lineage must be intact.
+    replacement_links_before = after_restart.load_order_replacement_links()
+    assert any(item["link_id"] == "SYNTHETIC:REPLACE-001" for item in replacement_links_before)
+    unrelated_oms = OrderStateMachine(persistence_store=after_restart)
+    unrelated_oms.restore_from_store()
+    unrelated_oms.apply_cancel(ExecutionReport(
+        client_order_id="client-g2-global", broker_order_id="broker-g2-global",
+        execution_id=None, status="CANCELLED", filled_quantity=0,
+        remaining_quantity=1, execution_price=None,
+        execution_timestamp=AS_OF - timedelta(seconds=4),
+        group_id=GROUP_TWO, leg_id="global-leg",
+    ))
+    unrelated_position = LivePositionAggregate(foreign_instrument)
+    persisted_unrelated_position = after_restart.load_position_state(foreign_instrument)
+    if persisted_unrelated_position is not None:
+        unrelated_position.restore_persistence_record(persisted_unrelated_position)
+    unrelated_bridge = LiveExecutionPositionBridge(
+        order_state_machine=unrelated_oms,
+        position_fill_adapter=LivePositionFillAdapter(unrelated_position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=after_restart),
+        position_aggregate=unrelated_position, settlement_store=after_restart,
+    )
+    unrelated_late_fill = ExecutionReport(
+        client_order_id="client-g2-global", broker_order_id="broker-g2-global",
+        execution_id="SYNTHETIC:G2-UNRELATED-LATE-FILL", status="FILLED",
+        filled_quantity=1, remaining_quantity=0, execution_price=Decimal("12.30"),
+        execution_timestamp=AS_OF - timedelta(seconds=3), fee=Decimal("2"),
+        group_id=GROUP_TWO, leg_id="global-leg",
+    )
+    with pytest.raises(OrderStateTransitionError, match="RECONCILIATION_PENDING"):
+        unrelated_bridge.settle(unrelated_late_fill)
+    unrelated_bridge.settle_authoritatively_reconciled_fill(
+        unrelated_late_fill,
+        authoritative_evidence_ref="VALIDATION_ONLY:U19:UNRELATED-ORDER-LATE-FILL",
+    )
+    assert unrelated_position.qty == 1
+    assert after_restart.open_reconciliation_events(scope_key="client-g2-global") == ()
+    assert after_restart.load_order_replacement_links() == replacement_links_before
+    assert after_restart.execution_journal_conflict_history(
+        scope_key="__runtime_bootstrap__",
+    ) == final_global_conflicts
+    assert len(after_restart.load_execution_journal_records()) == 8
+    assert after_restart.load_position_state(foreign_instrument)["qty"] == 1
+    assert [item["scope_key"] for item in after_restart.unresolved_reconciliations()] == [
+        "__runtime_bootstrap__",
+    ]
+
+    for group_id in (GROUP_ID, GROUP_TWO):
+        ledger = post_restart_reconciler.ledger_snapshot_builder.build(
+            group_id=group_id, snapshot_id=f"{group_id}:UNRELATED-LOCAL-RESOLVED", as_of=AS_OF,
+        )
+        assert ledger.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
+    unrelated_restart = SQLiteSettlementStore(store.path)
+    assert unrelated_restart.execution_journal_conflict_history(
+        scope_key="__runtime_bootstrap__",
+    ) == final_global_conflicts
+    assert len(unrelated_restart.load_execution_journal_records()) == 8
+    assert unrelated_restart.load_position_state(SHARED_INSTRUMENT)["qty"] == 3
+    assert unrelated_restart.load_position_state(foreign_instrument)["qty"] == 1
+    assert unrelated_restart.load_order_replacement_links() == replacement_links_before
+    assert [item["scope_key"] for item in unrelated_restart.unresolved_reconciliations()] == [
+        "__runtime_bootstrap__",
+    ]
