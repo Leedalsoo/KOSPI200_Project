@@ -801,3 +801,144 @@ def test_individual_multifill_journal_oms_position_restart_replay_exactly_once(t
     assert persisted_order["average_execution_price"] == str(expected_average)
     assert persisted_position["qty"] == 3
     assert persisted_position["avg_price"] == str(expected_average)
+
+
+def test_post_commit_memory_projection_failure_restores_durable_state_after_restart(tmp_path, monkeypatch):
+    store, oms, position, dedup, bridge = _prepared(tmp_path)
+    report = _fill(execution_id="commit-before-crash", quantity=1, remaining=2)
+
+    def crash_projection(_snapshot):
+        raise RuntimeError("synthetic process interruption after database commit")
+
+    monkeypatch.setattr(position, "restore_snapshot", crash_projection)
+    with pytest.raises(RuntimeError, match="SETTLEMENT_COMMITTED_MEMORY_PROJECTION_REBUILD_REQUIRED"):
+        bridge.settle(report)
+
+    assert store.has_execution("commit-before-crash")
+    assert store.load_order_state_payloads()[0]["filled_quantity"] == 1
+    assert store.load_position_state("FUT-1")["qty"] == 1
+    assert oms.get("client-1").filled_quantity == 1
+    assert position.qty == 0
+    unresolved = store.unresolved_reconciliations()
+    assert any(
+        item["scope_key"] == "client-1"
+        and item["status"] == "CONFLICT"
+        and item["reason"] == "POST_COMMIT_MEMORY_PROJECTION_REBUILD_REQUIRED"
+        for item in unresolved
+    )
+
+    restarted_store = SQLiteSettlementStore(tmp_path / "settlement.sqlite3")
+    restarted_oms = OrderStateMachine(persistence_store=restarted_store)
+    restarted_oms.restore_from_store()
+    restarted_position = LivePositionAggregate("FUT-1")
+    restarted_position.restore_persistence_record(restarted_store.load_position_state("FUT-1"))
+    restarted_bridge = LiveExecutionPositionBridge(
+        order_state_machine=restarted_oms,
+        position_fill_adapter=LivePositionFillAdapter(restarted_position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=restarted_store),
+        position_aggregate=restarted_position,
+        settlement_store=restarted_store,
+    )
+    replayed = restarted_bridge.settle(report)
+    assert replayed.filled_quantity == 1
+    assert restarted_position.qty == 1
+    assert restarted_position.avg_price == Decimal("14.75")
+    assert len(restarted_store.load_execution_journal_records()) == 1
+    assert restarted_store.has_unresolved_reconciliation()
+
+
+def test_second_fill_partial_sqlite_write_failure_rolls_back_all_durable_and_memory_state(tmp_path):
+    store, oms, position, dedup, bridge = _prepared(tmp_path)
+    bridge.settle(_fill(execution_id="first-commit", quantity=1, remaining=2))
+    before_order = store.load_order_state_payloads()[0]
+    before_position = store.load_position_state("FUT-1")
+
+    with store._connection() as connection:
+        connection.execute(
+            """CREATE TRIGGER fail_position_update BEFORE UPDATE ON position_states
+               BEGIN SELECT RAISE(ABORT, 'synthetic mid-transaction failure'); END"""
+        )
+
+    with pytest.raises(SettlementStoreError, match="SETTLEMENT_TRANSACTION_FAILED"):
+        bridge.settle(_fill(execution_id="second-rollback", quantity=1, remaining=1, price="14.90"))
+
+    assert [row["execution_id"] for row in store.load_execution_journal_records()] == ["first-commit"]
+    assert store.load_order_state_payloads()[0] == before_order
+    assert store.load_position_state("FUT-1") == before_position
+    assert oms.get("client-1").filled_quantity == 1
+    assert position.qty == 1
+    assert not dedup.contains("second-rollback")
+
+
+def test_shared_settlement_store_isolates_multiple_orders_and_instruments(tmp_path):
+    store = SQLiteSettlementStore(tmp_path / "multi-order.sqlite3")
+    oms = OrderStateMachine(persistence_store=store)
+    aggregates = {}
+    bridges = {}
+    for index, instrument_id in enumerate(("OPT-CALL-100", "OPT-PUT-100"), start=1):
+        client_order_id = f"client-{index}"
+        broker_order_id = f"broker-{index}"
+        oms.apply_intent(type("Intent", (), {"client_order_id": client_order_id, "quantity": 2})())
+        command = BrokerOrderCommand(
+            client_order_id=client_order_id,
+            instrument_id=instrument_id,
+            side="BUY" if index == 1 else "SELL",
+            quantity=2,
+            order_type="LIMIT",
+            broker_symbol=instrument_id,
+            asset_type="OPTIONS",
+            instrument_identity=FuturesInstrumentIdentity(
+                instrument_id=instrument_id,
+                symbol=instrument_id,
+                product_type=FuturesProductType.MINI,
+                contract_multiplier=Decimal("50000"),
+                identity_source="TEST_FIXTURE",
+            ),
+            strategy_id="SYNTHETIC-MULTI-INSTRUMENT",
+        )
+        oms.register_broker_order_command(command)
+        oms.apply_ack(OrderAckEvent(client_order_id=client_order_id, accepted=True, broker_order_id=broker_order_id))
+        aggregate = LivePositionAggregate(instrument_id)
+        aggregates[instrument_id] = aggregate
+        bridges[instrument_id] = LiveExecutionPositionBridge(
+            order_state_machine=oms,
+            position_fill_adapter=LivePositionFillAdapter(aggregate),
+            execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=store),
+            position_aggregate=aggregate,
+            settlement_store=store,
+        )
+
+    reports = (
+        ExecutionReport(
+            client_order_id="client-1", broker_order_id="broker-1", execution_id="exec-call-1",
+            status="PARTIALLY_FILLED", filled_quantity=1, remaining_quantity=1,
+            execution_price=Decimal("10.25"), execution_timestamp=datetime(2026, 10, 29, 8, 54, tzinfo=timezone.utc),
+        ),
+        ExecutionReport(
+            client_order_id="client-2", broker_order_id="broker-2", execution_id="exec-put-1",
+            status="FILLED", filled_quantity=2, remaining_quantity=0,
+            execution_price=Decimal("7.50"), execution_timestamp=datetime(2026, 10, 29, 8, 54, tzinfo=timezone.utc),
+        ),
+    )
+    bridges["OPT-CALL-100"].settle(reports[0])
+    bridges["OPT-PUT-100"].settle(reports[1])
+
+    assert oms.get("client-1").filled_quantity == 1
+    assert oms.get("client-2").filled_quantity == 2
+    assert aggregates["OPT-CALL-100"].qty == 1
+    assert aggregates["OPT-CALL-100"].avg_price == Decimal("10.25")
+    assert aggregates["OPT-PUT-100"].qty == 2
+    assert aggregates["OPT-PUT-100"].avg_price == Decimal("7.50")
+    assert {row["execution_id"] for row in store.load_execution_journal_records()} == {"exec-call-1", "exec-put-1"}
+    assert store.load_position_state("OPT-CALL-100")["qty"] == 1
+    assert store.load_position_state("OPT-PUT-100")["qty"] == 2
+
+    restarted_store = SQLiteSettlementStore(tmp_path / "multi-order.sqlite3")
+    restarted_oms = OrderStateMachine(persistence_store=restarted_store)
+    restarted_oms.restore_from_store()
+    assert restarted_oms.get("client-1").filled_quantity == 1
+    assert restarted_oms.get("client-2").filled_quantity == 2
+    for instrument_id, expected_qty in (("OPT-CALL-100", 1), ("OPT-PUT-100", 2)):
+        restored = LivePositionAggregate(instrument_id)
+        restored.restore_persistence_record(restarted_store.load_position_state(instrument_id))
+        assert restored.qty == expected_qty
