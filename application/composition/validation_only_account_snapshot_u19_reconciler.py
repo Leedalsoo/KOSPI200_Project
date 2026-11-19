@@ -14,8 +14,11 @@ from application.composition.validation_only_account_snapshot_assembler import (
 from core.oms.track2_u19_recovery import (
     U19BrokerPositionSnapshot,
     U19ExecutionLedgerSnapshot,
+    U19ExpectedGroupManifest,
     U19Position,
     U19RecoveryDecision,
+    _expected_group_manifest_digest,
+    _expected_group_manifest_positions,
 )
 from application.composition.track2_u19_ledger_snapshot_builder import U19LedgerSnapshotBuildError
 
@@ -29,6 +32,7 @@ class AccountSnapshotU19Reconciliation:
     broker_snapshot: U19BrokerPositionSnapshot | None
     recovery_decision: U19RecoveryDecision | None
     group_ledger_snapshots: tuple[U19ExecutionLedgerSnapshot, ...] = ()
+    expected_group_manifest: U19ExpectedGroupManifest | None = None
 
     @property
     def is_valid(self) -> bool:
@@ -63,6 +67,97 @@ def _positions(values: dict[str, int]) -> tuple[U19Position, ...]:
     )
 
 
+def _compose_account_expected_group_manifest(
+    *,
+    group_manifests: tuple[U19ExpectedGroupManifest, ...],
+    group_ids: tuple[str, ...],
+    aggregate_group_id: str,
+    opening_positions: tuple[U19Position, ...],
+    opening_evidence_sha256: str,
+) -> U19ExpectedGroupManifest | None:
+    """Compose independent group expectations plus the opening baseline.
+
+    Leg identity is the union of every child manifest, while expected positions
+    are signed net quantities after cross-group offsets and opening baseline.
+    A net-zero instrument remains in leg_instrument_ids even though its zero
+    quantity is omitted from expected_positions.
+    """
+    if (
+        not isinstance(group_manifests, tuple)
+        or len(group_manifests) != len(group_ids)
+        or not isinstance(opening_evidence_sha256, str)
+        or len(opening_evidence_sha256) != 64
+        or any(character not in "0123456789abcdefABCDEF" for character in opening_evidence_sha256)
+    ):
+        return None
+    by_group = {
+        item.group_id: item
+        for item in group_manifests
+        if isinstance(item, U19ExpectedGroupManifest)
+    }
+    if len(by_group) != len(group_manifests) or set(by_group) != set(group_ids):
+        return None
+
+    leg_ids: set[str] = set()
+    expected_quantities: dict[str, Decimal] = {}
+    child_lineage: list[dict[str, str]] = []
+    for group_id in group_ids:
+        manifest = by_group[group_id]
+        positions = _expected_group_manifest_positions(manifest, group_id=group_id)
+        if positions is None:
+            return None
+        leg_ids.update(manifest.leg_instrument_ids)
+        for instrument_id, quantity in positions.items():
+            expected_quantities[instrument_id] = (
+                expected_quantities.get(instrument_id, Decimal(0)) + quantity
+            )
+        child_lineage.append({
+            "group_id": group_id,
+            "manifest_id": manifest.manifest_id,
+            "payload_sha256": manifest.payload_sha256.lower(),
+        })
+
+    opening_map = _position_map(opening_positions)
+    if opening_map is None:
+        return None
+    leg_ids.update(opening_map)
+    for instrument_id, quantity in opening_map.items():
+        expected_quantities[instrument_id] = (
+            expected_quantities.get(instrument_id, Decimal(0)) + quantity
+        )
+    if any(
+        not quantity.is_finite() or quantity != quantity.to_integral_value()
+        for quantity in expected_quantities.values()
+    ):
+        return None
+
+    leg_instrument_ids = tuple(sorted(leg_ids))
+    if not leg_instrument_ids or not set(expected_quantities).issubset(leg_ids):
+        return None
+    expected_positions = tuple(
+        U19Position(instrument_id, quantity)
+        for instrument_id, quantity in sorted(expected_quantities.items())
+        if quantity != 0
+    )
+    provenance_payload = {
+        "group_manifests": child_lineage,
+        "opening_evidence_sha256": opening_evidence_sha256,
+    }
+    provenance_hash = hashlib.sha256(
+        json.dumps(provenance_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    manifest = U19ExpectedGroupManifest(
+        group_id=aggregate_group_id,
+        manifest_id=f"account-aggregate:{provenance_hash}",
+        source="VALIDATION_ONLY:EXPECTED_GROUP_MANIFEST",
+        provenance=f"VALIDATION_ONLY:ACCOUNT_AGGREGATE_MANIFEST:{provenance_hash}",
+        leg_instrument_ids=leg_instrument_ids,
+        expected_positions=expected_positions,
+        payload_sha256="0" * 64,
+    )
+    return replace(manifest, payload_sha256=_expected_group_manifest_digest(manifest))
+
+
 class ValidationOnlyAccountSnapshotU19Reconciler:
     """Join normalized account snapshots to the persisted U19 execution ledger.
 
@@ -83,6 +178,7 @@ class ValidationOnlyAccountSnapshotU19Reconciler:
         group_id: str,
         snapshot_id: str,
         as_of: datetime,
+        expected_group_manifest: U19ExpectedGroupManifest | None = None,
     ) -> AccountSnapshotU19Reconciliation:
         if not validation.is_valid or validation.as_of is None or not validation.evidence_sha256:
             return AccountSnapshotU19Reconciliation(
@@ -266,6 +362,7 @@ class ValidationOnlyAccountSnapshotU19Reconciler:
             group_id=group_id,
             broker_snapshot=broker_snapshot,
             ledger_snapshot=projected_ledger,
+            expected_group_manifest=expected_group_manifest,
         )
         if decision.status.value not in {"RESTORE_ALLOWED", "FLAT_CONFIRMED"}:
             issues.append(f"U19_RECOVERY_{decision.status.value}")
@@ -275,6 +372,7 @@ class ValidationOnlyAccountSnapshotU19Reconciler:
             status = "VALIDATION_ONLY_U19_RECONCILED"
         return AccountSnapshotU19Reconciliation(
             status, tuple(issues), ledger, projected_ledger, broker_snapshot, decision,
+            (), expected_group_manifest,
         )
 
     def reconcile_account(
@@ -286,6 +384,7 @@ class ValidationOnlyAccountSnapshotU19Reconciler:
         snapshot_id: str,
         as_of: datetime,
         aggregate_group_id: str = "SYNTHETIC:ACCOUNT_AGGREGATE:VALIDATION",
+        expected_group_manifests: tuple[U19ExpectedGroupManifest, ...] | None = None,
     ) -> AccountSnapshotU19Reconciliation:
         """Reconcile several OMS groups against one account-wide position snapshot.
 
@@ -521,6 +620,19 @@ class ValidationOnlyAccountSnapshotU19Reconciler:
         delta_positions = _positions(delta_quantities)
         projected_positions = _positions(projected_quantities)
         final_positions = _positions(final_quantities)
+        aggregate_manifest = None
+        if expected_group_manifests is not None:
+            aggregate_manifest = _compose_account_expected_group_manifest(
+                group_manifests=expected_group_manifests,
+                group_ids=normalized_groups,
+                aggregate_group_id=aggregate_group,
+                opening_positions=_positions(opening),
+                opening_evidence_sha256=bundle.opening_positions.payload_sha256,
+            )
+            if aggregate_manifest is None:
+                issues.append("ACCOUNT_EXPECTED_GROUP_MANIFEST_INVALID_OR_GROUP_SET_MISMATCH")
+            elif aggregate_manifest.expected_positions != projected_positions:
+                issues.append("ACCOUNT_EXPECTED_GROUP_MANIFEST_POSITION_PROJECTION_MISMATCH")
         execution_events = tuple(
             ledger_events_by_id[key] for key in sorted(ledger_events_by_id)
         )
@@ -625,23 +737,25 @@ class ValidationOnlyAccountSnapshotU19Reconciler:
             "U19_GROUP_POSITION_NOT_INTEGRAL:",
             "OPENING_POSITION_CANNOT_BE_PROJECTED:",
             "FINAL_POSITION_CANNOT_BE_PROJECTED:",
+            "ACCOUNT_EXPECTED_GROUP_MANIFEST_",
         )
         if any(issue.startswith(recovery_unsafe_prefixes) for issue in issues):
             return AccountSnapshotU19Reconciliation(
                 "RECONCILIATION_REQUIRED", tuple(dict.fromkeys(issues)),
                 aggregate_ledger, projected_ledger, broker_snapshot, None,
-                tuple(group_ledgers),
+                tuple(group_ledgers), aggregate_manifest,
             )
 
         decision = self.recovery_coordinator.recover(
             group_id=aggregate_group,
             broker_snapshot=broker_snapshot,
             ledger_snapshot=projected_ledger,
+            expected_group_manifest=aggregate_manifest,
         )
         if decision.status.value not in {"RESTORE_ALLOWED", "FLAT_CONFIRMED"}:
             issues.append(f"U19_RECOVERY_{decision.status.value}")
         status = "RECONCILIATION_REQUIRED" if issues else "VALIDATION_ONLY_U19_RECONCILED"
         return AccountSnapshotU19Reconciliation(
             status, tuple(dict.fromkeys(issues)), aggregate_ledger,
-            projected_ledger, broker_snapshot, decision, tuple(group_ledgers),
+            projected_ledger, broker_snapshot, decision, tuple(group_ledgers), aggregate_manifest,
         )

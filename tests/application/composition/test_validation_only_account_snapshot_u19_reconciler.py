@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
@@ -22,7 +22,12 @@ from application.composition.track2_u19_ledger_snapshot_builder import (
 from application.composition.track2_u19_recovery import ValidationOnlyTrack2U19RecoveryCoordinator
 from contracts.types import BrokerOrderCommand, ExecutionReport, OrderAckEvent, OrderIntent
 from core.oms.oms_fsm import OrderStateMachine
-from core.oms.track2_u19_recovery import U19RecoveryStatus
+from core.oms.track2_u19_recovery import (
+    U19ExpectedGroupManifest,
+    U19Position,
+    U19RecoveryStatus,
+    _expected_group_manifest_digest,
+)
 from environments.live.execution.execution_event_deduplicator import ExecutionEventDeduplicator
 from environments.live.position.live_execution_position_bridge import (
     LiveExecutionPositionBridge,
@@ -145,7 +150,9 @@ def _seed_order(
     return oms
 
 
-def _make_reconciler(tmp_path, *, old_first_fill_quantity=1):
+def _make_reconciler(
+    tmp_path, *, old_first_fill_quantity=1, require_expected_group_manifest=False,
+):
     instrument = "SYNTHETIC_CONTRACT:KOSPI200_CALL_202612"
     settlement = SQLiteSettlementStore(tmp_path / "settlement.sqlite3")
     old = _seed_order(
@@ -178,6 +185,7 @@ def _make_reconciler(tmp_path, *, old_first_fill_quantity=1):
     checkpoint = SqliteTrack2U19RecoveryStore(tmp_path / "u19-checkpoint.sqlite3")
     coordinator = ValidationOnlyTrack2U19RecoveryCoordinator(
         checkpoint, settlement_store=settlement,
+        require_expected_group_manifest=require_expected_group_manifest,
     )
     reconciler = ValidationOnlyAccountSnapshotU19Reconciler(
         ledger_snapshot_builder=ValidationOnlyU19LedgerSnapshotBuilder(settlement),
@@ -438,6 +446,137 @@ def _seed_second_group(reconciler, *, shared_sell_quantity=1):
     )
 
 
+def _expected_group_manifests(bundle, group_ids=(GROUP_ID, GROUP_TWO)):
+    """Build independent validation-only expectations from the scenario sidecar."""
+    manifests = []
+    for group_id in sorted(group_ids):
+        leg_ids = tuple(sorted({
+            str(row.get("instrument_id") or "").strip()
+            for row in bundle.orders.rows
+            if row.get("group_id") == group_id and str(row.get("instrument_id") or "").strip()
+        } | {
+            str(row.get("instrument_id") or "").strip()
+            for row in bundle.executions.rows
+            if row.get("group_id") == group_id and str(row.get("instrument_id") or "").strip()
+        }))
+        quantities = {}
+        for row in bundle.executions.rows:
+            if row.get("group_id") != group_id:
+                continue
+            instrument = str(row.get("instrument_id") or "").strip()
+            side = str(row.get("side") or "").upper()
+            quantity = int(row.get("filled_quantity"))
+            signed = quantity if side in {"BUY", "LONG"} else -quantity if side in {"SELL", "SHORT"} else 0
+            quantities[instrument] = quantities.get(instrument, 0) + signed
+        positions = tuple(
+            U19Position(instrument, Decimal(quantity))
+            for instrument, quantity in sorted(quantities.items()) if quantity
+        )
+        manifest = U19ExpectedGroupManifest(
+            group_id=group_id,
+            manifest_id=f"SYNTHETIC:EXPECTED:{group_id}",
+            source="VALIDATION_ONLY:EXPECTED_GROUP_MANIFEST",
+            provenance="VALIDATION_ONLY:DERIVED_SCENARIO_SIDECAR",
+            leg_instrument_ids=leg_ids,
+            expected_positions=positions,
+            payload_sha256="0" * 64,
+        )
+        manifests.append(replace(manifest, payload_sha256=_expected_group_manifest_digest(manifest)))
+    return tuple(manifests)
+
+
+def test_multi_group_strict_recovery_requires_manifest_without_promoting_account_snapshot(tmp_path):
+    bundle = _multi_group_bundle()
+    validation = validate_account_snapshot_bundle(bundle)
+    reconciler, _ = _make_reconciler(tmp_path, require_expected_group_manifest=True)
+    _seed_second_group(reconciler)
+
+    result = reconciler.reconcile_account(
+        bundle=bundle, validation=validation, group_ids=(GROUP_ID, GROUP_TWO),
+        snapshot_id="multi-group-manifest-missing", as_of=AS_OF,
+        aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:MANIFEST-MISSING",
+    )
+
+    assert result.status == "RECONCILIATION_REQUIRED"
+    assert result.recovery_decision.status is U19RecoveryStatus.EXPECTED_GROUP_MANIFEST_UNAVAILABLE
+    assert result.expected_group_manifest is None
+    assert result.recovery_decision.new_entry_enabled is False
+    assert result.recovery_decision.order_submission_enabled is False
+
+
+def test_multi_group_rejects_tampered_child_manifest_before_checkpoint(tmp_path):
+    bundle = _multi_group_bundle()
+    validation = validate_account_snapshot_bundle(bundle)
+    reconciler, checkpoint_path = _make_reconciler(tmp_path, require_expected_group_manifest=True)
+    _seed_second_group(reconciler)
+    manifests = list(_expected_group_manifests(bundle))
+    manifests[1] = replace(manifests[1], payload_sha256="f" * 64)
+
+    result = reconciler.reconcile_account(
+        bundle=bundle, validation=validation, group_ids=(GROUP_ID, GROUP_TWO),
+        snapshot_id="multi-group-manifest-tampered", as_of=AS_OF,
+        aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:MANIFEST-TAMPERED",
+        expected_group_manifests=tuple(manifests),
+    )
+
+    assert result.status == "RECONCILIATION_REQUIRED"
+    assert "ACCOUNT_EXPECTED_GROUP_MANIFEST_INVALID_OR_GROUP_SET_MISMATCH" in result.issues
+    assert result.recovery_decision is None
+    assert SqliteTrack2U19RecoveryStore(checkpoint_path).load_latest(
+        "SYNTHETIC:ACCOUNT_AGGREGATE:MANIFEST-TAMPERED"
+    ) is None
+
+
+def test_multi_group_manifest_position_mismatch_is_reported_before_checkpoint(tmp_path):
+    bundle = _multi_group_bundle()
+    validation = validate_account_snapshot_bundle(bundle)
+    reconciler, checkpoint_path = _make_reconciler(tmp_path, require_expected_group_manifest=True)
+    _seed_second_group(reconciler)
+    manifests = list(_expected_group_manifests(bundle))
+    child = manifests[1]
+    changed_positions = tuple(
+        U19Position(item.instrument_id, item.signed_quantity - Decimal(1))
+        if item.instrument_id == SHARED_INSTRUMENT else item
+        for item in child.expected_positions
+    )
+    changed_child = replace(child, expected_positions=changed_positions, payload_sha256="0" * 64)
+    manifests[1] = replace(
+        changed_child, payload_sha256=_expected_group_manifest_digest(changed_child),
+    )
+
+    result = reconciler.reconcile_account(
+        bundle=bundle, validation=validation, group_ids=(GROUP_ID, GROUP_TWO),
+        snapshot_id="multi-group-manifest-position-mismatch", as_of=AS_OF,
+        aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:MANIFEST-POSITION-MISMATCH",
+        expected_group_manifests=tuple(manifests),
+    )
+
+    assert result.status == "RECONCILIATION_REQUIRED"
+    assert "ACCOUNT_EXPECTED_GROUP_MANIFEST_POSITION_PROJECTION_MISMATCH" in result.issues
+    assert result.recovery_decision is None
+    assert SqliteTrack2U19RecoveryStore(checkpoint_path).load_latest(
+        "SYNTHETIC:ACCOUNT_AGGREGATE:MANIFEST-POSITION-MISMATCH"
+    ) is None
+
+
+def test_multi_group_manifest_requires_exact_child_group_set(tmp_path):
+    bundle = _multi_group_bundle()
+    validation = validate_account_snapshot_bundle(bundle)
+    reconciler, _ = _make_reconciler(tmp_path)
+    _seed_second_group(reconciler)
+
+    result = reconciler.reconcile_account(
+        bundle=bundle, validation=validation, group_ids=(GROUP_ID, GROUP_TWO),
+        snapshot_id="multi-group-manifest-group-gap", as_of=AS_OF,
+        aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:MANIFEST-GROUP-GAP",
+        expected_group_manifests=_expected_group_manifests(bundle, (GROUP_ID,)),
+    )
+
+    assert result.status == "RECONCILIATION_REQUIRED"
+    assert "ACCOUNT_EXPECTED_GROUP_MANIFEST_INVALID_OR_GROUP_SET_MISMATCH" in result.issues
+    assert result.recovery_decision is None
+
+
 def test_multi_group_account_snapshot_nets_shared_instrument_and_reopens_aggregate_u19_checkpoint(tmp_path):
     bundle = _multi_group_bundle()
     validation = validate_account_snapshot_bundle(bundle)
@@ -450,6 +589,7 @@ def test_multi_group_account_snapshot_nets_shared_instrument_and_reopens_aggrega
         group_ids=(GROUP_ID, GROUP_TWO),
         snapshot_id="multi-group-account-001", as_of=AS_OF,
         aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:MULTI-001",
+        expected_group_manifests=_expected_group_manifests(bundle),
     )
 
     assert result.is_valid
@@ -467,6 +607,11 @@ def test_multi_group_account_snapshot_nets_shared_instrument_and_reopens_aggrega
     }
     assert result.projected_ledger_snapshot.positions == result.broker_snapshot.positions
     assert result.recovery_decision.status is U19RecoveryStatus.RESTORE_ALLOWED
+    assert result.expected_group_manifest is not None
+    assert result.expected_group_manifest.leg_instrument_ids == (SHARED_INSTRUMENT, SECOND_INSTRUMENT)
+    assert result.expected_group_manifest.expected_positions == result.projected_ledger_snapshot.positions
+    assert result.recovery_decision.expected_group_manifest_id == result.expected_group_manifest.manifest_id
+    assert result.recovery_decision.expected_group_manifest_sha256 == result.expected_group_manifest.payload_sha256
     assert result.recovery_decision.new_entry_enabled is False
     assert result.recovery_decision.order_submission_enabled is False
 
@@ -499,6 +644,7 @@ def test_multi_group_account_snapshot_rejects_missing_group_lineage_without_bloc
         group_ids=(GROUP_ID, GROUP_TWO),
         snapshot_id="multi-group-missing-lineage", as_of=AS_OF,
         aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:MULTI-MISSING",
+        expected_group_manifests=_expected_group_manifests(bundle),
     )
 
     assert result.status == "RECONCILIATION_REQUIRED"
@@ -523,6 +669,7 @@ def test_multi_group_account_snapshot_keeps_late_fill_pending_for_owning_group(t
         group_ids=(GROUP_ID, GROUP_TWO),
         snapshot_id="multi-group-late-fill", as_of=AS_OF,
         aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:MULTI-LATE",
+        expected_group_manifests=_expected_group_manifests(bundle),
     )
 
     assert result.status == "RECONCILIATION_REQUIRED"
@@ -544,6 +691,7 @@ def test_multi_group_account_snapshot_does_not_checkpoint_on_execution_position_
         group_ids=(GROUP_ID, GROUP_TWO),
         snapshot_id="multi-group-position-mismatch", as_of=AS_OF,
         aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:MULTI-MISMATCH",
+        expected_group_manifests=_expected_group_manifests(bundle),
     )
 
     assert result.status == "RECONCILIATION_REQUIRED"
@@ -569,11 +717,16 @@ def test_multi_group_account_snapshot_normalizes_flat_position_after_cross_group
         group_ids=(GROUP_ID, GROUP_TWO),
         snapshot_id="multi-group-flat-netting", as_of=AS_OF,
         aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:MULTI-FLAT",
+        expected_group_manifests=_expected_group_manifests(bundle),
     )
 
     assert result.is_valid
     assert {item.instrument_id: item.signed_quantity for item in result.projected_ledger_snapshot.positions} == {
         SECOND_INSTRUMENT: Decimal("-1"),
+    }
+    assert result.expected_group_manifest.leg_instrument_ids == (SHARED_INSTRUMENT, SECOND_INSTRUMENT)
+    assert {item.instrument_id for item in result.expected_group_manifest.expected_positions} == {
+        SECOND_INSTRUMENT,
     }
     assert result.broker_snapshot.positions == result.projected_ledger_snapshot.positions
 
@@ -595,12 +748,24 @@ def test_multi_group_account_snapshot_is_independent_of_execution_row_order(tmp_
         group_ids=(GROUP_TWO, GROUP_ID),
         snapshot_id="multi-group-out-of-order", as_of=AS_OF,
         aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:MULTI-ORDER",
+        expected_group_manifests=_expected_group_manifests(bundle),
     )
 
     assert result.is_valid
     assert tuple(event.execution_id for event in result.ledger_snapshot.execution_events) == tuple(sorted(
         event.execution_id for event in result.ledger_snapshot.execution_events
     ))
+    canonical_bundle = _multi_group_bundle()
+    canonical_reconciler, _ = _make_reconciler(tmp_path / "canonical")
+    _seed_second_group(canonical_reconciler)
+    canonical = canonical_reconciler.reconcile_account(
+        bundle=canonical_bundle, validation=validate_account_snapshot_bundle(canonical_bundle),
+        group_ids=(GROUP_ID, GROUP_TWO), snapshot_id="multi-group-canonical-order", as_of=AS_OF,
+        aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:MULTI-ORDER",
+        expected_group_manifests=_expected_group_manifests(canonical_bundle),
+    )
+    assert canonical.expected_group_manifest.payload_sha256 == result.expected_group_manifest.payload_sha256
+    assert canonical.expected_group_manifest.leg_instrument_ids == result.expected_group_manifest.leg_instrument_ids
 
 
 def test_multi_group_account_snapshot_detects_order_group_crosswalk_mismatch(tmp_path):
@@ -621,6 +786,7 @@ def test_multi_group_account_snapshot_detects_order_group_crosswalk_mismatch(tmp
         group_ids=(GROUP_ID, GROUP_TWO),
         snapshot_id="multi-group-order-crosswalk-mismatch", as_of=AS_OF,
         aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:MULTI-CROSSWALK",
+        expected_group_manifests=_expected_group_manifests(bundle),
     )
 
     assert result.status == "RECONCILIATION_REQUIRED"
@@ -646,6 +812,7 @@ def test_multi_group_account_snapshot_detects_order_quantity_crosswalk_mismatch(
         group_ids=(GROUP_ID, GROUP_TWO),
         snapshot_id="multi-group-order-quantity-mismatch", as_of=AS_OF,
         aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:MULTI-ORDER-QTY",
+        expected_group_manifests=_expected_group_manifests(bundle),
     )
 
     assert result.status == "RECONCILIATION_REQUIRED"
@@ -675,6 +842,7 @@ def test_multi_group_reconciliation_imports_validation_baseline_and_keeps_startu
         group_ids=(GROUP_ID, GROUP_TWO),
         snapshot_id="multi-group-baseline-import", as_of=AS_OF,
         aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:BASELINE-IMPORT",
+        expected_group_manifests=_expected_group_manifests(bundle),
     )
     assert reconciliation.is_valid
 
@@ -820,6 +988,7 @@ def test_validation_baseline_adapter_rejects_u19_mismatch_without_import(tmp_pat
         group_ids=(GROUP_ID, GROUP_TWO),
         snapshot_id="multi-group-baseline-u19-mismatch", as_of=AS_OF,
         aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:U19-MISMATCH",
+        expected_group_manifests=_expected_group_manifests(bundle),
     )
     assert not reconciliation.is_valid
     baseline_store = SQLiteSettlementStore(tmp_path / "u19-mismatch-no-import.sqlite3")
@@ -855,6 +1024,7 @@ def _prepare_validation_startup_fixture(tmp_path):
         group_ids=(GROUP_ID, GROUP_TWO),
         snapshot_id="multi-group-startup-adapter", as_of=AS_OF,
         aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:STARTUP-ADAPTER",
+        expected_group_manifests=_expected_group_manifests(bundle),
     )
     assert reconciliation.is_valid
     store = SQLiteSettlementStore(tmp_path / "startup-settlement.sqlite3")
