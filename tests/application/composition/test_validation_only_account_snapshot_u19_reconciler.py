@@ -2403,6 +2403,7 @@ def test_multi_group_local_conflict_resolution_isolated_from_global_collision_af
         execution_price=Decimal("10.50"),
         execution_timestamp=AS_OF - timedelta(seconds=20),
     )
+    conflict_b = replace(late_b, execution_price=Decimal("10.51"))
     for report in (late_a, late_b):
         with pytest.raises(OrderStateTransitionError, match="RECONCILIATION_PENDING"):
             bridge.settle(report)
@@ -2595,3 +2596,114 @@ def test_multi_group_local_conflict_resolution_isolated_from_global_collision_af
         group_id=GROUP_TWO, snapshot_id="GROUP-TWO:LOCAL-GLOBAL-REPLAY", as_of=AS_OF,
     )
     assert "client-g2-shared" in group_two_ledger.pending_order_ids
+    # Resolve B after restart using the other preserved candidate. The two
+    # cross-order global collisions must remain unresolved for both groups.
+    restarted_store = SQLiteSettlementStore(store.path)
+    restarted_oms = OrderStateMachine(persistence_store=restarted_store)
+    restarted_oms.restore_from_store()
+    restarted_position = LivePositionAggregate(SHARED_INSTRUMENT)
+    restarted_position.restore_persistence_record(
+        restarted_store.load_position_state(SHARED_INSTRUMENT)
+    )
+    restarted_bridge = LiveExecutionPositionBridge(
+        order_state_machine=restarted_oms,
+        position_fill_adapter=LivePositionFillAdapter(restarted_position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=restarted_store),
+        position_aggregate=restarted_position, settlement_store=restarted_store,
+    )
+    local_b_restarted = restarted_store.late_fill_conflict_history(
+        execution_id=late_b.execution_id,
+    )[0]
+    evidence_b = "VALIDATION_ONLY:U19:GROUP-TWO:LATE-B:CONFLICTING-CANDIDATE-SELECTED"
+    assert restarted_store.prepare_validation_only_late_fill_conflict_resolution(
+        execution_id=late_b.execution_id, scope_key="client-g2-shared",
+        original_payload_sha256=local_b_restarted["original_payload_sha256"],
+        conflicting_payload_sha256=local_b_restarted["conflicting_payload_sha256"],
+        selected_payload_sha256=local_b_restarted["conflicting_payload_sha256"],
+        evidence_ref=evidence_b,
+    ) is True
+    settled_b = restarted_bridge.settle_authoritatively_reconciled_fill(
+        conflict_b, authoritative_evidence_ref=evidence_b,
+    )
+    assert settled_b.filled_quantity == 3
+    assert restarted_position.qty == 3
+    assert restarted_store.open_reconciliation_events(scope_key="client-g2-shared") == ()
+    assert [item["event_type"] for item in restarted_store.late_fill_conflict_history(
+        execution_id=late_b.execution_id,
+    )] == ["CONFLICT_DETECTED", "RESOLUTION_SELECTED", "SETTLED"]
+    assert len(restarted_store.execution_journal_conflict_history(
+        scope_key="__runtime_bootstrap__",
+    )) == 2
+    assert [item["scope_key"] for item in restarted_store.unresolved_reconciliations()] == [
+        "__runtime_bootstrap__",
+    ]
+
+    final_orders = tuple(
+        {**row, "order_quantity": 3, "cumulative_filled_quantity": 3, "status": "CANCELLED"}
+        if row["client_order_id"] == "client-g2-shared" else row
+        for row in bundle.orders.rows
+    )
+    late_b_row = {
+        "execution_id": late_b.execution_id, "client_order_id": late_b.client_order_id,
+        "broker_order_id": late_b.broker_order_id, "group_id": GROUP_TWO,
+        "instrument_id": SHARED_INSTRUMENT, "side": "SELL", "filled_quantity": 1,
+        "execution_price": "10.51", "execution_timestamp": late_b.execution_timestamp,
+    }
+    final_bundle = replace(
+        bundle,
+        orders=_section(bundle.orders.snapshot_id, AS_OF, final_orders),
+        executions=_section(
+            bundle.executions.snapshot_id, AS_OF,
+            (*bundle.executions.rows, late_a_row, late_b_row),
+        ),
+        positions=_section(bundle.positions.snapshot_id, AS_OF, (
+            {"instrument_id": SHARED_INSTRUMENT, "side": "LONG", "quantity": 1, "avg_price": "10.10"},
+            {"instrument_id": SECOND_INSTRUMENT, "side": "SHORT", "quantity": 1, "avg_price": "8.30"},
+        )),
+    )
+    final_validation = validate_account_snapshot_bundle(final_bundle)
+    final_reconciler = ValidationOnlyAccountSnapshotU19Reconciler(
+        ledger_snapshot_builder=ValidationOnlyU19LedgerSnapshotBuilder(restarted_store),
+        recovery_coordinator=ValidationOnlyTrack2U19RecoveryCoordinator(
+            SqliteTrack2U19RecoveryStore(checkpoint_path), settlement_store=restarted_store,
+        ),
+    )
+    final_result = final_reconciler.reconcile_account(
+        bundle=final_bundle, validation=final_validation,
+        group_ids=(GROUP_ID, GROUP_TWO), snapshot_id="multi-group-local-two-global-two",
+        as_of=AS_OF, aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:LOCAL-GLOBAL-ISOLATION",
+        expected_group_manifests=_expected_group_manifests(final_bundle),
+    )
+    assert final_result.status == "RECONCILIATION_REQUIRED"
+    assert final_result.recovery_decision.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+    assert final_result.recovery_decision.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
+    assert final_result.recovery_decision.new_entry_enabled is False
+    assert final_result.recovery_decision.order_submission_enabled is False
+
+    after_restart = SQLiteSettlementStore(store.path)
+    assert len(after_restart.execution_journal_conflict_history(
+        scope_key="__runtime_bootstrap__",
+    )) == 2
+    assert len(after_restart.load_execution_journal_records()) == 7
+    assert after_restart.load_position_state(SHARED_INSTRUMENT)["qty"] == 3
+    assert after_restart.unresolved_reconciliations()[0]["scope_key"] == "__runtime_bootstrap__"
+    assert after_restart.open_reconciliation_events(scope_key="client-g2-shared") == ()
+    post_restart_reconciler = ValidationOnlyAccountSnapshotU19Reconciler(
+        ledger_snapshot_builder=ValidationOnlyU19LedgerSnapshotBuilder(after_restart),
+        recovery_coordinator=ValidationOnlyTrack2U19RecoveryCoordinator(
+            SqliteTrack2U19RecoveryStore(checkpoint_path), settlement_store=after_restart,
+        ),
+    )
+    post_restart = post_restart_reconciler.reconcile_account(
+        bundle=final_bundle, validation=final_validation,
+        group_ids=(GROUP_ID, GROUP_TWO), snapshot_id="multi-group-two-global-restart",
+        as_of=AS_OF, aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:LOCAL-GLOBAL-ISOLATION",
+        expected_group_manifests=_expected_group_manifests(final_bundle),
+    )
+    assert post_restart.status == "RECONCILIATION_REQUIRED"
+    assert post_restart.recovery_decision.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
+    for group_id in (GROUP_ID, GROUP_TWO):
+        ledger = post_restart_reconciler.ledger_snapshot_builder.build(
+            group_id=group_id, snapshot_id=f"{group_id}:TWO-GLOBAL-RESTART", as_of=AS_OF,
+        )
+        assert ledger.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
