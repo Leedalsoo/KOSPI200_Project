@@ -2225,3 +2225,127 @@ def test_multi_group_late_fill_arrival_is_exactly_once_after_restart(tmp_path):
     assert replay.is_valid
     assert replay.expected_group_manifest.payload_sha256 == manifest_hash
     assert len([e for e in replay.ledger_snapshot.execution_events if e.execution_id == late_fill.execution_id]) == 1
+
+def test_multi_group_execution_payload_conflict_and_foreign_group_ownership_keep_account_gated_after_restart(tmp_path):
+    from environments.live.settlement.sqlite_settlement_store import SettlementStoreError
+
+    bundle = _multi_group_bundle()
+    reconciler, checkpoint_path = _make_reconciler(tmp_path)
+    _seed_second_group(reconciler)
+    store = reconciler.ledger_snapshot_builder.settlement_store
+
+    # A second group attempts to reuse group one's execution ID with a
+    # different payload, instrument, order, group and leg identity.
+    foreign_instrument = "SYNTHETIC_CONTRACT:KOSPI200_FOREIGN_GROUP"
+    foreign_oms = _seed_order(
+        store, client_id="client-g2-foreign", broker_id="broker-g2-foreign",
+        instrument=foreign_instrument, quantity=1, leg_id="foreign-leg",
+        fills=(), group_id=GROUP_TWO, side="SELL",
+    )
+    foreign_position = LivePositionAggregate(foreign_instrument)
+    foreign_bridge = LiveExecutionPositionBridge(
+        order_state_machine=foreign_oms,
+        position_fill_adapter=LivePositionFillAdapter(foreign_position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=store),
+        position_aggregate=foreign_position, settlement_store=store,
+    )
+    before_journal = store.load_execution_journal_records()
+    before_shared = store.load_position_state(SHARED_INSTRUMENT)
+    before_second = store.load_position_state(SECOND_INSTRUMENT)
+    conflicting_report = ExecutionReport(
+        client_order_id="client-g2-foreign", broker_order_id="broker-g2-foreign",
+        execution_id="SYNTHETIC:FILL-001", status="FILLED",
+        filled_quantity=1, remaining_quantity=0, execution_price=Decimal("99.99"),
+        execution_timestamp=AS_OF - timedelta(seconds=5), fee=Decimal("7"),
+        group_id=GROUP_TWO, leg_id="foreign-leg",
+    )
+    with pytest.raises(SettlementStoreError, match="EXECUTION_ID_COLLISION"):
+        foreign_bridge.settle(conflicting_report)
+
+    history = store.execution_journal_conflict_history(
+        execution_id="SYNTHETIC:FILL-001", scope_key="__runtime_bootstrap__",
+    )
+    assert len(history) == 1
+    assert history[0]["original_client_order_id"] == "client-old"
+    assert history[0]["incoming_client_order_id"] == "client-g2-foreign"
+    assert len(store.load_execution_journal_records()) == len(before_journal)
+    assert store.load_position_state(SHARED_INSTRUMENT) == before_shared
+    assert store.load_position_state(SECOND_INSTRUMENT) == before_second
+    assert store.unresolved_reconciliations()[0]["scope_key"] == "__runtime_bootstrap__"
+    assert store.unresolved_reconciliations()[0]["status"] == "CONFLICT"
+
+    # Reopen SQLite: the collision history and global U19 gate must survive.
+    reopened = SQLiteSettlementStore(store.path)
+    reopened_history = reopened.execution_journal_conflict_history(
+        execution_id="SYNTHETIC:FILL-001", scope_key="__runtime_bootstrap__",
+    )
+    assert reopened_history == history
+    assert len(reopened.load_execution_journal_records()) == len(before_journal)
+    assert reopened.load_position_state(SHARED_INSTRUMENT) == before_shared
+    assert reopened.load_position_state(SECOND_INSTRUMENT) == before_second
+
+    reopened_reconciler = ValidationOnlyAccountSnapshotU19Reconciler(
+        ledger_snapshot_builder=ValidationOnlyU19LedgerSnapshotBuilder(reopened),
+        recovery_coordinator=ValidationOnlyTrack2U19RecoveryCoordinator(
+            SqliteTrack2U19RecoveryStore(checkpoint_path), settlement_store=reopened,
+        ),
+    )
+
+    # A broker execution attributed to a different group than its owning
+    # order is rejected before any aggregate checkpoint can be created.
+    foreign_owned_rows = tuple(
+        {**row, "group_id": GROUP_ID}
+        if row["execution_id"] == "SYNTHETIC:G2-FILL-001" else row
+        for row in bundle.executions.rows
+    )
+    foreign_owned_bundle = replace(
+        bundle,
+        executions=_section(bundle.executions.snapshot_id, AS_OF, foreign_owned_rows),
+    )
+    foreign_owned_validation = validate_account_snapshot_bundle(foreign_owned_bundle)
+    assert foreign_owned_validation.is_valid
+    ownership_result = reopened_reconciler.reconcile_account(
+        bundle=foreign_owned_bundle, validation=foreign_owned_validation,
+        group_ids=(GROUP_ID, GROUP_TWO), snapshot_id="multi-group-foreign-owner",
+        as_of=AS_OF, aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:FOREIGN-OWNER",
+        expected_group_manifests=_expected_group_manifests(foreign_owned_bundle),
+    )
+    assert ownership_result.status == "RECONCILIATION_REQUIRED"
+    assert "ACCOUNT_EXECUTION_GROUP_ORDER_MISMATCH:SYNTHETIC:G2-FILL-001" in ownership_result.issues
+    assert ownership_result.recovery_decision is None
+    assert SqliteTrack2U19RecoveryStore(checkpoint_path).load_latest(
+        "SYNTHETIC:ACCOUNT_AGGREGATE:FOREIGN-OWNER"
+    ) is None
+
+    # With correct broker ownership restored, the independent global
+    # journal conflict still gates every account group and aggregate recovery.
+    valid_validation = validate_account_snapshot_bundle(bundle)
+    pending = reopened_reconciler.reconcile_account(
+        bundle=bundle, validation=valid_validation,
+        group_ids=(GROUP_ID, GROUP_TWO), snapshot_id="multi-group-global-conflict",
+        as_of=AS_OF, aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:GLOBAL-CONFLICT",
+        expected_group_manifests=_expected_group_manifests(bundle),
+    )
+    assert pending.status == "RECONCILIATION_REQUIRED"
+    assert pending.recovery_decision.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+    assert pending.recovery_decision.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
+    assert pending.recovery_decision.new_entry_enabled is False
+    assert pending.recovery_decision.order_submission_enabled is False
+    assert pending.expected_group_manifest is not None
+
+    for group_id in (GROUP_ID, GROUP_TWO):
+        ledger = reopened_reconciler.ledger_snapshot_builder.build(
+            group_id=group_id, snapshot_id=f"{group_id}:GLOBAL-CONFLICT-REOPEN",
+            as_of=AS_OF,
+        )
+        assert ledger.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
+
+    final_store = SQLiteSettlementStore(store.path)
+    final_history = final_store.execution_journal_conflict_history(
+        execution_id="SYNTHETIC:FILL-001", scope_key="__runtime_bootstrap__",
+    )
+    assert final_history == history
+    assert len(final_store.load_execution_journal_records()) == len(before_journal)
+    assert final_store.load_position_state(SHARED_INSTRUMENT) == before_shared
+    assert final_store.load_position_state(SECOND_INSTRUMENT) == before_second
+    assert final_store.unresolved_reconciliations()[0]["status"] == "CONFLICT"
