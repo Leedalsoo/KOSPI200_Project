@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
-from zoneinfo import ZoneInfo
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from hashlib import sha256
 from typing import Protocol
+from zoneinfo import ZoneInfo
 
 from contracts.kis_index_option_market_ws_adapter import (
-    KISIndexOptionMarketWebSocketAdapter,
     KisIndexOptionMarketObservation,
+    KISIndexOptionMarketWebSocketAdapter,
 )
 from contracts.track4_kis_greeks_ws_adapter import KISIndexOptionGreeksWebSocketAdapter
 from contracts.types import (
@@ -194,11 +194,30 @@ class KISWebSocketMarketObservationNormalizer:
             identity_metadata = tuple(metadata_provider(market.shrn_iscd))
 
         tr_id = market.source.split(":")[-1]
+        is_exchange_event_time = timestamp_semantics == "KIS_BSOP_HOUR"
+        source_timestamp_timezone = "Asia/Seoul" if is_exchange_event_time else "UNVERIFIED"
+        source_timestamp_date_resolution = "TRADING_DATE" if is_exchange_event_time else "UNRESOLVED"
+        source_to_receipt_lag_ms = ""
+        if is_exchange_event_time:
+            lag_ms = (
+                received_at.astimezone(UTC) - observed_at.astimezone(UTC)
+            ).total_seconds() * 1000
+            source_to_receipt_lag_ms = f"{lag_ms:.3f}"
         metadata = (
             ("transport", "websocket"),
             ("source_timestamp_semantics", timestamp_semantics),
+            ("source_timestamp_field", "BSOP_HOUR" if is_exchange_event_time else "H0IOASP0.HHMMSS"),
+            ("source_timestamp_raw", market.observed_hour),
+            ("source_timestamp_format", "HHMMSS"),
+            ("source_timestamp_timezone", source_timestamp_timezone),
+            ("source_timestamp_date_resolution", source_timestamp_date_resolution),
+            ("source_timestamp_absolute", str(is_exchange_event_time).lower()),
+            ("observed_at_semantics", "EXCHANGE_EVENT_TIME" if is_exchange_event_time else "RECEIPT_TIME_FALLBACK_SOURCE_TIME_UNVERIFIED"),
+            ("source_to_receipt_lag_ms", source_to_receipt_lag_ms),
             ("frame_record_index", str(record_index)),
             ("received_at", received_at.isoformat()),
+            ("receipt_timestamp", received_at.isoformat()),
+            ("receipt_timezone", str(received_at.tzinfo)),
             ("order_book_depth", "5" if market.order_book is not None else "1"),
         ) + identity_metadata
 

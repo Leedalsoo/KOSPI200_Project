@@ -7,9 +7,16 @@ from pathlib import Path
 import pytest
 
 import infrastructure.kis.kis_websocket_option_identity_resolver as resolver_module
-
-from contracts.kis_index_option_market_ws_adapter import KISIndexOptionMarketWebSocketAdapter
+from application.composition.vms_market_tick_projection_adapter import (
+    VMSMarketTickProjectionAdapter,
+)
+from contracts.kis_index_option_market_ws_adapter import (
+    KISIndexOptionMarketWebSocketAdapter,
+)
 from contracts.types import OptionInstrumentIdentity
+from environments.virtual.market.canonical import ReferenceCanonicalMarketTick
+from environments.virtual.market.replay_engine import HistoricalReplayEngine
+from environments.virtual.market.simulator_runtime import VirtualMarketSimulatorRuntime
 from infrastructure.kis.kis_index_option_master_source import (
     KIS_INDEX_MASTER_URL,
     KISIndexMasterSnapshot,
@@ -27,10 +34,6 @@ from infrastructure.kis.kis_websocket_option_identity_resolver import (
     KISWebSocketIdentityResolutionError,
     KISWebSocketOptionIdentityResolver,
 )
-from application.composition.vms_market_tick_projection_adapter import VMSMarketTickProjectionAdapter
-from environments.virtual.market.canonical import ReferenceCanonicalMarketTick
-from environments.virtual.market.replay_engine import HistoricalReplayEngine
-from environments.virtual.market.simulator_runtime import VirtualMarketSimulatorRuntime
 
 
 def _snapshot(master_hash: str, rows: tuple[dict[str, object], ...] = ()) -> KISIndexMasterSnapshot:
@@ -244,6 +247,12 @@ def test_h0ioasp0_normalizes_five_price_and_quantity_levels_without_fake_greeks(
     metadata = dict(observation.provenance.metadata)
     assert metadata["order_book_depth"] == "5"
     assert metadata["source_timestamp_semantics"] == "KIS_H0IOASP0_HHMMSS_CANDIDATE_UNVERIFIED"
+    assert metadata["source_timestamp_field"] == "H0IOASP0.HHMMSS"
+    assert metadata["source_timestamp_timezone"] == "UNVERIFIED"
+    assert metadata["source_timestamp_date_resolution"] == "UNRESOLVED"
+    assert metadata["source_timestamp_absolute"] == "false"
+    assert metadata["observed_at_semantics"] == "RECEIPT_TIME_FALLBACK_SOURCE_TIME_UNVERIFIED"
+    assert metadata["receipt_timezone"] == "UTC"
 
 
 def test_quote_only_observation_projects_without_inventing_trade_fields() -> None:
@@ -267,7 +276,10 @@ def test_quote_only_observation_projects_without_inventing_trade_fields() -> Non
 
 def test_historical_order_book_source_discards_invalid_levels_without_synthesis() -> None:
     from types import SimpleNamespace
-    from infrastructure.kis.historical_observation_sources import HistoricalObservationOptionSource
+
+    from infrastructure.kis.historical_observation_sources import (
+        HistoricalObservationOptionSource,
+    )
 
     levels = (
         SimpleNamespace(price="12.5", quantity="3"),
@@ -338,6 +350,15 @@ def test_h0iocnt0_uses_exchange_event_time_and_unique_record_ids() -> None:
     assert all(item.collected_at == received_at for item in observations)
     assert [dict(item.provenance.metadata)["frame_record_index"] for item in observations] == ["0", "1"]
     assert all(dict(item.provenance.metadata)["received_at"] == received_at.isoformat() for item in observations)
+    metadata = dict(observations[0].provenance.metadata)
+    assert metadata["source_timestamp_field"] == "BSOP_HOUR"
+    assert metadata["source_timestamp_raw"] == "091501"
+    assert metadata["source_timestamp_timezone"] == "Asia/Seoul"
+    assert metadata["source_timestamp_date_resolution"] == "TRADING_DATE"
+    assert metadata["source_timestamp_absolute"] == "true"
+    assert metadata["observed_at_semantics"] == "EXCHANGE_EVENT_TIME"
+    assert metadata["source_to_receipt_lag_ms"] == "1000.000"
+    assert metadata["receipt_timezone"] == "UTC"
 
 
 def test_historical_master_override_is_explicit_and_date_scoped(monkeypatch, tmp_path: Path) -> None:
@@ -366,3 +387,28 @@ def test_historical_master_override_is_explicit_and_date_scoped(monkeypatch, tmp
     assert requested_dates == [selected_snapshot_day]
     assert resolver.summary(["B01611835"])["target_master_snapshot_date"] == "20261014"
     assert resolver.provenance_metadata("B01611835")[1] == ("master_snapshot_date", "20261014")
+
+
+def test_t13_ws_future_source_time_preserves_negative_clock_skew_without_clamping():
+    normalizer = KISWebSocketMarketObservationNormalizer(_IdentityLookup())
+    fields = ['0'] * 58
+    fields[0] = 'B01611835'
+    fields[1] = '091503'
+    fields[2] = '12.30'
+    fields[10] = '1'
+    fields[33] = '10.0'
+    fields[41] = '12.40'
+    fields[42] = '12.20'
+    received_at = datetime(2026, 10, 12, 0, 15, 2, tzinfo=timezone.utc)
+    observation = normalizer.normalize_frame(
+        '0|H0IOCNT0|1|' + '^'.join(fields),
+        received_at=received_at,
+        run_id='t13-negative-clock-skew',
+        raw_id='20261012:negative-clock-skew',
+        raw_content_hash='9' * 64,
+        session_date=date(2026, 10, 12),
+    )[0]
+    metadata = dict(observation.provenance.metadata)
+    assert metadata['source_to_receipt_lag_ms'] == '-1000.000'
+    assert observation.observed_at.isoformat() == '2026-10-12T09:15:03+09:00'
+    assert observation.collected_at == received_at

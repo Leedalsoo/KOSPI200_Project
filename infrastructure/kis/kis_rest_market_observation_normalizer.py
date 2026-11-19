@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from hashlib import sha256
+from time import strptime
 from typing import Any, Protocol
 
 from contracts.types import (
@@ -59,6 +61,17 @@ class KISRestMarketObservationNormalizer:
                 return value
         return None
 
+    @staticmethod
+    def _source_time_candidate(value: Any) -> str | None:
+        raw = "" if value is None else str(value).strip()
+        if not re.fullmatch(r"\d{6}", raw) or raw == "000000":
+            return None
+        try:
+            strptime(raw, "%H%M%S")
+        except ValueError:
+            return None
+        return raw
+
     @classmethod
     def _levels(cls, row: dict[str, Any], side: str) -> tuple[OrderBookLevel, ...]:
         levels: list[OrderBookLevel] = []
@@ -78,6 +91,8 @@ class KISRestMarketObservationNormalizer:
         collected_at: datetime,
         run_id: str,
     ) -> MarketObservation:
+        if collected_at.tzinfo is None or collected_at.utcoffset() is None:
+            raise ValueError("KIS_REST_COLLECTED_AT_MUST_BE_TIMEZONE_AWARE")
         if str(price_response.get("rt_cd", "0")) != "0" or str(asking_price_response.get("rt_cd", "0")) != "0":
             raise ValueError("KIS_REST_RESPONSE_NOT_SUCCESS")
         price_row = self._output(price_response, "output1")
@@ -88,8 +103,10 @@ class KISRestMarketObservationNormalizer:
         if identity is None or not identity.instrument_id or not identity.symbol:
             raise ValueError("AUTHORITATIVE_OPTION_IDENTITY_REQUIRED")
 
-        price_timestamp = str(price_row.get("aspr_acpt_hour") or "").strip()
-        asking_timestamp = str(asking_row.get("aspr_acpt_hour") or "").strip()
+        raw_price_timestamp = str(price_row.get("aspr_acpt_hour") or "").strip()
+        raw_asking_timestamp = str(asking_row.get("aspr_acpt_hour") or "").strip()
+        price_timestamp = self._source_time_candidate(raw_price_timestamp)
+        asking_timestamp = self._source_time_candidate(raw_asking_timestamp)
         if price_timestamp and asking_timestamp and price_timestamp != asking_timestamp:
             raise ValueError("KIS_REST_SOURCE_TIMESTAMP_MISMATCH")
         source_timestamp = price_timestamp or asking_timestamp
@@ -137,6 +154,24 @@ class KISRestMarketObservationNormalizer:
                 ),
                 tr_ids=tr_ids,
                 source_timestamps=(source_timestamp,) if source_timestamp else (),
+                metadata=(
+                    ("source_timestamp_field", "aspr_acpt_hour"),
+                    ("source_timestamp_format", "HHMMSS"),
+                    ("source_timestamp_semantics", "QUOTE_ACCEPTANCE_TIME_OF_DAY"),
+                    ("source_timestamp_timezone", "UNVERIFIED"),
+                    ("source_timestamp_date_resolution", "UNRESOLVED_TIME_ONLY"),
+                    ("source_timestamp_absolute", "false"),
+                    ("source_timestamp_status", "TIME_OF_DAY_ONLY" if source_timestamp else "UNKNOWN"),
+                    ("source_timestamp_raw_price", raw_price_timestamp),
+                    ("source_timestamp_raw_order_book", raw_asking_timestamp),
+                    ("source_timestamp_zero_or_malformed_not_promoted", str(
+                        bool((raw_price_timestamp and not price_timestamp)
+                             or (raw_asking_timestamp and not asking_timestamp))
+                    ).lower()),
+                    ("receipt_timestamp", collected_at.isoformat()),
+                    ("receipt_timezone", str(collected_at.tzinfo)),
+                    ("observed_at_semantics", "RECEIPT_TIME_ONLY_SOURCE_INSTANT_UNRESOLVED"),
+                ),
             ),
             raw_reference=None,
             underlying_price=underlying_price,
