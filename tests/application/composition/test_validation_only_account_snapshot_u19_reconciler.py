@@ -3107,3 +3107,255 @@ def test_multi_group_local_conflict_resolution_isolated_from_global_collision_af
             as_of=AS_OF,
         )
         assert ledger.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
+
+def test_multi_group_same_contract_replacement_netting_matches_child_and_aggregate_manifests_under_global_gate(tmp_path):
+    from core.oms.oms_fsm import OrderStateTransitionError
+    from environments.live.settlement.sqlite_settlement_store import SettlementStoreError
+
+    bundle = _multi_group_bundle(final_shared=3, final_second=1)
+    reconciler, checkpoint_path = _make_reconciler(tmp_path, require_expected_group_manifest=True)
+    _seed_second_group(reconciler)
+    store = reconciler.ledger_snapshot_builder.settlement_store
+
+    def prepare_group_chain(group_id, prefix, side, base_price):
+        old_client = f"{prefix}-OLD"
+        old_broker = f"{prefix}-OLD-BROKER"
+        new_client = f"{prefix}-NEW"
+        new_broker = f"{prefix}-NEW-BROKER"
+        old_execution = f"{prefix}:OLD-FILL"
+        new_execution = f"{prefix}:NEW-FILL"
+        late_execution = f"{prefix}:OLD-LATE-FILL"
+        leg = f"{prefix}-LEG"
+        old_oms = _seed_order(
+            store, client_id=old_client, broker_id=old_broker,
+            instrument=SHARED_INSTRUMENT, quantity=2, leg_id=leg,
+            fills=((old_execution, 1, str(base_price)),),
+            group_id=group_id, side=side,
+        )
+        old_oms.apply_cancel(ExecutionReport(
+            client_order_id=old_client, broker_order_id=old_broker,
+            execution_id=None, status="CANCELLED", filled_quantity=0,
+            remaining_quantity=1, execution_price=None,
+            execution_timestamp=AS_OF - timedelta(seconds=35),
+            group_id=group_id, leg_id=leg,
+        ))
+        new_oms = _seed_order(
+            store, client_id=new_client, broker_id=new_broker,
+            instrument=SHARED_INSTRUMENT, quantity=1, leg_id=leg,
+            fills=(), group_id=group_id, side=side,
+        )
+        link_id = f"{prefix}:REPLACEMENT-LINK"
+        assert store.record_order_replacement_link(
+            link_id=link_id,
+            original_client_order_id=old_client, original_broker_order_id=old_broker,
+            replacement_client_order_id=new_client, replacement_broker_order_id=new_broker,
+            group_id=group_id, leg_id=leg,
+            cancel_request_ref=f"VALIDATION_ONLY:{prefix}:CANCEL-REQUEST",
+            cancel_ack_ref=f"VALIDATION_ONLY:{prefix}:CANCEL-ACK",
+            source="VALIDATION_ONLY:SAME-CONTRACT-CROSS-GROUP-REPLACEMENT",
+            payload={"group_id": group_id, "side": side, "scenario": "cancel-replace-late-fill"},
+        ) is True
+        position = LivePositionAggregate(SHARED_INSTRUMENT)
+        position.restore_persistence_record(store.load_position_state(SHARED_INSTRUMENT))
+        new_bridge = LiveExecutionPositionBridge(
+            order_state_machine=new_oms,
+            position_fill_adapter=LivePositionFillAdapter(position),
+            execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=store),
+            position_aggregate=position, settlement_store=store,
+        )
+        old_bridge = LiveExecutionPositionBridge(
+            order_state_machine=old_oms,
+            position_fill_adapter=LivePositionFillAdapter(position),
+            execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=store),
+            position_aggregate=position, settlement_store=store,
+        )
+        new_fill = ExecutionReport(
+            client_order_id=new_client, broker_order_id=new_broker,
+            execution_id=new_execution, status="FILLED",
+            filled_quantity=1, remaining_quantity=0,
+            execution_price=Decimal(str(Decimal(str(base_price)) + Decimal("0.10"))),
+            execution_timestamp=AS_OF - timedelta(seconds=25), fee=Decimal("2"),
+            group_id=group_id, leg_id=leg,
+        )
+        late_fill = ExecutionReport(
+            client_order_id=old_client, broker_order_id=old_broker,
+            execution_id=late_execution, status="FILLED",
+            filled_quantity=1, remaining_quantity=0,
+            execution_price=Decimal(str(Decimal(str(base_price)) + Decimal("0.05"))),
+            execution_timestamp=AS_OF - timedelta(seconds=15), fee=Decimal("2"),
+            group_id=group_id, leg_id=leg,
+        )
+        return {
+            "group_id": group_id, "side": side, "prefix": prefix, "leg": leg,
+            "old_client": old_client, "old_broker": old_broker,
+            "new_client": new_client, "new_broker": new_broker,
+            "old_execution": old_execution, "new_execution": new_execution,
+            "late_execution": late_execution, "link_id": link_id,
+            "position": position, "new_bridge": new_bridge,
+            "old_bridge": old_bridge, "new_fill": new_fill, "late_fill": late_fill,
+        }
+
+    group_one = prepare_group_chain(
+        GROUP_ID, "SYNTHETIC:G1:SHARED-NETTING", "BUY", "16.00",
+    )
+    group_two = prepare_group_chain(
+        GROUP_TWO, "SYNTHETIC:G2:SHARED-NETTING", "SELL", "16.20",
+    )
+    for chain in (group_one, group_two):
+        chain["new_bridge"].settle(chain["new_fill"])
+        assert chain["position"].qty == 2
+    for chain in (group_one, group_two):
+        with pytest.raises(OrderStateTransitionError, match="RECONCILIATION_PENDING"):
+            chain["old_bridge"].settle(chain["late_fill"])
+    for chain in (group_one, group_two):
+        chain["old_bridge"].settle_authoritatively_reconciled_fill(
+            chain["late_fill"],
+            authoritative_evidence_ref=f"VALIDATION_ONLY:{chain['group_id']}:SHARED-NETTING-LATE-FILL",
+        )
+        assert chain["position"].qty == 3
+        assert store.open_reconciliation_events(scope_key=chain["old_client"]) == ()
+
+    extra_orders = []
+    extra_executions = []
+    for chain in (group_one, group_two):
+        extra_orders.extend((
+            {
+                "client_order_id": chain["old_client"],
+                "broker_order_id": chain["old_broker"],
+                "group_id": chain["group_id"], "instrument_id": SHARED_INSTRUMENT,
+                "side": chain["side"], "order_quantity": 2,
+                "cumulative_filled_quantity": 2, "status": "CANCELLED",
+            },
+            {
+                "client_order_id": chain["new_client"],
+                "broker_order_id": chain["new_broker"],
+                "group_id": chain["group_id"], "instrument_id": SHARED_INSTRUMENT,
+                "side": chain["side"], "order_quantity": 1,
+                "cumulative_filled_quantity": 1, "status": "FILLED",
+                "replaces_broker_order_id": chain["old_broker"],
+            },
+        ))
+        for execution_id, client_id, broker_id, price, execution_timestamp in (
+            (chain["old_execution"], chain["old_client"], chain["old_broker"], "16.00" if chain["side"] == "BUY" else "16.20", AS_OF - timedelta(minutes=1)),
+            (chain["new_execution"], chain["new_client"], chain["new_broker"], "16.10" if chain["side"] == "BUY" else "16.30", AS_OF - timedelta(seconds=25)),
+            (chain["late_execution"], chain["old_client"], chain["old_broker"], "16.05" if chain["side"] == "BUY" else "16.25", AS_OF - timedelta(seconds=15)),
+        ):
+            extra_executions.append({
+                "execution_id": execution_id, "client_order_id": client_id,
+                "broker_order_id": broker_id, "group_id": chain["group_id"],
+                "instrument_id": SHARED_INSTRUMENT, "side": chain["side"],
+                "filled_quantity": 1, "execution_price": price,
+                "execution_timestamp": execution_timestamp,
+            })
+    netted_bundle = replace(
+        bundle,
+        orders=_section(bundle.orders.snapshot_id, AS_OF, (*bundle.orders.rows, *extra_orders)),
+        executions=_section(
+            bundle.executions.snapshot_id, AS_OF, (*bundle.executions.rows, *extra_executions),
+        ),
+    )
+    validation = validate_account_snapshot_bundle(netted_bundle)
+    assert validation.is_valid
+
+    # Create two global cross-order collisions only after all legitimate
+    # same-contract fills and replacement lineage have been persisted.
+    for execution_id, client_id, broker_id, group_id, instrument, side, leg in (
+        (
+            "SYNTHETIC:FILL-001", "client-cross-global-g1", "broker-cross-global-g1",
+            GROUP_TWO, "SYNTHETIC_CONTRACT:KOSPI200_CROSS_GLOBAL_1", "SELL", "global-1",
+        ),
+        (
+            "SYNTHETIC:G2-FILL-002", "client-cross-global-g2", "broker-cross-global-g2",
+            GROUP_ID, "SYNTHETIC_CONTRACT:KOSPI200_CROSS_GLOBAL_2", "BUY", "global-2",
+        ),
+    ):
+        foreign_oms = _seed_order(
+            store, client_id=client_id, broker_id=broker_id,
+            instrument=instrument, quantity=1, leg_id=leg,
+            fills=(), group_id=group_id, side=side,
+        )
+        foreign_position = LivePositionAggregate(instrument)
+        foreign_bridge = LiveExecutionPositionBridge(
+            order_state_machine=foreign_oms,
+            position_fill_adapter=LivePositionFillAdapter(foreign_position),
+            execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=store),
+            position_aggregate=foreign_position, settlement_store=store,
+        )
+        with pytest.raises(SettlementStoreError, match="EXECUTION_ID_COLLISION"):
+            foreign_bridge.settle(ExecutionReport(
+                client_order_id=client_id, broker_order_id=broker_id,
+                execution_id=execution_id, status="FILLED",
+                filled_quantity=1, remaining_quantity=0,
+                execution_price=Decimal("99.90"),
+                execution_timestamp=AS_OF - timedelta(seconds=5), fee=Decimal("7"),
+                group_id=group_id, leg_id=leg,
+            ))
+
+    result = reconciler.reconcile_account(
+        bundle=netted_bundle, validation=validation,
+        group_ids=(GROUP_ID, GROUP_TWO), snapshot_id="same-contract-cross-group-netting",
+        as_of=AS_OF, aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:CROSS-GROUP-NETTING",
+        expected_group_manifests=_expected_group_manifests(netted_bundle),
+    )
+    assert result.status == "RECONCILIATION_REQUIRED"
+    assert result.recovery_decision is not None, result.issues
+    assert result.recovery_decision.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+    assert result.recovery_decision.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
+    assert result.recovery_decision.new_entry_enabled is False
+    assert result.recovery_decision.order_submission_enabled is False
+    assert result.expected_group_manifest is not None
+    assert result.expected_group_manifest.expected_positions == result.projected_ledger_snapshot.positions
+    aggregate_positions = {
+        item.instrument_id: item.signed_quantity
+        for item in result.expected_group_manifest.expected_positions
+    }
+    assert aggregate_positions == {
+        SHARED_INSTRUMENT: Decimal("3"),
+        SECOND_INSTRUMENT: Decimal("-1"),
+    }
+    child_positions = {
+        item.group_id: {position.instrument_id: position.signed_quantity for position in item.positions}
+        for item in result.group_ledger_snapshots
+    }
+    assert child_positions[GROUP_ID][SHARED_INSTRUMENT] == Decimal("6")
+    assert child_positions[GROUP_TWO][SHARED_INSTRUMENT] == Decimal("-4")
+    assert child_positions[GROUP_TWO][SECOND_INSTRUMENT] == Decimal("-1")
+
+    expected_links = store.load_order_replacement_links()
+    assert {item["link_id"] for item in expected_links}.issuperset({
+        group_one["link_id"], group_two["link_id"],
+    })
+    assert len(store.execution_journal_conflict_history(scope_key="__runtime_bootstrap__")) == 2
+    assert len(store.load_execution_journal_records()) == 11
+    checkpoint = SqliteTrack2U19RecoveryStore(checkpoint_path).load_latest(
+        "SYNTHETIC:ACCOUNT_AGGREGATE:CROSS-GROUP-NETTING"
+    )
+    assert checkpoint["status"] == U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED.value
+
+    reopened = SQLiteSettlementStore(store.path)
+    replay_reconciler = ValidationOnlyAccountSnapshotU19Reconciler(
+        ledger_snapshot_builder=ValidationOnlyU19LedgerSnapshotBuilder(reopened),
+        recovery_coordinator=ValidationOnlyTrack2U19RecoveryCoordinator(
+            SqliteTrack2U19RecoveryStore(checkpoint_path), settlement_store=reopened,
+            require_expected_group_manifest=True,
+        ),
+    )
+    replay = replay_reconciler.reconcile_account(
+        bundle=netted_bundle, validation=validation,
+        group_ids=(GROUP_ID, GROUP_TWO), snapshot_id="same-contract-cross-group-netting-replay",
+        as_of=AS_OF, aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:CROSS-GROUP-NETTING",
+        expected_group_manifests=_expected_group_manifests(netted_bundle),
+    )
+    assert replay.status == "RECONCILIATION_REQUIRED"
+    assert replay.recovery_decision.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
+    assert replay.expected_group_manifest.payload_sha256 == result.expected_group_manifest.payload_sha256
+    assert replay.expected_group_manifest.expected_positions == result.expected_group_manifest.expected_positions
+    assert len(reopened.execution_journal_conflict_history(scope_key="__runtime_bootstrap__")) == 2
+    assert len(reopened.load_execution_journal_records()) == 11
+    assert reopened.load_order_replacement_links() == expected_links
+    for group_id in (GROUP_ID, GROUP_TWO):
+        ledger = replay_reconciler.ledger_snapshot_builder.build(
+            group_id=group_id, snapshot_id=f"{group_id}:SAME-CONTRACT-NETTING-REPLAY",
+            as_of=AS_OF,
+        )
+        assert ledger.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
