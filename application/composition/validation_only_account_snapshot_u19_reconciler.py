@@ -453,7 +453,12 @@ class ValidationOnlyAccountSnapshotU19Reconciler:
                 continue
             order_group_by_client[client_id] = row_group
         observed_order_groups = set(order_group_by_client.values())
-        if observed_order_groups != group_set:
+        # A manifest-backed group may legitimately be PRE_ENTRY: it has a
+        # planned leg set but no broker order or execution yet. In that case
+        # the exact manifest group set, validated below, is the independent
+        # membership evidence. Preserve the legacy order-row requirement when
+        # no expected manifests are supplied.
+        if expected_group_manifests is None and observed_order_groups != group_set:
             issues.append("ACCOUNT_ORDER_GROUP_SET_MISMATCH")
 
         executions_by_group: dict[str, list[dict[str, Any]]] = {

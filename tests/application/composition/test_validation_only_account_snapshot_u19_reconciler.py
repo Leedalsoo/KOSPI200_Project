@@ -1940,3 +1940,73 @@ def test_validation_baseline_lineage_audit_detects_current_generation_hash_repla
     assert audit["history_chain_valid"] is False
     assert audit["current_baseline_matches_latest_generation"] is False
     assert audit["history"][0]["lineage_status"] == "CHAIN_VALID"
+
+
+PRE_ENTRY_GROUP = "SYNTHETIC:GROUP:PRE-ENTRY"
+PRE_ENTRY_INSTRUMENT = "SYNTHETIC_CONTRACT:KOSPI200_PUT_202612"
+
+
+def _pre_entry_expected_manifest():
+    manifest = U19ExpectedGroupManifest(
+        group_id=PRE_ENTRY_GROUP,
+        manifest_id=f"SYNTHETIC:EXPECTED:{PRE_ENTRY_GROUP}",
+        source="VALIDATION_ONLY:EXPECTED_GROUP_MANIFEST",
+        provenance="VALIDATION_ONLY:DERIVED_SCENARIO_SIDECAR",
+        leg_instrument_ids=(PRE_ENTRY_INSTRUMENT,),
+        expected_positions=(),
+        payload_sha256="0" * 64,
+    )
+    return replace(manifest, payload_sha256=_expected_group_manifest_digest(manifest))
+
+
+def test_multi_group_account_snapshot_accepts_manifest_backed_pre_entry_group(tmp_path):
+    bundle = _multi_group_bundle()
+    validation = validate_account_snapshot_bundle(bundle)
+    assert validation.is_valid
+    reconciler, _ = _make_reconciler(tmp_path, require_expected_group_manifest=True)
+    _seed_second_group(reconciler)
+
+    result = reconciler.reconcile_account(
+        bundle=bundle, validation=validation,
+        group_ids=(GROUP_ID, GROUP_TWO, PRE_ENTRY_GROUP),
+        snapshot_id="multi-group-pre-entry", as_of=AS_OF,
+        aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:PRE-ENTRY",
+        expected_group_manifests=(
+            *_expected_group_manifests(bundle),
+            _pre_entry_expected_manifest(),
+        ),
+    )
+
+    assert result.is_valid
+    pre_entry_ledger = next(
+        item for item in result.group_ledger_snapshots if item.group_id == PRE_ENTRY_GROUP
+    )
+    assert pre_entry_ledger.complete is True
+    assert pre_entry_ledger.execution_events == ()
+    assert pre_entry_ledger.positions == ()
+    assert pre_entry_ledger.pending_order_ids == ()
+    assert set(result.expected_group_manifest.leg_instrument_ids) == {
+        PRE_ENTRY_INSTRUMENT, SHARED_INSTRUMENT, SECOND_INSTRUMENT,
+    }
+    assert result.expected_group_manifest.expected_positions == result.projected_ledger_snapshot.positions
+    assert result.recovery_decision.new_entry_enabled is False
+    assert result.recovery_decision.order_submission_enabled is False
+
+
+def test_multi_group_pre_entry_without_independent_manifest_remains_unreconciled(tmp_path):
+    bundle = _multi_group_bundle()
+    validation = validate_account_snapshot_bundle(bundle)
+    reconciler, _ = _make_reconciler(tmp_path, require_expected_group_manifest=True)
+    _seed_second_group(reconciler)
+
+    result = reconciler.reconcile_account(
+        bundle=bundle, validation=validation,
+        group_ids=(GROUP_ID, GROUP_TWO, PRE_ENTRY_GROUP),
+        snapshot_id="multi-group-pre-entry-no-manifest", as_of=AS_OF,
+        aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:PRE-ENTRY-NO-MANIFEST",
+    )
+
+    assert result.status == "RECONCILIATION_REQUIRED"
+    assert "ACCOUNT_ORDER_GROUP_SET_MISMATCH" in result.issues
+    assert result.recovery_decision is None
+    assert result.expected_group_manifest is None
