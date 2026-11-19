@@ -81,3 +81,41 @@ def test_future_timestamp_is_not_fresh():
 def test_validation_policy_never_enables_submission():
     for side in (QuoteSide.BUY, QuoteSide.SELL):
         assert run(quote(), side=side).order_submission_enabled is False
+
+
+def test_fallback_must_be_a_distinct_verified_source():
+    result = run(
+        quote(bid="1.00", ask="1.50", source="SYNTHETIC:shared"),
+        fallback=quote(source="SYNTHETIC:shared"),
+    )
+    assert result.decision is QuoteDecision.FALLBACK_UNAVAILABLE_BLOCKED
+    assert "FALLBACK_SOURCE_NOT_INDEPENDENT" in result.reason
+    assert not result.order_submission_enabled
+
+
+def test_candidate_max_age_boundary_is_five_seconds():
+    candidate = policy(max_age_seconds=Decimal("5"), max_spread=Decimal("4.70"))
+    at_limit = run(quote(age=5, bid="10.00", ask="14.70"), p=candidate)
+    beyond = run(quote(age=5.001, bid="10.00", ask="14.70"), p=candidate)
+    assert at_limit.decision is QuoteDecision.PRIMARY_QUOTE_ACCEPTED
+    assert beyond.decision is QuoteDecision.FALLBACK_UNAVAILABLE_BLOCKED
+
+
+def test_candidate_absolute_spread_boundary_is_4_70_price_points():
+    candidate = policy(max_age_seconds=Decimal("5"), max_spread=Decimal("4.70"))
+    at_limit = run(quote(bid="10.00", ask="14.70"), p=candidate)
+    beyond = run(quote(bid="10.00", ask="14.71"), p=candidate)
+    assert at_limit.decision is QuoteDecision.PRIMARY_QUOTE_ACCEPTED
+    assert at_limit.spread_value == Decimal("4.70")
+    assert beyond.decision is QuoteDecision.FALLBACK_UNAVAILABLE_BLOCKED
+
+
+@pytest.mark.parametrize("bad", [Decimal("NaN"), Decimal("Infinity"), Decimal("-Infinity")])
+def test_non_finite_quote_prices_are_rejected(bad):
+    result = run(quote(bid=bad, ask=Decimal("1.10")))
+    assert result.decision is QuoteDecision.FALLBACK_UNAVAILABLE_BLOCKED
+
+
+@pytest.mark.parametrize("bad", [Decimal("NaN"), Decimal("Infinity")])
+def test_non_finite_policy_limits_block(bad):
+    assert run(quote(), p=policy(max_spread=bad)).decision is QuoteDecision.POLICY_INPUT_BLOCKED
