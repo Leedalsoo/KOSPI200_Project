@@ -1,5 +1,5 @@
 from dataclasses import replace
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from hashlib import sha256
 from pathlib import Path
@@ -546,3 +546,277 @@ def test_track8_ten_minute_timeout_cancel_reaches_bridge_and_strategy_hub():
     assert strategy.state.entry_pending is True
     assert bridge.position_lot_store.open_lots() == ()
     assert vssf.metrics["order_commands"] == 2
+
+def test_t23_four_leg_virtual_group_reconciles_and_persists_u19_after_restart(tmp_path):
+    import json
+    from collections import defaultdict
+
+    from application.composition.track2_u19_recovery import (
+        ValidationOnlyTrack2U19RecoveryCoordinator,
+    )
+    from core.oms.track2_u19_recovery import (
+        U19BrokerPositionSnapshot,
+        U19ExecutionEvent,
+        U19ExecutionLedgerSnapshot,
+        U19Position,
+    )
+    from environments.virtual.position.track2_u19_recovery_store import (
+        SqliteTrack2U19RecoveryStore,
+    )
+
+    adapter = SyntheticReplayAdapter(DATASET)
+    option_master = build_synthetic_option_master(DATASET, validation_only_adapter=adapter)
+    events = tuple(HighSpeedReplayRunner(DATASET, synthetic_adapter=adapter).events())
+    grouped = defaultdict(dict)
+    for tick in events:
+        if str(tick.expiry) != "20261008":
+            continue
+        grouped[str(tick.timestamp)].setdefault(
+            str(tick.option_type).upper(), {}
+        )[float(tick.strike_price)] = tick
+
+    selected_ticks = None
+    for timestamp, by_type in grouped.items():
+        calls = by_type.get("CALL", {})
+        puts = by_type.get("PUT", {})
+        common_strikes = sorted(set(calls) & set(puts))
+        valid = [
+            strike
+            for strike in common_strikes
+            if Decimal(str(calls[strike].bid_price)) > 0
+            and Decimal(str(calls[strike].ask_price)) > Decimal(str(calls[strike].bid_price))
+            and Decimal(str(puts[strike].bid_price)) > 0
+            and Decimal(str(puts[strike].ask_price)) > Decimal(str(puts[strike].bid_price))
+        ]
+        if len(valid) >= 2:
+            selected_ticks = (
+                timestamp,
+                calls[valid[0]],
+                calls[valid[1]],
+                puts[valid[0]],
+                puts[valid[1]],
+            )
+            break
+    assert selected_ticks is not None
+
+    timestamp, call_low, call_high, put_low, put_high = selected_ticks
+    selected = (call_low, call_high, put_low, put_high)
+    identities = tuple(_fixture_identity(tick, option_master) for tick in selected)
+    assert len({identity.instrument_id for identity in identities}) == 4
+
+    sources = SyntheticRuntimeSources()
+    bootstrap = create_virtual_runtime_bootstrap(
+        option_master=option_master,
+        initial_capital=250_000_000.0,
+        risk_guard_status_source=sources,
+    )
+    if bootstrap.automated_loop is not None:
+        bootstrap.bundle.market.unsubscribe(bootstrap.automated_loop.on_tick)
+    loop = attach_standard_automated_loop(
+        bootstrap,
+        strategy_keys=(("TRACK1_TAIL_DEFENSE", "1.2.0"),),
+        run_id="T23-FOUR-LEG-U19-RESTART",
+        synthetic_runtime_sources=sources,
+        track4_greeks_provider=sources,
+        risk_guard_status_source=sources,
+    )
+    bootstrap.bundle.market.unsubscribe(loop.on_tick)
+    bridge = loop.multi_leg_bridge
+    vssf = bootstrap.bundle.execution._authoritative_execute.__self__.vssf_runtime
+
+    def freshness(_plan, _leg, _identity, command):
+        observed = datetime.fromisoformat(timestamp)
+        return FreshnessVerdict(
+            status=FreshnessStatus.FRESH,
+            reason="T23_SYNTHETIC_FIXTURE_ONLY",
+            policy_version="T23-FOUR-LEG-v1",
+            source="DERIVED_SCENARIO_TEST_FIXTURE",
+            tr_id="SYNTHETIC-REPLAY-TEST",
+            environment="VIRTUAL_VALIDATION_ONLY",
+            instrument_id=command.instrument_id,
+            symbol=command.broker_symbol,
+            source_instant=observed,
+            received_at=observed,
+            evidence_sha256=sha256(
+                f"{observed.isoformat()}|{command.instrument_id}|T23".encode()
+            ).hexdigest(),
+        )
+
+    bridge.freshness_verdict_provider = freshness
+    for tick in selected:
+        _publish_contract_scoped_replay_quote(
+            tick,
+            option_master=option_master,
+            market=bootstrap.bundle.market,
+            order_book=vssf.order_book,
+        )
+    sources.set_tick(call_low)
+    bootstrap.bundle.market.publish_replay_tick(call_low)
+
+    group_id = "T23-SYNTHETIC-FOUR-LEG-GROUP"
+    strategy_id = "T23_SYNTHETIC_FOUR_LEG"
+    legs = tuple(
+        ExecutionLeg(
+            leg_id=f"{str(tick.option_type).lower()}-{tick.strike_price}",
+            side="BUY",
+            quantity=1,
+            option_type=str(tick.option_type).upper(),
+            strike=identity.strike,
+            instrument_identity=identity,
+        )
+        for tick, identity in zip(selected, identities, strict=True)
+    )
+    plan = MultiLegExecutionPlan(
+        group_id=group_id,
+        strategy_id=strategy_id,
+        purpose="T23_FOUR_LEG_VIRTUAL_RESTART",
+        legs=legs,
+    )
+
+    result = bridge.execute(plan)
+    assert result.planned_legs == 4
+    assert result.routed_legs == 4
+    assert result.filled_legs == 4
+    assert result.pending_legs == 0
+    assert result.group_complete is True
+    assert len(result.reports) == 4
+    assert all(report.status == "FILLED" for report in result.reports)
+    assert all(report.group_id == group_id for report in result.reports)
+    assert {report.leg_id for report in result.reports} == {
+        leg.leg_id for leg in legs
+    }
+
+    lots = bridge.position_lot_store.open_lots()
+    fees = bridge.fee_ledger.snapshot(run_id=bridge.run_id)
+    assert len(lots) == 4
+    assert len(fees) == 4
+    assert {lot.group_id for lot in lots} == {group_id}
+    assert {lot.leg_id for lot in lots} == {leg.leg_id for leg in legs}
+    assert len({lot.execution_id for lot in lots}) == 4
+
+    broker_positions = tuple(
+        U19Position(
+            instrument_id=lot.instrument_id,
+            signed_quantity=(
+                Decimal(lot.remaining_quantity)
+                if lot.side == "BUY"
+                else -Decimal(lot.remaining_quantity)
+            ),
+        )
+        for lot in lots
+    )
+    ledger_positions = broker_positions
+    execution_events = tuple(
+        U19ExecutionEvent(
+            report.execution_id,
+            sha256(
+                json.dumps(
+                    {
+                        "execution_id": report.execution_id,
+                        "client_order_id": report.client_order_id,
+                        "group_id": report.group_id,
+                        "leg_id": report.leg_id,
+                        "filled_quantity": report.filled_quantity,
+                        "execution_price": str(report.execution_price),
+                    },
+                    sort_keys=True,
+                ).encode("utf-8")
+            ).hexdigest(),
+        )
+        for report in result.reports
+    )
+    as_of = max(
+        report.execution_timestamp for report in result.reports
+    ) + timedelta(seconds=1)
+    broker_payload = {
+        "group_id": group_id,
+        "positions": [
+            (item.instrument_id, str(item.signed_quantity))
+            for item in broker_positions
+        ],
+    }
+    ledger_payload = {
+        "group_id": group_id,
+        "positions": [
+            (item.instrument_id, str(item.signed_quantity))
+            for item in ledger_positions
+        ],
+        "execution_events": [
+            (event.execution_id, event.fingerprint)
+            for event in execution_events
+        ],
+    }
+    digest = lambda value: sha256(
+        json.dumps(value, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
+
+    checkpoint_path = tmp_path / "t23-four-leg-u19.sqlite3"
+    first_store = SqliteTrack2U19RecoveryStore(checkpoint_path)
+    first_decision = ValidationOnlyTrack2U19RecoveryCoordinator(
+        first_store
+    ).recover(
+        group_id=group_id,
+        broker_snapshot=U19BrokerPositionSnapshot(
+            group_id=group_id,
+            snapshot_id="T23-BROKER-INITIAL",
+            as_of=as_of,
+            source="VALIDATION_ONLY:BROKER_EXCHANGE",
+            positions=broker_positions,
+            complete=True,
+            capability_verified=True,
+            payload_sha256=digest(broker_payload),
+        ),
+        ledger_snapshot=U19ExecutionLedgerSnapshot(
+            group_id=group_id,
+            snapshot_id="T23-LEDGER-INITIAL",
+            as_of=as_of,
+            source="VALIDATION_ONLY:EXECUTION_LEDGER",
+            positions=ledger_positions,
+            complete=True,
+            payload_sha256=digest(ledger_payload),
+            execution_events=execution_events,
+        ),
+    )
+    assert first_decision.restore_allowed is True, first_decision.__dict__
+    assert first_decision.new_entry_enabled is False
+    assert first_decision.order_submission_enabled is False
+
+    reopened_store = SqliteTrack2U19RecoveryStore(checkpoint_path)
+    persisted = reopened_store.load_latest(group_id)
+    assert persisted is not None
+    assert persisted["status"] == first_decision.status.value
+    assert len(persisted["execution_events"]) == 4
+
+    before_lots = bridge.position_lot_store.history()
+    before_fees = bridge.fee_ledger.snapshot(run_id=bridge.run_id)
+    reopened_decision = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(checkpoint_path)
+    ).recover(
+        group_id=group_id,
+        broker_snapshot=U19BrokerPositionSnapshot(
+            group_id=group_id,
+            snapshot_id="T23-BROKER-REOPEN",
+            as_of=as_of + timedelta(seconds=1),
+            source="VALIDATION_ONLY:BROKER_EXCHANGE",
+            positions=broker_positions,
+            complete=True,
+            capability_verified=True,
+            payload_sha256=digest(broker_payload),
+        ),
+        ledger_snapshot=U19ExecutionLedgerSnapshot(
+            group_id=group_id,
+            snapshot_id="T23-LEDGER-REOPEN",
+            as_of=as_of + timedelta(seconds=1),
+            source="VALIDATION_ONLY:EXECUTION_LEDGER",
+            positions=ledger_positions,
+            complete=True,
+            payload_sha256=digest(ledger_payload),
+            execution_events=execution_events + execution_events,
+        ),
+    )
+    assert reopened_decision.restore_allowed is True
+    assert len(reopened_decision.execution_events) == 4
+    assert bridge.position_lot_store.history() == before_lots
+    assert bridge.fee_ledger.snapshot(run_id=bridge.run_id) == before_fees
+    assert len(bridge.position_lot_store.open_lots()) == 4
+    assert len(bridge.fee_ledger.snapshot(run_id=bridge.run_id)) == 4
