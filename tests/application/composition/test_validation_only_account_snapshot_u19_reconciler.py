@@ -2847,3 +2847,118 @@ def test_multi_group_local_conflict_resolution_isolated_from_global_collision_af
     assert [item["scope_key"] for item in unrelated_restart.unresolved_reconciliations()] == [
         "__runtime_bootstrap__",
     ]
+
+    # A second GROUP TWO cancel/replace race is processed while the global
+    # journal collision remains open. The original order's late fill must
+    # join its replacement lineage exactly once.
+    replacement_instrument = "SYNTHETIC_CONTRACT:KOSPI200_GROUP2_REPLACEMENT_RACE"
+    replacement_old_oms = _seed_order(
+        after_restart, client_id="client-g2-replace-old",
+        broker_id="broker-g2-replace-old", instrument=replacement_instrument,
+        quantity=2, leg_id="replacement-call",
+        fills=(("SYNTHETIC:G2-REPLACE-OLD-FILL", 1, "13.10"),),
+        execution_times={"SYNTHETIC:G2-REPLACE-OLD-FILL": AS_OF - timedelta(minutes=3)},
+        group_id=GROUP_TWO, side="BUY",
+    )
+    replacement_old_oms.apply_cancel(ExecutionReport(
+        client_order_id="client-g2-replace-old", broker_order_id="broker-g2-replace-old",
+        execution_id=None, status="CANCELLED", filled_quantity=0,
+        remaining_quantity=1, execution_price=None,
+        execution_timestamp=AS_OF - timedelta(minutes=2),
+        group_id=GROUP_TWO, leg_id="replacement-call",
+    ))
+    replacement_new_oms = _seed_order(
+        after_restart, client_id="client-g2-replace-new",
+        broker_id="broker-g2-replace-new", instrument=replacement_instrument,
+        quantity=1, leg_id="replacement-call", fills=(),
+        group_id=GROUP_TWO, side="BUY",
+    )
+    assert after_restart.record_order_replacement_link(
+        link_id="SYNTHETIC:G2:REPLACE-RACE-001",
+        original_client_order_id="client-g2-replace-old",
+        original_broker_order_id="broker-g2-replace-old",
+        replacement_client_order_id="client-g2-replace-new",
+        replacement_broker_order_id="broker-g2-replace-new",
+        group_id=GROUP_TWO, leg_id="replacement-call",
+        cancel_request_ref="VALIDATION_ONLY:G2:REPLACE-CANCEL-REQUEST",
+        cancel_ack_ref="VALIDATION_ONLY:G2:REPLACE-CANCEL-ACK",
+        source="VALIDATION_ONLY:G2:REPLACEMENT-RACE",
+        payload={"scenario": "partial-fill-cancel-replace-late-fill"},
+    ) is True
+
+    replacement_position = LivePositionAggregate(replacement_instrument)
+    replacement_position.restore_persistence_record(
+        after_restart.load_position_state(replacement_instrument)
+    )
+    replacement_new_bridge = LiveExecutionPositionBridge(
+        order_state_machine=replacement_new_oms,
+        position_fill_adapter=LivePositionFillAdapter(replacement_position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=after_restart),
+        position_aggregate=replacement_position, settlement_store=after_restart,
+    )
+    replacement_fill = ExecutionReport(
+        client_order_id="client-g2-replace-new", broker_order_id="broker-g2-replace-new",
+        execution_id="SYNTHETIC:G2-REPLACE-NEW-FILL", status="FILLED",
+        filled_quantity=1, remaining_quantity=0, execution_price=Decimal("13.20"),
+        execution_timestamp=AS_OF - timedelta(minutes=1), fee=Decimal("2"),
+        group_id=GROUP_TWO, leg_id="replacement-call",
+    )
+    replacement_new_bridge.settle(replacement_fill)
+    assert replacement_position.qty == 2
+
+    replacement_old_bridge = LiveExecutionPositionBridge(
+        order_state_machine=replacement_old_oms,
+        position_fill_adapter=LivePositionFillAdapter(replacement_position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=after_restart),
+        position_aggregate=replacement_position, settlement_store=after_restart,
+    )
+    replacement_late_fill = ExecutionReport(
+        client_order_id="client-g2-replace-old", broker_order_id="broker-g2-replace-old",
+        execution_id="SYNTHETIC:G2-REPLACE-OLD-LATE-FILL", status="FILLED",
+        filled_quantity=1, remaining_quantity=0, execution_price=Decimal("13.15"),
+        execution_timestamp=AS_OF - timedelta(seconds=2), fee=Decimal("2"),
+        group_id=GROUP_TWO, leg_id="replacement-call",
+    )
+    with pytest.raises(OrderStateTransitionError, match="RECONCILIATION_PENDING"):
+        replacement_old_bridge.settle(replacement_late_fill)
+    replacement_old_bridge.settle_authoritatively_reconciled_fill(
+        replacement_late_fill,
+        authoritative_evidence_ref="VALIDATION_ONLY:G2:REPLACEMENT-OLD-LATE-FILL",
+    )
+    assert replacement_position.qty == 3
+    assert after_restart.open_reconciliation_events(scope_key="client-g2-replace-old") == ()
+    replacement_links_after = after_restart.load_order_replacement_links()
+    assert any(
+        item["link_id"] == "SYNTHETIC:G2:REPLACE-RACE-001"
+        and item["original_client_order_id"] == "client-g2-replace-old"
+        and item["replacement_client_order_id"] == "client-g2-replace-new"
+        for item in replacement_links_after
+    )
+    assert after_restart.execution_journal_conflict_history(
+        scope_key="__runtime_bootstrap__",
+    ) == final_global_conflicts
+    assert len(after_restart.load_execution_journal_records()) == 11
+    assert after_restart.load_position_state(replacement_instrument)["qty"] == 3
+    assert [item["scope_key"] for item in after_restart.unresolved_reconciliations()] == [
+        "__runtime_bootstrap__",
+    ]
+
+    replacement_restart = SQLiteSettlementStore(store.path)
+    replacement_ledger = ValidationOnlyU19LedgerSnapshotBuilder(replacement_restart).build(
+        group_id=GROUP_TWO, snapshot_id="GROUP-TWO:REPLACEMENT-RACE-GLOBAL-GATE",
+        as_of=AS_OF,
+    )
+    assert replacement_ledger.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
+    assert {
+        event.execution_id for event in replacement_ledger.execution_events
+    }.issuperset({
+        "SYNTHETIC:G2-REPLACE-OLD-FILL",
+        "SYNTHETIC:G2-REPLACE-NEW-FILL",
+        "SYNTHETIC:G2-REPLACE-OLD-LATE-FILL",
+    })
+    assert replacement_restart.execution_journal_conflict_history(
+        scope_key="__runtime_bootstrap__",
+    ) == final_global_conflicts
+    assert len(replacement_restart.load_execution_journal_records()) == 11
+    assert replacement_restart.load_position_state(replacement_instrument)["qty"] == 3
+    assert replacement_restart.load_order_replacement_links() == replacement_links_after
