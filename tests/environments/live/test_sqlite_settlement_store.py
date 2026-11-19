@@ -1166,3 +1166,55 @@ def test_concurrent_identical_execution_commits_serialize_to_one_journal_row(tmp
     assert len(stores[0].load_execution_journal_records()) == 1
     assert stores[0].load_order_state_payloads() == (order_state,)
     assert stores[0].load_position_state("CONCURRENT-FUT") == position_state
+
+
+def test_safe_retry_policy_rechecks_journal_then_replays_or_preserves_conflict(tmp_path):
+    from dataclasses import replace
+
+    store, oms, position, dedup, bridge = _prepared(tmp_path)
+    report = _fill(execution_id="safe-retry-fill", quantity=1, remaining=2)
+    lock = sqlite3.connect(store.path, timeout=1, isolation_level=None)
+    lock.execute("BEGIN IMMEDIATE")
+    try:
+        with pytest.raises(sqlite3.OperationalError, match="database is locked"):
+            bridge.settle(report)
+        assert not store.has_execution("safe-retry-fill")
+        assert oms.get("client-1").filled_quantity == 0
+        assert position.qty == 0
+    finally:
+        lock.rollback()
+        lock.close()
+
+    # Re-read durable state before retry: no committed row means the same report may be retried.
+    reopened = SQLiteSettlementStore(tmp_path / "settlement.sqlite3")
+    assert not reopened.has_execution("safe-retry-fill")
+    settled = bridge.settle(report)
+    assert settled.filled_quantity == 1
+    assert len(store.load_execution_journal_records()) == 1
+
+    # A later caller retry after an ambiguous response must replay the durable event, not apply it twice.
+    restarted_oms = OrderStateMachine(persistence_store=reopened)
+    restarted_oms.restore_from_store()
+    restarted_position = LivePositionAggregate("FUT-1")
+    restarted_position.restore_persistence_record(reopened.load_position_state("FUT-1"))
+    replay_bridge = LiveExecutionPositionBridge(
+        order_state_machine=restarted_oms,
+        position_fill_adapter=LivePositionFillAdapter(restarted_position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=reopened),
+        position_aggregate=restarted_position,
+        settlement_store=reopened,
+    )
+    replayed = replay_bridge.settle(report)
+    assert replayed.filled_quantity == 1
+    assert restarted_position.qty == 1
+    assert len(reopened.load_execution_journal_records()) == 1
+
+    # Same ID with a changed payload is a conflict, never a retry candidate.
+    conflicting = replace(report, execution_price=Decimal("14.80"))
+    with pytest.raises(SettlementStoreError, match="EXECUTION_ID_COLLISION"):
+        replay_bridge.settle(conflicting)
+    assert len(reopened.load_execution_journal_records()) == 1
+    assert reopened.execution_journal_conflict_history(execution_id="safe-retry-fill")
+    assert restarted_oms.get("client-1").filled_quantity == 1
+    assert restarted_position.qty == 1
+    assert reopened.has_unresolved_reconciliation()
