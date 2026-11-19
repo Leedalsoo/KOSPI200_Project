@@ -3420,3 +3420,72 @@ def test_multi_group_same_contract_replacement_netting_matches_child_and_aggrega
     assert SqliteTrack2U19RecoveryStore(checkpoint_path).load_latest(
         "SYNTHETIC:ACCOUNT_AGGREGATE:CHILD-LEG-OMITTED"
     ) is None
+
+def test_multi_group_duplicate_execution_foreign_group_and_instrument_mismatch_are_gated(tmp_path):
+    bundle = _multi_group_bundle()
+    reconciler, checkpoint_path = _make_reconciler(
+        tmp_path, require_expected_group_manifest=True,
+    )
+    _seed_second_group(reconciler)
+    aggregate_id = "SYNTHETIC:ACCOUNT_AGGREGATE:OWNERSHIP-TAMPER"
+
+    # Duplicate an execution ID across two distinct order/group lineages and
+    # alter another row's instrument. Preserve all original source fixtures.
+    duplicate_rows = list(bundle.executions.rows)
+    duplicate_rows[3] = {**duplicate_rows[3], "execution_id": duplicate_rows[0]["execution_id"]}
+    duplicate_rows[2] = {**duplicate_rows[2], "instrument_id": "SYNTHETIC_CONTRACT:FOREIGN_INSTRUMENT"}
+    duplicate_bundle = replace(
+        bundle,
+        executions=_section(
+            bundle.executions.snapshot_id, AS_OF, tuple(duplicate_rows),
+        ),
+    )
+    duplicate_validation = validate_account_snapshot_bundle(duplicate_bundle)
+    assert not duplicate_validation.is_valid
+    assert any(issue.startswith("EXECUTION_ID_DUPLICATE:") for issue in duplicate_validation.issues)
+    assert any(issue.startswith("EXECUTION_ORDER_CONTRACT_MISMATCH:") for issue in duplicate_validation.issues)
+
+    duplicate_result = reconciler.reconcile_account(
+        bundle=duplicate_bundle, validation=duplicate_validation,
+        group_ids=(GROUP_ID, GROUP_TWO), snapshot_id="multi-group-duplicate-id-and-instrument",
+        as_of=AS_OF, aggregate_group_id=aggregate_id,
+        expected_group_manifests=_expected_group_manifests(duplicate_bundle),
+    )
+    assert duplicate_result.status == "RECONCILIATION_REQUIRED"
+    assert any(issue.startswith("EXECUTION_ID_DUPLICATE:") for issue in duplicate_result.issues)
+    assert any(issue.startswith("EXECUTION_ORDER_CONTRACT_MISMATCH:") for issue in duplicate_result.issues)
+    assert duplicate_result.recovery_decision is None
+    assert SqliteTrack2U19RecoveryStore(checkpoint_path).load_latest(aggregate_id) is None
+
+    # A coherent but unrequested group identity must still fail account
+    # ownership checks even when order/execution rows agree with each other.
+    foreign_group = "SYNTHETIC:FOREIGN:UNREQUESTED-GROUP"
+    foreign_orders = tuple(
+        {**row, "group_id": foreign_group}
+        if row["client_order_id"] == "client-g2-shared" else row
+        for row in bundle.orders.rows
+    )
+    foreign_executions = tuple(
+        {**row, "group_id": foreign_group}
+        if row["client_order_id"] == "client-g2-shared" else row
+        for row in bundle.executions.rows
+    )
+    foreign_bundle = replace(
+        bundle,
+        orders=_section(bundle.orders.snapshot_id, AS_OF, foreign_orders),
+        executions=_section(bundle.executions.snapshot_id, AS_OF, foreign_executions),
+    )
+    foreign_validation = validate_account_snapshot_bundle(foreign_bundle)
+    assert foreign_validation.is_valid, foreign_validation.issues
+
+    foreign_result = reconciler.reconcile_account(
+        bundle=foreign_bundle, validation=foreign_validation,
+        group_ids=(GROUP_ID, GROUP_TWO), snapshot_id="multi-group-foreign-group-ownership",
+        as_of=AS_OF, aggregate_group_id=aggregate_id,
+        expected_group_manifests=_expected_group_manifests(foreign_bundle),
+    )
+    assert foreign_result.status == "RECONCILIATION_REQUIRED"
+    assert f"ACCOUNT_ORDER_GROUP_NOT_REQUESTED:{foreign_group}" in foreign_result.issues
+    assert "ACCOUNT_EXECUTION_GROUP_INVALID:SYNTHETIC:G2-FILL-001" in foreign_result.issues
+    assert foreign_result.recovery_decision is None
+    assert SqliteTrack2U19RecoveryStore(checkpoint_path).load_latest(aggregate_id) is None
