@@ -44,3 +44,8 @@ Date: 2026-11-19
 - KIS Live/REAL_VTS/실계좌 API 호출, 주문/취소/청산, 신규 수집은 수행하지 않음.
 - Task Scheduler 등록/변경, Graphify watcher 활성화/실행은 수행하지 않음.
 - Graphify 산출물은 현재 로컬 R10 작업 폴더에서 최신화됨. 이후 Git 반영은 이 보고서와 산출물 무결성 검토를 포함해 별도 커밋으로 수행한다.
+
+## Graphify community mapping artifact
+- .graphify_analysis.json contains 489 community assignments covering all 9,481 graph node IDs exactly once; unique member IDs 9,481.
+- SHA-256: 729AB5D026D28A6FE77713732D2E0458AB8D7E6C8CCBBEB641F605ACBABBFA77
+- The mapping is local deterministic clustering output; no LLM semantic extraction or community naming was used.
