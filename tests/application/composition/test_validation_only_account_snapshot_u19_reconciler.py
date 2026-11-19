@@ -2090,3 +2090,138 @@ def test_multi_group_zero_fill_cancel_pre_entry_netting_and_late_fill_gate_are_c
     assert zero_fill_ledger.execution_events == ()
     assert zero_fill_ledger.positions == ()
     assert zero_fill_ledger.pending_order_ids == ()
+
+
+def test_multi_group_late_fill_arrival_is_exactly_once_after_restart(tmp_path):
+    from core.oms.oms_fsm import OrderStateTransitionError
+
+    bundle = _multi_group_bundle()
+    reconciler, checkpoint_path = _make_reconciler(tmp_path)
+    _seed_second_group(reconciler)
+    store = reconciler.ledger_snapshot_builder.settlement_store
+    oms = OrderStateMachine(persistence_store=store)
+    oms.restore_from_store()
+    oms.apply_cancel(ExecutionReport(
+        client_order_id="client-g2-shared", broker_order_id="broker-g2-shared",
+        execution_id=None, status="CANCELLED", filled_quantity=0,
+        remaining_quantity=1, execution_price=None,
+        execution_timestamp=AS_OF - timedelta(seconds=20),
+        group_id=GROUP_TWO, leg_id="shared",
+    ))
+    position = LivePositionAggregate(SHARED_INSTRUMENT)
+    position.restore_persistence_record(store.load_position_state(SHARED_INSTRUMENT))
+    bridge = LiveExecutionPositionBridge(
+        order_state_machine=oms, position_fill_adapter=LivePositionFillAdapter(position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=store),
+        position_aggregate=position, settlement_store=store,
+    )
+    late_fill = ExecutionReport(
+        client_order_id="client-g2-shared", broker_order_id="broker-g2-shared",
+        execution_id="SYNTHETIC:G2-LATE-FILL-ARRIVED", status="FILLED",
+        filled_quantity=1, remaining_quantity=0, execution_price=Decimal("10.40"),
+        execution_timestamp=AS_OF - timedelta(seconds=10), fee=Decimal("5"),
+        group_id=GROUP_TWO, leg_id="shared",
+    )
+    with pytest.raises(OrderStateTransitionError, match="RECONCILIATION_PENDING"):
+        bridge.settle(late_fill)
+
+    pending_orders = tuple(
+        {**row, "status": "CANCELLED"} if row["client_order_id"] == "client-g2-shared" else row
+        for row in bundle.orders.rows
+    )
+    pending_bundle = replace(bundle, orders=_section(bundle.orders.snapshot_id, AS_OF, pending_orders))
+    pending_validation = validate_account_snapshot_bundle(pending_bundle)
+    pending = reconciler.reconcile_account(
+        bundle=pending_bundle, validation=pending_validation,
+        group_ids=(GROUP_ID, GROUP_TWO), snapshot_id="multi-late-pending",
+        as_of=AS_OF, aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:LATE-ARRIVAL",
+        expected_group_manifests=_expected_group_manifests(pending_bundle),
+    )
+    assert pending.status == "RECONCILIATION_REQUIRED"
+    assert pending.recovery_decision.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+    assert pending.recovery_decision.order_submission_enabled is False
+
+    reopened = SQLiteSettlementStore(store.path)
+    restarted_oms = OrderStateMachine(persistence_store=reopened)
+    restarted_oms.restore_from_store()
+    restarted_position = LivePositionAggregate(SHARED_INSTRUMENT)
+    restarted_position.restore_persistence_record(reopened.load_position_state(SHARED_INSTRUMENT))
+    restarted_bridge = LiveExecutionPositionBridge(
+        order_state_machine=restarted_oms,
+        position_fill_adapter=LivePositionFillAdapter(restarted_position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=reopened),
+        position_aggregate=restarted_position, settlement_store=reopened,
+    )
+    settled = restarted_bridge.settle_authoritatively_reconciled_fill(
+        late_fill, authoritative_evidence_ref="VALIDATION_ONLY:SYNTHETIC:G2-LATE-FILL",
+    )
+    assert settled.filled_quantity == 2
+    assert restarted_position.qty == 2
+    assert not reopened.has_unresolved_reconciliation()
+
+    orders = tuple(
+        {**row, "cumulative_filled_quantity": 2, "status": "CANCELLED"}
+        if row["client_order_id"] == "client-g2-shared" else row
+        for row in bundle.orders.rows
+    )
+    fill_row = {
+        "execution_id": late_fill.execution_id, "client_order_id": late_fill.client_order_id,
+        "broker_order_id": late_fill.broker_order_id, "group_id": GROUP_TWO,
+        "instrument_id": SHARED_INSTRUMENT, "side": "SELL", "filled_quantity": 1,
+        "execution_price": "10.40", "execution_timestamp": late_fill.execution_timestamp,
+    }
+    arrived = replace(
+        bundle,
+        orders=_section(bundle.orders.snapshot_id, AS_OF, orders),
+        executions=_section(bundle.executions.snapshot_id, AS_OF, (*bundle.executions.rows, fill_row)),
+        positions=_section(bundle.positions.snapshot_id, AS_OF, (
+            {"instrument_id": SHARED_INSTRUMENT, "side": "LONG", "quantity": 2, "avg_price": "10.10"},
+            {"instrument_id": SECOND_INSTRUMENT, "side": "SHORT", "quantity": 1, "avg_price": "8.30"},
+        )),
+    )
+    validation = validate_account_snapshot_bundle(arrived)
+    result = reconciler.reconcile_account(
+        bundle=arrived, validation=validation, group_ids=(GROUP_ID, GROUP_TWO),
+        snapshot_id="multi-late-arrived", as_of=AS_OF,
+        aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:LATE-ARRIVAL",
+        expected_group_manifests=_expected_group_manifests(arrived),
+    )
+    assert result.is_valid
+    assert result.recovery_decision.status is U19RecoveryStatus.RESTORE_ALLOWED
+    assert result.expected_group_manifest.expected_positions == result.projected_ledger_snapshot.positions
+    assert len([e for e in result.ledger_snapshot.execution_events if e.execution_id == late_fill.execution_id]) == 1
+    manifest_hash = result.expected_group_manifest.payload_sha256
+    assert len(reopened.load_execution_journal_records()) == 6
+
+    final_store = SQLiteSettlementStore(store.path)
+    final_oms = OrderStateMachine(persistence_store=final_store)
+    final_oms.restore_from_store()
+    final_position = LivePositionAggregate(SHARED_INSTRUMENT)
+    final_position.restore_persistence_record(final_store.load_position_state(SHARED_INSTRUMENT))
+    final_bridge = LiveExecutionPositionBridge(
+        order_state_machine=final_oms, position_fill_adapter=LivePositionFillAdapter(final_position),
+        execution_event_deduplicator=ExecutionEventDeduplicator(persistence_store=final_store),
+        position_aggregate=final_position, settlement_store=final_store,
+    )
+    final_bridge.settle(late_fill)
+    assert final_position.qty == 2
+    assert len(final_store.load_execution_journal_records()) == 6
+    assert len([r for r in final_store.load_execution_journal_records()
+                if r["report"]["execution_id"] == late_fill.execution_id]) == 1
+    assert not final_store.has_unresolved_reconciliation()
+
+    replay_reconciler = ValidationOnlyAccountSnapshotU19Reconciler(
+        ledger_snapshot_builder=ValidationOnlyU19LedgerSnapshotBuilder(final_store),
+        recovery_coordinator=ValidationOnlyTrack2U19RecoveryCoordinator(
+            SqliteTrack2U19RecoveryStore(checkpoint_path), settlement_store=final_store,
+        ),
+    )
+    replay = replay_reconciler.reconcile_account(
+        bundle=arrived, validation=validation, group_ids=(GROUP_ID, GROUP_TWO),
+        snapshot_id="multi-late-replay", as_of=AS_OF,
+        aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:LATE-ARRIVAL",
+        expected_group_manifests=_expected_group_manifests(arrived),
+    )
+    assert replay.is_valid
+    assert replay.expected_group_manifest.payload_sha256 == manifest_hash
+    assert len([e for e in replay.ledger_snapshot.execution_events if e.execution_id == late_fill.execution_id]) == 1
