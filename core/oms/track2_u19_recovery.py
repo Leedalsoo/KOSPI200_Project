@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
 import hashlib
+import json
 import re
 
 
@@ -20,6 +21,9 @@ class U19RecoveryStatus(str, Enum):
     EXECUTION_ID_CONFLICT = "EXECUTION_ID_CONFLICT"
     POSITION_SNAPSHOT_INVALID = "POSITION_SNAPSHOT_INVALID"
     POSITION_LEDGER_MISMATCH = "POSITION_LEDGER_MISMATCH"
+    EXPECTED_GROUP_MANIFEST_UNAVAILABLE = "EXPECTED_GROUP_MANIFEST_UNAVAILABLE"
+    EXPECTED_GROUP_MANIFEST_UNVERIFIED = "EXPECTED_GROUP_MANIFEST_UNVERIFIED"
+    EXPECTED_GROUP_LEG_SET_MISMATCH = "EXPECTED_GROUP_LEG_SET_MISMATCH"
 
 
 @dataclass(frozen=True)
@@ -60,6 +64,17 @@ class U19ExecutionLedgerSnapshot:
 
 
 @dataclass(frozen=True)
+class U19ExpectedGroupManifest:
+    group_id: str
+    manifest_id: str
+    source: str
+    provenance: str
+    leg_instrument_ids: tuple[str, ...]
+    expected_positions: tuple[U19Position, ...]
+    payload_sha256: str
+
+
+@dataclass(frozen=True)
 class U19RecoveryDecision:
     checkpoint_id: str
     group_id: str
@@ -76,6 +91,8 @@ class U19RecoveryDecision:
     ledger_positions: tuple[U19Position, ...]
     execution_events: tuple[U19ExecutionEvent, ...]
     pending_order_ids: tuple[str, ...]
+    expected_group_manifest_id: str | None
+    expected_group_manifest_sha256: str | None
     restore_allowed: bool
     strategy_resume_allowed: bool
     new_entry_enabled: bool = False
@@ -113,6 +130,8 @@ class U19RecoveryDecision:
                 for item in self.execution_events
             ],
             "pending_order_ids": list(self.pending_order_ids),
+            "expected_group_manifest_id": self.expected_group_manifest_id,
+            "expected_group_manifest_sha256": self.expected_group_manifest_sha256,
             "restore_allowed": self.restore_allowed,
             "strategy_resume_allowed": self.strategy_resume_allowed,
             "new_entry_enabled": self.new_entry_enabled,
@@ -135,7 +154,7 @@ def _position_map(positions: tuple[U19Position, ...]) -> dict[str, Decimal] | No
         if not isinstance(item, U19Position):
             return None
         if (
-            not item.instrument_id
+            not isinstance(item.instrument_id, str)
             or not item.instrument_id.strip()
             or not isinstance(item.signed_quantity, Decimal)
             or not item.signed_quantity.is_finite()
@@ -146,6 +165,50 @@ def _position_map(positions: tuple[U19Position, ...]) -> dict[str, Decimal] | No
             return None
         result[item.instrument_id] = item.signed_quantity
     return result
+
+
+def _expected_group_manifest_digest(manifest: U19ExpectedGroupManifest) -> str:
+    payload = {
+        "group_id": manifest.group_id,
+        "manifest_id": manifest.manifest_id,
+        "source": manifest.source,
+        "provenance": manifest.provenance,
+        "leg_instrument_ids": sorted(manifest.leg_instrument_ids),
+        "expected_positions": [
+            {"instrument_id": item.instrument_id, "signed_quantity": str(item.signed_quantity)}
+            for item in sorted(manifest.expected_positions, key=lambda item: item.instrument_id)
+        ],
+    }
+    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _expected_group_manifest_positions(
+    manifest: U19ExpectedGroupManifest | None, *, group_id: str,
+) -> dict[str, Decimal] | None:
+    if not isinstance(manifest, U19ExpectedGroupManifest):
+        return None
+    if (
+        manifest.group_id != group_id
+        or not isinstance(manifest.manifest_id, str) or not manifest.manifest_id.strip()
+        or manifest.source != "VALIDATION_ONLY:EXPECTED_GROUP_MANIFEST"
+        or not isinstance(manifest.provenance, str)
+        or not manifest.provenance.startswith("VALIDATION_ONLY:")
+        or not isinstance(manifest.leg_instrument_ids, tuple)
+        or not manifest.leg_instrument_ids
+        or any(not isinstance(item, str) or not item.strip() for item in manifest.leg_instrument_ids)
+        or len(set(manifest.leg_instrument_ids)) != len(manifest.leg_instrument_ids)
+        or not isinstance(manifest.expected_positions, tuple)
+        or not isinstance(manifest.payload_sha256, str)
+        or not _valid_hash(manifest.payload_sha256)
+    ):
+        return None
+    expected = _position_map(manifest.expected_positions)
+    if expected is None or not set(expected).issubset(set(manifest.leg_instrument_ids)):
+        return None
+    if manifest.payload_sha256.lower() != _expected_group_manifest_digest(manifest):
+        return None
+    return expected
 
 
 def _event_ids_valid(events: tuple[U19ExecutionEvent, ...]) -> bool:
@@ -181,7 +244,15 @@ def _checkpoint_id(
     broker: U19BrokerPositionSnapshot | None,
     ledger: U19ExecutionLedgerSnapshot | None,
     as_of: datetime | None,
+    expected_group_manifest: U19ExpectedGroupManifest | None,
 ) -> str:
+    manifest_parts = (
+        (
+            str(expected_group_manifest.manifest_id or ""),
+            str(expected_group_manifest.payload_sha256 or ""),
+        )
+        if isinstance(expected_group_manifest, U19ExpectedGroupManifest) else ()
+    )
     parts = (
         group_id,
         status.value,
@@ -189,6 +260,7 @@ def _checkpoint_id(
         ledger.snapshot_id if ledger else "",
         broker.payload_sha256 if broker else "",
         ledger.payload_sha256 if ledger else "",
+        *manifest_parts,
         "\x1f".join(ledger.pending_order_ids) if ledger else "",
         "\x1f".join(
             f"{event.execution_id}:{event.fingerprint}"
@@ -204,6 +276,8 @@ def evaluate_u19_recovery(
     group_id: str,
     broker_snapshot: U19BrokerPositionSnapshot | None,
     ledger_snapshot: U19ExecutionLedgerSnapshot | None,
+    expected_group_manifest: U19ExpectedGroupManifest | None = None,
+    require_expected_group_manifest: bool = False,
 ) -> U19RecoveryDecision:
     """Validation-only reconciliation. Broker positions are primary; mismatch never auto-adjusts."""
     status: U19RecoveryStatus
@@ -254,6 +328,19 @@ def evaluate_u19_recovery(
         elif broker_positions != ledger_positions:
             status, reason = U19RecoveryStatus.POSITION_LEDGER_MISMATCH, "AUTHORITATIVE_BROKER_POSITION_DIFFERS_FROM_EXECUTION_LEDGER"
             positions = tuple(broker_snapshot.positions)
+        elif require_expected_group_manifest and expected_group_manifest is None:
+            status, reason = U19RecoveryStatus.EXPECTED_GROUP_MANIFEST_UNAVAILABLE, "AUTHORITATIVE_EXPECTED_GROUP_LEG_SET_REQUIRED"
+            positions = tuple(broker_snapshot.positions)
+        elif expected_group_manifest is not None and (
+            expected_positions := _expected_group_manifest_positions(expected_group_manifest, group_id=group_id)
+        ) is None:
+            status, reason = U19RecoveryStatus.EXPECTED_GROUP_MANIFEST_UNVERIFIED, "EXPECTED_GROUP_MANIFEST_IDENTITY_PROVENANCE_OR_HASH_UNVERIFIED"
+            positions = tuple(broker_snapshot.positions)
+        elif expected_group_manifest is not None and (
+            broker_positions != expected_positions or ledger_positions != expected_positions
+        ):
+            status, reason = U19RecoveryStatus.EXPECTED_GROUP_LEG_SET_MISMATCH, "BROKER_OR_LEDGER_DOES_NOT_MATCH_EXPECTED_GROUP_LEG_SET_AND_SIGNED_QUANTITIES"
+            positions = tuple(broker_snapshot.positions)
         else:
             positions = tuple(broker_snapshot.positions)
             if not broker_positions:
@@ -263,7 +350,9 @@ def evaluate_u19_recovery(
 
     allowed = status in {U19RecoveryStatus.RESTORE_ALLOWED, U19RecoveryStatus.FLAT_CONFIRMED}
     return U19RecoveryDecision(
-        checkpoint_id=_checkpoint_id(group_id, status, broker_snapshot, ledger_snapshot, as_of),
+        checkpoint_id=_checkpoint_id(
+            group_id, status, broker_snapshot, ledger_snapshot, as_of, expected_group_manifest,
+        ),
         group_id=group_id,
         status=status,
         reason=reason,
@@ -282,6 +371,8 @@ def evaluate_u19_recovery(
             else tuple(ledger_snapshot.execution_events) if ledger_snapshot else ()
         ),
         pending_order_ids=tuple(ledger_snapshot.pending_order_ids) if ledger_snapshot else (),
+        expected_group_manifest_id=(expected_group_manifest.manifest_id if isinstance(expected_group_manifest, U19ExpectedGroupManifest) else None),
+        expected_group_manifest_sha256=(expected_group_manifest.payload_sha256 if isinstance(expected_group_manifest, U19ExpectedGroupManifest) else None),
         restore_allowed=allowed,
         strategy_resume_allowed=allowed,
         new_entry_enabled=False,

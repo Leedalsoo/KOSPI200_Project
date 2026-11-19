@@ -16,6 +16,7 @@ class ValidationOnlyRuntimeEvidenceCandidate:
     ledger_snapshot: Any
     invariant_inputs: Mapping[str, Any]
     freshness_verdict: Any
+    expected_group_manifest: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -140,6 +141,7 @@ class ValidationOnlyRuntimeEvidenceSupervisor:
                     group_id=candidate.group_id,
                     broker_snapshot=candidate.broker_snapshot,
                     ledger_snapshot=candidate.ledger_snapshot,
+                    expected_group_manifest=candidate.expected_group_manifest,
                 )
                 invariant_inputs = dict(candidate.invariant_inputs)
                 invariant_inputs["u19_decision"] = decision

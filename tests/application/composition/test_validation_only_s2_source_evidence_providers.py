@@ -222,11 +222,13 @@ def test_t9_supervisor_runs_primary_then_source_reconciliation_then_synthetic_fa
             return SimpleNamespace(status="ARMED")
 
     class _Recovery:
-        def recover(self, *, group_id, broker_snapshot, ledger_snapshot):
+        def recover(self, *, group_id, broker_snapshot, ledger_snapshot, expected_group_manifest=None):
             return evaluate_u19_recovery(
                 group_id=group_id,
                 broker_snapshot=broker_snapshot,
                 ledger_snapshot=ledger_snapshot,
+                expected_group_manifest=expected_group_manifest,
+                require_expected_group_manifest=True,
             )
 
     stop = _StopSwitch()
@@ -261,7 +263,6 @@ def test_t9_supervisor_runs_primary_then_source_reconciliation_then_synthetic_fa
     assert result.stop_snapshot.status == "ARMED"
     assert len(stop.calls) == 1
 
-Path(r'C:\Users\white\Desktop\MovingProject\Q25_A8_R10\tests\application\composition\test_validation_only_s2_source_evidence_providers.py').write_text(Path(__file__).read_text(encoding='utf-8'), encoding='utf-8')
 
 
 def test_t10_builder_creates_complete_isolated_pre_entry_provider_chain(tmp_path):
@@ -483,11 +484,13 @@ def test_t15_unverified_ws_capability_falls_through_to_synthetic_without_x2_trip
             return SimpleNamespace(status="ARMED")
 
     class _Recovery:
-        def recover(self, *, group_id, broker_snapshot, ledger_snapshot):
+        def recover(self, *, group_id, broker_snapshot, ledger_snapshot, expected_group_manifest=None):
             return evaluate_u19_recovery(
                 group_id=group_id,
                 broker_snapshot=broker_snapshot,
                 ledger_snapshot=ledger_snapshot,
+                expected_group_manifest=expected_group_manifest,
+                require_expected_group_manifest=True,
             )
 
     stop = _StopSwitch()

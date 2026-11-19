@@ -145,11 +145,15 @@ def test_t7_s2_alternative_builds_independent_broker_snapshot_and_freshness_cand
     assert len(candidate.broker_snapshot.positions) == 4
     assert len(candidate.ledger_snapshot.execution_events) == 4
     assert candidate.broker_snapshot.positions == candidate.ledger_snapshot.positions
+    assert candidate.expected_group_manifest.source == "VALIDATION_ONLY:EXPECTED_GROUP_MANIFEST"
+    assert len(candidate.expected_group_manifest.leg_instrument_ids) == 4
 
     decision = evaluate_u19_recovery(
         group_id=candidate.group_id,
         broker_snapshot=candidate.broker_snapshot,
         ledger_snapshot=candidate.ledger_snapshot,
+        expected_group_manifest=candidate.expected_group_manifest,
+        require_expected_group_manifest=True,
     )
     assert decision.status is U19RecoveryStatus.RESTORE_ALLOWED
     invariant_inputs = dict(candidate.invariant_inputs)
@@ -210,11 +214,13 @@ def test_t7_s2_alternative_runs_after_primary_and_reconciliation_are_unavailable
             return SimpleNamespace(status="ARMED")
 
     class _Recovery:
-        def recover(self, *, group_id, broker_snapshot, ledger_snapshot):
+        def recover(self, *, group_id, broker_snapshot, ledger_snapshot, expected_group_manifest=None):
             return evaluate_u19_recovery(
                 group_id=group_id,
                 broker_snapshot=broker_snapshot,
                 ledger_snapshot=ledger_snapshot,
+                expected_group_manifest=expected_group_manifest,
+                require_expected_group_manifest=True,
             )
 
     stop_switch = _StopSwitch()
@@ -293,6 +299,8 @@ def test_t8_pre_entry_alternative_uses_flat_independent_broker_snapshot():
         group_id=candidate.group_id,
         broker_snapshot=candidate.broker_snapshot,
         ledger_snapshot=candidate.ledger_snapshot,
+        expected_group_manifest=candidate.expected_group_manifest,
+        require_expected_group_manifest=True,
     )
     assert decision.status is U19RecoveryStatus.FLAT_CONFIRMED
     invariant_inputs = dict(candidate.invariant_inputs)
@@ -337,11 +345,13 @@ def test_t8_supervisor_skips_ticks_outside_all_evidence_scopes():
             return SimpleNamespace(status="TRIPPED")
 
     class _Recovery:
-        def recover(self, *, group_id, broker_snapshot, ledger_snapshot):
+        def recover(self, *, group_id, broker_snapshot, ledger_snapshot, expected_group_manifest=None):
             return evaluate_u19_recovery(
                 group_id=group_id,
                 broker_snapshot=broker_snapshot,
                 ledger_snapshot=ledger_snapshot,
+                expected_group_manifest=expected_group_manifest,
+                require_expected_group_manifest=True,
             )
 
     stop = _StopSwitch()

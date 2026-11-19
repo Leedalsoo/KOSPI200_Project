@@ -1,5 +1,7 @@
 from datetime import UTC, datetime
 from types import SimpleNamespace
+import hashlib
+import json
 
 from application.composition.automated_virtual_trading_loop import (
     AutomatedVirtualTradingLoop,
@@ -17,6 +19,7 @@ from contracts.trading_state import SensorLevel, SensorSnapshot, TradingHealthSn
 from core.oms.track2_u19_recovery import (
     U19BrokerPositionSnapshot,
     U19ExecutionLedgerSnapshot,
+    U19ExpectedGroupManifest,
     evaluate_u19_recovery,
 )
 from core.risk.risk_engine import RiskEngine
@@ -31,11 +34,13 @@ class _Margin:
 
 
 class _Coordinator:
-    def recover(self, *, group_id, broker_snapshot, ledger_snapshot):
+    def recover(self, *, group_id, broker_snapshot, ledger_snapshot, expected_group_manifest=None):
         return evaluate_u19_recovery(
             group_id=group_id,
             broker_snapshot=broker_snapshot,
             ledger_snapshot=ledger_snapshot,
+            expected_group_manifest=expected_group_manifest,
+            require_expected_group_manifest=True,
         )
 
 
@@ -65,6 +70,23 @@ def _evidence():
         "T5-GROUP", "T5-LEDGER", NOW, "VALIDATION_ONLY:EXECUTION_LEDGER",
         (), True, "b" * 64, (), (),
     )
+    manifest_payload = {
+        "group_id": "T5-GROUP",
+        "manifest_id": "T5-MANIFEST-001",
+        "source": "VALIDATION_ONLY:EXPECTED_GROUP_MANIFEST",
+        "provenance": "VALIDATION_ONLY:T5_TEST_FIXTURE",
+        "leg_instrument_ids": ["SYNTHETIC_CONTRACT:T5:LEG1"],
+        "expected_positions": [],
+    }
+    expected_manifest = U19ExpectedGroupManifest(
+        group_id="T5-GROUP", manifest_id="T5-MANIFEST-001",
+        source="VALIDATION_ONLY:EXPECTED_GROUP_MANIFEST",
+        provenance="VALIDATION_ONLY:T5_TEST_FIXTURE",
+        leg_instrument_ids=("SYNTHETIC_CONTRACT:T5:LEG1",), expected_positions=(),
+        payload_sha256=hashlib.sha256(
+            json.dumps(manifest_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest(),
+    )
     return ValidationOnlyRuntimeEvidenceCandidate(
         group_id="T5-GROUP",
         broker_snapshot=broker,
@@ -88,6 +110,7 @@ def _evidence():
             "evidence_refs": ("synthetic://t5/fixture-001",),
         },
         freshness_verdict=SimpleNamespace(status="FRESH"),
+        expected_group_manifest=expected_manifest,
     )
 
 

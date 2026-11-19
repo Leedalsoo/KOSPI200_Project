@@ -317,7 +317,6 @@ class ValidationOnlyS2NotionSourceReconciliationProvider(_ScopedS2EvidenceProvid
         self.last_diagnostic = "NOTION_SOURCE_RECONCILIATION_CANDIDATE_BUILT" if result is not None else "NOTION_SOURCE_RECONCILIATION_CANDIDATE_BUILDER_UNAVAILABLE"
         return result
 
-Path(r'C:\Users\white\Desktop\MovingProject\Q25_A8_R10\application\composition\validation_only_s2_source_evidence_providers.py').write_text(Path(__file__).read_text(encoding='utf-8'), encoding='utf-8')
 
 
 from dataclasses import dataclass
@@ -400,7 +399,9 @@ def build_validation_only_s2_runtime_evidence_chain(
         notion_decision_refs=notion_decision_refs,
     )
     recovery_store = SqliteTrack2U19RecoveryStore(state_path)
-    recovery_coordinator = ValidationOnlyTrack2U19RecoveryCoordinator(recovery_store)
+    recovery_coordinator = ValidationOnlyTrack2U19RecoveryCoordinator(
+        recovery_store, require_expected_group_manifest=True,
+    )
     supervisor = ValidationOnlyRuntimeEvidenceSupervisor(
         stop_switch=stop_switch,
         invariant_checker=ValidationOnlyRuntimeInvariantChecker(),

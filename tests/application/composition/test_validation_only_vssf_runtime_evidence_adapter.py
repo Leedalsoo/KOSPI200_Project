@@ -1,5 +1,7 @@
 from datetime import UTC, datetime
 from decimal import Decimal
+import hashlib
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -16,6 +18,7 @@ from application.composition.validation_only_vssf_runtime_evidence_adapter impor
 from contracts.market_data_freshness import FreshnessStatus
 from core.oms.track2_u19_recovery import (
     U19BrokerPositionSnapshot,
+    U19ExpectedGroupManifest,
     U19Position,
     U19RecoveryStatus,
     evaluate_u19_recovery,
@@ -122,10 +125,36 @@ def _fixture(*, account_qty=1, broker_qty=1, include_provenance=True):
     return adapter, broker, report, lot, bridge, vssf
 
 
+def _expected_manifest(broker):
+    leg_ids = ("SYNTHETIC_CONTRACT:T6:OPT1",)
+    positions = tuple(broker.positions)
+    payload = {
+        "group_id": SCOPE,
+        "manifest_id": "SYNTHETIC:T6:EXPECTED-001",
+        "source": "VALIDATION_ONLY:EXPECTED_GROUP_MANIFEST",
+        "provenance": "VALIDATION_ONLY:T6_TEST_FIXTURE",
+        "leg_instrument_ids": list(leg_ids),
+        "expected_positions": [
+            {"instrument_id": item.instrument_id, "signed_quantity": str(item.signed_quantity)}
+            for item in sorted(positions, key=lambda item: item.instrument_id)
+        ],
+    }
+    return U19ExpectedGroupManifest(
+        group_id=SCOPE, manifest_id="SYNTHETIC:T6:EXPECTED-001",
+        source="VALIDATION_ONLY:EXPECTED_GROUP_MANIFEST",
+        provenance="VALIDATION_ONLY:T6_TEST_FIXTURE", leg_instrument_ids=leg_ids,
+        expected_positions=positions,
+        payload_sha256=hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest(),
+    )
+
+
 def _build(adapter, broker):
     return adapter.build_candidate(
         as_of=AS_OF,
         broker_snapshot=broker,
+        expected_group_manifest=_expected_manifest(broker),
         freshness_verdict=SimpleNamespace(status=FreshnessStatus.FRESH),
         source_namespace="SYNTHETIC:Q25_A8_T6_VSSF_RUNTIME",
         deterministic_rule_id="Q25_A8_T6_VSSF_READONLY_RULE_V1",
@@ -207,6 +236,7 @@ def test_t6_vssf_adapter_requires_synthetic_source_and_no_future_anchor():
         adapter.build_candidate(
             as_of=AS_OF,
             broker_snapshot=broker,
+            expected_group_manifest=_expected_manifest(broker),
             freshness_verdict=SimpleNamespace(status=FreshnessStatus.FRESH),
             source_namespace="KIS:LIVE",
             deterministic_rule_id="RULE",
@@ -221,6 +251,7 @@ def test_t6_vssf_adapter_requires_synthetic_source_and_no_future_anchor():
         adapter.build_candidate(
             as_of=AS_OF,
             broker_snapshot=broker,
+            expected_group_manifest=_expected_manifest(broker),
             freshness_verdict=SimpleNamespace(status=FreshnessStatus.FRESH),
             source_namespace="SYNTHETIC:T6",
             deterministic_rule_id="RULE",

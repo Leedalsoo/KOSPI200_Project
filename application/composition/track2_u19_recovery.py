@@ -5,6 +5,7 @@ from dataclasses import replace
 from core.oms.track2_u19_recovery import (
     U19BrokerPositionSnapshot,
     U19ExecutionLedgerSnapshot,
+    U19ExpectedGroupManifest,
     U19RecoveryDecision,
     evaluate_u19_recovery,
 )
@@ -14,9 +15,13 @@ from environments.virtual.position.track2_u19_recovery_store import SqliteTrack2
 class ValidationOnlyTrack2U19RecoveryCoordinator:
     """Coordinates injected validation snapshots and persists a durable decision."""
 
-    def __init__(self, store: SqliteTrack2U19RecoveryStore, *, settlement_store=None) -> None:
+    def __init__(
+        self, store: SqliteTrack2U19RecoveryStore, *, settlement_store=None,
+        require_expected_group_manifest: bool = False,
+    ) -> None:
         self.store = store
         self.settlement_store = settlement_store
+        self.require_expected_group_manifest = bool(require_expected_group_manifest)
 
     def recover(
         self,
@@ -24,6 +29,7 @@ class ValidationOnlyTrack2U19RecoveryCoordinator:
         group_id: str,
         broker_snapshot: U19BrokerPositionSnapshot | None,
         ledger_snapshot: U19ExecutionLedgerSnapshot | None,
+        expected_group_manifest: U19ExpectedGroupManifest | None = None,
     ) -> U19RecoveryDecision:
         if self.settlement_store is not None and ledger_snapshot is not None:
             open_events = self.settlement_store.open_reconciliation_events()
@@ -45,6 +51,8 @@ class ValidationOnlyTrack2U19RecoveryCoordinator:
             group_id=group_id,
             broker_snapshot=broker_snapshot,
             ledger_snapshot=ledger_snapshot,
+            expected_group_manifest=expected_group_manifest,
+            require_expected_group_manifest=self.require_expected_group_manifest,
         )
         self.store.save(decision.to_checkpoint())
         return decision
@@ -57,6 +65,7 @@ class ValidationOnlyTrack2U19RecoveryCoordinator:
         snapshot_id: str,
         as_of,
         ledger_snapshot_builder,
+        expected_group_manifest: U19ExpectedGroupManifest | None = None,
     ) -> U19RecoveryDecision:
         """Build the local validation ledger from persisted OMS/fill lineage, then reconcile."""
         ledger_snapshot = ledger_snapshot_builder.build(
@@ -66,6 +75,7 @@ class ValidationOnlyTrack2U19RecoveryCoordinator:
             group_id=group_id,
             broker_snapshot=broker_snapshot,
             ledger_snapshot=ledger_snapshot,
+            expected_group_manifest=expected_group_manifest,
         )
 
     def recover_and_restore_u16_runtime(
@@ -75,12 +85,14 @@ class ValidationOnlyTrack2U19RecoveryCoordinator:
         broker_snapshot: U19BrokerPositionSnapshot | None,
         ledger_snapshot: U19ExecutionLedgerSnapshot | None,
         u16_runtime: object,
+        expected_group_manifest: U19ExpectedGroupManifest | None = None,
     ) -> tuple[U19RecoveryDecision, bool]:
         """Persist U19 evidence first; restore U16 retry state only on verified resume."""
         decision = self.recover(
             group_id=group_id,
             broker_snapshot=broker_snapshot,
             ledger_snapshot=ledger_snapshot,
+            expected_group_manifest=expected_group_manifest,
         )
         if decision.status.value != "RESTORE_ALLOWED":
             return decision, False

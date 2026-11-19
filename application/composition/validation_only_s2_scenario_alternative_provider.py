@@ -13,7 +13,11 @@ from contracts.market_data_freshness import (
     FreshnessPolicy,
     evaluate_freshness,
 )
-from core.oms.track2_u19_recovery import U19BrokerPositionSnapshot, U19Position
+from core.oms.track2_u19_recovery import (
+    U19BrokerPositionSnapshot,
+    U19ExpectedGroupManifest,
+    U19Position,
+)
 from environments.virtual.market.canonical import ReferenceCanonicalMarketTick
 
 
@@ -378,6 +382,42 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
             "position_phase": self.position_phase,
             "validation_only": True,
         }
+        manifest_leg_ids = tuple(sorted(str(row["instrument_id"]) for row in quotes))
+        manifest_positions = tuple(sorted(
+            (
+                U19Position(
+                    str(row["instrument_id"]),
+                    Decimal(self.scenario_quantity if self.ROLE_SIDE[str(row["leg_role"])] == "BUY" else -self.scenario_quantity),
+                )
+                for row in quotes
+            ) if self.position_phase == "POST_ENTRY" else (),
+            key=lambda item: item.instrument_id,
+        ))
+        expected_manifest_id = f"{self.candidate_id}:{self.position_phase}:{scenario_time.isoformat()}"
+        expected_manifest_source = "VALIDATION_ONLY:EXPECTED_GROUP_MANIFEST"
+        expected_manifest_provenance = (
+            f"VALIDATION_ONLY:{self.VERSION}:ACCEPTED={hashes['accepted_manifest']}:SCENARIO={hashes['scenario_manifest']}"
+        )
+        expected_manifest_payload = {
+            "group_id": group_id,
+            "manifest_id": expected_manifest_id,
+            "source": expected_manifest_source,
+            "provenance": expected_manifest_provenance,
+            "leg_instrument_ids": list(manifest_leg_ids),
+            "expected_positions": [
+                {"instrument_id": item.instrument_id, "signed_quantity": str(item.signed_quantity)}
+                for item in manifest_positions
+            ],
+        }
+        expected_group_manifest = U19ExpectedGroupManifest(
+            group_id=group_id,
+            manifest_id=expected_manifest_id,
+            source=expected_manifest_source,
+            provenance=expected_manifest_provenance,
+            leg_instrument_ids=manifest_leg_ids,
+            expected_positions=manifest_positions,
+            payload_sha256=self._hash_json(expected_manifest_payload),
+        )
         broker_snapshot = U19BrokerPositionSnapshot(
             group_id=group_id,
             snapshot_id=f"{self.candidate_id}:{as_of.isoformat()}",
@@ -431,6 +471,7 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
         candidate_result = self.vssf_adapter.build_candidate(
             as_of=as_of,
             broker_snapshot=broker_snapshot,
+            expected_group_manifest=expected_group_manifest,
             freshness_verdict=freshness_verdict,
             source_namespace="SYNTHETIC:DERIVED_SCENARIO",
             deterministic_rule_id=self.VERSION,

@@ -14,6 +14,7 @@ from core.oms.track2_u19_recovery import (
     U19BrokerPositionSnapshot,
     U19ExecutionEvent,
     U19ExecutionLedgerSnapshot,
+    U19ExpectedGroupManifest,
     U19Position,
 )
 
@@ -66,6 +67,7 @@ class ValidationOnlyVSSFRuntimeEvidenceAdapter:
         *,
         as_of: datetime,
         broker_snapshot: U19BrokerPositionSnapshot,
+        expected_group_manifest: U19ExpectedGroupManifest,
         freshness_verdict: Any,
         source_namespace: str,
         deterministic_rule_id: str,
@@ -93,10 +95,12 @@ class ValidationOnlyVSSFRuntimeEvidenceAdapter:
             raise TypeError("T6_INDEPENDENT_VALIDATION_BROKER_SNAPSHOT_REQUIRED")
         if broker_snapshot.source != "VALIDATION_ONLY:BROKER_EXCHANGE":
             raise ValueError("T6_SYNTHETIC_BROKER_SNAPSHOT_CANNOT_CLAIM_LIVE_AUTHORITY")
+        if not isinstance(expected_group_manifest, U19ExpectedGroupManifest):
+            raise TypeError("T6_VALIDATION_EXPECTED_GROUP_MANIFEST_REQUIRED")
 
         scope_group_id = f"VALIDATION_ONLY:RUN:{self.run_id}"
-        if broker_snapshot.group_id != scope_group_id:
-            raise ValueError("T6_BROKER_SNAPSHOT_RUN_SCOPE_MISMATCH")
+        if broker_snapshot.group_id != scope_group_id or expected_group_manifest.group_id != scope_group_id:
+            raise ValueError("T6_BROKER_OR_EXPECTED_MANIFEST_RUN_SCOPE_MISMATCH")
         if self._aware(broker_snapshot.as_of, "T6_BROKER_SNAPSHOT_AS_OF_INVALID") != as_of_utc:
             raise ValueError("T6_BROKER_SNAPSHOT_AS_OF_MISMATCH")
 
@@ -346,4 +350,5 @@ class ValidationOnlyVSSFRuntimeEvidenceAdapter:
             ledger_snapshot=ledger_snapshot,
             invariant_inputs=invariant_inputs,
             freshness_verdict=freshness_verdict,
+            expected_group_manifest=expected_group_manifest,
         )

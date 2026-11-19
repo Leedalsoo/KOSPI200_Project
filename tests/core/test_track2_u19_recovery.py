@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import hashlib
+import json
 import sqlite3
 
 import pytest
@@ -9,6 +11,7 @@ from core.oms.track2_u19_recovery import (
     U19BrokerPositionSnapshot,
     U19ExecutionEvent,
     U19ExecutionLedgerSnapshot,
+    U19ExpectedGroupManifest,
     U19Position,
     U19RecoveryStatus,
     evaluate_u19_recovery,
@@ -43,6 +46,29 @@ def ledger(*, positions=None, as_of=AS_OF, source="VALIDATION_ONLY:EXECUTION_LED
         )),
         complete=complete, payload_sha256=digest * 64,
         execution_events=tuple(events), pending_order_ids=tuple(pending),
+    )
+
+
+def expected_manifest(*, positions, leg_ids, group_id=GROUP, manifest_id="manifest-001",
+                      provenance="VALIDATION_ONLY:TEST_FIXTURE"):
+    payload = {
+        "group_id": group_id,
+        "manifest_id": manifest_id,
+        "source": "VALIDATION_ONLY:EXPECTED_GROUP_MANIFEST",
+        "provenance": provenance,
+        "leg_instrument_ids": sorted(leg_ids),
+        "expected_positions": [
+            {"instrument_id": item.instrument_id, "signed_quantity": str(item.signed_quantity)}
+            for item in sorted(positions, key=lambda item: item.instrument_id)
+        ],
+    }
+    digest = hashlib.sha256(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return U19ExpectedGroupManifest(
+        group_id=group_id, manifest_id=manifest_id,
+        source="VALIDATION_ONLY:EXPECTED_GROUP_MANIFEST", provenance=provenance,
+        leg_instrument_ids=tuple(leg_ids), expected_positions=tuple(positions), payload_sha256=digest,
     )
 
 
@@ -269,6 +295,89 @@ def test_checkpoint_persists_both_position_views_and_execution_dedup_state(tmp_p
 
 
 
+def test_strict_recovery_requires_expected_group_manifest():
+    result = evaluate_u19_recovery(
+        group_id=GROUP, broker_snapshot=broker(), ledger_snapshot=ledger(),
+        require_expected_group_manifest=True,
+    )
+    assert result.status is U19RecoveryStatus.EXPECTED_GROUP_MANIFEST_UNAVAILABLE
+    assert result.restore_allowed is False
+    assert result.strategy_resume_allowed is False
+
+
+def test_expected_group_manifest_detects_identical_broker_and_ledger_leg_omission():
+    expected = (
+        U19Position("OPT-PUT-1", Decimal("-1")),
+        U19Position("OPT-CALL-1", Decimal("1")),
+        U19Position("OPT-PUT-2", Decimal("-1")),
+        U19Position("OPT-CALL-2", Decimal("1")),
+    )
+    observed = expected[:-1]
+    result = evaluate_u19_recovery(
+        group_id=GROUP, broker_snapshot=broker(positions=observed),
+        ledger_snapshot=ledger(positions=observed),
+        expected_group_manifest=expected_manifest(positions=expected, leg_ids=tuple(item.instrument_id for item in expected)),
+        require_expected_group_manifest=True,
+    )
+    assert result.status is U19RecoveryStatus.EXPECTED_GROUP_LEG_SET_MISMATCH
+    assert not result.restore_allowed
+
+
+def test_expected_group_manifest_allows_exact_four_leg_and_signed_quantity_match():
+    expected = (
+        U19Position("OPT-PUT-1", Decimal("-2")),
+        U19Position("OPT-CALL-1", Decimal("2")),
+        U19Position("OPT-PUT-2", Decimal("-1")),
+        U19Position("OPT-CALL-2", Decimal("1")),
+    )
+    manifest = expected_manifest(positions=expected, leg_ids=tuple(item.instrument_id for item in expected))
+    result = evaluate_u19_recovery(
+        group_id=GROUP, broker_snapshot=broker(positions=expected),
+        ledger_snapshot=ledger(positions=expected), expected_group_manifest=manifest,
+        require_expected_group_manifest=True,
+    )
+    assert result.status is U19RecoveryStatus.RESTORE_ALLOWED
+    assert result.expected_group_manifest_id == manifest.manifest_id
+    assert result.to_checkpoint()["expected_group_manifest_sha256"] == manifest.payload_sha256
+
+
+def test_expected_group_manifest_supports_exact_partial_position_subset():
+    expected = (
+        U19Position("OPT-PUT-1", Decimal("-1")),
+        U19Position("OPT-CALL-1", Decimal("1")),
+    )
+    leg_ids = ("OPT-PUT-1", "OPT-CALL-1", "OPT-PUT-2", "OPT-CALL-2")
+    manifest = expected_manifest(positions=expected, leg_ids=leg_ids)
+    result = evaluate_u19_recovery(
+        group_id=GROUP, broker_snapshot=broker(positions=expected),
+        ledger_snapshot=ledger(positions=expected), expected_group_manifest=manifest,
+        require_expected_group_manifest=True,
+    )
+    assert result.status is U19RecoveryStatus.RESTORE_ALLOWED
+
+def test_expected_group_manifest_hash_tampering_blocks_restore():
+    manifest = expected_manifest(positions=broker().positions, leg_ids=tuple(item.instrument_id for item in broker().positions))
+    tampered = U19ExpectedGroupManifest(
+        group_id=manifest.group_id, manifest_id=manifest.manifest_id, source=manifest.source,
+        provenance=manifest.provenance, leg_instrument_ids=manifest.leg_instrument_ids,
+        expected_positions=manifest.expected_positions, payload_sha256="0" * 64,
+    )
+    result = evaluate_u19_recovery(
+        group_id=GROUP, broker_snapshot=broker(), ledger_snapshot=ledger(),
+        expected_group_manifest=tampered, require_expected_group_manifest=True,
+    )
+    assert result.status is U19RecoveryStatus.EXPECTED_GROUP_MANIFEST_UNVERIFIED
+    assert not result.restore_allowed
+
+def test_flat_confirmation_requires_a_verified_empty_expected_position_manifest():
+    leg_ids = ("OPT-PUT-1", "OPT-CALL-1", "OPT-PUT-2", "OPT-CALL-2")
+    manifest = expected_manifest(positions=(), leg_ids=leg_ids)
+    result = evaluate_u19_recovery(
+        group_id=GROUP, broker_snapshot=broker(positions=()), ledger_snapshot=ledger(positions=()),
+        expected_group_manifest=manifest, require_expected_group_manifest=True,
+    )
+    assert result.status is U19RecoveryStatus.FLAT_CONFIRMED
+
 def test_fractional_contract_quantity_blocks():
     fractional = (U19Position("OPT-1", Decimal("0.5")),)
     result = evaluate_u19_recovery(
@@ -348,7 +457,6 @@ def test_four_leg_open_group_then_flat_close_survives_u19_restart_checkpoint(tmp
 
 
 def test_u19_recovery_gates_u16_persistent_runtime_restore(tmp_path):
-    from types import SimpleNamespace
     from application.composition.track2_u16_runtime_coordinator import ValidationOnlyU16RuntimeCoordinator
     from environments.virtual.position.track2_u16_runtime_store import SqliteTrack2U16RuntimeStore
 
