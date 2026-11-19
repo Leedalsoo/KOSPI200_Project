@@ -284,4 +284,4 @@ class ValidationOnlyRuntimeInvariantChecker:
             checks=checks,
             manifest=manifest,
             manifest_sha256=digest if not unique_issues else None,
-        )\n
+        )
