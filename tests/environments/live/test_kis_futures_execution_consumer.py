@@ -84,3 +84,37 @@ def test_kis_h0ifcni0_report_does_not_invent_fee_or_calendar_date():
     assert report.source_freshness is not None
     assert report.source_freshness.is_complete is False
 
+
+
+def test_runtime_lifecycle_propagates_settlement_error_and_drains_receive_tracking():
+    from application.composition.live_runtime_lifecycle_coordinator import LiveRuntimeLifecycleCoordinator
+
+    class Controller:
+        def start(self, _config, _policy):
+            return None
+
+    class Bootstrap:
+        def __init__(self):
+            self.receive_calls = 0
+
+        def startup_reconcile(self, _query):
+            return object()
+
+        async def start_execution(self, _hts_id):
+            return None
+
+        async def receive_execution_once(self):
+            self.receive_calls += 1
+            raise sqlite3.OperationalError("database is locked")
+
+    coordinator = LiveRuntimeLifecycleCoordinator(controller=Controller(), bootstrap=Bootstrap())
+
+    async def exercise():
+        await coordinator.start(object(), object(), hts_id="TEST-HTS", recovery_query=object())
+        with pytest.raises(sqlite3.OperationalError, match="database is locked"):
+            await coordinator.receive_execution_once()
+        assert coordinator._active_receives == 0
+        assert coordinator._receives_drained.is_set()
+        assert coordinator._bootstrap.receive_calls == 1
+
+    asyncio.run(exercise())
