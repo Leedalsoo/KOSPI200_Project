@@ -657,6 +657,40 @@ class ValidationOnlyAccountSnapshotU19Reconciler:
                 issues.append("ACCOUNT_EXPECTED_GROUP_MANIFEST_INVALID_OR_GROUP_SET_MISMATCH")
             elif aggregate_manifest.expected_positions != projected_positions:
                 issues.append("ACCOUNT_EXPECTED_GROUP_MANIFEST_POSITION_PROJECTION_MISMATCH")
+
+            manifests_by_group = {
+                item.group_id: item
+                for item in expected_group_manifests
+                if isinstance(item, U19ExpectedGroupManifest)
+            }
+            for group_ledger in group_ledgers:
+                child_manifest = manifests_by_group.get(group_ledger.group_id)
+                if child_manifest is None:
+                    continue
+                expected_child_positions = _expected_group_manifest_positions(
+                    child_manifest, group_id=group_ledger.group_id,
+                )
+                actual_child_positions = _position_map(group_ledger.positions)
+                if (
+                    expected_child_positions is None
+                    or actual_child_positions is None
+                    or expected_child_positions != actual_child_positions
+                ):
+                    issues.append(
+                        "ACCOUNT_EXPECTED_GROUP_MANIFEST_GROUP_POSITION_PROJECTION_MISMATCH:"
+                        f"{group_ledger.group_id}"
+                    )
+                observed_leg_ids = {
+                    str(row.get("instrument_id") or "").strip()
+                    for row in (*bundle.orders.rows, *bundle.executions.rows)
+                    if str(row.get("group_id") or "").strip() == group_ledger.group_id
+                    and str(row.get("instrument_id") or "").strip()
+                }
+                if not observed_leg_ids.issubset(set(child_manifest.leg_instrument_ids)):
+                    issues.append(
+                        "ACCOUNT_EXPECTED_GROUP_MANIFEST_LEG_SET_MISMATCH:"
+                        f"{group_ledger.group_id}"
+                    )
         execution_events = tuple(
             ledger_events_by_id[key] for key in sorted(ledger_events_by_id)
         )

@@ -3359,3 +3359,64 @@ def test_multi_group_same_contract_replacement_netting_matches_child_and_aggrega
             as_of=AS_OF,
         )
         assert ledger.pending_order_ids == ("__GLOBAL_RECONCILIATION__",)
+
+    masked_manifests = list(_expected_group_manifests(netted_bundle))
+    group_one_manifest, group_two_manifest = masked_manifests
+    masked_group_one = replace(
+        group_one_manifest,
+        expected_positions=(U19Position(SHARED_INSTRUMENT, Decimal("2")),),
+        payload_sha256="0" * 64,
+    )
+    masked_manifests[0] = replace(
+        masked_group_one, payload_sha256=_expected_group_manifest_digest(masked_group_one),
+    )
+    masked_group_two = replace(
+        group_two_manifest,
+        expected_positions=tuple(
+            item for item in group_two_manifest.expected_positions
+            if item.instrument_id != SHARED_INSTRUMENT
+        ),
+        payload_sha256="0" * 64,
+    )
+    masked_manifests[1] = replace(
+        masked_group_two, payload_sha256=_expected_group_manifest_digest(masked_group_two),
+    )
+    masked_result = reconciler.reconcile_account(
+        bundle=netted_bundle, validation=validation,
+        group_ids=(GROUP_ID, GROUP_TWO), snapshot_id="same-contract-child-manifest-masked",
+        as_of=AS_OF, aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:CHILD-MANIFEST-MASKED",
+        expected_group_manifests=tuple(masked_manifests),
+    )
+    assert masked_result.status == "RECONCILIATION_REQUIRED"
+    assert masked_result.expected_group_manifest.expected_positions == masked_result.projected_ledger_snapshot.positions
+    assert f"ACCOUNT_EXPECTED_GROUP_MANIFEST_GROUP_POSITION_PROJECTION_MISMATCH:{GROUP_ID}" in masked_result.issues
+    assert f"ACCOUNT_EXPECTED_GROUP_MANIFEST_GROUP_POSITION_PROJECTION_MISMATCH:{GROUP_TWO}" in masked_result.issues
+    assert masked_result.recovery_decision is None
+    assert SqliteTrack2U19RecoveryStore(checkpoint_path).load_latest(
+        "SYNTHETIC:ACCOUNT_AGGREGATE:CHILD-MANIFEST-MASKED"
+    ) is None
+
+    missing_leg_manifests = list(_expected_group_manifests(netted_bundle))
+    missing_leg_child = replace(
+        missing_leg_manifests[1],
+        leg_instrument_ids=tuple(
+            item for item in missing_leg_manifests[1].leg_instrument_ids
+            if item != SHARED_INSTRUMENT
+        ),
+        payload_sha256="0" * 64,
+    )
+    missing_leg_manifests[1] = replace(
+        missing_leg_child, payload_sha256=_expected_group_manifest_digest(missing_leg_child),
+    )
+    missing_leg_result = reconciler.reconcile_account(
+        bundle=netted_bundle, validation=validation,
+        group_ids=(GROUP_ID, GROUP_TWO), snapshot_id="same-contract-child-leg-omitted",
+        as_of=AS_OF, aggregate_group_id="SYNTHETIC:ACCOUNT_AGGREGATE:CHILD-LEG-OMITTED",
+        expected_group_manifests=tuple(missing_leg_manifests),
+    )
+    assert missing_leg_result.status == "RECONCILIATION_REQUIRED"
+    assert f"ACCOUNT_EXPECTED_GROUP_MANIFEST_LEG_SET_MISMATCH:{GROUP_TWO}" in missing_leg_result.issues
+    assert missing_leg_result.recovery_decision is None
+    assert SqliteTrack2U19RecoveryStore(checkpoint_path).load_latest(
+        "SYNTHETIC:ACCOUNT_AGGREGATE:CHILD-LEG-OMITTED"
+    ) is None
