@@ -14,6 +14,7 @@ from core.oms.track2_u19_recovery import (
     U19BrokerPositionSnapshot,
     U19ExecutionEvent,
     U19ExecutionLedgerSnapshot,
+    U19Position,
     U19RecoveryStatus,
 )
 from environments.virtual.authoritative_vssf.firm_runtime import VirtualSecuritiesFirmRuntime
@@ -39,7 +40,7 @@ def _digest(value):
     return hashlib.sha256(payload).hexdigest()
 
 
-def _command(client_order_id, leg_id, side, quantity):
+def _command(client_order_id, leg_id, side, quantity, *, candidate_id=CANDIDATE_ID):
     instrument_id, option_type, strike = LEGS[leg_id]
     return SimpleNamespace(
         client_order_id=client_order_id,
@@ -54,7 +55,7 @@ def _command(client_order_id, leg_id, side, quantity):
         strike=strike,
         expiry="20261210",
         strategy_id="track2_asymmetric_trap",
-        group_id=GROUP_ID,
+        group_id=f"VALIDATION_ONLY:RUN:{RUN_ID}:CANDIDATE:{candidate_id}",
         leg_id=leg_id,
         instrument_id=instrument_id,
         contract_multiplier=MULTIPLIER,
@@ -429,3 +430,139 @@ def test_candidate_multileg_partial_cancel_latefill_close_reopen_restart_replay(
     assert first["account_balance"] == "24999999.0"
     assert first["fees_total"] == "1.0"
     assert first["u19_status"] == U19RecoveryStatus.FLAT_CONFIRMED.value
+
+
+def test_two_candidates_interleave_without_cross_scope_and_u19_pending_order_isolated(tmp_path):
+    candidate_a_id = "S2-CANDIDATE-MULTILEG-A"
+    candidate_b_id = "S2-CANDIDATE-MULTILEG-B"
+    group_a = f"VALIDATION_ONLY:RUN:{RUN_ID}:CANDIDATE:{candidate_a_id}"
+    group_b = f"VALIDATION_ONLY:RUN:{RUN_ID}:CANDIDATE:{candidate_b_id}"
+    clock_a = VirtualClock(STAMP)
+    clock_b = VirtualClock(STAMP)
+    runtime_a = VirtualSecuritiesFirmRuntime(
+        initial_capital=25_000_000, clock=clock_a,
+        validation_run_id=RUN_ID, validation_candidate_id=candidate_a_id,
+    )
+    runtime_b = VirtualSecuritiesFirmRuntime(
+        initial_capital=25_000_000, clock=clock_b,
+        validation_run_id=RUN_ID, validation_candidate_id=candidate_b_id,
+    )
+    lots_a, lots_b = VirtualPositionLotStore(), VirtualPositionLotStore()
+    fees_a, fees_b = VirtualTrack9FeeLedger(), VirtualTrack9FeeLedger()
+
+    def apply(runtime, lots, fees, report, candidate_id):
+        instrument_id, option_type, strike = LEGS[report.leg_id]
+        executed_at = datetime.fromisoformat(report.timestamp)
+        identity = OptionInstrumentIdentity(
+            instrument_id, instrument_id, "20261210", option_type, strike,
+            MULTIPLIER, "SYNTHETIC:DERIVED_SCENARIO",
+        )
+        group_id = f"VALIDATION_ONLY:RUN:{RUN_ID}:CANDIDATE:{candidate_id}"
+        lots.apply_execution(PositionLotProvenance(
+            run_id=RUN_ID, instrument_id=instrument_id,
+            strategy_id=report.strategy_id, group_id=group_id,
+            leg_id=report.leg_id, client_order_id=report.client_order_id,
+            execution_id=report.exec_id, side=str(report.side),
+            opened_quantity=report.executed_qty,
+            remaining_quantity=report.executed_qty,
+            execution_timestamp=executed_at, instrument_identity=identity,
+            contract_multiplier=MULTIPLIER,
+            identity_source="SYNTHETIC:DERIVED_SCENARIO",
+            position_role=PositionRole.NONE,
+        ))
+        fees.record(Track9FeeRecord(
+            run_id=RUN_ID, strategy_id=report.strategy_id,
+            group_id=group_id, leg_id=report.leg_id,
+            client_order_id=report.client_order_id,
+            execution_id=report.exec_id, instrument_id=instrument_id,
+            fee_amount=FEE, executed_quantity=report.executed_qty,
+            executed_price=Decimal(str(report.executed_price)),
+            executed_at=executed_at, source="SYNTHETIC:FEE_FIXTURE",
+        ))
+
+    def submit_fill(runtime, clock, lots, fees, command, price, qty, candidate_id):
+        assert runtime.process_order(command).status == "NEW"
+        clock.sleep_policy(60)
+        report = runtime._execute(command, float(price), clock.now(), quantity=qty)
+        apply(runtime, lots, fees, report, candidate_id)
+        return report
+
+    # Interleave A's partial entry with B's complete open/close lifecycle.
+    a_order = _command("ORDER-A-PENDING", "put", "BUY", 2, candidate_id=candidate_a_id)
+    a_fill = submit_fill(runtime_a, clock_a, lots_a, fees_a, a_order, "10", 1, candidate_a_id)
+    assert runtime_a.query_order(a_order.client_order_id).status == "PARTIALLY_FILLED"
+
+    b_entry = _command("ORDER-B-ENTRY", "call", "BUY", 1, candidate_id=candidate_b_id)
+    b_entry_fill = submit_fill(runtime_b, clock_b, lots_b, fees_b, b_entry, "20", 1, candidate_b_id)
+    b_close = _command("ORDER-B-CLOSE", "call", "SELL", 1, candidate_id=candidate_b_id)
+    b_close_fill = submit_fill(runtime_b, clock_b, lots_b, fees_b, b_close, "22", 1, candidate_b_id)
+
+    assert runtime_a.account.positions
+    assert runtime_a.account.realized_pnl == Decimal("0")
+    assert runtime_b.account.positions == {}
+    assert runtime_b.account.realized_pnl == Decimal("20.0")
+    assert len(lots_a.history()) == 1 and len(lots_b.history()) == 1
+    assert len(lots_a.close_events()) == 0 and len(lots_b.close_events()) == 1
+    assert len(fees_a.snapshot(run_id=RUN_ID)) == 1
+    assert len(fees_b.snapshot(run_id=RUN_ID)) == 2
+    assert lots_a.history()[0].group_id == group_a
+    assert all(lot.group_id == group_b for lot in lots_b.history())
+
+    # Candidate A has a partial/unknown order; candidate B is independently flat.
+    as_of = max(
+        datetime.fromisoformat(a_fill.timestamp),
+        datetime.fromisoformat(b_entry_fill.timestamp),
+        datetime.fromisoformat(b_close_fill.timestamp),
+    )
+    a_position = (U19Position(LEGS["put"][0], Decimal("1")),)
+    a_broker = U19BrokerPositionSnapshot(
+        group_id=group_a, snapshot_id="SYNTHETIC:A-BROKER-PENDING",
+        as_of=as_of, source="VALIDATION_ONLY:BROKER_EXCHANGE",
+        positions=a_position, complete=True, capability_verified=True,
+        payload_sha256=_digest({"group_id": group_a, "positions": [(LEGS["put"][0], "1")]}),
+    )
+    a_ledger = U19ExecutionLedgerSnapshot(
+        group_id=group_a, snapshot_id="SYNTHETIC:A-LEDGER-PENDING",
+        as_of=as_of, source="VALIDATION_ONLY:EXECUTION_LEDGER",
+        positions=a_position, complete=True,
+        payload_sha256=_digest({"group_id": group_a, "positions": [(LEGS["put"][0], "1")]}),
+        execution_events=(U19ExecutionEvent(a_fill.exec_id, _digest({"execution_id": a_fill.exec_id})),),
+        pending_order_ids=(a_order.client_order_id,),
+    )
+    b_broker = U19BrokerPositionSnapshot(
+        group_id=group_b, snapshot_id="SYNTHETIC:B-BROKER-FLAT",
+        as_of=as_of, source="VALIDATION_ONLY:BROKER_EXCHANGE",
+        positions=(), complete=True, capability_verified=True,
+        payload_sha256=_digest({"group_id": group_b, "positions": []}),
+    )
+    b_ledger = U19ExecutionLedgerSnapshot(
+        group_id=group_b, snapshot_id="SYNTHETIC:B-LEDGER-FLAT",
+        as_of=as_of, source="VALIDATION_ONLY:EXECUTION_LEDGER",
+        positions=(), complete=True,
+        payload_sha256=_digest({"group_id": group_b, "positions": []}),
+        execution_events=tuple(
+            U19ExecutionEvent(report.exec_id, _digest({"execution_id": report.exec_id}))
+            for report in (b_entry_fill, b_close_fill)
+        ),
+        pending_order_ids=(),
+    )
+    decision_a = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(tmp_path / "candidate-a-u19.sqlite3")
+    ).recover(group_id=group_a, broker_snapshot=a_broker, ledger_snapshot=a_ledger)
+    decision_b = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(tmp_path / "candidate-b-u19.sqlite3")
+    ).recover(group_id=group_b, broker_snapshot=b_broker, ledger_snapshot=b_ledger)
+
+    assert decision_a.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+    assert decision_a.pending_order_ids == (a_order.client_order_id,)
+    assert decision_a.restore_allowed is False
+    assert decision_a.new_entry_enabled is False
+    assert decision_a.order_submission_enabled is False
+    assert decision_b.status is U19RecoveryStatus.FLAT_CONFIRMED
+    assert decision_b.pending_order_ids == ()
+    assert decision_b.restore_allowed is True
+    assert decision_b.strategy_resume_allowed is True
+    assert decision_b.new_entry_enabled is False
+    assert decision_b.order_submission_enabled is False
+    assert SqliteTrack2U19RecoveryStore(tmp_path / "candidate-a-u19.sqlite3").load_latest(group_a)["pending_order_ids"] == [a_order.client_order_id]
+    assert SqliteTrack2U19RecoveryStore(tmp_path / "candidate-b-u19.sqlite3").load_latest(group_b)["pending_order_ids"] == []
