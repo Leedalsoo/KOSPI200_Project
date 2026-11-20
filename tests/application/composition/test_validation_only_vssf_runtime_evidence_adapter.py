@@ -26,7 +26,7 @@ from core.oms.track2_u19_recovery import (
 
 AS_OF = datetime(2026, 10, 12, 1, 0, 2, tzinfo=UTC)
 MANIFEST_SHA = "1" * 64
-SCOPE = "VALIDATION_ONLY:RUN:RUN-T6"
+SCOPE = "VALIDATION_ONLY:RUN:RUN-T6:CANDIDATE:S2-CANDIDATE-001"
 
 
 def _fixture(*, account_qty=1, broker_qty=1, include_provenance=True):
@@ -261,3 +261,17 @@ def test_t6_vssf_adapter_requires_synthetic_source_and_no_future_anchor():
             scenario_timestamp=AS_OF.replace(second=3),
             evidence_refs=("evidence",),
         )
+
+
+def test_adapter_scopes_same_run_candidates_to_distinct_group_ids():
+    adapter, _broker, _report, _lot, bridge, vssf = _fixture()
+    second = ValidationOnlyVSSFRuntimeEvidenceAdapter(
+        bridge=bridge,
+        vssf_runtime=vssf,
+        run_id="RUN-T6",
+        candidate_id="S2-CANDIDATE-002",
+    )
+
+    assert adapter.scope_group_id == SCOPE
+    assert second.scope_group_id == "VALIDATION_ONLY:RUN:RUN-T6:CANDIDATE:S2-CANDIDATE-002"
+    assert adapter.scope_group_id != second.scope_group_id

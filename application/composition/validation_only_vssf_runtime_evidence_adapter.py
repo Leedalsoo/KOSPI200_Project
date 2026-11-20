@@ -28,9 +28,14 @@ class ValidationOnlyVSSFRuntimeEvidenceAdapter:
 
     VERSION = "Q25-A8-T6-VSSF-RUNTIME-EVIDENCE-v1"
 
-    def __init__(self, *, bridge: Any, vssf_runtime: Any, run_id: str) -> None:
+    def __init__(
+        self, *, bridge: Any, vssf_runtime: Any, run_id: str,
+        candidate_id: str = "S2-CANDIDATE-001",
+    ) -> None:
         if not str(run_id).strip():
             raise ValueError("T6_RUN_ID_REQUIRED")
+        if not str(candidate_id).strip():
+            raise ValueError("T6_CANDIDATE_ID_REQUIRED")
         if getattr(bridge, "run_id", None) != run_id:
             raise ValueError("T6_BRIDGE_RUN_ID_MISMATCH")
         store = getattr(bridge, "position_lot_store", None)
@@ -44,6 +49,10 @@ class ValidationOnlyVSSFRuntimeEvidenceAdapter:
         self.bridge = bridge
         self.vssf_runtime = vssf_runtime
         self.run_id = str(run_id)
+        self.candidate_id = str(candidate_id)
+        self.scope_group_id = (
+            f"VALIDATION_ONLY:RUN:{self.run_id}:CANDIDATE:{self.candidate_id}"
+        )
 
     @staticmethod
     def _aware(value: Any, code: str) -> datetime:
@@ -98,7 +107,7 @@ class ValidationOnlyVSSFRuntimeEvidenceAdapter:
         if not isinstance(expected_group_manifest, U19ExpectedGroupManifest):
             raise TypeError("T6_VALIDATION_EXPECTED_GROUP_MANIFEST_REQUIRED")
 
-        scope_group_id = f"VALIDATION_ONLY:RUN:{self.run_id}"
+        scope_group_id = self.scope_group_id
         if broker_snapshot.group_id != scope_group_id or expected_group_manifest.group_id != scope_group_id:
             raise ValueError("T6_BROKER_OR_EXPECTED_MANIFEST_RUN_SCOPE_MISMATCH")
         if self._aware(broker_snapshot.as_of, "T6_BROKER_SNAPSHOT_AS_OF_INVALID") != as_of_utc:

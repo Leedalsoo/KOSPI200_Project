@@ -381,6 +381,7 @@ def build_validation_only_s2_runtime_evidence_chain(
         "No.1534", "No.1535", "No.1538", "No.1554", "No.1555",
     ),
     scenario_source_roots: tuple[str | Path, ...] = (),
+    candidate_id: str = "S2-CANDIDATE-001",
 ) -> ValidationOnlyS2RuntimeEvidenceChain:
     """Build the complete S2 provider chain for an explicitly isolated Virtual replay."""
     if not str(run_id).strip() or str(getattr(bridge, "run_id", "")) != str(run_id):
@@ -397,6 +398,7 @@ def build_validation_only_s2_runtime_evidence_chain(
         bridge=bridge,
         vssf_runtime=vssf_runtime,
         run_id=run_id,
+        candidate_id=candidate_id,
     )
     alternative = ValidationOnlyS2ScenarioAlternativeProvider(
         project_root=project_root,
@@ -404,6 +406,7 @@ def build_validation_only_s2_runtime_evidence_chain(
         vssf_adapter=vssf_adapter,
         position_phase="PRE_ENTRY",
         source_roots=scenario_source_roots,
+        candidate_id=candidate_id,
     )
     primary = ValidationOnlyS2AcceptedOriginalPrimaryProvider(
         project_root=project_root,

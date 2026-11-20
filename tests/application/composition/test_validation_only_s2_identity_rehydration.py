@@ -323,7 +323,9 @@ def test_candidate_specific_identity_registry_and_u19_manifest_are_isolated_acro
         expected = capture.kwargs["expected_group_manifest"]
         assert f"IDENTITY_REGISTRY={registry_digest}" in expected.provenance
         assert expected.manifest_id.startswith(candidate_id + ":")
-        assert expected.group_id == f"VALIDATION_ONLY:RUN:{provider.run_id}"
+        assert expected.group_id == (
+            f"VALIDATION_ONLY:RUN:{provider.run_id}:CANDIDATE:{candidate_id}"
+        )
         built[candidate_id] = {
             "digest": registry_digest,
             "instrument_ids": {item.identity.instrument_id for item in evidence},

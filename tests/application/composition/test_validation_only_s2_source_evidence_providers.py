@@ -305,11 +305,22 @@ def test_t10_builder_creates_complete_isolated_pre_entry_provider_chain(tmp_path
         u19_state_store_path=tmp_path / "u19" / "state.sqlite3",
         notion_decision_refs=DECISIONS,
         scenario_source_roots=(ORIGINAL_PROJECT_ROOT,),
+        candidate_id="S2-CANDIDATE-002",
     )
 
     assert chain.supervisor.stop_switch is stop
+    assert chain.alternative_provider.candidate_id == "S2-CANDIDATE-002"
+    assert chain.vssf_adapter.scope_group_id == (
+        f"VALIDATION_ONLY:RUN:{chain.vssf_adapter.run_id}:CANDIDATE:S2-CANDIDATE-002"
+    )
     assert chain.alternative_provider.position_phase == "PRE_ENTRY"
-    result = chain.supervisor.evaluate(TICK)
+    _source_manifest, candidate, _profile, _quotes, _hashes = chain.alternative_provider._load_verified_sources()
+    candidate_tick = SimpleNamespace(
+        timestamp=candidate["observed_at"],
+        underlying_price=candidate["underlying_price"],
+        candidate_id="S2-CANDIDATE-002",
+    )
+    result = chain.supervisor.evaluate(candidate_tick)
     assert result.candidate_source == "PROVENANCE_PRESERVING_ALTERNATIVE"
     assert result.u19_decision.status is U19RecoveryStatus.FLAT_CONFIRMED
     assert result.invariant_report.status == ValidationOnlyRuntimeInvariantChecker.PASS

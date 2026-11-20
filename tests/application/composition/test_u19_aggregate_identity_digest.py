@@ -3,6 +3,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 
 from application.composition.validation_only_account_snapshot_u19_reconciler import (
     _compose_account_expected_group_manifest,
@@ -473,3 +474,69 @@ def test_cross_candidate_child_digest_reuse_changes_account_checkpoint_identity(
     )
     assert correct_replay.checkpoint_id == correct.checkpoint_id
     assert correct_replay.expected_group_manifest_sha256 == aggregate.payload_sha256
+
+
+def test_same_run_id_multiple_candidates_have_distinct_u19_group_and_checkpoint_keys(tmp_path):
+    original_root = Path(__file__).resolve().parents[3].parent / "Q25_A8_R10"
+    if not original_root.is_dir():
+        raise AssertionError("Read-only exact original S2 source root is required for this validation test")
+
+    class _CaptureVssf:
+        def build_candidate(self, **kwargs):
+            self.kwargs = kwargs
+            return kwargs
+
+    run_id = "SYNTHETIC:SAME-RUN:MULTI-CANDIDATE"
+    captures = {}
+    manifests = {}
+    for candidate_id in ("S2-CANDIDATE-001", "S2-CANDIDATE-002"):
+        capture = _CaptureVssf()
+        provider = ValidationOnlyS2ScenarioAlternativeProvider(
+            project_root=Path(__file__).resolve().parents[3],
+            run_id=run_id,
+            vssf_adapter=capture,
+            candidate_id=candidate_id,
+            source_roots=(original_root,),
+        )
+        _source_manifest, candidate, _profile, _quotes, _hashes = provider._load_verified_sources()
+        provider(SimpleNamespace(
+            timestamp=candidate["observed_at"],
+            underlying_price=candidate["underlying_price"],
+        ))
+        captures[candidate_id] = capture
+        manifests[candidate_id] = capture.kwargs["expected_group_manifest"]
+
+    manifest_a = manifests["S2-CANDIDATE-001"]
+    manifest_b = manifests["S2-CANDIDATE-002"]
+    assert manifest_a.group_id != manifest_b.group_id
+    assert manifest_a.manifest_id != manifest_b.manifest_id
+
+    store = SqliteTrack2U19RecoveryStore(tmp_path / "same-run-multi-candidate.sqlite3")
+    coordinator = ValidationOnlyTrack2U19RecoveryCoordinator(
+        store, require_expected_group_manifest=True
+    )
+    for index, candidate_id in enumerate(("S2-CANDIDATE-001", "S2-CANDIDATE-002")):
+        capture = captures[candidate_id]
+        broker = capture.kwargs["broker_snapshot"]
+        ledger = U19ExecutionLedgerSnapshot(
+            group_id=broker.group_id,
+            snapshot_id=f"SYNTHETIC:SAME-RUN:LEDGER:{candidate_id}",
+            as_of=broker.as_of,
+            source="VALIDATION_ONLY:EXECUTION_LEDGER",
+            positions=broker.positions,
+            complete=True,
+            payload_sha256=f"{index + 1}" * 64,
+        )
+        decision = coordinator.recover(
+            group_id=broker.group_id,
+            broker_snapshot=broker,
+            ledger_snapshot=ledger,
+            expected_group_manifest=manifests[candidate_id],
+        )
+        assert decision.status in {U19RecoveryStatus.FLAT_CONFIRMED, U19RecoveryStatus.RESTORE_ALLOWED}
+
+    latest_a = store.load_latest(manifest_a.group_id)
+    latest_b = store.load_latest(manifest_b.group_id)
+    assert latest_a["expected_group_manifest_id"] == manifest_a.manifest_id
+    assert latest_b["expected_group_manifest_id"] == manifest_b.manifest_id
+    assert latest_a["checkpoint_id"] != latest_b["checkpoint_id"]

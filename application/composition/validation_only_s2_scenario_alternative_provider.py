@@ -74,6 +74,8 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
     ) -> None:
         if not str(run_id).strip():
             raise ValueError("T7_RUN_ID_REQUIRED")
+        if not str(candidate_id).strip():
+            raise ValueError("T7_CANDIDATE_ID_REQUIRED")
         if not candidate_id.strip():
             raise ValueError("T7_CANDIDATE_ID_REQUIRED")
         if not isinstance(scenario_quantity, int) or scenario_quantity <= 0:
@@ -554,7 +556,7 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
         source_anchor_as_of = min(anchors)
         if source_anchor_as_of > scenario_time:
             raise ValueError("T7_SOURCE_ANCHOR_AFTER_SCENARIO")
-        group_id = f"VALIDATION_ONLY:RUN:{self.run_id}"
+        group_id = f"VALIDATION_ONLY:RUN:{self.run_id}:CANDIDATE:{self.candidate_id}"
         broker_payload = {
             "version": self.VERSION,
             "candidate_id": self.candidate_id,
