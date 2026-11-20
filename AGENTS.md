@@ -432,3 +432,14 @@
 - This is test-only boundary characterization, not a production synchronization design or safety PASS. No lock primitive, lock scope, atomic gate contract, Runtime wiring, or side-effect policy was selected or implemented.
 - Aggregate contract 46 passed; adjacent regression 15 passed. compileall, scoped Ruff F821/F401, git diff-check and UTF-8 append checks passed. Separate test batches; not integrated acceptance.
 - No Live/account API, broker calls, real orders/cancels/liquidations, persistence or broker policy, collector restart, new collection, or Raw/Canonical/accepted source/manifest changes. No.1652 checkpoint remains separate. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+
+
+## T4 X3 Track7 X2 concurrent latch boundary (No.1705, 2026-11-21)
+
+- Reconciled latest Notion No.1704/1703/1702/1701/1700/1699/1689, No.1546, Current Baseline and No.1534 source/provenance-first rules. No.1652 candidate/account aggregate checkpoint remains separate from Track7 strategy aggregate.
+- Inspected the actual validation-only runtime path: `AutomatedVirtualTradingLoop._execute_multi_leg_if_admitted()` checks `_runtime_orders_blocked()` and then invokes the executor. The inspected X2 stop-switch, RiskGuard, RiskEngine and loop path expose no shared lock/atomic check-and-action primitive.
+- Added one deterministic synthetic two-actor interleaving test using thread events: the admission read returns open, a separate actor trips X2 before the read result returns to the caller, and the synthetic executor callback is still invoked while the stop switch reports TRIPPED.
+- This is a test-only characterization of the actual Virtual Runtime admission/callback boundary, not a production safety PASS. It confirms that a latch transition can race between the gate observation and executor invocation. No production lock primitive, lock scope, atomic contract, Runtime wiring or side-effect policy was selected or implemented.
+- Results (separate batches): X2 Virtual admission 7 passed; auto-stop/evidence-supervisor/U19 latch persistence 28 passed; Track7 aggregate contract 46 passed; adjacent Track7 lifecycle/cutoff/identity/terminal-close/validation-only regression 15 passed. compileall, scoped Ruff F821/F401 and git diff-check passed.
+- Synthetic recorder only. No KIS/REAL_VTS/Live/account API, broker call, real order/cancel/liquidation, collector restart, new collection, or Raw/Canonical/accepted source/manifest change.
+- Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN. No.1652 checkpoint boundary remains separate.

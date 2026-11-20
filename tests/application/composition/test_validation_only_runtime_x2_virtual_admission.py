@@ -227,3 +227,52 @@ def test_t4_virtual_multileg_path_obeys_base_riskguard_and_engine_latches(tmp_pa
     healthy_inputs[1].trigger_kill_switch("SYNTHETIC_EXTERNAL_RISK_LATCH")
     assert second_loop._runtime_orders_blocked() is True
     assert second_switch.snapshot().status == "TRIPPED"
+
+
+def test_t4_x2_virtual_multileg_path_exposes_concurrent_latch_to_callback_window(tmp_path):
+    from threading import Event, Thread
+
+    inputs = _inputs()
+    stop_switch = _switch(inputs, tmp_path)
+    loop = _loop(
+        inputs[1], stop_switch,
+        ValidationOnlyRuntimeStopAdmissionSource(_BaseStatusSource(inputs[4]), stop_switch),
+    )
+    gate_read_completed = Event()
+    allow_gate_result_return = Event()
+    callback_observations = []
+    callback_calls = []
+    original_gate_check = loop._runtime_orders_blocked
+
+    def interleaved_gate_check():
+        admitted = original_gate_check()
+        gate_read_completed.set()
+        assert allow_gate_result_return.wait(timeout=5)
+        return admitted
+
+    def concurrent_latch_actor():
+        assert gate_read_completed.wait(timeout=5)
+        stop_switch.trip("T4_SYNTHETIC_CONCURRENT_X2_LATCH")
+        allow_gate_result_return.set()
+
+    def synthetic_executor(_plan):
+        callback_calls.append("invoked")
+        callback_observations.append(stop_switch.snapshot().status)
+        return "SYNTHETIC_CALLBACK_ONLY"
+
+    loop._runtime_orders_blocked = interleaved_gate_check
+    loop.multi_leg_executor = synthetic_executor
+    actor = Thread(target=concurrent_latch_actor)
+    actor.start()
+    try:
+        admitted, result = loop._execute_multi_leg_if_admitted(SimpleNamespace())
+    finally:
+        allow_gate_result_return.set()
+        actor.join(timeout=5)
+
+    assert not actor.is_alive()
+    assert admitted is True
+    assert result == "SYNTHETIC_CALLBACK_ONLY"
+    assert stop_switch.snapshot().status == "TRIPPED"
+    assert callback_calls == ["invoked"]
+    assert callback_observations == ["TRIPPED"]
