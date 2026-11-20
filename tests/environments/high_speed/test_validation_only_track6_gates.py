@@ -3,11 +3,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from types import SimpleNamespace
-from datetime import datetime
 
 import pytest
 
-from application.composition.automated_virtual_trading_loop import AutomatedVirtualTradingLoop
+from application.composition.automated_virtual_trading_loop import (
+    AutomatedVirtualTradingLoop,
+)
 from core.risk.option_hedge_risk_config import DEFAULT_CONFIG_PATH
 from core.strategy.contracts import SignalKind
 from core.strategy.track6_daily_tail_insurance import Track6DailyTailInsurance
@@ -68,6 +69,8 @@ def test_track6_validation_gate_rejects_operationally_enforced_config(tmp_path: 
 def test_signal_observation_mode_never_invokes_decision_or_execution() -> None:
     loop = AutomatedVirtualTradingLoop.__new__(AutomatedVirtualTradingLoop)
     loop.signal_observation_only = True
+    loop.runtime_evidence_supervisor = None
+    loop.last_runtime_evidence_supervision = None
     loop.pending_multi_leg_processor = lambda: pytest.fail("pending execution must be skipped")
     loop.context_builder = lambda tick, state: {
         "track6_daily_tail_insurance": SimpleNamespace(strategy_id="track6_daily_tail_insurance")
@@ -83,7 +86,7 @@ def test_signal_observation_mode_never_invokes_decision_or_execution() -> None:
     loop.strategy_results = SimpleNamespace(collect=lambda **kwargs: (evaluation,))
 
     result = loop.on_tick(SimpleNamespace(
-        timestamp=datetime(2026, 11, 2, 10, 0).isoformat(),
+        timestamp="2026-11-02T10:00:00",
         underlying_price=500,
         volume=1,
         seq_id=1,
