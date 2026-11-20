@@ -31,42 +31,69 @@ class Track6ValidationStateStore:
     def _canonical(payload: dict[str, Any]) -> bytes:
         return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
+    def _acquire_writer_lock(self):
+        lock_path = self.path.with_suffix(self.path.suffix + ".lock")
+        handle = lock_path.open("a+b")
+        try:
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                handle.write(b"0")
+                handle.flush()
+            handle.seek(0)
+            if os.name == "nt":
+                import msvcrt
+
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return handle
+        except (OSError, BlockingIOError) as exc:
+            handle.close()
+            raise Track6ValidationStateStoreError(
+                "TRACK6_VALIDATION_STATE_WRITER_LOCKED"
+            ) from exc
+
     def append(self, snapshot: dict[str, Any]) -> str:
         if str(snapshot.get("run_id", "")) != self.run_id:
             raise Track6ValidationStateStoreError("TRACK6_VALIDATION_RUN_ID_MISMATCH")
         self.root.mkdir(parents=True, exist_ok=True)
-        # Revalidate the persisted append-only chain before every append.
-        # A cached in-memory head must not let external tampering or a torn
-        # write bypass integrity checks on the next append.
-        prior = self.load_latest() if self.path.exists() else self._last_record
-        sequence = int(prior.get("sequence", 0)) + 1 if prior else 1
-        previous_hash = str(prior.get("record_sha256", "")) if prior else None
-        body = {
-            "schema_version": 1,
-            "run_id": self.run_id,
-            "sequence": sequence,
-            "previous_record_sha256": previous_hash,
-            "snapshot": snapshot,
-        }
-        digest = hashlib.sha256(self._canonical(body)).hexdigest()
-        record = dict(body, record_sha256=digest)
-        encoded = self._canonical(record) + b"\n"
-        fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        # Serialize the read/validate/sequence/append transaction across processes.
+        # The non-blocking lock makes a second writer fail closed rather than
+        # append a duplicate sequence against a stale chain head.
+        lock_handle = self._acquire_writer_lock()
         try:
+            # Revalidate the persisted append-only chain before every append.
+            # A cached in-memory head must not bypass on-disk integrity checks.
+            prior = self.load_latest() if self.path.exists() else self._last_record
+            sequence = int(prior.get("sequence", 0)) + 1 if prior else 1
+            previous_hash = str(prior.get("record_sha256", "")) if prior else None
+            body = {
+                "schema_version": 1,
+                "run_id": self.run_id,
+                "sequence": sequence,
+                "previous_record_sha256": previous_hash,
+                "snapshot": snapshot,
+            }
+            digest = hashlib.sha256(self._canonical(body)).hexdigest()
+            record = dict(body, record_sha256=digest)
+            encoded = self._canonical(record) + b"\n"
+            fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
             with os.fdopen(fd, "ab", closefd=True) as stream:
                 written = stream.write(encoded)
                 if written != len(encoded):
                     raise Track6ValidationStateStoreError("TRACK6_VALIDATION_STATE_WRITE_INCOMPLETE")
                 stream.flush()
                 os.fsync(stream.fileno())
-        except Exception:
-            raise
-        self._last_record = {
-            "sequence": sequence,
-            "record_sha256": digest,
-            "snapshot": snapshot,
-        }
-        return digest
+            self._last_record = {
+                "sequence": sequence,
+                "record_sha256": digest,
+                "snapshot": snapshot,
+            }
+            return digest
+        finally:
+            lock_handle.close()
 
     def load_latest(self) -> dict[str, Any] | None:
         if not self.path.exists():

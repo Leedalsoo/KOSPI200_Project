@@ -1,4 +1,5 @@
 import json
+import multiprocessing
 
 import pytest
 
@@ -156,3 +157,40 @@ def test_track6_validation_state_store_rejects_short_write_and_keeps_torn_tail_f
         restarted.load_latest()
     with pytest.raises(Track6ValidationStateStoreError, match="TORN_RECORD"):
         restarted.append({"run_id": "S6-RUN-SHORT", "status": "MUST_NOT_APPEND"})
+
+
+def _hold_track6_writer_lock(root, run_id, ready, release):
+    store = Track6ValidationStateStore(root, run_id=run_id)
+    handle = store._acquire_writer_lock()
+    ready.set()
+    release.wait(10)
+    handle.close()
+
+
+def test_track6_validation_state_store_rejects_second_process_writer_and_recovers(tmp_path):
+    context = multiprocessing.get_context("spawn")
+    ready = context.Event()
+    release = context.Event()
+    process = context.Process(
+        target=_hold_track6_writer_lock,
+        args=(str(tmp_path), "S6-RUN-MULTIPROCESS", ready, release),
+    )
+    process.start()
+    try:
+        assert ready.wait(10), "second process did not acquire the writer lock"
+        store = Track6ValidationStateStore(tmp_path, run_id="S6-RUN-MULTIPROCESS")
+        with pytest.raises(Track6ValidationStateStoreError, match="WRITER_LOCKED"):
+            store.append({"run_id": "S6-RUN-MULTIPROCESS", "status": "MUST_NOT_APPEND"})
+        assert not store.path.exists()
+    finally:
+        release.set()
+        process.join(10)
+        if process.is_alive():
+            process.terminate()
+            process.join(5)
+    assert process.exitcode == 0
+
+    store.append({"run_id": "S6-RUN-MULTIPROCESS", "status": "AFTER_LOCK_RELEASE"})
+    latest = Track6ValidationStateStore(tmp_path, run_id="S6-RUN-MULTIPROCESS").load_latest()
+    assert latest["sequence"] == 1
+    assert latest["snapshot"]["status"] == "AFTER_LOCK_RELEASE"

@@ -269,3 +269,12 @@
 - Added tests for read failure wrapping and recovery-failure stop-trip ordering. Full Track6 inventory (13 files) + X2 admission/auto-stop suites: **99 passed**. Separate focused Track6/X2 batch: 55 passed. `compileall`, scoped Ruff F821, and `git diff --check` passed.
 - This closes the inspected Track6 lifecycle state-store write/read/restore exception propagation boundary only. It does not prove actual power-loss durability, concurrent multi-process writers, or full integrated T4 acceptance.
 - Synthetic validation-only; no raw/canonical/accepted data, manifest, risk profile, operating config or Live integration changed. No KIS/REAL_VTS/Live/account API, actual order/cancel/liquidation or new data collection. Full T4 X3 matrix remains OPEN.
+
+## T4 X3 S6 multi-process writer collision prevention (2026-11-21)
+
+- Deterministic two-writer race probe on separate store instances sharing one `run_id` reproduced duplicate sequence allocation: both writers read sequence 1, then appended sequence 2. Reopening the stream rejected it with `TRACK6_VALIDATION_STATE_SEQUENCE_INVALID`.
+- Added a per-run OS-level non-blocking writer lock (`.jsonl.lock`) around the complete read/validate/sequence/append/fsync transaction. Windows uses `msvcrt.locking`; POSIX uses `fcntl.flock`. A competing writer fails closed with `TRACK6_VALIDATION_STATE_WRITER_LOCKED`; lock release is guaranteed in `finally`. The lock file is intentionally retained so processes lock the same inode/file identity; do not delete it while any runtime may be active.
+- Added a spawned second-process test proving a competing writer is rejected without creating a JSONL record, and a later append succeeds after lock release with a valid sequence-1 chain.
+- Full Track6 inventory (13 files) + X2 admission/auto-stop suites: **100 passed**. `compileall`, scoped Ruff F821/F401 for the changed store/test, scoped F821 for adjacent Track6 Runtime files, and `git diff --check` passed.
+- This enforces one active writer per run_id. It does not coordinate different run_ids, distributed/network filesystems with unverified lock semantics, or readers racing a write; readers still fail closed on a torn/incomplete record. No lock is held across Runtime lifecycle work, only the store append transaction.
+- Synthetic validation-only. No raw/canonical/accepted data, manifest, risk profile, operating config or Live integration changed. No KIS/REAL_VTS/Live/account API, actual order/cancel/liquidation or new data collection. Full T4 X3 matrix/integrated acceptance remains OPEN.

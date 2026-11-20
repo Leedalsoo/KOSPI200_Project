@@ -244,3 +244,12 @@
 - Added regression tests for read failure wrapping and X2 stop-trip ordering.
 - Full Track6 inventory (13 files) + X2 admission/auto-stop suites: **99 passed in 6.95s**. Separate focused batch: 55 passed. `compileall`, scoped Ruff F821, and `git diff --check` passed.
 - Closes inspected Track6 store write/read/restore exception propagation only. Does not prove real power-loss durability, concurrent multi-process writer safety or integrated T4 acceptance. Synthetic validation-only; no raw/canonical/accepted data, risk profile, operating config, Live/account API, actual order/cancel/liquidation or new collection.
+
+## 2026-11-21 T4 X3 S6 multi-process writer collision guard ? No.1683
+
+- A deterministic race probe using two independent store instances with the same run_id reproduced the defect: both read sequence 1, both appended sequence 2, and reopening failed with `TRACK6_VALIDATION_STATE_SEQUENCE_INVALID`.
+- Added a per-run OS-level non-blocking lock around the complete reload/chain-validation/sequence-allocation/append/fsync transaction. Windows uses `msvcrt.locking`; POSIX uses `fcntl.flock`. A competing writer fails closed with `TRACK6_VALIDATION_STATE_WRITER_LOCKED`; handle release occurs in `finally`.
+- `.jsonl.lock` is intentionally retained for stable lock identity; do not remove it while any runtime may be active. One writer is enforced per run_id. Different run_ids are not coordinated; network filesystem lock semantics are unverified; readers racing an incomplete write continue to fail closed.
+- Added a spawned second-process test proving competing writer rejection without a JSONL mutation and successful append after lock release.
+- Full Track6 inventory (13 files) + X2 admission/auto-stop suites: **100 passed in 7.39s**. compileall, scoped Ruff F821/F401 for changed store/test, adjacent Track6 F821 and diff-check passed.
+- Synthetic validation-only. No raw/canonical/accepted data, manifests, risk profiles, operating config, Live/account API, actual order/cancel/liquidation or new collection. Full T4 X3 matrix/integrated acceptance remains OPEN.
