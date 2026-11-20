@@ -222,6 +222,36 @@ def _run_integrated_lifecycle(checkpoint_path):
     assert lots.history() == before_history
     assert fees.snapshot(run_id=RUN_ID) == before_fees
 
+    # Fault injection: same execution ID with altered lot provenance must fail
+    # without changing any previously reconciled lot or close event.
+    before_close_events = lots.close_events()
+    conflicting_lot = replace(
+        before_history[0],
+        opened_quantity=before_history[0].opened_quantity + 1,
+    )
+    try:
+        lots.apply_execution(conflicting_lot)
+    except ValueError as exc:
+        assert str(exc) == "POSITION_PROVENANCE_DUPLICATE_CONFLICT"
+    else:
+        raise AssertionError("conflicting execution replay was accepted")
+    assert lots.history() == before_history
+    assert lots.close_events() == before_close_events
+
+    # Fault injection: same execution ID with a changed fee must also fail
+    # without mutating the candidate fee ledger.
+    conflicting_fee = replace(
+        before_fees[0],
+        fee_amount=before_fees[0].fee_amount + Decimal("0.1"),
+    )
+    try:
+        fees.record(conflicting_fee)
+    except ValueError as exc:
+        assert str(exc) == "TRACK9_FEE_DUPLICATE_CONFLICT"
+    else:
+        raise AssertionError("conflicting fee replay was accepted")
+    assert fees.snapshot(run_id=RUN_ID) == before_fees
+
     assert runtime.account.positions == {}
     assert runtime.account.realized_pnl == Decimal("80.0")
     assert runtime.account.unrealized_pnl == Decimal("0")
@@ -373,6 +403,9 @@ def _run_integrated_lifecycle(checkpoint_path):
         "account_unrealized_pnl": str(runtime.account.unrealized_pnl),
         "account_balance": str(runtime.account.balance),
         "fees_total": str(fees.total(run_id=RUN_ID)),
+        "duplicate_execution_replay_idempotent": True,
+        "conflicting_position_replay_rejected_without_mutation": True,
+        "conflicting_fee_replay_rejected_without_mutation": True,
         "position_lot_history": [lot.execution_id for lot in lots.history()],
         "close_events": [
             (event.execution_id, event.source_lot_execution_id, event.quantity)
