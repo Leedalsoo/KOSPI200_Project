@@ -229,3 +229,8 @@
 - Preserve the No.1658 distinction: candidate A unresolved pending order remains `PENDING_ORDER_RECONCILIATION_REQUIRED` with restore/new-entry/order-submission disabled; candidate B's independent flat checkpoint must not inherit A's pending order or ledger state. A permitted U19 restore decision is not automatic runtime restoration and does not enable entries/submission.
 - Keep identity mismatch, changed execution replay and conflicting ledger payloads fail-closed without mutating previously reconciled state. Do not weaken candidate/run/group/instrument identity or provenance checks.
 - Each focused pytest invocation is separate; counts may overlap existing U19/candidate coverage and are not a unique-test total or integrated acceptance. No real account, broker API, order/cancel/liquidation or new collection.
+## Shared StrategyHub runtime and option-risk boundary regression (2026-11-21)
+
+- After candidate identity/isolation coverage, run existing shared StrategyHub Runtime and validation-only option-risk-budget suites as separate batches. These prove only the tested shared runtime wiring and option-risk-budget contract; they do not prove a common capital-pool allocator, simultaneous strategy capital competition, or approved operating limits.
+- Inventory showed no dedicated shared-capital pool/allocation implementation or test in the T4 worktree. Do not invent allocation priority, per-strategy budget, leverage, margin, or risk thresholds. Keep this as an explicit X3 design/coverage gap pending approved policy and implementation evidence.
+- Preserve strategy-specific policy gates and no-entry/no-submission recovery boundaries. Do not treat shared Runtime tests as strategy-wide economic or Live certification.

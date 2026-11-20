@@ -343,3 +343,15 @@ Separate focused synthetic validation-only invocations:
 The batches may overlap previous candidate/U19 suites; do not sum them as unique tests or integrated acceptance. They extend No.1657/1658 coverage: identity tamper is rejected; same-run candidates retain separate identity/aggregate checkpoint; duplicate delivery remains idempotent; conflicting PositionLot/Fee replay does not mutate existing ledger state; unresolved candidate A pending order does not leak into candidate B's flat checkpoint. Recovery/new-entry/order-submission remain disabled for unresolved state. A U19 restore decision is not automatic runtime restore.
 
 Static: compileall, repo-scoped Ruff F821 and `git diff --check` passed. No production code, raw/canonical/accepted data changed. S3 economic spread legs and S5 D2-D8 remain unapproved; P5 runtime use prohibited. No KIS/REAL_VTS/Live/account API, actual order/cancel/liquidation or new collection.
+## 22. Shared StrategyHub runtime / option-risk boundary (2026-11-21)
+
+Separate focused validation-only batches:
+
+| Scope | Result |
+|---|---:|
+| Q25 A8 R9 shared StrategyHub Runtime E2E | 13 passed |
+| Validation-only option risk budget contract | 4 passed |
+
+These tests establish only their existing shared Runtime wiring and option-risk-budget checks. Repository test/implementation inventory did not identify a dedicated shared-capital pool allocator or cross-strategy capital competition test. No capital allocation priority, per-strategy budget, leverage, margin, or operating risk thresholds were inferred or invented. Shared-capital competition remains an explicit X3 gap pending an approved policy and corresponding implementation/test contract.
+
+Static: compileall, repo-scoped Ruff F821 and `git diff --check` passed. No production code or raw/canonical/accepted data changed. S3 economic spread legs/S5 D2-D8 unapproved; P5 runtime use prohibited. No Live/account API or actual order activity.

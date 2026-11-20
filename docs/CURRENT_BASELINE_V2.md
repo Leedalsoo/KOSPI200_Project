@@ -204,3 +204,8 @@
 - Separate synthetic focused batches: candidate scope/restart identity 8; candidate/quote identity tamper + multi-leg asset identity 28; U19 aggregate identity digest/cross-candidate checkpoint replay 7; candidate multi-leg duplicate/ledger conflict/pending-order isolation 2 passed.
 - Confirms identity mismatch rejection, candidate-specific U19 aggregate/replay isolation, idempotent duplicate delivery, conflicting PositionLot/Fee replay rejected without mutation, and unresolved A pending order does not leak into B flat checkpoint. Counts may overlap previous suites; not unique-test total or integrated acceptance.
 - compileall, repo-scoped Ruff F821, diff-check passed. No production/raw/canonical/accepted data changed. No Live/account API or actual order activity. S3/S5 approvals and P5 runtime prohibition unchanged.
+## 2026-11-21 T4 shared StrategyHub / option-risk boundary — No.1676
+
+- Shared StrategyHub Runtime E2E: 13 passed; validation-only option risk budget: 4 passed, separate focused batches.
+- These do not prove shared-capital pool allocation or simultaneous cross-strategy capital competition. Repository inventory found no dedicated allocator/test; no priority, strategy budget, leverage, margin, or risk thresholds invented. Shared-capital competition remains an explicit X3 gap pending approved policy and implementation/test contract.
+- compileall, repo-scoped Ruff F821, diff-check passed. No production/raw data changed; no Live/account API or actual order activity.
