@@ -391,3 +391,72 @@ def test_t4_x2_latch_during_executor_exception_preserves_latch_and_blocks_next_d
     assert result is None
     assert callback_calls == ["PLAN_EXCEPTION"]
     assert stop_switch.snapshot().status == "TRIPPED"
+
+
+def test_t4_x2_executor_exception_latch_survives_switch_recreation_and_blocks_dispatch(tmp_path):
+    from threading import Event, Thread
+
+    inputs = _inputs()
+    state_path = tmp_path / "durable-x2.sqlite3"
+    stop_switch = ValidationOnlyRuntimeAutoStopSwitch(
+        risk_guard=inputs[0],
+        risk_engine=inputs[1],
+        state_store=SqliteRuntimeStopSwitchStateStore(state_path),
+    )
+    admission = ValidationOnlyRuntimeStopAdmissionSource(
+        _BaseStatusSource(inputs[4]), stop_switch,
+    )
+    loop = _loop(inputs[1], stop_switch, admission)
+    callback_entered = Event()
+    allow_callback_to_raise = Event()
+
+    def synthetic_executor(_plan):
+        callback_entered.set()
+        assert allow_callback_to_raise.wait(timeout=5)
+        raise RuntimeError("T4_SYNTHETIC_REOPEN_FAILURE")
+
+    def concurrent_latch_actor():
+        assert callback_entered.wait(timeout=5)
+        stop_switch.trip("T4_SYNTHETIC_DURABLE_LATCH_DURING_EXCEPTION")
+        allow_callback_to_raise.set()
+
+    loop.multi_leg_executor = synthetic_executor
+    actor = Thread(target=concurrent_latch_actor)
+    actor.start()
+    try:
+        with pytest.raises(RuntimeError, match="T4_SYNTHETIC_REOPEN_FAILURE"):
+            loop._execute_multi_leg_if_admitted("PLAN_DURABLE_EXCEPTION")
+    finally:
+        allow_callback_to_raise.set()
+        actor.join(timeout=5)
+
+    assert not actor.is_alive()
+    tripped = stop_switch.snapshot()
+    assert tripped.status == "TRIPPED"
+    assert tripped.persistence_confirmed is True
+    assert tripped.reset_supported is False
+
+    reopened_inputs = _inputs()
+    reopened_switch = ValidationOnlyRuntimeAutoStopSwitch(
+        risk_guard=reopened_inputs[0],
+        risk_engine=reopened_inputs[1],
+        state_store=SqliteRuntimeStopSwitchStateStore(state_path),
+    )
+    reopened_admission = ValidationOnlyRuntimeStopAdmissionSource(
+        _BaseStatusSource(reopened_inputs[4]), reopened_switch,
+    )
+    reopened_loop = _loop(reopened_inputs[1], reopened_switch, reopened_admission)
+    reopened_calls = []
+    reopened_loop.multi_leg_executor = lambda plan: reopened_calls.append(plan)
+
+    restored = reopened_switch.snapshot()
+    admitted, result = reopened_loop._execute_multi_leg_if_admitted("PLAN_AFTER_REOPEN")
+
+    assert restored.status == "TRIPPED"
+    assert restored.persistence_confirmed is True
+    assert restored.latch_confirmed is True
+    assert restored.reset_supported is False
+    assert admitted is False
+    assert result is None
+    assert reopened_calls == []
+    assert reopened_switch.snapshot().status == "TRIPPED"

@@ -542,3 +542,15 @@ The test-only restore-order harness now treats X2 gate accessor exceptions and u
 - No production Runtime/X2 code, persistence/broker policy, callback cancellation protocol, synchronization primitive, lock scope or side-effect behavior changed or selected. No.1652 checkpoint separation maintained.
 - No KIS/REAL_VTS/Live/account API, broker call, actual order/cancel/liquidation, collector restart, new collection, or Raw/Canonical/accepted source/manifest change.
 - Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+
+
+## T4 X3 Track7 X2 durable latch after executor exception / switch recreation (No.1709, 2026-11-21)
+
+- Reconciled latest No.1708?1705, No.1689, No.1546, Current Baseline and No.1534 source/provenance-first rules with actual T4 worktree. No.1652 candidate/account aggregate checkpoint remains separate from Track7 strategy aggregate.
+- Actual X2 implementation uses append-only SQLite stop-state persistence and restores a persisted latch during switch construction; there is no reset API. Existing policy does not auto-unlatch.
+- Added a deterministic test-only interleaving: synthetic executor enters, a separate actor trips X2, and executor raises a synthetic RuntimeError. Recreated the stop-switch and Virtual Runtime against the same SQLite state store; persisted status restored as TRIPPED, persistence/latch confirmation remained true, reset_supported remained false, and the next dispatch was rejected without executor invocation.
+- Results (separate batches): X2 Virtual admission 11 passed; auto-stop/evidence-supervisor/U19 latch persistence 28 passed; Track7 aggregate contract 46 passed; adjacent Track7 lifecycle/cutoff/identity/terminal-close/validation-only regression 15 passed. compileall, scoped Ruff F821/F401 and git diff-check passed.
+- This is test-only synthetic restart/reconstruction characterization, not a production recovery acceptance. No new reset/recovery policy, retry, rollback, compensation, broker reconciliation, callback cancellation, atomic admission, or side-effect semantics were inferred or implemented.
+- No production Runtime/X2 code, persistence schema, callback protocol, synchronization primitive, lock scope, or broker policy changed. No.1652 checkpoint separation maintained.
+- No KIS/REAL_VTS/Live/account API, broker call, actual order/cancel/liquidation, collector restart, new collection, or Raw/Canonical/accepted source/manifest change.
+- Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
