@@ -26,6 +26,8 @@ class LiveBrokerAdapter:
     def submit(self, command: BrokerOrderCommand, identity: OrderIdentity, account_age_seconds: float, *, health: TradingHealthSnapshot | None = None, daily_pnl: Decimal | None = None, current_position_quantity: int | None = None) -> BrokerOrderResponse:
         if not self.connected:
             raise RuntimeError("live broker is disconnected")
+        if command.asset_type != "FUTURES":
+            raise RuntimeError("LIVE_BROKER_FUTURES_ONLY")
         if not self.idempotency.reserve(identity):
             raise RuntimeError("duplicate client order identity")
 
