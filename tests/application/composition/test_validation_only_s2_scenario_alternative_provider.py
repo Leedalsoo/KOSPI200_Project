@@ -481,3 +481,53 @@ def test_t17_synthetic_freshness_exact_five_second_boundary_is_fresh():
     candidate = _provider(tick.timestamp)(tick, ())
 
     assert candidate.freshness_verdict.status.value == "FRESH"
+
+
+def test_t17_source_observed_and_collected_times_remain_separate_from_synthetic_quote_time():
+    import json
+    from datetime import timezone
+
+    provider = _provider("2026-10-12T09:26:00+09:00")
+    manifest, candidate, _profile, quote_rows, _hashes = provider._load_verified_sources()
+    candidate_time = datetime.fromisoformat(candidate["observed_at"])
+    accepted_day = provider.accepted_manifest_path.parent / "20261012.jsonl"
+    accepted_by_id = {}
+    for line in accepted_day.read_text(encoding="utf-8").splitlines():
+        source_row = json.loads(line)
+        metadata = source_row.get("scenario_metadata", {})
+        source_id = metadata.get("source_observation_id")
+        if source_id:
+            accepted_by_id[source_id] = source_row
+
+    anchor_ids = set()
+    for quote in quote_rows:
+        calibration = quote["market_calibration"]
+        anchor_ids.update(calibration["iv_anchor_observation_ids"])
+        anchor_ids.update(calibration["spread_anchor_observation_ids"])
+        assert quote["timestamp"] == candidate_time.isoformat()
+        assert calibration["target_quote_age_seconds"] == 0
+
+    assert len(quote_rows) == 4
+    assert len(anchor_ids) == 12
+    assert anchor_ids.issubset(accepted_by_id)
+    anchor_ages = []
+    collection_latencies = []
+    for source_id in anchor_ids:
+        source_row = accepted_by_id[source_id]
+        metadata = source_row["scenario_metadata"]
+        observed_at = datetime.fromisoformat(metadata["source_observed_at"])
+        collected_at = datetime.fromisoformat(metadata["source_collected_at"])
+        assert source_row["tick"]["timestamp"] == observed_at.isoformat()
+        assert observed_at.tzinfo is not None and collected_at.tzinfo == timezone.utc
+        assert len(metadata["source_raw_sha256"]) == 64
+        assert len(metadata["source_canonical_sha256"]) == 64
+        anchor_ages.append((candidate_time - observed_at).total_seconds())
+        collection_latencies.append(
+            (collected_at - observed_at.astimezone(timezone.utc)).total_seconds()
+        )
+
+    assert min(anchor_ages) >= 0
+    assert max(anchor_ages) == 833
+    assert max(anchor_ages) <= manifest["anchor_policy"]["max_source_anchor_age_seconds"]
+    assert min(collection_latencies) >= 0
+    assert collection_latencies
