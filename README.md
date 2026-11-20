@@ -469,3 +469,11 @@ The test-only restore-order harness now treats X2 gate accessor exceptions and u
 - Synthetic results: aggregate snapshot contract **40 passed**; adjacent Track7 lifecycle/cutoff/identity/terminal-close/validation-only regression **15 passed**. Separate batches, not integrated acceptance. compileall, scoped Ruff F821/F401, and git diff-check passed.
 - Test-only synthetic harness; no production retry policy, retry count/backoff/cache, Runtime wiring, durable persistence, broker reconciliation policy, or X2 auto-unlatch implementation. No.1652 candidate/account aggregate remains separate from Track7 strategy aggregate.
 - No Live/account API, broker calls, actual order/cancel/liquidation, collector restart, new collection, or Raw/Canonical/accepted source/manifest changes. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.\n
+
+## Track7 per-action X2 recheck verification (No.1702, 2026-11-21)
+
+- Added a test-only harness requiring an independent fresh X2 gate read immediately before each candidate side-effect callback (cancel, repair, retry, flatten, new submission).
+- Synthetic sequence with first read open and subsequent reads latched invokes only the first recorder; later candidates are suppressed.
+- Exception, missing read and non-boolean values suppress only the affected candidate; a prior open result is never reused for a later action.
+- Aggregate snapshot contract: **44 passed**; adjacent Track7 lifecycle/cutoff/identity/terminal-close/validation-only regression: **15 passed**. Separate batches, not integrated acceptance. compileall, scoped Ruff F821/F401, git diff-check PASS.
+- Test-only only; no production Runtime wiring, actual side-effect execution, persistence, broker reconciliation, retry/backoff/cache or X2 auto-unlatch policy. No.1652 candidate/account checkpoint remains separate. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.

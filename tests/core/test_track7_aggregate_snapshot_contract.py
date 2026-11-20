@@ -792,3 +792,112 @@ def test_track7_x2_latched_state_changes_only_after_later_explicit_false_read():
     assert prior_state == "latched"
     assert later_state == "open"
     assert diagnostics == ["read_open"]
+
+
+
+def _dispatch_test_actions_with_fresh_x2_reads(actions, gate_reads):
+    """Test-only per-action gate probe; callbacks are synthetic recorders only."""
+    events = []
+    read_iter = iter(gate_reads)
+    for action_name, callback in actions:
+        try:
+            gate = next(read_iter)
+            gate = gate() if callable(gate) else gate
+        except (StopIteration, Exception):
+            events.append((action_name, "gate_unavailable"))
+            continue
+        if type(gate) is not bool:
+            events.append((action_name, "gate_invalid"))
+            continue
+        if gate is True:
+            events.append((action_name, "x2_latched"))
+            continue
+        callback()
+        events.append((action_name, "synthetic_callback_invoked"))
+    return events
+
+
+def test_track7_x2_each_side_effect_candidate_requires_its_own_fresh_gate_read():
+    invoked = []
+    actions = [
+        ("cancel", lambda: invoked.append("cancel")),
+        ("repair", lambda: invoked.append("repair")),
+        ("retry", lambda: invoked.append("retry")),
+        ("flatten", lambda: invoked.append("flatten")),
+        ("new_submission", lambda: invoked.append("new_submission")),
+    ]
+
+    events = _dispatch_test_actions_with_fresh_x2_reads(
+        actions, [False, False, False, False, False]
+    )
+
+    assert invoked == ["cancel", "repair", "retry", "flatten", "new_submission"]
+    assert all(status == "synthetic_callback_invoked" for _, status in events)
+
+
+def test_track7_x2_gate_transition_suppresses_later_action_candidates():
+    invoked = []
+    actions = [
+        ("cancel", lambda: invoked.append("cancel")),
+        ("repair", lambda: invoked.append("repair")),
+        ("retry", lambda: invoked.append("retry")),
+        ("flatten", lambda: invoked.append("flatten")),
+        ("new_submission", lambda: invoked.append("new_submission")),
+    ]
+
+    events = _dispatch_test_actions_with_fresh_x2_reads(
+        actions, [False, True, True, True, True]
+    )
+
+    assert invoked == ["cancel"]
+    assert events == [
+        ("cancel", "synthetic_callback_invoked"),
+        ("repair", "x2_latched"),
+        ("retry", "x2_latched"),
+        ("flatten", "x2_latched"),
+        ("new_submission", "x2_latched"),
+    ]
+
+
+def test_track7_x2_invalid_or_failed_per_action_read_suppresses_only_that_candidate():
+    invoked = []
+
+    def failed_read():
+        raise RuntimeError("synthetic gate read failure")
+
+    actions = [
+        ("cancel", lambda: invoked.append("cancel")),
+        ("repair", lambda: invoked.append("repair")),
+        ("retry", lambda: invoked.append("retry")),
+        ("flatten", lambda: invoked.append("flatten")),
+        ("new_submission", lambda: invoked.append("new_submission")),
+    ]
+
+    events = _dispatch_test_actions_with_fresh_x2_reads(
+        actions, [False, None, failed_read, 1, False]
+    )
+
+    assert invoked == ["cancel", "new_submission"]
+    assert events == [
+        ("cancel", "synthetic_callback_invoked"),
+        ("repair", "gate_invalid"),
+        ("retry", "gate_unavailable"),
+        ("flatten", "gate_invalid"),
+        ("new_submission", "synthetic_callback_invoked"),
+    ]
+
+
+def test_track7_x2_missing_gate_read_never_reuses_previous_open_value():
+    invoked = []
+    actions = [
+        ("cancel", lambda: invoked.append("cancel")),
+        ("repair", lambda: invoked.append("repair")),
+    ]
+
+    events = _dispatch_test_actions_with_fresh_x2_reads(actions, [False])
+
+    assert invoked == ["cancel"]
+    assert events == [
+        ("cancel", "synthetic_callback_invoked"),
+        ("repair", "gate_unavailable"),
+    ]
