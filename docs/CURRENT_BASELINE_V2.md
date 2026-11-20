@@ -337,3 +337,12 @@
 - Aggregate contract suite: **19 passed**. Adjacent Track7 lifecycle/cutoff/spec/exit regression: **19 passed**. compileall, scoped Ruff F821/F401 and git diff-check: PASS. Separate batches; not a single integrated acceptance count.
 - This is a test-only validation harness, not production persistence/restore API or a transactional guarantee for runtime state. Broker-state precedence/freshness/order-position matching/cancel-retry policy remains unapproved and unspecified. No KIS/REAL_VTS/Live/account API, broker calls, real orders/cancels/liquidation, collector restart, new collection, Raw/Canonical/accepted source or manifest changes.
 - Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+
+## T4 X3 Track7 multi-expiry/group partial-restore validation — No.1697 (2026-11-21)
+
+- Compared No.1696/1695/1694/1693/1692, No.1652 candidate-scoped child/account aggregate checkpoint separation, No.1546, Current Baseline and No.1534 source/provenance rules.
+- Test-only aggregate validation now checks expiry-state/group-binding collections are lists, expiry/group IDs are non-empty strings, and active expiry is null or a non-empty string.
+- Late failure tests exercise expiry/state identity mismatch, malformed group identity, unknown group expiry and invalid active-expiry type after valid earlier records. Each failed staged restore leaves target strategy state unchanged.
+- Aggregate contract suite: **24 passed**. Adjacent Track7 lifecycle/cutoff/spec/exit regression: **19 passed**. compileall, scoped Ruff F821/F401 and git diff-check: PASS. Separate batches; not one integrated acceptance count.
+- No.1652 candidate/account checkpoint isolation remains a distinct persistence boundary, not merged with Track7 strategy aggregate. No production persistence/restore API, broker reconciliation precedence/freshness/matching/cancel-retry policy, KIS/REAL_VTS/Live/account API, broker calls, actual orders/cancels/liquidation, collector restart, new collection, Raw/Canonical/accepted data or manifest changes.
+- Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.

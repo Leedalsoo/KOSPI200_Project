@@ -127,22 +127,32 @@ def _restore_aggregate(envelope, *, x2_latched=False, expected_config=None):
     strategy = Track7VolatilitySkewWeeklyInsurance(**config)
     strategy._legacy_state = _state_from_payload(payload["legacy_state"])
 
+    raw_states = payload["states_by_expiry"]
+    if not isinstance(raw_states, list):
+        raise ValueError("TRACK7_SNAPSHOT_EXPIRY_STATES_INVALID")
     states = {}
-    for pair in payload["states_by_expiry"]:
+    for pair in raw_states:
         if not isinstance(pair, list) or len(pair) != 2:
             raise ValueError("TRACK7_SNAPSHOT_EXPIRY_STATE_INVALID")
         expiry, raw_state = pair
+        if not isinstance(expiry, str) or not expiry:
+            raise ValueError("TRACK7_SNAPSHOT_EXPIRY_ID_INVALID")
         state = _state_from_payload(raw_state)
         if expiry in states or state.expiry != expiry:
             raise ValueError("TRACK7_SNAPSHOT_EXPIRY_STATE_CONFLICT")
         states[expiry] = state
     strategy._states_by_expiry = states
 
+    raw_groups = payload["group_expiry"]
+    if not isinstance(raw_groups, list):
+        raise ValueError("TRACK7_SNAPSHOT_GROUP_BINDINGS_INVALID")
     groups = {}
-    for pair in payload["group_expiry"]:
+    for pair in raw_groups:
         if not isinstance(pair, list) or len(pair) != 2:
             raise ValueError("TRACK7_SNAPSHOT_GROUP_BINDING_INVALID")
         group, expiry = pair
+        if not isinstance(group, str) or not group or not isinstance(expiry, str) or not expiry:
+            raise ValueError("TRACK7_SNAPSHOT_GROUP_BINDING_ID_INVALID")
         if group in groups:
             raise ValueError("TRACK7_SNAPSHOT_DUPLICATE_GROUP_BINDING")
         if expiry not in states:
@@ -151,6 +161,9 @@ def _restore_aggregate(envelope, *, x2_latched=False, expected_config=None):
     strategy._group_expiry = groups
 
     strategy._active_expiry = payload["active_expiry"]
+    if (strategy._active_expiry is not None
+            and (not isinstance(strategy._active_expiry, str) or not strategy._active_expiry)):
+        raise ValueError("TRACK7_SNAPSHOT_ACTIVE_EXPIRY_INVALID")
     if strategy._active_expiry is not None and strategy._active_expiry not in states:
         raise ValueError("TRACK7_SNAPSHOT_ACTIVE_EXPIRY_UNKNOWN")
     if type(payload["legacy_exit_pending"]) is not bool:
@@ -427,3 +440,51 @@ def test_track7_aggregate_restore_swaps_state_only_after_full_validation():
     assert target._active_expiry == "20261203"
     assert target._states_by_expiry["20261203"].entry_stage == "CALL_PENDING"
     assert gate == {"state_restored": True, "side_effect_actions_allowed": False}
+
+
+
+@pytest.mark.parametrize(
+    ("mutate", "error"),
+    [
+        (
+            lambda payload: payload["states_by_expiry"].append(
+                ["20261210", {**payload["states_by_expiry"][1][1], "expiry": "20261217"}]
+            ),
+            "EXPIRY_STATE_CONFLICT",
+        ),
+        (
+            lambda payload: payload["group_expiry"].append(["", "20261126"]),
+            "GROUP_BINDING_ID_INVALID",
+        ),
+        (
+            lambda payload: payload["group_expiry"].append(["synthetic-group-c", "20261210"]),
+            "GROUP_EXPIRY_UNKNOWN",
+        ),
+        (
+            lambda payload: payload.update({"active_expiry": 17}),
+            "ACTIVE_EXPIRY_INVALID",
+        ),
+    ],
+)
+def test_track7_aggregate_restore_late_multi_expiry_group_failure_is_atomic(mutate, error):
+    target = _multi_expiry_strategy()
+    before = target.__dict__.copy()
+    payload = _open_sealed(_capture_aggregate(_multi_expiry_strategy()))
+    mutate(payload)
+
+    with pytest.raises(ValueError, match=error):
+        _restore_aggregate_into(target, _seal(payload))
+
+    assert target.__dict__ == before
+
+
+def test_track7_aggregate_snapshot_rejects_non_list_expiry_and_group_collections():
+    for field, invalid in (
+        ("states_by_expiry", {"20261126": {"expiry": "20261126"}}),
+        ("group_expiry", {"synthetic-group-a": "20261126"}),
+    ):
+        payload = _open_sealed(_capture_aggregate(_multi_expiry_strategy()))
+        payload[field] = invalid
+        expected = "EXPIRY_STATES_INVALID" if field == "states_by_expiry" else "GROUP_BINDINGS_INVALID"
+        with pytest.raises(ValueError, match=expected):
+            _restore_aggregate(_seal(payload))

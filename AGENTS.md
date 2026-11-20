@@ -371,3 +371,9 @@
 - Synthetic negative tests confirm malformed Decimal payload and expected-config mismatch leave the target strategy __dict__ unchanged. A successful staged validation replaces the target state; with X2 latched, the restored state is preserved while side-effect actions remain disallowed.
 - This helper is test-only. It is not a production restore API, persistence transaction, broker reconciliation, or approval of lifecycle recovery semantics.
 - Preserve the No.1689 X2 boundary: observations/fills may reconcile; cancel, repair, retry, flatten and new submission remain suppressed while latched.
+## 2026-11-21 Track7 multi-expiry/group partial-restore validation
+
+- Continue from No.1696. Compared No.1695/1694/1693/1692, No.1652 candidate/account checkpoint separation, No.1546, Current Baseline and No.1534 source-preservation rules.
+- Expanded test-only aggregate structural validation: require expiry-state and group-binding collections to be lists; expiry/group identifiers must be non-empty strings; active expiry must be null or a non-empty string.
+- Synthetic late-failure cases cover a later expiry/state identity mismatch, malformed group identity, group mapped to an unknown expiry, and invalid active-expiry type. Each is applied after earlier valid entries to exercise partial-restore risk; target state must remain unchanged.
+- Candidate/account aggregate checkpoint isolation from No.1652 remains a separate persistence contract; no conflation with Track7 strategy state.
