@@ -234,3 +234,9 @@ The P5 manifest still explicitly marks identity owner unresolved and runtime use
 - S1/S2 verification E2E rerun after source reconciliation: 5 passed, 0 skipped. No unresolved missing-source skip remains in the selected T4/S1-S9 focused regression batches.
 - All counts above are batch-level and overlap across suites; do not sum them as unique test count. Full integrated T4 acceptance and strategy-wide natural-signal certification remain open.
 - Project200/R10/P2 source originals unchanged; all copied fixture files remain isolated/read-only. No Live/REAL_VTS/account API or actual orders/cancels/liquidations.
+
+## Strategy-specific residual scope (2026-11-20)
+
+- S5 validation-only seed-ingestion adapter tests: 3 passed. This does not certify S5 Runtime E2E. Per No.1474/1480/1483, retired S5 entry policy remains blocked; the prior seed is not canonical executable evidence and the canonical runtime historical-order ingestion port/full Risk-OMS-Router-Virtual Execution E2E remains unconnected. No synthetic fill was promoted to an observed fill.
+- S3 spread-leg definition remains blocked pending approved economic legs; no tradable legs were invented. S4 MINI identity/profile checks passed, but this does not close the full cross-strategy acceptance matrix.
+- Therefore the common and strategy-focused regression coverage is substantially expanded, but the full strategy-by-strategy fault-injection matrix and integrated T4 acceptance remain open until S3/S5 prerequisites and natural-signal/runtime evidence are available.
