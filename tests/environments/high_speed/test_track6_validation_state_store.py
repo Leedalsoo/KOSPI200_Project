@@ -91,3 +91,68 @@ def test_track6_validation_state_store_revalidates_cached_stream_before_append(t
     with pytest.raises(Track6ValidationStateStoreError, match="HASH_MISMATCH"):
         store.append({"run_id": "S6-RUN-CACHED", "status": "SHOULD_NOT_APPEND"})
     assert len(store.path.read_text(encoding="utf-8").splitlines()) == 1
+
+
+def test_track6_validation_state_store_recovers_after_fsync_failure(tmp_path, monkeypatch):
+    import environments.high_speed.track6_validation_state_store as state_store_module
+
+    store = Track6ValidationStateStore(tmp_path, run_id="S6-RUN-FSYNC")
+    snapshot = {"run_id": "S6-RUN-FSYNC", "status": "DURABILITY_UNCERTAIN"}
+
+    def fail_fsync(_fd):
+        raise OSError("simulated fsync failure")
+
+    monkeypatch.setattr(state_store_module.os, "fsync", fail_fsync)
+    with pytest.raises(OSError, match="simulated fsync failure"):
+        store.append(snapshot)
+
+    # The write may already be visible even though durability confirmation failed.
+    # A fresh instance must validate the persisted chain before appending again.
+    monkeypatch.undo()
+    restored = Track6ValidationStateStore(tmp_path, run_id="S6-RUN-FSYNC")
+    latest = restored.load_latest()
+    assert latest["sequence"] == 1
+    assert latest["snapshot"] == snapshot
+    restored.append({"run_id": "S6-RUN-FSYNC", "status": "AFTER_RESTART"})
+    assert restored.load_latest()["sequence"] == 2
+
+
+def test_track6_validation_state_store_rejects_short_write_and_keeps_torn_tail_fail_closed(tmp_path, monkeypatch):
+    import environments.high_speed.track6_validation_state_store as state_store_module
+
+    store = Track6ValidationStateStore(tmp_path, run_id="S6-RUN-SHORT")
+    real_fdopen = state_store_module.os.fdopen
+
+    class ShortWriteStream:
+        def __init__(self, raw):
+            self.raw = raw
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self.raw.close()
+
+        def write(self, payload):
+            return self.raw.write(payload[: max(1, len(payload) // 2)])
+
+        def flush(self):
+            self.raw.flush()
+
+        def fileno(self):
+            return self.raw.fileno()
+
+    monkeypatch.setattr(
+        state_store_module.os,
+        "fdopen",
+        lambda fd, mode, closefd=True: ShortWriteStream(real_fdopen(fd, mode, closefd=closefd)),
+    )
+    with pytest.raises(Track6ValidationStateStoreError, match="WRITE_INCOMPLETE"):
+        store.append({"run_id": "S6-RUN-SHORT", "status": "PARTIAL"})
+
+    monkeypatch.undo()
+    restarted = Track6ValidationStateStore(tmp_path, run_id="S6-RUN-SHORT")
+    with pytest.raises(Track6ValidationStateStoreError, match="TORN_RECORD"):
+        restarted.load_latest()
+    with pytest.raises(Track6ValidationStateStoreError, match="TORN_RECORD"):
+        restarted.append({"run_id": "S6-RUN-SHORT", "status": "MUST_NOT_APPEND"})

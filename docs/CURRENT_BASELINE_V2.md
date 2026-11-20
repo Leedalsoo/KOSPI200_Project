@@ -217,3 +217,12 @@
 - Full Track6 test inventory: 13 files, **67 passed**. Combined focused S6 invocation: **51 passed**. `compileall`, scoped Ruff F821/F401, and `git diff --check` passed.
 - Changed only `environments/high_speed/track6_validation_state_store.py` and `tests/environments/high_speed/test_track6_validation_state_store.py`, plus project documentation. No raw/canonical/accepted data, risk profiles, operational configuration, or production/live integration changed.
 - Synthetic validation-only. No KIS/REAL_VTS/Live/account API, real order/cancel/liquidation, or new data collection. S3 economic legs/S5 D2-D8 remain unapproved; P5 runtime use prohibited; shared-capital allocation/competition unresolved. Full T4 X3 fault matrix and integrated acceptance remain OPEN.
+
+## 2026-11-21 T4 X3 S6 fsync/short-write/restart fault injection ? No.1680
+
+- Follow-up fault injection covered `fsync()` failure and a simulated short write in the Track6 append-only validation state store.
+- `fsync()` failure is propagated. Since a complete record may already be visible before durability confirmation fails, the safe recovery path is to create/reopen the store, validate the persisted chain, then append. Synthetic regression confirms the visible record reloads at sequence 1 and a later append becomes sequence 2. This is not proof of survival across an actual power loss after fsync failure.
+- Short-write injection found missing byte-count validation. Added exact `stream.write()` length check and `TRACK6_VALIDATION_STATE_WRITE_INCOMPLETE`. Partial tail remains preserved; restart load and append fail closed with `TORN_RECORD`. No silent truncation or automatic rewrite.
+- Full Track6 test inventory: 13 files, **69 passed**. `compileall`, scoped Ruff F821/F401, and `git diff --check` passed.
+- Only `environments/high_speed/track6_validation_state_store.py`, its test file and project documentation changed. No raw/canonical/accepted data, manifests, risk profiles, operating configuration or production/live integration changed.
+- Synthetic validation-only. No KIS/REAL_VTS/Live/account API, actual order/cancel/liquidation or new data collection. Full T4 X3 fault matrix and integrated acceptance remain OPEN.

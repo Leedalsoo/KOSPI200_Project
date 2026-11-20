@@ -242,3 +242,11 @@
 - Added regression tests for broken previous-hash chain, sequence gaps, and cached-head append after on-disk hash tampering. S6 full Track6 test inventory: 13 files, 67 passed. A focused combined S6 batch: 51 passed.
 - Static checks: compileall, scoped Ruff F821/F401, and `git diff --check` passed. Only the S6 validation-only state-store implementation and its test file changed; no raw/canonical/accepted data, risk profiles, operational config, or production/live integration changed.
 - Synthetic validation-only only. No KIS/REAL_VTS/Live/account API, actual order/cancel/liquidation, or new data collection. S3 economic spread legs/S5 D2-D8 remain unapproved; P5 runtime use prohibited; shared-capital allocator/competition remains unresolved. Full T4 X3 matrix and integrated acceptance remain OPEN.
+
+## T4 X3 S6 fsync/short-write/restart recovery regression (2026-11-21)
+
+- Follow-up fault injection tested `fsync()` failure and a simulated short write in the append-only validation state store.
+- `fsync()` failure is surfaced to the caller. Because the complete record may already be visible before durability confirmation fails, recovery must instantiate/reload the store and validate the persisted chain before continuing; the regression test confirms the visible record is recovered as sequence 1 and a later append becomes sequence 2. This does not claim survival of an actual power-loss event after failed fsync.
+- A simulated short write exposed that the return length from `stream.write()` was not checked. Added an exact byte-count check and `TRACK6_VALIDATION_STATE_WRITE_INCOMPLETE` failure. The partial tail is not auto-truncated or rewritten; restart load and subsequent append both fail closed with `TORN_RECORD`, preserving evidence for explicit recovery.
+- Full Track6 inventory: 13 files, 69 passed. `compileall`, scoped Ruff F821/F401, and `git diff --check` passed.
+- Only the validation-only Track6 state-store implementation and its test file changed. No raw/canonical/accepted data, manifests, risk profiles, operating config or production/live integration changed. No KIS/REAL_VTS/Live/account API, actual order/cancel/liquidation or new data collection. Full T4 X3 matrix/integrated acceptance remains OPEN.

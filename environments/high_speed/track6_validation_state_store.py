@@ -54,7 +54,9 @@ class Track6ValidationStateStore:
         fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
         try:
             with os.fdopen(fd, "ab", closefd=True) as stream:
-                stream.write(encoded)
+                written = stream.write(encoded)
+                if written != len(encoded):
+                    raise Track6ValidationStateStoreError("TRACK6_VALIDATION_STATE_WRITE_INCOMPLETE")
                 stream.flush()
                 os.fsync(stream.fileno())
         except Exception:
