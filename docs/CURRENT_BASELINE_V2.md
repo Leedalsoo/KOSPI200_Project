@@ -169,3 +169,4 @@
 - Track4 MINI identity; Track6 close/marks; S7 group close/reconciliation; S8 natural normal and multi-contract partial-fill Runtime; S9 retry/partial-reject and Virtual retry/PnL focused batch: 49 passed.
 - Separate batches may overlap earlier runs. Do not sum as unique tests or describe as integrated T4 acceptance. T4 branch remained clean at starting SHA `faf1c6e71e41998520d2a7fd4a909d54101f0c00` before documentation updates.
 - No policy or S3 spread legs invented. S3 economic legs and S5 D2-D8 remain unapproved; P5 `runtime_use=PROHIBITED`. No KIS/REAL_VTS/Live/account API, actual orders/cancels/liquidations, or new data collection.
+- Additional guard/spec batch: KRX futures identity, quote-only evaluation, S3 spread-leg fail-closed contract, Track4 hedge cap, Track1/2/3/4/6 spec alignment, Track6 cutoff/order/trailing lifecycle, and S7 exit policy: 66 passed in 0.43s. This does not approve S3 economics or S5 D2-D8; separate focused batch only.
