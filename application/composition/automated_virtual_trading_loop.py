@@ -204,7 +204,7 @@ class AutomatedVirtualTradingLoop:
         ask_price = getattr(tick, "ask_price", None)
         event["bid_price"] = bid_price
         event["ask_price"] = ask_price
-        if self.runtime_evidence_supervisor is not None:
+        if getattr(self, "runtime_evidence_supervisor", None) is not None:
             try:
                 supervision = self.runtime_evidence_supervisor.evaluate(tick)
                 self.last_runtime_evidence_supervision = supervision
@@ -312,7 +312,7 @@ class AutomatedVirtualTradingLoop:
             })()},
             quality={},
         )
-        if self.runtime_evidence_supervisor is not None:
+        if getattr(self, "runtime_evidence_supervisor", None) is not None:
             try:
                 self.last_runtime_evidence_supervision = self.runtime_evidence_supervisor.evaluate(tick)
             except Exception as exc:  # noqa: BLE001 - evidence supervision failure must latch X2
