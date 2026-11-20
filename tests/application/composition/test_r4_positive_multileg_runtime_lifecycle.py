@@ -694,6 +694,37 @@ def test_t23_four_leg_virtual_group_reconciles_and_persists_u19_after_restart(tm
     assert {lot.leg_id for lot in lots} == {leg.leg_id for leg in legs}
     assert len({lot.execution_id for lot in lots}) == 4
 
+    identity_by_leg = {leg.leg_id: leg.instrument_identity for leg in legs}
+    for lot in lots:
+        identity = identity_by_leg[lot.leg_id]
+        assert lot.instrument_id == identity.instrument_id
+        assert lot.instrument_identity == identity
+        assert lot.contract_multiplier == identity.contract_multiplier
+        assert lot.identity_source == identity.identity_source
+    for report in result.reports:
+        identity = identity_by_leg[report.leg_id]
+        assert report.group_id == group_id
+        assert report.execution_id is not None
+        provenance = bridge.provenance[report.execution_id]
+        execution_leg = bridge.execution_legs[report.execution_id]
+        assert provenance["instrument_id"] == identity.instrument_id
+        assert provenance["symbol"] == identity.symbol
+        assert provenance["expiry"] == identity.expiry
+        assert provenance["option_type"] == identity.option_type
+        assert Decimal(provenance["strike"]) == identity.strike
+        assert Decimal(provenance["contract_multiplier"]) == identity.contract_multiplier
+        assert provenance["identity_source"] == identity.identity_source
+        assert execution_leg["asset_type"] == "OPTION"
+        assert execution_leg["option_type"] == identity.option_type
+        assert execution_leg["contract_multiplier"] == identity.contract_multiplier
+    position_group = bridge.position_groups.all()[group_id]
+    group_legs_by_id = {leg.leg_id: leg for leg in position_group.legs}
+    for leg_id, identity in identity_by_leg.items():
+        group_leg = group_legs_by_id[leg_id]
+        assert group_leg.instrument_id == identity.instrument_id
+        assert group_leg.contract_multiplier == identity.contract_multiplier
+        assert group_leg.identity_source == identity.identity_source
+
     broker_positions = tuple(
         U19Position(
             instrument_id=lot.instrument_id,

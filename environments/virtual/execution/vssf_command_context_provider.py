@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from decimal import Decimal
-from contracts.types import BrokerOrderCommand
+from contracts.futures_identity_source_port import FuturesInstrumentIdentity
+from contracts.types import BrokerOrderCommand, OptionInstrumentIdentity
 from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
 from shared.contracts.canonical import CanonicalAssetType, CanonicalOptionType, CanonicalOrderCommand, CanonicalOrderSide
 
@@ -21,7 +22,8 @@ class CanonicalVSSFCommandContextProvider:
         if not order.tag_id: raise VSSFCommandContextError("TAG_ID_REQUIRED")
         asset_type = order.asset_type
         if asset_type == CanonicalAssetType.OPTION.value:
-            if identity is None: raise VSSFCommandContextError("OPTION_IDENTITY_REQUIRED")
+            if not isinstance(identity, OptionInstrumentIdentity):
+                raise VSSFCommandContextError("OPTION_IDENTITY_TYPE_REQUIRED")
             if identity.instrument_id != order.instrument_id: raise VSSFCommandContextError("INSTRUMENT_IDENTITY_MISMATCH")
             if not identity.symbol or not identity.expiry: raise VSSFCommandContextError("OPTION_IDENTITY_INCOMPLETE")
             try:
@@ -32,7 +34,9 @@ class CanonicalVSSFCommandContextProvider:
             if identity.strike is None or identity.strike <= Decimal("0"): raise VSSFCommandContextError("OPTION_STRIKE_REQUIRED")
             option_type, strike, symbol, expiry = CanonicalOptionType(identity.option_type), float(identity.strike), identity.symbol, exact_expiry
         elif asset_type == CanonicalAssetType.FUTURES.value:
-            if identity is None or identity.instrument_id != order.instrument_id: raise VSSFCommandContextError("FUTURES_IDENTITY_REQUIRED")
+            if not isinstance(identity, FuturesInstrumentIdentity):
+                raise VSSFCommandContextError("FUTURES_IDENTITY_TYPE_REQUIRED")
+            if identity.instrument_id != order.instrument_id: raise VSSFCommandContextError("FUTURES_IDENTITY_REQUIRED")
             if identity.contract_multiplier is None or identity.contract_multiplier <= 0: raise VSSFCommandContextError("FUTURES_CONTRACT_MULTIPLIER_REQUIRED")
             option_type, strike, symbol, expiry = None, 0.0, order.broker_symbol or order.instrument_id, ""
         else:
