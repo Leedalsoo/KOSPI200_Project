@@ -1,4 +1,4 @@
-﻿import hashlib
+import hashlib
 import json
 from dataclasses import fields
 from datetime import datetime
@@ -83,7 +83,7 @@ def _capture_aggregate(strategy):
     return _seal(payload)
 
 
-def _restore_aggregate(envelope, *, x2_latched=False):
+def _restore_aggregate(envelope, *, x2_latched=False, expected_config=None):
     payload = _open_sealed(envelope)
     if payload.get("schema_version") != SCHEMA_VERSION:
         raise ValueError("TRACK7_SNAPSHOT_SCHEMA_VERSION_UNSUPPORTED")
@@ -104,6 +104,8 @@ def _restore_aggregate(envelope, *, x2_latched=False):
         "insurance_qty", "runtime_config_verified", "risk_limits_available"
     }:
         raise ValueError("TRACK7_SNAPSHOT_CONFIG_INVALID")
+    if expected_config is not None and config != expected_config:
+        raise ValueError("TRACK7_SNAPSHOT_CONFIG_MISMATCH")
     strategy = Track7VolatilitySkewWeeklyInsurance(**config)
     strategy._legacy_state = _state_from_payload(payload["legacy_state"])
 
@@ -220,3 +222,77 @@ def test_track7_x2_latched_restore_preserves_state_but_disallows_side_effect_act
     assert restored._group_expiry["synthetic-group-b"] == "20261203"
     assert gate["state_restored"] is True
     assert gate["side_effect_actions_allowed"] is False
+
+
+def _restore_observe_then_gate(envelope, *, x2_latched, reconcile_observation, side_effect_action):
+    """Test-only ordering harness; it does not call any broker or runtime port."""
+    strategy, gate = _restore_aggregate(envelope, x2_latched=x2_latched)
+    events = ["state_restored"]
+    reconcile_observation(strategy)
+    events.append("authoritative_observation_reconciled")
+    if gate["side_effect_actions_allowed"]:
+        side_effect_action(strategy)
+        events.append("side_effect_action")
+    return strategy, events
+
+
+def test_track7_aggregate_snapshot_rejects_strategy_identity_and_version_mismatch():
+    payload = _open_sealed(_capture_aggregate(_multi_expiry_strategy()))
+    payload["strategy_id"] = "different.synthetic.strategy"
+    with pytest.raises(ValueError, match="STRATEGY_ID_MISMATCH"):
+        _restore_aggregate(_seal(payload))
+
+    payload = _open_sealed(_capture_aggregate(_multi_expiry_strategy()))
+    payload["strategy_version"] = "999.synthetic"
+    with pytest.raises(ValueError, match="STRATEGY_VERSION_MISMATCH"):
+        _restore_aggregate(_seal(payload))
+
+
+def test_track7_aggregate_snapshot_rejects_expected_validation_config_mismatch():
+    source = _multi_expiry_strategy()
+    expected = {
+        "insurance_qty": 3,
+        "runtime_config_verified": True,
+        "risk_limits_available": True,
+    }
+    with pytest.raises(ValueError, match="CONFIG_MISMATCH"):
+        _restore_aggregate(_capture_aggregate(source), expected_config=expected)
+
+
+def test_track7_aggregate_snapshot_rejects_unknown_active_and_exit_pending_expiry():
+    payload = _open_sealed(_capture_aggregate(_multi_expiry_strategy()))
+    payload["active_expiry"] = "20261210"
+    with pytest.raises(ValueError, match="ACTIVE_EXPIRY_UNKNOWN"):
+        _restore_aggregate(_seal(payload))
+
+    payload = _open_sealed(_capture_aggregate(_multi_expiry_strategy()))
+    payload["exit_pending_expiries"] = ["20261210"]
+    with pytest.raises(ValueError, match="EXIT_PENDING_EXPIRY_UNKNOWN"):
+        _restore_aggregate(_seal(payload))
+
+
+def test_track7_restore_order_reconciles_observations_before_any_action_when_x2_open():
+    events = []
+    restored, observed = _restore_observe_then_gate(
+        _capture_aggregate(_multi_expiry_strategy()),
+        x2_latched=False,
+        reconcile_observation=lambda strategy: events.append(("reconcile", strategy._active_expiry)),
+        side_effect_action=lambda strategy: events.append(("action", strategy._active_expiry)),
+    )
+    assert restored._active_expiry == "20261203"
+    assert observed == ["state_restored", "authoritative_observation_reconciled", "side_effect_action"]
+    assert [item[0] for item in events] == ["reconcile", "action"]
+
+
+def test_track7_restore_order_under_x2_reconciles_observation_but_skips_side_effects():
+    events = []
+    restored, observed = _restore_observe_then_gate(
+        _capture_aggregate(_multi_expiry_strategy()),
+        x2_latched=True,
+        reconcile_observation=lambda strategy: events.append(("reconcile", strategy._active_expiry)),
+        side_effect_action=lambda strategy: events.append(("action", strategy._active_expiry)),
+    )
+    assert restored._active_expiry == "20261203"
+    assert restored._states_by_expiry["20261203"].entry_stage == "CALL_PENDING"
+    assert observed == ["state_restored", "authoritative_observation_reconciled"]
+    assert [item[0] for item in events] == ["reconcile"]

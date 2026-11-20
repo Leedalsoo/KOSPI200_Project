@@ -315,3 +315,8 @@
 - Tests: new fixture **6 passed**; adjacent Track7 lifecycle/cutoff/spec/exit regression **19 passed**. Separate batches; do not sum as unique integrated coverage. `py -m compileall -q tests/core/test_track7_aggregate_snapshot_contract.py`, `py -m ruff check ... --select F821,F401`, and `git diff --check` passed.
 - This is a test-only serialization contract, not production persistence, approved recovery policy, Runtime restore wiring or broker reconciliation. No blind cancel/retry, actual broker state inference, KIS/REAL_VTS/Live/account API, actual order/cancel/liquidation, collector restart, new data collection, raw/canonical/accepted source, manifest, policy or operating config was changed.
 - Next boundary: compare the test-only aggregate contract against any future approved persistence/reconciliation decision, then extend fault tests for strategy/config mismatch and restore ordering only without side effects. Full T4 X3 fault matrix and integrated acceptance remain OPEN.
+
+## T4 X3 Track7 aggregate snapshot follow-up — No.1694 (2026-11-21)
+
+- Additional test-only fault cases cover strategy identity/version mismatch, validation-config mismatch, and restore → authoritative-observation reconciliation → action-gate ordering. X2-latched flow preserves restored state and permits observation reconciliation while suppressing side-effect actions.
+- This does not approve production persistence or broker-reconciliation policy. No live/account API, real orders/cancels/liquidation, collector restart, new data collection, or raw/canonical/accepted data changes.

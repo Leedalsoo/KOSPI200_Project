@@ -421,3 +421,8 @@ Separate validation batches: Track6 13-file inventory + X2 suites 111 passed; fo
 - Synthetic fixture checks: multi-expiry/group/legacy round-trip; unsupported schema version; checksum corruption; missing Track7State field; duplicate group binding; unknown group expiry; X2-latched restore preserving state while disabling side-effect actions.
 - New contract tests: 6 passed. Adjacent Track7 lifecycle/spec/cutoff/exit regression: 19 passed. compileall, scoped Ruff F821/F401 and `git diff --check` passed.
 - Test fixture only: no production persistence API, runtime restore wiring, broker reconciliation, cancel/retry, policy, raw/canonical/accepted data or operating configuration was added or changed. Full T4 X3/integrated acceptance remains OPEN.
+
+## T4 X3 Track7 aggregate snapshot follow-up (2026-11-21)
+
+- Extended test-only validation for strategy identity/version mismatch, expected validation-config mismatch, and restore/reconciliation/action ordering under X2.
+- The tests use synthetic state only. They do not add production persistence or broker reconciliation behavior.
