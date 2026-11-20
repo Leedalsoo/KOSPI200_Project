@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from collections import defaultdict, deque
 from dataclasses import dataclass
@@ -246,7 +246,7 @@ class KISTrack3RuntimeInputSource:
         for future in self._futures:
             if future.observed_at > comparison_at:
                 continue
-            index = self._nearest_index(future.observed_at)
+            index = self._nearest_index(future.observed_at, not_after=self._comparison_time(observed_at))
             if index is None:
                 continue
             basis = self._matched_basis(future, index)
@@ -254,12 +254,22 @@ class KISTrack3RuntimeInputSource:
                 points.append(basis)
         return tuple(points)
 
-    def _nearest_index(self, observed_at: datetime) -> _IndexPoint | None:
-        if not self._index:
-            return None
+    def _nearest_index(
+        self,
+        observed_at: datetime,
+        *,
+        not_after: datetime | None = None,
+    ) -> _IndexPoint | None:
         comparison_at = self._comparison_time(observed_at)
+        eligible = tuple(
+            item
+            for item in self._index
+            if not_after is None or item.observed_at <= not_after
+        )
+        if not eligible:
+            return None
         candidate = min(
-            self._index,
+            eligible,
             key=lambda item: abs((item.observed_at - comparison_at).total_seconds()),
         )
         return (
@@ -305,8 +315,14 @@ class KISTrack3RuntimeInputSource:
 
     @staticmethod
     def _latest_total(values: dict[datetime, Decimal], observed_at: datetime) -> float | None:
-        candidates = sorted(value for timestamp, value in values.items() if timestamp <= observed_at)
-        return float(candidates[-1]) if candidates else None
+        candidates = [
+            (timestamp, value)
+            for timestamp, value in values.items()
+            if timestamp <= observed_at
+        ]
+        if not candidates:
+            return None
+        return float(max(candidates, key=lambda item: item[0])[1])
 
     def _latest_option_quantity(self, instrument_id: str, observed_at: datetime) -> int | None:
         comparison_at = self._comparison_time(observed_at)
