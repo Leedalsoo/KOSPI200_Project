@@ -924,3 +924,32 @@ def test_track7_x2_gate_read_to_callback_window_is_not_atomic():
     assert gate_state["latched"] is True
     assert callback_gate_states == [True]
     assert events == [("cancel", "synthetic_callback_invoked")]
+
+
+def test_track7_x2_final_gate_recheck_still_has_callback_toctou_window():
+    gate_state = {"latched": False}
+    callback_gate_states = []
+    read_count = {"value": 0}
+
+    def gate_read():
+        read_count["value"] += 1
+        observed = gate_state["latched"]
+        if read_count["value"] == 2:
+            # X2 latches after the final read returns but before callback.
+            gate_state["latched"] = True
+        return observed
+
+    def final_recheck_then_callback():
+        if gate_read() is False:
+            callback_gate_states.append(gate_state["latched"])
+
+    events = _dispatch_test_actions_with_fresh_x2_reads(
+        [("cancel", final_recheck_then_callback)],
+        [gate_read],
+    )
+
+    # A second read narrows the window but cannot make check-and-act atomic.
+    assert read_count["value"] == 2
+    assert gate_state["latched"] is True
+    assert callback_gate_states == [True]
+    assert events == [("cancel", "synthetic_callback_invoked")]

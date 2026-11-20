@@ -416,12 +416,19 @@
 - Aggregate snapshot contract: **44 passed**; adjacent Track7 lifecycle/cutoff/identity/terminal-close/validation-only regression: **15 passed**. Separate batches, not integrated acceptance. compileall, scoped Ruff F821/F401, git diff-check PASS.
 - Test-only only; no production Runtime wiring, actual side-effect execution, persistence, broker reconciliation, retry/backoff/cache or X2 auto-unlatch policy. No.1652 candidate/account checkpoint remains separate. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 
-
 ## Track7 X2 gate read-to-callback TOCTOU characterization (No.1703, 2026-11-21)
 
-- No.1702? action? fresh read? ?????, No.1701/1700/1699/1689? gate ? action ??? No.1534? ??/provenance ????? ?? ?? ??? ????.
-- ??? synthetic interleaving?? gate getter? False? ??? ??, callback ?? ?? gate? True? ??? ??? ????.
-- ?? test-only dispatcher? ?? False ???? ?? callback? ??? ? ???, callback ???? gate? ?? latched? ? ??? ????. ??? per-action fresh read??? read-to-callback ????? TOCTOU ???? ????? ???.
-- ? ???? ?? ??? ???? characterization?? ??? PASS ?? ?? Runtime ?? ???? ???? ???. Production locking/atomic gate contract, lock scope, ??? ??? ??????? ?? ?? ???? ???.
-- ??? synthetic recorder? ????. No.1652 candidate/account aggregate checkpoint? Track7 strategy aggregate? ?? ????. Live/account API, broker call, ?? ????????, Runtime wiring, persistence policy, ???manifest ?? ??.
-- Track7 strategy-state restart recovery ? Full T4 X3/integrated acceptance? OPEN.
+- Reconciled No.1702/1701/1700/1699/1689, No.1546, Current Baseline, No.1534 source/provenance rules, and the separate No.1652 candidate/account checkpoint boundary.
+- A deterministic synthetic interleaving changed X2 from False to True after the gate getter returned and before callback invocation.
+- The test-only dispatcher can invoke a callback using the stale False observation even though X2 is latched at callback time. Per-action fresh reads do not establish read-to-callback atomicity or TOCTOU safety.
+- This is a characterization test, not a safety PASS or a production Runtime fix. No production locking/atomic-gate contract or lock scope has been approved; none was invented or implemented.
+- Synthetic recorder only. No Live/account API, broker calls, real orders/cancels/liquidations, Runtime wiring, persistence policy, collector restart, new collection, Raw/Canonical/accepted source or manifest changes.
+- Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+
+## Track7 X2 final gate recheck TOCTOU characterization (No.1704, 2026-11-21)
+
+- A deterministic synthetic test added a second gate read inside the callback wrapper, then latched X2 immediately after that final read returned and before the recorder ran.
+- The recorder observed X2 latched despite both the dispatcher read and final recheck returning False. A second check narrows the interval but does not make check-and-act atomic.
+- This is test-only boundary characterization, not a production synchronization design or safety PASS. No lock primitive, lock scope, atomic gate contract, Runtime wiring, or side-effect policy was selected or implemented.
+- Aggregate contract 46 passed; adjacent regression 15 passed. compileall, scoped Ruff F821/F401, git diff-check and UTF-8 append checks passed. Separate test batches; not integrated acceptance.
+- No Live/account API, broker calls, real orders/cancels/liquidations, persistence or broker policy, collector restart, new collection, or Raw/Canonical/accepted source/manifest changes. No.1652 checkpoint remains separate. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
