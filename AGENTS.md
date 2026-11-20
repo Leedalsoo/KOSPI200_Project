@@ -350,3 +350,11 @@
 - A synthetic multi-expiry strategy instance held two expiry states, two group-to-expiry bindings and one exit-pending expiry. Restoring only the active Track7State into a fresh strategy instance lost the group map, second expiry state and exit-pending set. A single Track7State snapshot is insufficient for aggregate restart recovery.
 - Aggregate snapshot candidate must account for legacy state, active expiry, states_by_expiry, group_expiry, legacy exit-pending and exit_pending_expiries. Strategy identity/version, config and snapshot integrity require separate review. This is structural synthetic evidence, not an approved persistence or broker-reconciliation policy. Do not add blind cancel/retry or infer broker state.
 - Next test-only verification: multi-expiry/group aggregate round-trip, version/corruption/duplicate-binding cases and X2-latched restore ordering. No code/policy/raw-data changes; no Live/account API, actual order/cancel/liquidation, collector restart or new collection. Full T4 X3 acceptance remains OPEN.
+
+## 2026-11-21 synthetic validation and latest-decision precedence addendum
+
+- 자료 부족/불일치는 즉시 차단 결론으로 처리하지 않는다. 최신 Notion 결정·실행 결과, 현재 격리 worktree와 Project200, manifest가 지정한 원본 및 provenance/hash를 먼저 대조하고, 원본을 보존한 채 검증용 합성 fixture 또는 대체 검증을 적용한다.
+- 과거 Notion 기록과 최신 기록이 충돌하면 최신 확정 결정과 현재 증거를 우선한다. No.1534의 원본·manifest·provenance 보존 원칙을 유지한다.
+- 실계좌 투자 API가 연결되기 전까지 provenance가 명시된 synthetic/validation-only 데이터와 기준만 사용한다. 이를 REAL_VTS/Live/실계좌 적합성으로 승격하지 않는다. API 연결 후 확정된 실제 계약 identity, multiplier, calendar, quote, fee, margin, account-risk 기준에 맞춰 전체 코드와 검증을 재평가한다.
+- Track7 aggregate restart는 No.1692에 따라 test-only snapshot contract로 검증한다. 승인된 영속화 정책이나 broker reconciliation 순서를 추정하지 않고 blind cancel/retry를 추가하지 않는다. X2 latch에서는 복원된 관측 상태를 보존하되 side-effect action을 허용하지 않는다.
+- 작업 시작 시 T4 isolated worktree 및 origin T4/Project200 HEAD를 확인한다. Project200의 기존 dirty/untracked 항목을 보존하고, 명시된 사용자 요청이 있는 경우에만 검증된 변경을 T4 및 Project200에 fast-forward/non-force 방식으로 반영한다.

@@ -414,3 +414,10 @@ Separate validation batches: Track6 13-file inventory + X2 suites 111 passed; fo
 - A synthetic multi-expiry strategy instance held two expiry states, two group-to-expiry bindings and one exit-pending expiry. Restoring only the active Track7State into a fresh strategy instance lost the group map, second expiry state and exit-pending set. A single Track7State snapshot is insufficient for aggregate restart recovery.
 - Aggregate snapshot candidate must account for legacy state, active expiry, states_by_expiry, group_expiry, legacy exit-pending and exit_pending_expiries. Strategy identity/version, config and snapshot integrity require separate review. This is structural synthetic evidence, not an approved persistence or broker-reconciliation policy. Do not add blind cancel/retry or infer broker state.
 - Next test-only verification: multi-expiry/group aggregate round-trip, version/corruption/duplicate-binding cases and X2-latched restore ordering. No code/policy/raw-data changes; no Live/account API, actual order/cancel/liquidation, collector restart or new collection. Full T4 X3 acceptance remains OPEN.
+
+## T4 X3 Track7 aggregate snapshot contract probe (2026-11-21, No.1693)
+
+- Added a test-only aggregate snapshot fixture covering legacy state, active expiry, all expiry-scoped Track7State values, group-to-expiry bindings, legacy exit-pending, expiry-scoped exit-pending, strategy identity/version and validation config.
+- Synthetic fixture checks: multi-expiry/group/legacy round-trip; unsupported schema version; checksum corruption; missing Track7State field; duplicate group binding; unknown group expiry; X2-latched restore preserving state while disabling side-effect actions.
+- New contract tests: 6 passed. Adjacent Track7 lifecycle/spec/cutoff/exit regression: 19 passed. compileall, scoped Ruff F821/F401 and `git diff --check` passed.
+- Test fixture only: no production persistence API, runtime restore wiring, broker reconciliation, cancel/retry, policy, raw/canonical/accepted data or operating configuration was added or changed. Full T4 X3/integrated acceptance remains OPEN.
