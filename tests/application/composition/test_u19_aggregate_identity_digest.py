@@ -1,11 +1,16 @@
+import shutil
 from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 
 from application.composition.validation_only_account_snapshot_u19_reconciler import (
     _compose_account_expected_group_manifest,
 )
 from application.composition.track2_u19_recovery import ValidationOnlyTrack2U19RecoveryCoordinator
+from application.composition.validation_only_s2_scenario_alternative_provider import (
+    ValidationOnlyS2ScenarioAlternativeProvider,
+)
 from core.oms.track2_u19_recovery import (
     U19BrokerPositionSnapshot,
     U19ExecutionLedgerSnapshot,
@@ -142,3 +147,91 @@ def test_identity_registry_digest_reaches_recovery_checkpoint_and_restart_replay
     assert changed.status is U19RecoveryStatus.RESTORE_ALLOWED
     assert changed.expected_group_manifest_sha256 == changed_aggregate.payload_sha256
     assert changed.checkpoint_id != first.checkpoint_id
+
+
+def test_source_sidecar_hash_change_after_checkpoint_does_not_advance_recovery(tmp_path):
+    original_root = Path(__file__).resolve().parents[3].parent / "Q25_A8_R10"
+    if not original_root.is_dir():
+        raise AssertionError("Read-only exact original source root is required for this validation test")
+    source_root = tmp_path / "original-source"
+    relative_files = (
+        "data/accepted_market_data/runtime_v2/manifest.json",
+        "data/accepted_market_data/runtime_v2/20261012.jsonl",
+        "data/accepted_market_data/runtime_v2/20261013.jsonl",
+        "data/derived_scenario/q25_a8_p2_recovered_track2_four_leg_quotes_v3_market_calibrated_r3_20261115/manifest.json",
+        "data/derived_scenario/q25_a8_p2_recovered_track2_four_leg_quotes_v3_market_calibrated_r3_20261115/four_leg_quotes.jsonl",
+        "data/derived_scenario/q25_a8_p2_recovered_track2_four_leg_quotes_v3_market_calibrated_r3_20261115/candidate_inputs.json",
+        "config/validation_only/track2/synthetic_scenario_profile.market_calibrated.v2.json",
+    )
+    for relative in relative_files:
+        target = source_root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(original_root / relative, target)
+        target.chmod(0o666)
+
+    provider = ValidationOnlyS2ScenarioAlternativeProvider(
+        project_root=tmp_path / "empty-project",
+        run_id="SYNTHETIC:U19:SOURCE-RESTART-GATE",
+        vssf_adapter=object(),
+        source_roots=(source_root,),
+    )
+    evidence = provider.build_option_identity_evidence()
+    registry_digest = provider._hash_json([
+        {"leg_role": item.leg_role, "derived_identity_digest": item.derived_identity_digest}
+        for item in evidence
+    ])
+    child_a = _child("GROUP-A", evidence[0].identity.instrument_id, registry_digest)
+    child_b = _child("GROUP-B", "SYNTHETIC:OPTION:B", "2" * 64)
+    aggregate = _aggregate((child_a, child_b))
+    assert aggregate is not None
+
+    as_of = datetime(2026, 11, 20, 9, 30, tzinfo=timezone.utc)
+    positions = aggregate.expected_positions
+    broker = U19BrokerPositionSnapshot(
+        group_id=aggregate.group_id,
+        snapshot_id="SYNTHETIC:SOURCE-GATE:BROKER",
+        as_of=as_of,
+        source="VALIDATION_ONLY:BROKER_EXCHANGE",
+        positions=positions,
+        complete=True,
+        capability_verified=True,
+        payload_sha256="d" * 64,
+    )
+    ledger = U19ExecutionLedgerSnapshot(
+        group_id=aggregate.group_id,
+        snapshot_id="SYNTHETIC:SOURCE-GATE:LEDGER",
+        as_of=as_of,
+        source="VALIDATION_ONLY:EXECUTION_LEDGER",
+        positions=positions,
+        complete=True,
+        payload_sha256="e" * 64,
+    )
+    store = SqliteTrack2U19RecoveryStore(tmp_path / "u19-source-gate.sqlite3")
+    coordinator = ValidationOnlyTrack2U19RecoveryCoordinator(
+        store, require_expected_group_manifest=True
+    )
+    decision = coordinator.recover(
+        group_id=aggregate.group_id,
+        broker_snapshot=broker,
+        ledger_snapshot=ledger,
+        expected_group_manifest=aggregate,
+    )
+    assert decision.status is U19RecoveryStatus.RESTORE_ALLOWED
+    checkpoint_before = store.load_latest(aggregate.group_id)
+
+    quote_path = source_root / relative_files[4]
+    quote_path.write_bytes(quote_path.read_bytes() + b"\n")
+    restarted_provider = ValidationOnlyS2ScenarioAlternativeProvider(
+        project_root=tmp_path / "empty-project",
+        run_id="SYNTHETIC:U19:SOURCE-RESTART-GATE",
+        vssf_adapter=object(),
+        source_roots=(source_root,),
+    )
+    try:
+        restarted_provider.build_option_identity_evidence()
+    except ValueError as exc:
+        assert str(exc).startswith("T7_SOURCE_HASH_MISMATCH:quotes:")
+    else:
+        raise AssertionError("Changed sidecar hash was accepted after restart")
+
+    assert store.load_latest(aggregate.group_id) == checkpoint_before

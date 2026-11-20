@@ -1,26 +1,40 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from application.composition.validation_only_s2_scenario_alternative_provider import (
     ValidationOnlyS2ScenarioAlternativeProvider,
 )
 from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
 
 
-def _provider(root, vssf_adapter=None):
+ORIGINAL_ROOT = Path(__file__).resolve().parents[3].parent / "Q25_A8_R10"
+
+
+def _provider(root, vssf_adapter=None, source_roots=()):
     return ValidationOnlyS2ScenarioAlternativeProvider(
         project_root=root,
         run_id="S2-IDENTITY-REHYDRATION-TEST",
         vssf_adapter=vssf_adapter if vssf_adapter is not None else object(),
         candidate_id="S2-CANDIDATE-001",
         position_phase="PRE_ENTRY",
+        source_roots=source_roots,
     )
 
 
 def test_s2_identity_registry_rehydrates_four_exact_validation_only_identities_after_restart():
+    if not ORIGINAL_ROOT.is_dir():
+        pytest.skip("read-only exact original S2 source root is not mounted")
     project_root = Path(__file__).resolve().parents[3]
-    first = _provider(project_root).build_option_identity_evidence()
-    restarted = _provider(project_root).build_option_identity_evidence()
+    source_roots = (ORIGINAL_ROOT,) if ORIGINAL_ROOT.is_dir() else ()
+    first_provider = _provider(project_root, source_roots=source_roots)
+    restarted_provider = _provider(project_root, source_roots=source_roots)
+    first = first_provider.build_option_identity_evidence()
+    restarted = restarted_provider.build_option_identity_evidence()
+    if source_roots:
+        assert first_provider.last_source_resolution["scenario_manifest"] == "ORIGINAL_SOURCE_ROOT:0"
+        assert first_provider.last_source_resolution["quotes"] == "ORIGINAL_SOURCE_ROOT:0"
 
     assert len(first) == 4
     assert [item.leg_role for item in first] == [
@@ -55,6 +69,8 @@ def _bridge():
 
 
 def test_u19_expected_group_manifest_hash_binds_rehydrated_identity_registry():
+    if not ORIGINAL_ROOT.is_dir():
+        pytest.skip("read-only exact original S2 source root is not mounted")
     project_root = Path(__file__).resolve().parents[3]
 
     class _CaptureVssf:
@@ -63,7 +79,7 @@ def test_u19_expected_group_manifest_hash_binds_rehydrated_identity_registry():
             return kwargs
 
     capture = _CaptureVssf()
-    provider = _provider(project_root, vssf_adapter=capture)
+    provider = _provider(project_root, vssf_adapter=capture, source_roots=(ORIGINAL_ROOT,) if ORIGINAL_ROOT.is_dir() else ())
     tick = SimpleNamespace(
         timestamp="2026-10-12T09:26:00+09:00",
         underlying_price=1034.62,
@@ -96,3 +112,90 @@ def test_u19_expected_group_manifest_hash_binds_rehydrated_identity_registry():
         ],
     }
     assert expected.payload_sha256 == provider._hash_json(expected_payload)
+
+
+def test_source_rehydration_prefers_hash_exact_original_when_local_copy_is_tampered(tmp_path):
+    if not ORIGINAL_ROOT.is_dir():
+        pytest.skip("read-only exact original S2 source root is not mounted")
+    project_root = tmp_path / "project"
+    scenario = project_root / "data" / "derived_scenario" / (
+        "q25_a8_p2_recovered_track2_four_leg_quotes_v3_market_calibrated_r3_20261115"
+    )
+    scenario.mkdir(parents=True)
+    (scenario / "manifest.json").write_bytes(
+        (ORIGINAL_ROOT / "data" / "derived_scenario" / scenario.name / "manifest.json").read_bytes() + b"\n"
+    )
+    profile = project_root / "config" / "validation_only" / "track2"
+    profile.mkdir(parents=True)
+    profile_source = Path(__file__).resolve().parents[3] / "config" / "validation_only" / "track2" / "synthetic_scenario_profile.market_calibrated.v2.json"
+    profile.joinpath(profile_source.name).write_bytes(profile_source.read_bytes())
+
+    provider = _provider(project_root, source_roots=(ORIGINAL_ROOT,))
+    evidence = provider.build_option_identity_evidence()
+
+    assert len(evidence) == 4
+    assert provider.last_source_resolution["scenario_manifest"] == "ORIGINAL_SOURCE_ROOT:0"
+    assert provider.last_source_resolution["quotes"] == "ORIGINAL_SOURCE_ROOT:0"
+    assert provider.last_source_resolution["profile"] == "PROJECT_ROOT"
+
+
+def test_source_rehydration_does_not_accept_hash_mismatch_without_exact_alternative(tmp_path):
+    if not ORIGINAL_ROOT.is_dir():
+        pytest.skip("read-only exact original S2 source root is not mounted")
+    project_root = tmp_path / "project"
+    scenario_name = "q25_a8_p2_recovered_track2_four_leg_quotes_v3_market_calibrated_r3_20261115"
+    source = ORIGINAL_ROOT
+    files = {
+        "accepted_manifest": ("data/accepted_market_data/runtime_v2/manifest.json", "data/accepted_market_data/runtime_v2/manifest.json"),
+        "scenario_manifest": (f"data/derived_scenario/{scenario_name}/manifest.json", f"data/derived_scenario/{scenario_name}/manifest.json"),
+        "quotes": (f"data/derived_scenario/{scenario_name}/four_leg_quotes.jsonl", f"data/derived_scenario/{scenario_name}/four_leg_quotes.jsonl"),
+        "candidate_inputs": (f"data/derived_scenario/{scenario_name}/candidate_inputs.json", f"data/derived_scenario/{scenario_name}/candidate_inputs.json"),
+        "profile": ("config/validation_only/track2/synthetic_scenario_profile.market_calibrated.v2.json", "config/validation_only/track2/synthetic_scenario_profile.market_calibrated.v2.json"),
+    }
+    for _, (relative, _) in files.items():
+        target = project_root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((source / relative).read_bytes())
+    quote_path = project_root / files["quotes"][0]
+    quote_path.write_bytes(quote_path.read_bytes() + b"\n")
+
+    provider = _provider(project_root)
+    try:
+        provider.build_option_identity_evidence()
+    except ValueError as exc:
+        assert str(exc).startswith("T7_SOURCE_HASH_MISMATCH:quotes:")
+    else:
+        raise AssertionError("Modified source was accepted without a hash-exact alternative")
+
+
+def test_source_rehydration_reports_missing_source_separately_from_hash_mismatch(tmp_path):
+    provider = _provider(tmp_path / "empty-project")
+    try:
+        provider.build_option_identity_evidence()
+    except FileNotFoundError as exc:
+        assert str(exc).startswith("T7_SOURCE_FILE_MISSING:accepted_manifest")
+    else:
+        raise AssertionError("Missing source was not reported")
+
+
+def test_source_rehydration_resolves_missing_manifest_partitions_from_original_root(tmp_path):
+    if not ORIGINAL_ROOT.is_dir():
+        raise AssertionError("Read-only exact original source root is required for this validation test")
+    project_root = tmp_path / "project"
+    accepted_manifest = project_root / "data" / "accepted_market_data" / "runtime_v2" / "manifest.json"
+    accepted_manifest.parent.mkdir(parents=True)
+    accepted_manifest.write_bytes(
+        (ORIGINAL_ROOT / "data" / "accepted_market_data" / "runtime_v2" / "manifest.json").read_bytes()
+    )
+    profile = project_root / "config" / "validation_only" / "track2"
+    profile.mkdir(parents=True)
+    profile_source = Path(__file__).resolve().parents[3] / "config" / "validation_only" / "track2" / "synthetic_scenario_profile.market_calibrated.v2.json"
+    profile.joinpath(profile_source.name).write_bytes(profile_source.read_bytes())
+
+    provider = _provider(project_root, source_roots=(ORIGINAL_ROOT,))
+    evidence = provider.build_option_identity_evidence()
+
+    assert len(evidence) == 4
+    assert provider.last_source_resolution["accepted_manifest"] == "PROJECT_ROOT"
+    assert provider.last_source_resolution["accepted_partition:20261012"] == "ORIGINAL_SOURCE_ROOT:0"
+    assert provider.last_source_resolution["accepted_partition:20261013"] == "ORIGINAL_SOURCE_ROOT:0"

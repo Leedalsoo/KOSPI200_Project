@@ -44,15 +44,23 @@ class _ScopedS2EvidenceProvider:
         return value
 
     def _candidate_inputs(self, root: Path) -> dict[str, Any]:
-        path = root / "data" / "derived_scenario" / (
-            "q25_a8_p2_recovered_track2_four_leg_quotes_v3_market_calibrated_r3_20261115"
-        ) / "candidate_inputs.json"
+        resolver = getattr(self.scope_provider, "_resolve_verified_source", None)
+        if callable(resolver):
+            path = resolver(
+                key="candidate_inputs",
+                relative_path=Path("data/derived_scenario/q25_a8_p2_recovered_track2_four_leg_quotes_v3_market_calibrated_r3_20261115/candidate_inputs.json"),
+                expected_sha256="d2d96b35d0402c1bdf8a6b07e771e9bdc593772985610dc68d3fd74f615b5a32",
+            )
+        else:
+            path = root / "data" / "derived_scenario" / (
+                "q25_a8_p2_recovered_track2_four_leg_quotes_v3_market_calibrated_r3_20261115"
+            ) / "candidate_inputs.json"
+            if not path.is_file() or self._sha256(path) != "d2d96b35d0402c1bdf8a6b07e771e9bdc593772985610dc68d3fd74f615b5a32":
+                raise ValueError("T9_CANDIDATE_INPUTS_SOURCE_UNAVAILABLE_OR_HASH_MISMATCH")
         rows = json.loads(path.read_text(encoding="utf-8"))
         candidate = next((row for row in rows if row.get("candidate_id") == self.candidate_id), None)
         if candidate is None:
             raise ValueError("T9_SCENARIO_CANDIDATE_NOT_FOUND")
-        if self._sha256(path) != "d2d96b35d0402c1bdf8a6b07e771e9bdc593772985610dc68d3fd74f615b5a32":
-            raise ValueError("T9_CANDIDATE_INPUTS_SHA256_MISMATCH")
         return candidate
 
     def _accepted_rows(self, accepted_root: Path, trading_date: str) -> tuple[dict[str, Any], ...]:
@@ -169,6 +177,9 @@ class ValidationOnlyS2AcceptedOriginalPrimaryProvider(_ScopedS2EvidenceProvider)
             self.last_diagnostic = "TICK_OUTSIDE_EVIDENCE_SCOPE"
             return None
         candidate = self._candidate_inputs(self.root)
+        if not (self.accepted_root / "manifest.json").is_file():
+            self.scope_provider._load_verified_sources()
+            self.accepted_root = self.scope_provider.accepted_manifest_path.parent
         tick_time = self._aware(getattr(tick, "timestamp", None))
         if tick_time != self._aware(candidate.get("observed_at")):
             self.last_diagnostic = "ACCEPTED_ORIGINAL_TICK_TIME_MISMATCH"
@@ -224,6 +235,10 @@ class ValidationOnlyS2NotionSourceReconciliationProvider(_ScopedS2EvidenceProvid
             self.last_diagnostic = "TICK_OUTSIDE_EVIDENCE_SCOPE"
             return None
         candidate = self._candidate_inputs(self.root)
+        self.scope_provider._load_verified_sources()
+        self.scenario_dir = self.scope_provider.scenario_dir
+        if not (self.accepted_root / "manifest.json").is_file():
+            self.accepted_root = self.scope_provider.accepted_manifest_path.parent
         as_of = self._aware(getattr(tick, "timestamp", None))
         trading_date = as_of.strftime("%Y%m%d")
         day_root = self.original_root / trading_date
@@ -365,6 +380,7 @@ def build_validation_only_s2_runtime_evidence_chain(
     notion_decision_refs: tuple[str, ...] = (
         "No.1534", "No.1535", "No.1538", "No.1554", "No.1555",
     ),
+    scenario_source_roots: tuple[str | Path, ...] = (),
 ) -> ValidationOnlyS2RuntimeEvidenceChain:
     """Build the complete S2 provider chain for an explicitly isolated Virtual replay."""
     if not str(run_id).strip() or str(getattr(bridge, "run_id", "")) != str(run_id):
@@ -387,6 +403,7 @@ def build_validation_only_s2_runtime_evidence_chain(
         run_id=run_id,
         vssf_adapter=vssf_adapter,
         position_phase="PRE_ENTRY",
+        source_roots=scenario_source_roots,
     )
     primary = ValidationOnlyS2AcceptedOriginalPrimaryProvider(
         project_root=project_root,

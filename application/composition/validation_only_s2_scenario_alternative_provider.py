@@ -70,6 +70,7 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
         candidate_id: str = "S2-CANDIDATE-001",
         scenario_quantity: int = 1,
         position_phase: str = "PRE_ENTRY",
+        source_roots: tuple[str | Path, ...] = (),
     ) -> None:
         if not str(run_id).strip():
             raise ValueError("T7_RUN_ID_REQUIRED")
@@ -78,6 +79,9 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
         if not isinstance(scenario_quantity, int) or scenario_quantity <= 0:
             raise ValueError("T7_SCENARIO_QUANTITY_MUST_BE_POSITIVE")
         self.root = Path(project_root).resolve()
+        resolved_roots = tuple(Path(value).resolve() for value in source_roots)
+        self.source_roots = tuple(dict.fromkeys((self.root, *resolved_roots)))
+        self.last_source_resolution: dict[str, str] = {}
         self.run_id = str(run_id)
         self.vssf_adapter = vssf_adapter
         self.candidate_id = candidate_id
@@ -120,19 +124,27 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
             raise ValueError(code)
         return value
 
-    def _load_verified_sources(self) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], list[dict[str, Any]], dict[str, str]]:
-        manifest_path = self.scenario_dir / "manifest.json"
-        quotes_path = self.scenario_dir / "four_leg_quotes.jsonl"
-        candidates_path = self.scenario_dir / "candidate_inputs.json"
-        if not all(path.is_file() for path in (
-            manifest_path, quotes_path, candidates_path,
-            self.accepted_manifest_path, self.profile_path,
-        )):
-            raise FileNotFoundError("T7_ACCEPTED_OR_SCENARIO_SOURCE_FILE_MISSING")
+    def _resolve_verified_source(
+        self, *, key: str, relative_path: Path, expected_sha256: str,
+    ) -> Path:
+        mismatches: list[str] = []
+        for index, root in enumerate(self.source_roots):
+            path = root / relative_path
+            if not path.is_file():
+                continue
+            actual = self._sha256(path)
+            if actual == expected_sha256:
+                self.last_source_resolution[key] = (
+                    "PROJECT_ROOT" if index == 0 else f"ORIGINAL_SOURCE_ROOT:{index - 1}"
+                )
+                return path
+            mismatches.append(f"{index}:{actual}")
+        if mismatches:
+            raise ValueError(f"T7_SOURCE_HASH_MISMATCH:{key}:{'|'.join(mismatches)}")
+        raise FileNotFoundError(f"T7_SOURCE_FILE_MISSING:{key}")
 
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        accepted_manifest = json.loads(self.accepted_manifest_path.read_text(encoding="utf-8"))
-        profile = json.loads(self.profile_path.read_text(encoding="utf-8"))
+    def _load_verified_sources(self) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], list[dict[str, Any]], dict[str, str]]:
+        self.last_source_resolution = {}
         expected_hashes = {
             "accepted_manifest": "7657c90f13a81a7f98a8ccd075a259c8ec9795477a2a0541366094cd87e0360f",
             "scenario_manifest": "13580e010c34c74a1787bffb6b6b72adebdc4964f848937c0894bfa0fd4918b7",
@@ -140,16 +152,29 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
             "candidate_inputs": "d2d96b35d0402c1bdf8a6b07e771e9bdc593772985610dc68d3fd74f615b5a32",
             "profile": "c0607c405abba4d2500bd8d5572db0270a9bdc61ab7e4943b1fd3c73d6181b18",
         }
-        paths = {
-            "accepted_manifest": self.accepted_manifest_path,
-            "scenario_manifest": manifest_path,
-            "quotes": quotes_path,
-            "candidate_inputs": candidates_path,
-            "profile": self.profile_path,
+        relative_paths = {
+            "accepted_manifest": Path("data/accepted_market_data/runtime_v2/manifest.json"),
+            "scenario_manifest": Path("data/derived_scenario/q25_a8_p2_recovered_track2_four_leg_quotes_v3_market_calibrated_r3_20261115/manifest.json"),
+            "quotes": Path("data/derived_scenario/q25_a8_p2_recovered_track2_four_leg_quotes_v3_market_calibrated_r3_20261115/four_leg_quotes.jsonl"),
+            "candidate_inputs": Path("data/derived_scenario/q25_a8_p2_recovered_track2_four_leg_quotes_v3_market_calibrated_r3_20261115/candidate_inputs.json"),
+            "profile": Path("config/validation_only/track2/synthetic_scenario_profile.market_calibrated.v2.json"),
         }
+        paths = {
+            key: self._resolve_verified_source(
+                key=key, relative_path=relative_paths[key], expected_sha256=expected_hashes[key]
+            )
+            for key in expected_hashes
+        }
+        manifest_path = paths["scenario_manifest"]
+        quotes_path = paths["quotes"]
+        candidates_path = paths["candidate_inputs"]
+        self.accepted_manifest_path = paths["accepted_manifest"]
+        self.profile_path = paths["profile"]
+        self.scenario_dir = manifest_path.parent
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        accepted_manifest = json.loads(self.accepted_manifest_path.read_text(encoding="utf-8"))
+        profile = json.loads(self.profile_path.read_text(encoding="utf-8"))
         actual_hashes = {key: self._sha256(path) for key, path in paths.items()}
-        if actual_hashes != expected_hashes:
-            raise ValueError("T7_ACCEPTED_OR_SCENARIO_SOURCE_HASH_MISMATCH")
         if manifest.get("base_manifest_sha256") != actual_hashes["accepted_manifest"]:
             raise ValueError("T7_SCENARIO_BASE_MANIFEST_CROSSWALK_MISMATCH")
         if accepted_manifest.get("registry_id") != manifest.get("base_registry_id"):
@@ -170,9 +195,11 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
 
         for partition in manifest.get("base_data_partitions", ()):
             day = str(partition.get("date") or "")
-            partition_path = self.accepted_manifest_path.parent / f"{day}.jsonl"
-            if not partition_path.is_file() or self._sha256(partition_path) != partition.get("sha256"):
-                raise ValueError(f"T7_ACCEPTED_PARTITION_HASH_MISMATCH:{day}")
+            self._resolve_verified_source(
+                key=f"accepted_partition:{day}",
+                relative_path=Path("data/accepted_market_data/runtime_v2") / f"{day}.jsonl",
+                expected_sha256=str(partition.get("sha256") or ""),
+            )
 
         candidates = json.loads(candidates_path.read_text(encoding="utf-8"))
         candidate = next(
@@ -302,8 +329,14 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
             tick_underlying = Decimal(str(underlying))
         except (TypeError, ValueError, ArithmeticError):
             return False
-        candidates_path = self.scenario_dir / "candidate_inputs.json"
-        if not candidates_path.is_file():
+        try:
+            candidates_path = self._resolve_verified_source(
+                key="candidate_inputs",
+                relative_path=Path("data/derived_scenario/q25_a8_p2_recovered_track2_four_leg_quotes_v3_market_calibrated_r3_20261115/candidate_inputs.json"),
+                expected_sha256="d2d96b35d0402c1bdf8a6b07e771e9bdc593772985610dc68d3fd74f615b5a32",
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            self.last_diagnostic = str(exc)
             return False
         candidates = json.loads(candidates_path.read_text(encoding="utf-8"))
         candidate = next((row for row in candidates if row.get("candidate_id") == self.candidate_id), None)

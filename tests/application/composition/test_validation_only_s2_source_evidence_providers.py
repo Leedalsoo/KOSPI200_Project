@@ -39,12 +39,13 @@ DECISIONS = ("No.1534", "No.1535", "No.1538", "No.1554", "No.1555")
 SCENARIO_DIR = (
     "q25_a8_p2_recovered_track2_four_leg_quotes_v3_market_calibrated_r3_20261115"
 )
+ORIGINAL_PROJECT_ROOT = ROOT.parent / "Q25_A8_R10"
 
 
 def _source_fixture(tmp_path: Path, *, source_capability_verified: bool = False) -> tuple[Path, Path]:
     project = tmp_path / "project"
     accepted_root = project / "data" / "accepted_market_data" / "runtime_v2"
-    scenario_source = ROOT / "data" / "derived_scenario" / SCENARIO_DIR
+    scenario_source = ORIGINAL_PROJECT_ROOT / "data" / "derived_scenario" / SCENARIO_DIR
     scenario_target = project / "data" / "derived_scenario" / SCENARIO_DIR
     accepted_root.mkdir(parents=True)
     scenario_target.parent.mkdir(parents=True)
@@ -76,7 +77,7 @@ def _source_fixture(tmp_path: Path, *, source_capability_verified: bool = False)
     )
 
     source_partition = (
-        ROOT / "data" / "accepted_market_data" / "runtime_v2" / "20261012.jsonl"
+        ORIGINAL_PROJECT_ROOT / "data" / "accepted_market_data" / "runtime_v2" / "20261012.jsonl"
     )
     rows = [
         json.loads(line)
@@ -194,6 +195,7 @@ def _pre_entry_alternative(run_id="SYNTHETIC:T9:PRE_ENTRY"):
         project_root=ROOT,
         run_id=run_id,
         vssf_adapter=adapter,
+        source_roots=(ORIGINAL_PROJECT_ROOT,) if ORIGINAL_PROJECT_ROOT.is_dir() else (),
     )
 
 def test_t9_supervisor_runs_primary_then_source_reconciliation_then_synthetic_fallback(tmp_path):
@@ -302,6 +304,7 @@ def test_t10_builder_creates_complete_isolated_pre_entry_provider_chain(tmp_path
         ),
         u19_state_store_path=tmp_path / "u19" / "state.sqlite3",
         notion_decision_refs=DECISIONS,
+        scenario_source_roots=(ORIGINAL_PROJECT_ROOT,),
     )
 
     assert chain.supervisor.stop_switch is stop

@@ -15,13 +15,15 @@ from application.composition.validation_only_vssf_runtime_evidence_adapter impor
 from core.oms.track2_u19_recovery import U19RecoveryStatus, evaluate_u19_recovery
 
 ROOT = Path(__file__).resolve().parents[3]
+ORIGINAL_ROOT = ROOT.parent / "Q25_A8_R10"
+SOURCE_ROOTS = (ORIGINAL_ROOT,) if ORIGINAL_ROOT.is_dir() else ()
 RUN_ID = "SYNTHETIC:T7:S2-CANDIDATE-001"
 
 
 def _runtime_fixture(provider_timestamp: str):
     scenario_time = datetime.fromisoformat(provider_timestamp)
     candidate_path = (
-        ROOT / "data" / "derived_scenario"
+        (ORIGINAL_ROOT if SOURCE_ROOTS else ROOT) / "data" / "derived_scenario"
         / "q25_a8_p2_recovered_track2_four_leg_quotes_v3_market_calibrated_r3_20261115"
         / "four_leg_quotes.jsonl"
     )
@@ -128,6 +130,7 @@ def _provider(tick_timestamp: str):
         run_id=RUN_ID,
         vssf_adapter=adapter,
         position_phase="POST_ENTRY",
+        source_roots=SOURCE_ROOTS,
     )
 
 
@@ -286,6 +289,7 @@ def test_t8_pre_entry_alternative_uses_flat_independent_broker_snapshot():
         project_root=ROOT,
         run_id=RUN_ID,
         vssf_adapter=adapter,
+        source_roots=SOURCE_ROOTS,
     )
 
     assert provider.is_applicable(tick)
@@ -436,12 +440,7 @@ def test_t17_synthetic_evidence_retains_anchor_lineage_and_no_lookahead():
         for ref in inputs["source_anchor_refs"]
     )
 
-    scenario_dir = (
-        ROOT
-        / "data"
-        / "derived_scenario"
-        / "q25_a8_p2_recovered_track2_four_leg_quotes_v3_market_calibrated_r3_20261115"
-    )
+    scenario_dir = provider.scenario_dir
     quote_path = scenario_dir / "four_leg_quotes.jsonl"
     quote_rows = [
         json.loads(line)
@@ -662,6 +661,7 @@ def test_t17_all_s2_candidate_iv_and_spread_medians_recompute_from_accepted_anch
     from verification.track2_synthetic_quote_scenario import _market_implied_volatility
 
     provider = _provider("2026-10-13T08:49:10+09:00")
+    provider.build_option_identity_evidence()
     scenario_rows = [
         json.loads(line)
         for line in (provider.scenario_dir / "four_leg_quotes.jsonl").read_text(encoding="utf-8").splitlines()
@@ -896,7 +896,7 @@ def test_t17_all_84_quote_premiums_use_the_official_five_cent_tick_band():
 
 def test_t17_all_s2_candidate_expiries_match_second_thursday_under_weekday_only_synthetic_calendar():
     import json
-    from datetime import date, timedelta
+    from datetime import timedelta
     from contracts.kis_option_product_spec import calculate_kis_monthly_option_expiry
 
     class WeekdayOnlySyntheticCalendar:
@@ -910,6 +910,7 @@ def test_t17_all_s2_candidate_expiries_match_second_thursday_under_weekday_only_
             return candidate
 
     provider = _provider("2026-10-12T09:26:00+09:00")
+    provider.build_option_identity_evidence()
     candidates = json.loads((provider.scenario_dir / "candidate_inputs.json").read_text(encoding="utf-8"))
     expiry_months = {item["expiry"][:6] for item in candidates}
     assert expiry_months == {"202611"}

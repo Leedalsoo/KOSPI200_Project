@@ -66,6 +66,7 @@ def _chain(run_id, tmp_path):
         risk_guard_status_source=_risk_guard_source(),
         u19_state_store_path=tmp_path / "u19.sqlite3",
         notion_decision_refs=DECISIONS,
+        scenario_source_roots=(ROOT.parent / "Q25_A8_R10",),
     )
     return chain, stop
 
