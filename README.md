@@ -277,3 +277,15 @@ Additional separate validation-only batches in the isolated T4 worktree:
 These are separate batches, not a unique-test total or integrated T4 acceptance. S5's 3 seed-ingestion adapter checks remain validation-only and do not certify canonical historical-order ingestion or S5 Runtime E2E. S3 economic spread legs and S5 D2-D8 remain unapproved; P5 runtime use remains prohibited. No live/account API or actual order/cancel/liquidation.
 
 Static checks: compileall passed; repo-scoped Ruff F821 passed; changed S2 test Ruff F821/F401 passed; git diff check passed. A broader Ruff F401 scan found 17 unused-import findings across pre-existing test files outside the changed scope. They were not mass-fixed; record as cleanup candidates only. No production code or raw source data changed.
+## 19. Cross-source evidence + OMS lifecycle/race regression (2026-11-20)
+
+Additional separate T4 validation-only batches:
+
+| Scope | Result |
+|---|---:|
+| Cross-source alignment, three-source orderbook, H0IFCNT0 identity, no-lookahead anchor, S2 source evidence providers, candidate multi-leg restart, strategy source diagnostics, KIS capability evidence | 44 passed in 2.01s |
+| Freshness restart recovery, OMS cancel/replace reconciliation, fill/cancel race, order-router freshness guard, S7 pending identity reconciliation, S8 multi-partial and natural multi-contract partial-fill, S9 partial-reject, Track6 Virtual cancel | 34 passed in 7.32s |
+
+The batches are separate and may overlap earlier suites; they are not a unique-test sum or integrated T4 acceptance. The first batch validates synthetic cross-source/evidence consistency only, not broker/API truth. The second validates synthetic OMS/Virtual lifecycle and race handling only; recovery/new-entry/order-submission safety remains closed. No missing-source skips occurred in these selected runs.
+
+Static: compileall passed; repo-scoped Ruff F821 passed; `git diff --check` passed. No production source or raw/canonical/accepted data changed. S3 economic spread legs and S5 D2-D8 remain unapproved; P5 runtime use prohibited. No KIS/REAL_VTS/Live/account API, actual orders/cancels/liquidations or new collection.

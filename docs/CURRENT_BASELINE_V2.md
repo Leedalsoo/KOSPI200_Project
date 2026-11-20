@@ -176,3 +176,9 @@
 - Separate focused batches: freshness/no-lookahead + S1 + Track2 + S1/S2 verification 72 passed; X2 auto-stop/evidence/invariant/ledger/provider/VSSF/lineage/candidate/Track6 state 95 passed; S5/S7/S8 adapters + Track2/6 adapters + virtual identity/replay 60 passed; Track1-8 specs + Track9 policy/recovery + Track6/7/8 lifecycle 140 passed.
 - Counts are separate invocations, may overlap with earlier work and are not an integrated acceptance or unique-test sum. Synthetic validation-only only. S3 economic legs and S5 D2-D8 unapproved; P5 runtime use prohibited.
 - compileall and Ruff F821 passed; changed S2 test F821/F401 passed. Repo-wide Ruff F401 identified 17 unused imports in existing files outside this change; no broad cleanup performed. No production or raw data changes.
+## 2026-11-20 T4 cross-source + OMS race regression — No.1671
+
+- Separate synthetic validation-only batches: cross-source/orderbook/H0IFCNT0/no-lookahead/S2 evidence/candidate restart/source diagnostics/KIS capability **44 passed**; freshness restart/OMS cancel-replace/fill-cancel race/router guard/S7 pending identity/S8 multi-partial natural runtime/S9 partial reject/Track6 cancel **34 passed**.
+- Counts may overlap previous batches; not a unique-test sum or integrated acceptance. No missing-source skip in these selected runs.
+- compileall, repo-scoped Ruff F821, diff-check passed. No production or raw data changed. Cross-source consistency is not broker/account authority; OMS recovery tests do not enable entries or submissions.
+- S3 economic spread legs/S5 D2-D8 unapproved; P5 runtime prohibited. No Live/account API or actual orders.

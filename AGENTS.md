@@ -197,3 +197,10 @@
 - Functional regression batches are reported separately; do not sum counts where overlap is possible or describe focused tests as integrated acceptance.
 - Repo-wide Ruff F821/F401 scan findings must be separated: F821 is the undefined-name safety check; existing F401 unused-import findings outside the edited scope are recorded, not auto-fixed wholesale. Fix only findings in files intentionally changed for the task, unless a separately approved cleanup scope exists.
 - If the repo-wide scan reveals missing/contradictory source fixtures, reconcile the latest Notion decision, recorded execution evidence, canonical local files and manifest/hash first. Prefer hash-verified synthetic fallback in isolated worktree; never weaken identity checks or rewrite originals to make tests pass.
+## Cross-source evidence and OMS race regression extension (2026-11-20)
+
+- After the strategy/common runtime batches, continue the T4 X3 matrix with evidence cross-checks and OMS lifecycle/race boundaries. Re-read the latest No.1660 correction (No.1661 supersedes the older S9 scope), No.1667, No.1669, No.1670, No.1534 and Current Baseline before choosing suites.
+- Treat each pytest invocation as its own evidence batch. Report exact suite scope and count; do not add counts into a unique-test total or integrated acceptance claim.
+- Cross-source auditor passes establish only the tested synthetic provider/evidence consistency contracts. They do not certify broker/API connectivity or authoritative account truth.
+- OMS cancel/replace, fill/cancel race, restart recovery and multi-leg reconciliation are validation-only; maintain `new_entry_enabled=false` and `order_submission_enabled=false` for recovery/safety tests.
+- If a source or fixture is absent, compare current Notion decisions, previous run records, local/canonical raw source and manifest hashes before choosing an exact-hash alternative synthetic fixture. Do not weaken identity, time-order, quantity or reconciliation checks.
