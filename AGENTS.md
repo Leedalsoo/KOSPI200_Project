@@ -310,3 +310,16 @@
 - After X2 is latched, existing admission checks prevent subsequent pending processing and multi-leg submission. Focused regression tests for Track6 X2 trip ordering and X2 pending/multi-leg blocking: 3 passed. compileall and scoped Ruff F821 passed; `git diff --check` passed.
 - The audit used a synthetic in-memory control-flow probe; no broker/Live/API call, real order/cancel/liquidation, or market data collection. No production source or test code changed. Scoped Ruff F401 reported three pre-existing unused imports in `automated_virtual_trading_loop.py`; no cleanup was made.
 - This is an ordering/design gap, not missing source data. Do not claim same-tick pending work is prevented by the later Track6 X2 trip. Next design step is to separate pending observation/reconciliation from any repair/retry/new-order actions, preserving the requirement that strategies see current position/fill state. Do not reorder or split production flow until pending processor side effects and replay parity are mapped. Full T4 X3 integrated acceptance remains OPEN.
+
+## T4 X3 pending processor side-effect inventory (2026-11-21)
+
+- Mapped the exact factory callback and bridge/coordinator methods to classify side effects before any runtime-order refactor.
+- `process_pending_quotes()` queries already-routed VSSF orders and reconciles report/fill/PositionLot/Fee evidence; it is state-mutating reconciliation, not a fresh submit by itself.
+- Track6/Track7 `lifecycle_clock_action()` branches can call `cancel_pending_order()` (cancel side effect).
+- U16 `ValidationOnlyU16RuntimeCoordinator.process()` can invoke injected `submit_repair` or `submit_flatten` ports for `REPAIR_READY` / confirmed `FLATTEN_REQUIRED_BLOCKED` cases.
+- S9 `process_s9_entry_retries()` can cancel timed-out BUY orders, schedule retries and call `execute()` for the remaining quantity after the wait/cutoff checks.
+- Track2 `process_track2_entry_progress()` can call `execute()` for the next leg after predecessor terminal/position/lot reconciliation.
+- Track2 mark/PnL refresh updates group state but does not itself submit an order.
+- Four focused synthetic tests passed: U16 missing-quantity repair submission, S9 delayed retry of only missing quantity, Track2 next-leg progression after confirmed zero-fill cancel, and VSSF pending-order fill reconciliation. A first guessed pytest node was not present; repository test inventory identified the exact existing test name and the corrected invocation passed (not a product-code failure).
+- compileall, scoped Ruff F821 and diff-check passed. No production source/test code changed. No KIS/Live/account API, real order/cancel/liquidation or new data collection.
+- The pending callback combines reconciliation and side-effect-capable cancel/repair/retry/entry progression. Next design must separate these phases and preserve fill/position freshness plus replay parity. Do not alter production flow until that mapping is converted into tests. Full T4 X3 integrated acceptance remains OPEN.
