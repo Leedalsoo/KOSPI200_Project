@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import pytest
 from hashlib import sha256
@@ -255,7 +255,7 @@ def test_track4_standard_futures_identity_is_rejected_before_vssf_submission() -
     assert bridge.position_lot_store.open_lots() == ()
 
 
-def test_track4_mini_partial_fill_cancel_late_fill_reconciles_exactly_once(monkeypatch) -> None:
+def test_track4_mini_partial_fill_cancel_late_fill_u19_restart_reconciles_exactly_once(monkeypatch, tmp_path) -> None:
     loop = _loop(("track4_gamma_scalping", "1.0"), "S4-MINI-LATE-FILL-FAULT")
     bridge = loop.multi_leg_bridge
     tick = SimpleNamespace(
@@ -362,6 +362,107 @@ def test_track4_mini_partial_fill_cancel_late_fill_reconciles_exactly_once(monke
     assert sum(lot.remaining_quantity for lot in lots) == 5
     assert len({lot.execution_id for lot in lots}) == 2
     assert vssf.account.positions[identity.instrument_id]["qty"] == 5
+
+    import json
+    from collections import defaultdict
+    from application.composition.track2_u19_recovery import (
+        ValidationOnlyTrack2U19RecoveryCoordinator,
+    )
+    from core.oms.track2_u19_recovery import (
+        U19BrokerPositionSnapshot,
+        U19ExecutionEvent,
+        U19ExecutionLedgerSnapshot,
+        U19Position,
+    )
+    from environments.virtual.position.track2_u19_recovery_store import (
+        SqliteTrack2U19RecoveryStore,
+    )
+
+    account_position = vssf.account.positions[identity.instrument_id]
+    account_quantity = Decimal(str(account_position["qty"]))
+    account_signed = account_quantity if str(account_position["side"]).upper() == "BUY" else -account_quantity
+    broker_positions = (U19Position(identity.instrument_id, account_signed),)
+    signed_by_instrument = defaultdict(Decimal)
+    for lot in lots:
+        signed_by_instrument[lot.instrument_id] += (
+            Decimal(lot.remaining_quantity)
+            if str(lot.side).upper() == "BUY"
+            else -Decimal(lot.remaining_quantity)
+        )
+    ledger_positions = tuple(
+        U19Position(instrument_id, quantity)
+        for instrument_id, quantity in sorted(signed_by_instrument.items())
+    )
+    assert broker_positions == ledger_positions
+    execution_events = tuple(
+        U19ExecutionEvent(
+            fill.execution_id,
+            sha256(
+                f"{fill.execution_id}|{fill.filled_quantity}|{fill.execution_price}|{fill.execution_timestamp}".encode()
+            ).hexdigest(),
+        )
+        for fill in latest.execution_fills
+    )
+    as_of = max(fill.execution_timestamp for fill in latest.execution_fills).replace(
+        tzinfo=timezone(timedelta(hours=9))
+    ) + timedelta(seconds=1)
+    broker_payload = {
+        "group_id": plan.group_id,
+        "positions": [(item.instrument_id, str(item.signed_quantity)) for item in broker_positions],
+    }
+    ledger_payload = {
+        "group_id": plan.group_id,
+        "positions": [(item.instrument_id, str(item.signed_quantity)) for item in ledger_positions],
+        "execution_events": [(event.execution_id, event.fingerprint) for event in execution_events],
+    }
+    digest = lambda value: sha256(
+        json.dumps(value, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
+    checkpoint = tmp_path / "s4-mini-u19.sqlite3"
+    first_decision = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(checkpoint)
+    ).recover(
+        group_id=plan.group_id,
+        broker_snapshot=U19BrokerPositionSnapshot(
+            group_id=plan.group_id, snapshot_id="S4-U19-BROKER-INITIAL", as_of=as_of,
+            source="VALIDATION_ONLY:BROKER_EXCHANGE", positions=broker_positions,
+            complete=True, capability_verified=True, payload_sha256=digest(broker_payload),
+        ),
+        ledger_snapshot=U19ExecutionLedgerSnapshot(
+            group_id=plan.group_id, snapshot_id="S4-U19-LEDGER-INITIAL", as_of=as_of,
+            source="VALIDATION_ONLY:EXECUTION_LEDGER", positions=ledger_positions,
+            complete=True, payload_sha256=digest(ledger_payload), execution_events=execution_events,
+        ),
+    )
+    assert first_decision.restore_allowed is True, first_decision.__dict__
+    assert first_decision.new_entry_enabled is False
+    assert first_decision.order_submission_enabled is False
+    persisted = SqliteTrack2U19RecoveryStore(checkpoint).load_latest(plan.group_id)
+    assert persisted is not None
+    assert len(persisted["execution_events"]) == 2
+
+    before_lots = bridge.position_lot_store.history()
+    before_fees = bridge.fee_ledger.snapshot(run_id=bridge.run_id)
+    reopened_decision = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(checkpoint)
+    ).recover(
+        group_id=plan.group_id,
+        broker_snapshot=U19BrokerPositionSnapshot(
+            group_id=plan.group_id, snapshot_id="S4-U19-BROKER-REOPEN", as_of=as_of + timedelta(seconds=1),
+            source="VALIDATION_ONLY:BROKER_EXCHANGE", positions=broker_positions,
+            complete=True, capability_verified=True, payload_sha256=digest(broker_payload),
+        ),
+        ledger_snapshot=U19ExecutionLedgerSnapshot(
+            group_id=plan.group_id, snapshot_id="S4-U19-LEDGER-REOPEN", as_of=as_of + timedelta(seconds=1),
+            source="VALIDATION_ONLY:EXECUTION_LEDGER", positions=ledger_positions,
+            complete=True, payload_sha256=digest(ledger_payload),
+            execution_events=execution_events + execution_events,
+        ),
+    )
+    assert reopened_decision.restore_allowed is True
+    assert len(reopened_decision.execution_events) == 2
+    assert bridge.position_lot_store.history() == before_lots
+    assert bridge.fee_ledger.snapshot(run_id=bridge.run_id) == before_fees
 
     monkeypatch.setattr(vssf, "_execute", original_execute)
     close_plan = bridge.build_close_plan_from_open_lots(
