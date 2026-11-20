@@ -47,6 +47,7 @@ class VirtualMarketSimulatorRuntime:
         self._option_quotes = {}
         self._option_quotes_by_instrument_id = {}
         self._authoritative_option_quote_provider = None
+        self._last_validation_only_replay_timestamp = None
         self._futures_price = self._price
 
     @property
@@ -249,6 +250,19 @@ class VirtualMarketSimulatorRuntime:
         # Contract metadata is resolved separately through the authoritative Master.
         # Keep authoritative VSSF execution timestamps aligned with replay observation time.
         observed_at = datetime.fromisoformat(tick.timestamp)
+        if getattr(tick, "validation_only", False) is True:
+            previous_validation_time = self._last_validation_only_replay_timestamp
+            if observed_at.tzinfo is None or observed_at.utcoffset() is None:
+                raise ValueError("VMS_VALIDATION_ONLY_REPLAY_TIMESTAMP_UNVERIFIED")
+            if previous_validation_time is not None:
+                if (
+                    previous_validation_time.tzinfo is None
+                    or previous_validation_time.utcoffset() is None
+                ):
+                    raise ValueError("VMS_VALIDATION_ONLY_REPLAY_TIMESTAMP_UNVERIFIED")
+                if observed_at < previous_validation_time:
+                    raise ValueError("VMS_VALIDATION_ONLY_REPLAY_TIMESTAMP_REGRESSION")
+            self._last_validation_only_replay_timestamp = observed_at
         self.clock.current_time = observed_at
         self.last_tick = tick
         self._recent_ticks.append(tick)

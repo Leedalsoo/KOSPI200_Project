@@ -426,3 +426,27 @@ def test_t10_s2_quote_map_preserves_per_contract_timestamps_after_one_later_quot
     assert event["u21_policy_decision"] == "FALLBACK_UNAVAILABLE_BLOCKED"
     assert "PRIMARY_QUOTE_STALE" in event["reason"]
     assert event["order_routing"] == "NOT_INVOKED"
+
+
+def test_t10_s2_virtual_market_does_not_allow_older_tick_to_overwrite_newer_contract_quote():
+    from dataclasses import replace
+    from datetime import datetime
+
+    alternative = _provider("2026-10-12T09:26:00+09:00")
+    market = VirtualMarketSimulatorRuntime(option_master=None)
+    market.set_authoritative_option_quote_provider(alternative.option_quotes_at)
+    tick = alternative.build_quote_only_ticks()[0]
+    market.publish_replay_tick(tick)
+    later = replace(tick, timestamp="2026-10-12T09:26:06+09:00")
+    market.publish_replay_tick(later)
+    key = (tick.option_type, tick.strike_price, tick.expiry)
+    latest_before = market.option_quotes[key]
+    clock_before = market.clock.current_time
+    older = replace(tick, timestamp="2026-10-12T09:26:03+09:00")
+
+    with pytest.raises(ValueError, match="VMS_VALIDATION_ONLY_REPLAY_TIMESTAMP_REGRESSION"):
+        market.publish_replay_tick(older)
+
+    assert market.option_quotes[key]["timestamp"] == latest_before["timestamp"]
+    assert market.last_tick is later
+    assert market.clock.current_time == clock_before == datetime.fromisoformat("2026-10-12T09:26:06+09:00")
