@@ -170,3 +170,22 @@ def test_live_broker_keeps_authoritative_futures_command_mapping():
     assert transport.submissions[0].broker_symbol == "1001FUT01"
     assert idempotency.calls == 1
     assert gate.calls == 1
+
+
+def test_live_broker_rejects_non_kis_futures_identity_source_before_side_effects():
+    adapter, idempotency, gate, transport = _adapter_for_rejection()
+    instrument_id = "FUTURES-TEST-ONLY"
+    command = BrokerOrderCommand(
+        client_order_id="fixture-futures", instrument_id=instrument_id,
+        side="BUY", quantity=1, order_type="LIMIT", broker_symbol=instrument_id,
+        asset_type="FUTURES",
+        instrument_identity=FuturesInstrumentIdentity(
+            instrument_id=instrument_id, symbol=instrument_id,
+            product_type=FuturesProductType.MINI,
+            contract_multiplier=Decimal("50000"),
+            identity_source="TEST_FIXTURE",
+        ),
+    )
+    with pytest.raises(RuntimeError, match="LIVE_BROKER_FUTURES_IDENTITY_NOT_AUTHORITATIVE"):
+        adapter.submit(command, identity=None, account_age_seconds=0)
+    _assert_no_side_effects(idempotency, gate, transport)

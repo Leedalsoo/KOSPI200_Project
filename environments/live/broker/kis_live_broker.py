@@ -35,7 +35,7 @@ class LiveBrokerAdapter:
         if instrument_identity.instrument_id != command.instrument_id:
             raise RuntimeError("LIVE_BROKER_FUTURES_IDENTITY_MISMATCH")
         identity_source = instrument_identity.identity_source.upper()
-        if any(marker in identity_source for marker in ("SYNTHETIC", "VALIDATION_ONLY", "KRX")):
+        if not identity_source.startswith("KIS_FUTURES_MASTER") or "KRX" in identity_source:
             raise RuntimeError("LIVE_BROKER_FUTURES_IDENTITY_NOT_AUTHORITATIVE")
         if not self.idempotency.reserve(identity):
             raise RuntimeError("duplicate client order identity")
