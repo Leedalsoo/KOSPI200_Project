@@ -13,12 +13,18 @@ from application.composition.virtual_multi_leg_execution import VirtualMultiLegE
 ORIGINAL_ROOT = Path(__file__).resolve().parents[3].parent / "Q25_A8_R10"
 
 
-def _provider(root, vssf_adapter=None, source_roots=()):
+def _provider(
+    root,
+    vssf_adapter=None,
+    source_roots=(),
+    candidate_id="S2-CANDIDATE-001",
+    run_id="S2-IDENTITY-REHYDRATION-TEST",
+):
     return ValidationOnlyS2ScenarioAlternativeProvider(
         project_root=root,
-        run_id="S2-IDENTITY-REHYDRATION-TEST",
+        run_id=run_id,
         vssf_adapter=vssf_adapter if vssf_adapter is not None else object(),
-        candidate_id="S2-CANDIDATE-001",
+        candidate_id=candidate_id,
         position_phase="PRE_ENTRY",
         source_roots=source_roots,
     )
@@ -280,5 +286,98 @@ def test_hash_verified_source_with_in_memory_candidate_or_leg_crosswalk_tamper_i
     )
 
     with pytest.raises(ValueError, match=expected_error):
+        provider(tick)
+    assert capture.calls == 0
+
+
+def test_candidate_specific_identity_registry_and_u19_manifest_are_isolated_across_s2_candidates():
+    if not ORIGINAL_ROOT.is_dir():
+        pytest.skip("read-only exact original S2 source root is not mounted")
+
+    class _CaptureVssf:
+        def build_candidate(self, **kwargs):
+            self.kwargs = kwargs
+            return kwargs
+
+    built = {}
+    for candidate_id in ("S2-CANDIDATE-001", "S2-CANDIDATE-002"):
+        capture = _CaptureVssf()
+        provider = _provider(
+            Path(__file__).resolve().parents[3],
+            vssf_adapter=capture,
+            source_roots=(ORIGINAL_ROOT,),
+            candidate_id=candidate_id,
+            run_id=f"S2-CANDIDATE-ISOLATION:{candidate_id}",
+        )
+        evidence = provider.build_option_identity_evidence()
+        registry_digest = provider._hash_json([
+            {"leg_role": item.leg_role, "derived_identity_digest": item.derived_identity_digest}
+            for item in evidence
+        ])
+        _manifest, candidate, _profile, _quotes, _hashes = provider._load_verified_sources()
+        tick = SimpleNamespace(
+            timestamp=candidate["observed_at"],
+            underlying_price=candidate["underlying_price"],
+        )
+        provider(tick)
+        expected = capture.kwargs["expected_group_manifest"]
+        assert f"IDENTITY_REGISTRY={registry_digest}" in expected.provenance
+        assert expected.manifest_id.startswith(candidate_id + ":")
+        assert expected.group_id == f"VALIDATION_ONLY:RUN:{provider.run_id}"
+        built[candidate_id] = {
+            "digest": registry_digest,
+            "instrument_ids": {item.identity.instrument_id for item in evidence},
+            "manifest": expected,
+        }
+
+    first = built["S2-CANDIDATE-001"]
+    second = built["S2-CANDIDATE-002"]
+    assert first["digest"] != second["digest"]
+    assert first["instrument_ids"].isdisjoint(second["instrument_ids"])
+    assert first["manifest"].group_id != second["manifest"].group_id
+    assert first["manifest"].payload_sha256 != second["manifest"].payload_sha256
+
+
+def test_quote_row_reused_from_another_candidate_is_rejected_before_u19_manifest_build():
+    if not ORIGINAL_ROOT.is_dir():
+        pytest.skip("read-only exact original S2 source root is not mounted")
+
+    class _CaptureVssf:
+        calls = 0
+
+        def build_candidate(self, **kwargs):
+            self.calls += 1
+            return kwargs
+
+    class _CrossCandidateProvider(ValidationOnlyS2ScenarioAlternativeProvider):
+        def _load_verified_sources(self):
+            manifest, candidate, profile, quotes, hashes = super()._load_verified_sources()
+            other = ValidationOnlyS2ScenarioAlternativeProvider(
+                project_root=Path(__file__).resolve().parents[3],
+                run_id="S2-CROSS-CANDIDATE-SOURCE",
+                vssf_adapter=object(),
+                candidate_id="S2-CANDIDATE-001",
+                source_roots=(ORIGINAL_ROOT,),
+            )
+            _other_manifest, _other_candidate, _other_profile, other_quotes, _other_hashes = other._load_verified_sources()
+            quotes[0] = dict(other_quotes[0])
+            quotes[0]["candidate_id"] = self.candidate_id
+            return manifest, candidate, profile, quotes, hashes
+
+    capture = _CaptureVssf()
+    provider = _CrossCandidateProvider(
+        project_root=Path(__file__).resolve().parents[3],
+        run_id="S2-CROSS-CANDIDATE-TAMPER",
+        vssf_adapter=capture,
+        candidate_id="S2-CANDIDATE-002",
+        source_roots=(ORIGINAL_ROOT,),
+    )
+    _manifest, candidate, _profile, _quotes, _hashes = provider._load_verified_sources()
+    tick = SimpleNamespace(
+        timestamp=candidate["observed_at"],
+        underlying_price=candidate["underlying_price"],
+    )
+
+    with pytest.raises(ValueError, match="T7_S2_IDENTITY_CONTRACT_FIELDS_MISMATCH:inner_put"):
         provider(tick)
     assert capture.calls == 0
