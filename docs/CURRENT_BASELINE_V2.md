@@ -226,3 +226,12 @@
 - Full Track6 test inventory: 13 files, **69 passed**. `compileall`, scoped Ruff F821/F401, and `git diff --check` passed.
 - Only `environments/high_speed/track6_validation_state_store.py`, its test file and project documentation changed. No raw/canonical/accepted data, manifests, risk profiles, operating configuration or production/live integration changed.
 - Synthetic validation-only. No KIS/REAL_VTS/Live/account API, actual order/cancel/liquidation or new data collection. Full T4 X3 fault matrix and integrated acceptance remain OPEN.
+
+## 2026-11-21 T4 X3 S6 persistence failure -> X2 stop propagation ? No.1681
+
+- Inspection found StrategyOrchestrator converts strategy exceptions to `StrategyRunFailure`; the Runtime previously only counted generic strategy failures and continued toward signal collection/arbitration. Track6 state persistence failure therefore did not explicitly latch X2.
+- Added `Track6LifecyclePersistenceError`; `_persist_lifecycle()` wraps underlying append/fsync exceptions and retains the original cause.
+- `AutomatedVirtualTradingLoop.on_tick()` now detects that typed failure for `track6_daily_tail_insurance` immediately after StrategyHub execution and trips `X2_TRACK6_LIFECYCLE_STATE_PERSISTENCE_FAILED` before signal collection/arbitration. Existing RiskGuard/RiskEngine latches then deny new admission and route paths. No auto-cancel or liquidation behavior.
+- Added tests for OSError wrapping and stop-trip ordering before signal collection.
+- Combined Track6 inventory (13 files) + X2 admission/auto-stop suites: **97 passed**. Separate focused Track6/X2 batch: 77 passed. compileall, scoped Ruff F821 and `git diff --check` passed. Six F401 unused imports were reproduced on baseline HEAD; unchanged.
+- Validation-only synthetic. No raw/canonical/accepted data, manifests, risk profiles, operating config, Live/account API, actual orders/cancels/liquidations or new collection. Full T4 X3 matrix/integrated acceptance remains OPEN.

@@ -72,6 +72,10 @@ class Track6State:
     force_close_pending: bool = False
 
 
+class Track6LifecyclePersistenceError(RuntimeError):
+    """Raised when a validation lifecycle snapshot cannot be durably persisted."""
+
+
 class Track6DailyTailInsurance:
     strategy_id = "track6_daily_tail_insurance"
     version = "1.0"
@@ -145,7 +149,12 @@ class Track6DailyTailInsurance:
 
     def _persist_lifecycle(self) -> None:
         if self.lifecycle is not None and self.lifecycle_state_store is not None:
-            self.lifecycle_state_store.append(self.lifecycle.export_snapshot())
+            try:
+                self.lifecycle_state_store.append(self.lifecycle.export_snapshot())
+            except Exception as exc:
+                raise Track6LifecyclePersistenceError(
+                    "TRACK6_LIFECYCLE_STATE_PERSISTENCE_FAILED"
+                ) from exc
 
     def lifecycle_clock_action(self, now: datetime):
         if self.lifecycle is None:

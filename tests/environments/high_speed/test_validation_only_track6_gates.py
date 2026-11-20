@@ -92,3 +92,55 @@ def test_signal_observation_mode_never_invokes_decision_or_execution() -> None:
     assert result.signals == 1
     assert result.approved == result.routed == result.filled == result.rejected == 0
     assert result.execution_ids == ()
+
+
+def test_track6_lifecycle_persistence_failure_trips_runtime_stop_before_signal_collection():
+    loop = AutomatedVirtualTradingLoop.__new__(AutomatedVirtualTradingLoop)
+    loop.signal_observation_only = True
+    loop.pending_multi_leg_processor = None
+    loop.runtime_evidence_supervisor = None
+    loop.context_builder = lambda tick, state: {
+        "track6_daily_tail_insurance": SimpleNamespace(strategy_id="track6_daily_tail_insurance")
+    }
+    calls = []
+
+    class _StopSwitch:
+        def trip(self, reason):
+            calls.append(("trip", reason))
+
+    loop.runtime_stop_switch = _StopSwitch()
+    loop.strategy_hub = SimpleNamespace(run=lambda _contexts: SimpleNamespace(
+        signals=(),
+        failures=(SimpleNamespace(
+            strategy_id="track6_daily_tail_insurance",
+            error_type="Track6LifecyclePersistenceError",
+            stage="on_market_state",
+            message="TRACK6_LIFECYCLE_STATE_PERSISTENCE_FAILED",
+        ),),
+    ))
+    loop.strategy_results = SimpleNamespace(collect=lambda **_kwargs: calls.append(("collect", None)) or ())
+
+    result = loop.on_tick(SimpleNamespace(
+        timestamp=datetime(2026, 11, 21, 10, 0).isoformat(),
+        underlying_price=500, volume=1, seq_id=99,
+    ))
+
+    assert calls[0] == ("trip", "X2_TRACK6_LIFECYCLE_STATE_PERSISTENCE_FAILED")
+    assert calls[1] == ("collect", None)
+    assert result.approved == result.routed == result.filled == 0
+
+
+def test_track6_lifecycle_wraps_state_store_oserror_as_critical_persistence_failure():
+    from core.strategy.track6_daily_tail_insurance import Track6LifecyclePersistenceError
+
+    strategy = Track6DailyTailInsurance()
+    strategy.lifecycle = SimpleNamespace(export_snapshot=lambda: {"run_id": "SYNTHETIC-TRACK6"})
+
+    class _BrokenStore:
+        def append(self, _snapshot):
+            raise OSError("simulated state-store fsync failure")
+
+    strategy.lifecycle_state_store = _BrokenStore()
+    with pytest.raises(Track6LifecyclePersistenceError, match="TRACK6_LIFECYCLE_STATE_PERSISTENCE_FAILED") as error:
+        strategy._persist_lifecycle()
+    assert isinstance(error.value.__cause__, OSError)
