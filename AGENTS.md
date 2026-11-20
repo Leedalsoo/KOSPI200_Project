@@ -390,3 +390,10 @@
 - After restore and observation, re-read the current explicit X2 gate immediately before any action. An earlier open state does not authorize action after a later latch. Never infer an unlatch; require an explicit current open-gate value.
 - No.1652 candidate/account aggregate checkpoints remain separate from Track7 strategy aggregate state.
 - Continue synthetic/validation-only evidence until authoritative real-account API criteria are connected and separately approved. Preserve raw/canonical/accepted sources and manifests. Full Track7 restart recovery and integrated T4 X3 acceptance remain OPEN.
+## Track7 X2 gate read failure handling (No.1700, 2026-11-21)
+
+- After aggregate restore and read-only observation reconciliation, the current X2 gate must be read explicitly before side-effect actions.
+- A gate accessor exception or a non-boolean/unknown gate value is not evidence that X2 is open. Preserve restored strategy state and completed observation reconciliation, record the gate-read diagnostic, and suppress planning/action callbacks.
+- Do not infer an unlatch, synthesize a false/open gate value, or trigger cancel, repair, retry, flatten, or new submission when the gate read is unavailable.
+- This is a test-only synthetic contract, not production Runtime wiring or an approved X2 recovery/unlatch policy. Keep No.1689 phase boundaries and No.1652 checkpoint separation.
+- Continue validation-only synthetic criteria until real-account API fields and exact acceptance criteria are connected and separately approved. Preserve source/provenance and existing Project200 dirty/untracked files.

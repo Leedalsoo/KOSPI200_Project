@@ -315,8 +315,17 @@ def _restore_observe_then_gate(envelope, *, x2_latched, reconcile_observation, s
     events.append("authoritative_observation_reconciled")
 
     # A previously latched state is never inferred to be open. The current
-    # gate value must be explicitly supplied at the action boundary.
-    current_x2_latched = x2_latched() if callable(x2_latched) else x2_latched
+    # gate must return an explicit bool; read errors/unknown values suppress action.
+    try:
+        current_x2_latched = x2_latched() if callable(x2_latched) else x2_latched
+    except Exception:
+        events.append("x2_gate_read_failed")
+        return strategy, events
+
+    if type(current_x2_latched) is not bool:
+        events.append("x2_gate_read_invalid")
+        return strategy, events
+
     events.append("x2_gate_rechecked_latched" if current_x2_latched else "x2_gate_rechecked_open")
     if not current_x2_latched:
         side_effect_action(strategy)
@@ -439,6 +448,46 @@ def test_track7_explicit_open_gate_read_is_required_before_action():
         "x2_gate_rechecked_open", "side_effect_action",
     ]
     assert [item[0] for item in events] == ["reconcile", "action"]
+
+
+def test_track7_restore_x2_gate_read_exception_preserves_state_and_suppresses_action():
+    events = []
+
+    def failed_gate_read():
+        raise RuntimeError("synthetic gate read failure")
+
+    restored, observed = _restore_observe_then_gate(
+        _capture_aggregate(_multi_expiry_strategy()),
+        x2_latched=failed_gate_read,
+        reconcile_observation=lambda strategy: events.append(("reconcile", strategy._active_expiry)),
+        side_effect_action=lambda strategy: events.append(("action", strategy._active_expiry)),
+    )
+
+    assert restored._active_expiry == "20261203"
+    assert restored._states_by_expiry["20261203"].entry_stage == "CALL_PENDING"
+    assert observed == [
+        "state_restored", "authoritative_observation_reconciled", "x2_gate_read_failed"
+    ]
+    assert [item[0] for item in events] == ["reconcile"]
+
+
+@pytest.mark.parametrize("unknown_gate_value", [None, "OPEN", 0, 1])
+def test_track7_restore_x2_gate_unknown_value_preserves_state_and_suppresses_action(
+    unknown_gate_value,
+):
+    events = []
+    restored, observed = _restore_observe_then_gate(
+        _capture_aggregate(_multi_expiry_strategy()),
+        x2_latched=lambda: unknown_gate_value,
+        reconcile_observation=lambda strategy: events.append(("reconcile", strategy._active_expiry)),
+        side_effect_action=lambda strategy: events.append(("action", strategy._active_expiry)),
+    )
+
+    assert restored._active_expiry == "20261203"
+    assert observed == [
+        "state_restored", "authoritative_observation_reconciled", "x2_gate_read_invalid"
+    ]
+    assert [item[0] for item in events] == ["reconcile"]
 
 
 def test_track7_aggregate_snapshot_rejects_duplicate_expiry_state_records():

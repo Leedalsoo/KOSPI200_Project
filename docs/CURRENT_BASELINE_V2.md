@@ -363,3 +363,11 @@
 - Track7 aggregate contract suite: 29 passed. Adjacent Track7 lifecycle/cutoff/identity/terminal-close/validation-only suite: 15 passed. Separate invocations; not integrated acceptance. compileall, scoped Ruff F821/F401 and git diff-check passed.
 - This is a test-only ordering contract, not production restore wiring, durable persistence, approved broker-state reconciliation, or X2 auto-unlatch policy. No.1652 candidate/account aggregate remains separate. No Live/account API, broker calls, real order/cancel/liquidation, collector restart, new collection, or Raw/Canonical/accepted source/manifest changes.
 - Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN. Synthetic/validation-only criteria remain in force until authoritative real-account API inputs and exact acceptance criteria are connected and approved.
+## T4 X3 Track7 X2 gate read failure - No.1700 (2026-11-21)
+
+- Compared latest No.1699/1698/1689, No.1546, Current Baseline and No.1534 provenance/source-preservation rules with the isolated T4 worktree before changes.
+- Test-only harness: after aggregate restore and read-only observation reconciliation, re-read the current X2 gate. Getter exception and unknown/non-bool values are diagnosed as unavailable, never coerced to open/false. Restored strategy state and observation result remain preserved; side-effect action callback is suppressed.
+- Synthetic cases: RuntimeError from gate accessor; None, string, integer 0 and integer 1 as invalid values; valid open/latched and open-to-latched transition regressions retained.
+- Track7 aggregate snapshot contract: 34 passed. Adjacent Track7 lifecycle/cutoff/identity/terminal-close/validation-only regression: 15 passed. Separate batches, not integrated acceptance. compileall, scoped Ruff F821/F401 and git diff-check passed.
+- No production Runtime wiring, durable persistence, broker reconciliation policy, X2 auto-unlatch/recovery implementation, Live/account API, broker calls, real orders/cancels/liquidation, collector restart, new collection or Raw/Canonical/accepted source/manifest changes.
+- Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN. Synthetic/validation-only criteria remain in force pending authoritative real-account API inputs and separately approved exact criteria.
