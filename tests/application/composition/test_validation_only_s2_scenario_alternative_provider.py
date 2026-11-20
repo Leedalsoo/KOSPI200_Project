@@ -605,3 +605,51 @@ def test_t17_all_s2_candidates_preserve_four_leg_time_alignment_and_source_ancho
     assert len(scenario_rows) == 84
     assert len(all_anchor_ids) == 160
     assert all_anchor_ids.issubset(accepted_by_id)
+
+
+def test_t17_cross_type_iv_and_spread_fallbacks_match_recorded_source_contract_types():
+    import json
+
+    provider = _provider("2026-10-13T08:49:10+09:00")
+    manifest, _candidate, _profile, _quotes, _hashes = provider._load_verified_sources()
+    scenario_rows = [
+        json.loads(line)
+        for line in (provider.scenario_dir / "four_leg_quotes.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    accepted_by_id = {}
+    for day in ("20261012", "20261013"):
+        source_path = provider.accepted_manifest_path.parent / f"{day}.jsonl"
+        for line in source_path.read_text(encoding="utf-8").splitlines():
+            source_row = json.loads(line)
+            source_id = (source_row.get("scenario_metadata") or {}).get("source_observation_id")
+            if source_id:
+                accepted_by_id[source_id] = source_row
+
+    for candidate in manifest["candidate_calibration"]:
+        group = [row for row in scenario_rows if row["candidate_id"] == candidate["candidate_id"]]
+        actual_cross_type_iv_legs = 0
+        for row in group:
+            target_type = row["option_type"]
+            calibration = row["market_calibration"]
+            iv_source_types = {
+                accepted_by_id[source_id]["tick"]["option_type"]
+                for source_id in calibration["iv_anchor_observation_ids"]
+            }
+            spread_source_types = {
+                accepted_by_id[source_id]["tick"]["option_type"]
+                for source_id in calibration["spread_anchor_observation_ids"]
+            }
+            iv_is_cross_type = str(calibration["iv_anchor_selection"]).startswith("CROSS_TYPE")
+            spread_is_cross_type = str(calibration["spread_anchor_selection"]).startswith("CROSS_TYPE")
+            expected_iv_type = "CALL" if target_type == "PUT" else "PUT"
+            assert iv_source_types == ({expected_iv_type} if iv_is_cross_type else {target_type})
+            assert spread_source_types == ({expected_iv_type} if spread_is_cross_type else {target_type})
+            actual_cross_type_iv_legs += int(iv_is_cross_type)
+        assert actual_cross_type_iv_legs == candidate["cross_type_iv_fallback_legs"]
+
+    assert {
+        candidate["candidate_id"]: candidate["cross_type_iv_fallback_legs"]
+        for candidate in manifest["candidate_calibration"]
+        if candidate["cross_type_iv_fallback_legs"]
+    } == {"S2-CANDIDATE-007": 2, "S2-CANDIDATE-008": 2}
