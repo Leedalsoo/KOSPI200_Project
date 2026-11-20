@@ -8,6 +8,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, ClassVar
 
+from contracts.types import OptionInstrumentIdentity
+from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
 from contracts.market_data_freshness import (
     FreshnessEvidence,
     FreshnessPolicy,
@@ -26,6 +28,20 @@ class ValidationOnlyS2CandidateTick(ReferenceCanonicalMarketTick):
     candidate_id: str = ""
     leg_role: str = ""
     u21_quote_side: str = ""
+
+
+@dataclass(frozen=True)
+class ValidationOnlyS2IdentityEvidence:
+    candidate_id: str
+    leg_role: str
+    identity: OptionInstrumentIdentity
+    contract_identity_authority: str
+    contract_multiplier_provenance: str
+    accepted_manifest_sha256: str
+    scenario_manifest_sha256: str
+    quote_sidecar_sha256: str
+    profile_sha256: str
+    derived_identity_digest: str
 
 
 class ValidationOnlyS2ScenarioAlternativeProvider:
@@ -174,6 +190,94 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
         if len(selected_quotes) != 4:
             raise ValueError("T7_SCENARIO_MUST_HAVE_EXACTLY_FOUR_QUOTES")
         return manifest, candidate, profile, selected_quotes, actual_hashes
+
+    def build_option_identity_evidence(self) -> tuple[ValidationOnlyS2IdentityEvidence, ...]:
+        """Rehydrate exact validation-only option identities from the hash-verified sidecar."""
+        _manifest, candidate, _profile, quotes, hashes = self._load_verified_sources()
+        expected_legs = {
+            str(leg.get("role")): leg
+            for leg in candidate.get("legs", ())
+            if isinstance(leg, dict) and leg.get("role")
+        }
+        rows_by_role = {str(row.get("leg_role")): row for row in quotes}
+        if (
+            set(expected_legs) != set(self.ROLE_SIDE)
+            or len(rows_by_role) != 4
+            or set(rows_by_role) != set(self.ROLE_SIDE)
+            or len({str(row.get("instrument_id")) for row in quotes}) != 4
+        ):
+            raise ValueError("T7_S2_IDENTITY_ROLE_OR_INSTRUMENT_SET_MISMATCH")
+
+        evidence: list[ValidationOnlyS2IdentityEvidence] = []
+        for role in self.ROLE_SIDE:
+            row = rows_by_role[role]
+            expected_leg = expected_legs[role]
+            authority = str(row.get("contract_identity_authority") or "")
+            source = str(row.get("source") or "")
+            provenance = str(row.get("provenance") or "")
+            if (
+                authority != "SYNTHETIC_ONLY_NOT_KIS_MASTER"
+                or source != "SYNTHETIC:DERIVED_SCENARIO"
+                or provenance != "SYNTHETIC"
+            ):
+                raise ValueError(f"T7_S2_IDENTITY_AUTHORITY_NOT_VALIDATION_ONLY:{role}")
+            instrument_id = str(row.get("instrument_id") or "").strip()
+            option_type = str(row.get("option_type") or "").upper()
+            expiry = str(row.get("expiry") or "")
+            try:
+                exact_expiry = require_exact_option_expiry(expiry)
+            except CanonicalOptionExpiryError as exc:
+                raise ValueError(f"T7_S2_IDENTITY_EXPIRY_INVALID:{role}") from exc
+            strike = Decimal(str(row.get("strike")))
+            multiplier = Decimal(str(row.get("contract_multiplier")))
+            if (
+                not instrument_id.startswith("SYNTHETIC_CONTRACT:")
+                or option_type not in {"CALL", "PUT"}
+                or option_type != str(expected_leg.get("option_type") or "").upper()
+                or strike <= 0
+                or strike != Decimal(str(expected_leg.get("strike")))
+                or exact_expiry != str(candidate.get("expiry"))
+                or multiplier <= 0
+            ):
+                raise ValueError(f"T7_S2_IDENTITY_CONTRACT_FIELDS_MISMATCH:{role}")
+            identity = OptionInstrumentIdentity(
+                instrument_id=instrument_id,
+                symbol=instrument_id,
+                expiry=exact_expiry,
+                option_type=option_type,
+                strike=strike,
+                contract_multiplier=multiplier,
+                identity_source="SYNTHETIC:DERIVED_SCENARIO",
+            )
+            identity_payload = {
+                "candidate_id": self.candidate_id,
+                "leg_role": role,
+                "identity": {
+                    "instrument_id": identity.instrument_id,
+                    "symbol": identity.symbol,
+                    "expiry": identity.expiry,
+                    "option_type": identity.option_type,
+                    "strike": str(identity.strike),
+                    "contract_multiplier": str(identity.contract_multiplier),
+                    "identity_source": identity.identity_source,
+                },
+                "source_hashes": hashes,
+                "contract_identity_authority": authority,
+                "contract_multiplier_provenance": str(row.get("contract_multiplier_provenance") or ""),
+            }
+            evidence.append(ValidationOnlyS2IdentityEvidence(
+                candidate_id=self.candidate_id,
+                leg_role=role,
+                identity=identity,
+                contract_identity_authority=authority,
+                contract_multiplier_provenance=str(row.get("contract_multiplier_provenance") or ""),
+                accepted_manifest_sha256=hashes["accepted_manifest"],
+                scenario_manifest_sha256=hashes["scenario_manifest"],
+                quote_sidecar_sha256=hashes["quotes"],
+                profile_sha256=hashes["profile"],
+                derived_identity_digest=self._hash_json(identity_payload),
+            ))
+        return tuple(evidence)
 
     def is_applicable(self, tick: Any) -> bool:
         explicit_id = str(getattr(tick, "candidate_id", "") or "").strip()
