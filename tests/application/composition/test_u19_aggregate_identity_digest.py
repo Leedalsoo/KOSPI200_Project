@@ -235,3 +235,105 @@ def test_source_sidecar_hash_change_after_checkpoint_does_not_advance_recovery(t
         raise AssertionError("Changed sidecar hash was accepted after restart")
 
     assert store.load_latest(aggregate.group_id) == checkpoint_before
+
+
+def test_rehydration_from_different_source_roots_reproduces_same_u19_checkpoint(tmp_path):
+    original_root = Path(__file__).resolve().parents[3].parent / "Q25_A8_R10"
+    if not original_root.is_dir():
+        raise AssertionError("Read-only exact original S2 source root is required for this validation test")
+    relative_files = (
+        "data/accepted_market_data/runtime_v2/manifest.json",
+        "data/accepted_market_data/runtime_v2/20261012.jsonl",
+        "data/accepted_market_data/runtime_v2/20261013.jsonl",
+        "data/derived_scenario/q25_a8_p2_recovered_track2_four_leg_quotes_v3_market_calibrated_r3_20261115/manifest.json",
+        "data/derived_scenario/q25_a8_p2_recovered_track2_four_leg_quotes_v3_market_calibrated_r3_20261115/four_leg_quotes.jsonl",
+        "data/derived_scenario/q25_a8_p2_recovered_track2_four_leg_quotes_v3_market_calibrated_r3_20261115/candidate_inputs.json",
+        "config/validation_only/track2/synthetic_scenario_profile.market_calibrated.v2.json",
+    )
+    source_roots = (tmp_path / "source-root-a", tmp_path / "source-root-b")
+    for root in source_roots:
+        for relative in relative_files:
+            target = root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(original_root / relative, target)
+
+    provider_a = ValidationOnlyS2ScenarioAlternativeProvider(
+        project_root=source_roots[0],
+        run_id="SYNTHETIC:U19:ROOT-INDEPENDENT-REPLAY",
+        vssf_adapter=object(),
+    )
+    provider_b = ValidationOnlyS2ScenarioAlternativeProvider(
+        project_root=tmp_path / "empty-project-b",
+        run_id="SYNTHETIC:U19:ROOT-INDEPENDENT-REPLAY",
+        vssf_adapter=object(),
+        source_roots=(source_roots[1],),
+    )
+    evidence_a = provider_a.build_option_identity_evidence()
+    evidence_b = provider_b.build_option_identity_evidence()
+    registry_a = provider_a._hash_json([
+        {"leg_role": item.leg_role, "derived_identity_digest": item.derived_identity_digest}
+        for item in evidence_a
+    ])
+    registry_b = provider_b._hash_json([
+        {"leg_role": item.leg_role, "derived_identity_digest": item.derived_identity_digest}
+        for item in evidence_b
+    ])
+    assert registry_a == registry_b
+    assert provider_a.last_source_resolution["scenario_manifest"] == "PROJECT_ROOT"
+    assert provider_b.last_source_resolution["scenario_manifest"] == "ORIGINAL_SOURCE_ROOT:0"
+
+    child_a1 = _child("GROUP-A", evidence_a[0].identity.instrument_id, registry_a)
+    child_b1 = _child("GROUP-B", evidence_a[1].identity.instrument_id, "2" * 64)
+    child_a2 = _child("GROUP-A", evidence_b[0].identity.instrument_id, registry_b)
+    child_b2 = _child("GROUP-B", evidence_b[1].identity.instrument_id, "2" * 64)
+    aggregate_a = _aggregate((child_a1, child_b1))
+    aggregate_b = _aggregate((child_a2, child_b2))
+    assert aggregate_a is not None and aggregate_b is not None
+    assert aggregate_a.payload_sha256 == aggregate_b.payload_sha256
+    assert aggregate_a.manifest_id == aggregate_b.manifest_id
+
+    as_of = datetime(2026, 11, 20, 9, 30, tzinfo=timezone.utc)
+    positions = aggregate_a.expected_positions
+    broker = U19BrokerPositionSnapshot(
+        group_id=aggregate_a.group_id,
+        snapshot_id="SYNTHETIC:ROOT-INDEPENDENT:BROKER",
+        as_of=as_of,
+        source="VALIDATION_ONLY:BROKER_EXCHANGE",
+        positions=positions,
+        complete=True,
+        capability_verified=True,
+        payload_sha256="f" * 64,
+    )
+    ledger = U19ExecutionLedgerSnapshot(
+        group_id=aggregate_a.group_id,
+        snapshot_id="SYNTHETIC:ROOT-INDEPENDENT:LEDGER",
+        as_of=as_of,
+        source="VALIDATION_ONLY:EXECUTION_LEDGER",
+        positions=positions,
+        complete=True,
+        payload_sha256="0" * 64,
+    )
+    path = tmp_path / "u19-root-independent.sqlite3"
+    first_store = SqliteTrack2U19RecoveryStore(path)
+    first = ValidationOnlyTrack2U19RecoveryCoordinator(
+        first_store, require_expected_group_manifest=True
+    ).recover(
+        group_id=aggregate_a.group_id,
+        broker_snapshot=broker,
+        ledger_snapshot=ledger,
+        expected_group_manifest=aggregate_a,
+    )
+    assert first.status is U19RecoveryStatus.RESTORE_ALLOWED
+
+    restarted_store = SqliteTrack2U19RecoveryStore(path)
+    replay = ValidationOnlyTrack2U19RecoveryCoordinator(
+        restarted_store, require_expected_group_manifest=True
+    ).recover(
+        group_id=aggregate_b.group_id,
+        broker_snapshot=broker,
+        ledger_snapshot=ledger,
+        expected_group_manifest=aggregate_b,
+    )
+    assert replay.checkpoint_id == first.checkpoint_id
+    assert replay.expected_group_manifest_sha256 == first.expected_group_manifest_sha256
+    assert restarted_store.load_latest(aggregate_b.group_id)["expected_group_manifest_sha256"] == aggregate_b.payload_sha256
