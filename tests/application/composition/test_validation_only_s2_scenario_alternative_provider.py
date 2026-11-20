@@ -872,3 +872,23 @@ def test_t17_all_84_synthetic_contract_identities_match_candidate_legs_and_produ
         assert row["source_registry_id"] == registry_id
         assert row["contract_identity_authority"] == "SYNTHETIC_ONLY_NOT_KIS_MASTER"
         assert row["instrument_id"] == _identity(registry_id, expiry, option_type, strike)
+
+
+def test_t17_all_84_quote_premiums_use_the_official_five_cent_tick_band():
+    import json
+    from contracts.kis_option_product_spec import kis_option_price_tick
+
+    provider = _provider("2026-10-12T09:26:00+09:00")
+    manifest, _candidate, _profile, _quotes, _hashes = provider._load_verified_sources()
+    rows = [
+        json.loads(line)
+        for line in (provider.scenario_dir / "four_leg_quotes.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert len(rows) == 84
+    assert Decimal(manifest["u21"]["tick_size"]) == Decimal("0.05")
+    for row in rows:
+        bid, ask = Decimal(row["bid"]), Decimal(row["ask"])
+        assert bid >= Decimal("10.00") and ask >= Decimal("10.00")
+        assert kis_option_price_tick(bid) == Decimal("0.05")
+        assert kis_option_price_tick(ask) == Decimal("0.05")
