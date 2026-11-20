@@ -892,3 +892,27 @@ def test_t17_all_84_quote_premiums_use_the_official_five_cent_tick_band():
         assert bid >= Decimal("10.00") and ask >= Decimal("10.00")
         assert kis_option_price_tick(bid) == Decimal("0.05")
         assert kis_option_price_tick(ask) == Decimal("0.05")
+
+
+def test_t17_all_s2_candidate_expiries_match_second_thursday_under_weekday_only_synthetic_calendar():
+    import json
+    from datetime import date, timedelta
+    from contracts.kis_option_product_spec import calculate_kis_monthly_option_expiry
+
+    class WeekdayOnlySyntheticCalendar:
+        def is_trading_day(self, value):
+            return value.weekday() < 5
+
+        def prev_trading_day(self, value):
+            candidate = value - timedelta(days=1)
+            while not self.is_trading_day(candidate):
+                candidate -= timedelta(days=1)
+            return candidate
+
+    provider = _provider("2026-10-12T09:26:00+09:00")
+    candidates = json.loads((provider.scenario_dir / "candidate_inputs.json").read_text(encoding="utf-8"))
+    expiry_months = {item["expiry"][:6] for item in candidates}
+    assert expiry_months == {"202611"}
+    expected = calculate_kis_monthly_option_expiry("202611", WeekdayOnlySyntheticCalendar())
+    assert expected == "20261112"
+    assert {item["expiry"] for item in candidates} == {expected}
