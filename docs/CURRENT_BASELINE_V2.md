@@ -115,3 +115,10 @@
 - No.1545: [Project200 단일 기준 및 브랜치 보존·정리 원칙](https://app.notion.com/p/4185f4f6eaa1816b80c9ce740c8ba37d)
 - A8 진행: [No.1546](https://app.notion.com/p/4195f4f6eaa1811a9da1d2072a9b3fd1)
 - A8 변경 로그: [Current Baseline v2 update log](https://app.notion.com/p/4195f4f6eaa181869a49c12e5aa83076)
+
+## 2026-11-20 T4 source-reconciled shared Runtime verification
+
+- P5 shared StrategyHub tests initially skipped 13 cases because the isolated T4 worktree lacked manifest-declared source anchors. Per No.1534/No.1665, all 63 manifest-declared event files were rechecked against Project200 and matched; the manifest SHA-256 is `47d6746bfd7abfea9d52016434ca06f097ca117e6724f96c522b58eb8e5590f5` (53,550 rows / 62 days). Two raw anchors and three KRX calendar files were individually SHA-256 verified against the manifest and copied only to the isolated T4 worktree. The 13 tests then passed; Project200 originals were unchanged.
+- Additional focused regression evidence in the T4 worktree: 165 passed across S4 MINI identity/runtime/late-fill/U19 (5), Track4 profile/spec (12), U19 recovery (114), shared StrategyHub (13), FRESH31 bridge/U19 (2), R4 multi-leg lifecycle (6), R4 strategy-decision lifecycle (2), Track6 cancel (2), and validation-only provider boundary (9).
+- compileall, Ruff F821, Ruff F401 on the new Track4 test, and `git diff --check` passed. These are separate targeted suites, not a complete integrated strategy or T4 fault matrix.
+- P5 remains synthetic-only: identity owner unresolved and runtime use prohibited by its manifest. U16/runtime rehydration and the full common/strategy fault matrix remain open. No KIS/REAL_VTS/Live/real-account or actual order/cancel/liquidation API was used.
