@@ -944,25 +944,79 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         strategy_id = str(getattr(evaluation.context, "strategy_id", "") or "")
         return execution_resolvers.resolve(strategy_id, evaluation, canonical)
 
-    def process_pending_multi_leg(tick=None):
-        if tick is not None:
-            now = datetime.fromisoformat(str(tick.timestamp))
-            if "track6_daily_tail_insurance" in selected_ids:
-                strategy6 = registry.get("track6_daily_tail_insurance", "1.0")
-                if strategy6.sequential_lifecycle_enabled and strategy6.lifecycle is not None:
-                    action = strategy6.lifecycle_clock_action(now)
-                    if action is not None and action.kind in {"CANCEL", "CANCEL_AND_RECONCILE"} and action.client_order_id:
-                        multi_leg_bridge.cancel_pending_order(action.client_order_id)
-            if "track7_volatility_skew_weekly_insurance" in selected_ids:
-                strategy7 = registry.get("track7_volatility_skew_weekly_insurance", "1.0")
-                action7 = strategy7.lifecycle_clock_action(now)
-                if action7 is not None and action7.kind == "CANCEL_AND_RECONCILE" and action7.client_order_id:
-                    try:
-                        multi_leg_bridge.cancel_pending_order(action7.client_order_id, reason=action7.reason)
-                    except Exception:
-                        strategy7.cancel_reconciliation_retry()
-                        logger.warning("S7_CALL_CANCEL_RECONCILIATION_PENDING: %s", action7.client_order_id, exc_info=True)
+    def refresh_track2_position_marks():
+        if "track2_asymmetric_trap" not in selected_ids:
+            return
+        strategy2 = registry.get("track2_asymmetric_trap", "1.0")
+        try:
+            multi_leg_bridge.refresh_position_group_marks(
+                strategy_id="track2_asymmetric_trap"
+            )
+            open_group_ids = {
+                lot.group_id
+                for lot in multi_leg_bridge.position_lot_store.open_lots()
+                if lot.run_id == run_id
+                and lot.strategy_id == "track2_asymmetric_trap"
+                and int(lot.remaining_quantity) > 0
+            }
+            if len(open_group_ids) == 1:
+                group_id = next(iter(open_group_ids))
+                strategy2.update_group_pnl_snapshot(
+                    multi_leg_bridge.position_groups.snapshot(group_id)
+                )
+            elif not open_group_ids:
+                strategy2.update_group_pnl_snapshot(None)
+            else:
+                strategy2.update_group_pnl_status(
+                    "GROUP_PNL_MULTIPLE_OPEN_GROUPS_UNRESOLVED"
+                )
+        except ValueError as exc:
+            strategy2.update_group_pnl_status(
+                f"GROUP_PNL_MARK_REFRESH_BLOCKED:{exc}"
+            )
+
+    deferred_lifecycle_actions = []
+
+    def observe_pending_multi_leg(tick=None):
+        # Reconcile only already-routed orders/fills before StrategyHub. No cancel,
+        # repair, retry, flatten or new-entry side effect is permitted in this phase.
         pending_results = list(multi_leg_bridge.process_pending_quotes())
+        refresh_track2_position_marks()
+        return tuple(pending_results)
+
+    def plan_pending_multi_leg(tick=None):
+        deferred_lifecycle_actions.clear()
+        if tick is None:
+            return ()
+        now = datetime.fromisoformat(str(tick.timestamp))
+        if "track6_daily_tail_insurance" in selected_ids:
+            strategy6 = registry.get("track6_daily_tail_insurance", "1.0")
+            if strategy6.sequential_lifecycle_enabled and strategy6.lifecycle is not None:
+                action = strategy6.lifecycle_clock_action(now)
+                if action is not None and action.kind in {"CANCEL", "CANCEL_AND_RECONCILE"} and action.client_order_id:
+                    deferred_lifecycle_actions.append(("track6_daily_tail_insurance", action))
+        if "track7_volatility_skew_weekly_insurance" in selected_ids:
+            strategy7 = registry.get("track7_volatility_skew_weekly_insurance", "1.0")
+            action7 = strategy7.lifecycle_clock_action(now)
+            if action7 is not None and action7.kind == "CANCEL_AND_RECONCILE" and action7.client_order_id:
+                deferred_lifecycle_actions.append(("track7_volatility_skew_weekly_insurance", action7))
+        return tuple(deferred_lifecycle_actions)
+
+
+    def process_pending_multi_leg(tick=None):
+        for strategy_id, action in tuple(deferred_lifecycle_actions):
+            if strategy_id == "track6_daily_tail_insurance":
+                multi_leg_bridge.cancel_pending_order(action.client_order_id)
+            elif strategy_id == "track7_volatility_skew_weekly_insurance":
+                strategy7 = registry.get("track7_volatility_skew_weekly_insurance", "1.0")
+                try:
+                    multi_leg_bridge.cancel_pending_order(action.client_order_id, reason=action.reason)
+                except Exception:
+                    strategy7.cancel_reconciliation_retry()
+                    logger.warning("S7_CALL_CANCEL_RECONCILIATION_PENDING: %s", action.client_order_id, exc_info=True)
+        deferred_lifecycle_actions.clear()
+        pending_results = []
+
         if u16_runtime_coordinator is not None and u16_bridge_ports is not None and tick is not None:
             now = datetime.fromisoformat(str(tick.timestamp))
             for group_plan in multi_leg_bridge.group_plans_for_strategy("track2_asymmetric_trap"):
@@ -1047,34 +1101,9 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
                     pending_results.extend(progressed)
             else:
                 pending_results.extend(multi_leg_bridge.process_track2_entry_progress())
-            strategy2 = registry.get("track2_asymmetric_trap", "1.0")
-            try:
-                multi_leg_bridge.refresh_position_group_marks(
-                    strategy_id="track2_asymmetric_trap"
-                )
-                open_group_ids = {
-                    lot.group_id
-                    for lot in multi_leg_bridge.position_lot_store.open_lots()
-                    if lot.run_id == run_id
-                    and lot.strategy_id == "track2_asymmetric_trap"
-                    and int(lot.remaining_quantity) > 0
-                }
-                if len(open_group_ids) == 1:
-                    group_id = next(iter(open_group_ids))
-                    strategy2.update_group_pnl_snapshot(
-                        multi_leg_bridge.position_groups.snapshot(group_id)
-                    )
-                elif not open_group_ids:
-                    strategy2.update_group_pnl_snapshot(None)
-                else:
-                    strategy2.update_group_pnl_status(
-                        "GROUP_PNL_MULTIPLE_OPEN_GROUPS_UNRESOLVED"
-                    )
-            except ValueError as exc:
-                strategy2.update_group_pnl_status(
-                    f"GROUP_PNL_MARK_REFRESH_BLOCKED:{exc}"
-                )
+        refresh_track2_position_marks()
         return tuple(pending_results)
+
 
     loop = AutomatedVirtualTradingLoop(
         bundle=bootstrap.bundle,
@@ -1085,6 +1114,8 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         identity_provider=identity,
         multi_leg_plan_resolver=multi_leg_plan_resolver,
         multi_leg_executor=multi_leg_bridge.execute,
+        pending_multi_leg_observer=observe_pending_multi_leg,
+        pending_multi_leg_planner=plan_pending_multi_leg,
         pending_multi_leg_processor=process_pending_multi_leg,
         risk_guard_status_source=(risk_guard_status_source or synthetic_runtime_sources),
         risk_engine=risk_engine,

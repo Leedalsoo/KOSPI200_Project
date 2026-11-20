@@ -23,6 +23,9 @@ from core.oms.order_router import StandardOrderRouter
 from core.risk.risk_engine import RiskEngine, RiskGate
 from core.risk.risk_config import RiskConfig
 from core.strategy.contracts import SignalKind, StrategyContext
+from core.strategy.track6_daily_tail_insurance import (
+    Track6LifecyclePersistenceError, Track6LifecycleRecoveryError,
+)
 from core.strategy.execution_plan import ExecutionPlanKind
 from contracts.strategy_runtime_status import StrategyRuntimeStatus
 from application.strategy_hub.contracts import StrategyHubPort
@@ -96,6 +99,8 @@ class AutomatedVirtualTradingLoop:
                  identity_provider: Callable[[object], OptionInstrumentIdentity],
                  multi_leg_plan_resolver: Callable[[object, object], MultiLegExecutionPlan | None] | None = None,
                  multi_leg_executor: Callable[[MultiLegExecutionPlan], object] | None = None,
+                 pending_multi_leg_observer: Callable[[object], object] | None = None,
+                 pending_multi_leg_planner: Callable[[object], object] | None = None,
                  pending_multi_leg_processor: Callable[[object], object] | None = None,
                  risk_config: RiskConfig | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None,
                  risk_engine: RiskEngine | None = None, runtime_stop_switch=None, runtime_evidence_supervisor=None,
@@ -111,6 +116,8 @@ class AutomatedVirtualTradingLoop:
         self.identity_provider = identity_provider
         self.multi_leg_plan_resolver = multi_leg_plan_resolver
         self.multi_leg_executor = multi_leg_executor
+        self.pending_multi_leg_observer = pending_multi_leg_observer
+        self.pending_multi_leg_planner = pending_multi_leg_planner
         self.pending_multi_leg_processor = pending_multi_leg_processor
         self.signal_observation_only = bool(signal_observation_only)
         if validation_only_u21_quote_policy_adapter is not None and (
@@ -167,6 +174,37 @@ class AutomatedVirtualTradingLoop:
             return self._trip_runtime_stop("X2_RUNTIME_STOP_STATUS_UNAVAILABLE:RuntimeError")
         except Exception:  # noqa: BLE001 - inability to verify X2/RiskGuard must not permit submission
             return self._trip_runtime_stop("X2_RUNTIME_STOP_STATUS_UNAVAILABLE")
+
+    def _reconcile_pending_multi_leg(self, tick) -> tuple[object, ...]:
+        """Refresh already-routed fill/position evidence before strategy evaluation.
+
+        This callback is reconciliation-only: it must not cancel or submit orders.
+        It remains available after X2 is latched so late fills can still update the
+        authoritative virtual position/fee state.
+        """
+        observer = getattr(self, "pending_multi_leg_observer", None)
+        if observer is None or self.signal_observation_only:
+            return ()
+        parameters = inspect.signature(observer).parameters
+        result = observer(tick) if parameters else observer()
+        return tuple(result) if isinstance(result, (tuple, list)) else ()
+
+    def _plan_pending_multi_leg_if_admitted(self, tick) -> None:
+        planner = getattr(self, "pending_multi_leg_planner", None)
+        if planner is None or self.signal_observation_only or self._runtime_orders_blocked():
+            return
+        parameters = inspect.signature(planner).parameters
+        try:
+            if parameters:
+                planner(tick)
+            else:
+                planner()
+        except Track6LifecycleRecoveryError:
+            self._trip_runtime_stop("X2_TRACK6_LIFECYCLE_STATE_RECOVERY_FAILED")
+        except Track6LifecyclePersistenceError:
+            self._trip_runtime_stop("X2_TRACK6_LIFECYCLE_STATE_PERSISTENCE_FAILED")
+        except Exception as exc:  # noqa: BLE001 - lifecycle planning failure blocks subsequent actions
+            self._trip_runtime_stop(f"X2_PENDING_LIFECYCLE_PLANNING_FAILED:{type(exc).__name__}")
 
     def _process_pending_multi_leg_if_admitted(self, tick) -> tuple[object, ...]:
         if (
@@ -357,10 +395,8 @@ class AutomatedVirtualTradingLoop:
                 self.last_runtime_evidence_supervision = self.runtime_evidence_supervisor.evaluate(tick)
             except Exception as exc:  # noqa: BLE001 - evidence supervision failure must latch X2
                 self._trip_runtime_stop(f"X2_T5_EVIDENCE_SUPERVISOR_FAILED:{type(exc).__name__}")
-        pending_execution_results = self._process_pending_multi_leg_if_admitted(tick)
-        pending_routed, pending_filled, pending_execution_ids = summarize_pending_multi_leg_results(
-            pending_execution_results
-        )
+        pending_reconciliation_results = self._reconcile_pending_multi_leg(tick)
+        self._plan_pending_multi_leg_if_admitted(tick)
         contexts = self.context_builder(tick, state)
         strategy_result = self.strategy_hub.run(contexts)
         track6_state_failure = next((
@@ -378,6 +414,18 @@ class AutomatedVirtualTradingLoop:
                 else "X2_TRACK6_LIFECYCLE_STATE_PERSISTENCE_FAILED"
             )
             self._trip_runtime_stop(reason)
+        try:
+            pending_action_results = self._process_pending_multi_leg_if_admitted(tick)
+        except Track6LifecycleRecoveryError:
+            self._trip_runtime_stop("X2_TRACK6_LIFECYCLE_STATE_RECOVERY_FAILED")
+            pending_action_results = ()
+        except Track6LifecyclePersistenceError:
+            self._trip_runtime_stop("X2_TRACK6_LIFECYCLE_STATE_PERSISTENCE_FAILED")
+            pending_action_results = ()
+        pending_execution_results = pending_reconciliation_results + pending_action_results
+        pending_routed, pending_filled, pending_execution_ids = summarize_pending_multi_leg_results(
+            pending_execution_results
+        )
         evaluations = self.strategy_results.collect(
             tick_sequence=tick.seq_id, context=contexts, result=strategy_result
         )

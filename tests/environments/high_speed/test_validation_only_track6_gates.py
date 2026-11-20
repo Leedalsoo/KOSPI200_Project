@@ -10,7 +10,9 @@ import pytest
 from application.composition.automated_virtual_trading_loop import AutomatedVirtualTradingLoop
 from core.risk.option_hedge_risk_config import DEFAULT_CONFIG_PATH
 from core.strategy.contracts import SignalKind
-from core.strategy.track6_daily_tail_insurance import Track6DailyTailInsurance
+from core.strategy.track6_daily_tail_insurance import (
+    Track6DailyTailInsurance, Track6LifecyclePersistenceError,
+)
 from environments.high_speed.validation_only_track6_gates import (
     apply_track6_validation_gates,
     load_track6_validation_gate_evidence,
@@ -240,3 +242,189 @@ def test_track6_writer_lock_contention_propagates_as_runtime_critical_persistenc
         assert not store.path.exists()
     finally:
         competing_handle.close()
+
+
+class _StopAfterArbitration(Exception):
+    pass
+
+
+def _ordering_probe_loop(trace, *, blocked=False, strategy_failures=(), planner=None, processor=None):
+    loop = AutomatedVirtualTradingLoop.__new__(AutomatedVirtualTradingLoop)
+    state = {"reconciled": False, "blocked": blocked}
+    loop.signal_observation_only = False
+    loop.runtime_evidence_supervisor = None
+
+    def observe(_tick):
+        trace.append("reconcile_pending_fills")
+        state["reconciled"] = True
+        return ()
+
+    def build_context(_tick, _market_state):
+        assert state["reconciled"] is True
+        trace.append("build_strategy_context")
+        return {"synthetic_strategy": SimpleNamespace(strategy_id="synthetic_strategy")}
+
+    def run_strategies(_contexts):
+        trace.append("strategy_hub")
+        return SimpleNamespace(signals=(), failures=strategy_failures)
+
+    def trip(reason):
+        trace.append(("x2_trip", reason))
+        state["blocked"] = True
+
+    def collect(**_kwargs):
+        trace.append("signal_collection")
+        return ()
+
+    def arbitrate(*_args, **_kwargs):
+        trace.append("arbitration")
+        raise _StopAfterArbitration
+
+    loop.pending_multi_leg_observer = observe
+    loop.pending_multi_leg_planner = planner
+    loop.pending_multi_leg_processor = processor
+    loop.context_builder = build_context
+    loop.strategy_hub = SimpleNamespace(run=run_strategies)
+    loop.strategy_results = SimpleNamespace(collect=collect)
+    loop._runtime_orders_blocked = lambda: state["blocked"]
+    loop._trip_runtime_stop = trip
+    loop.strategy_to_decision = SimpleNamespace(arbitrate=arbitrate)
+    loop.bundle = SimpleNamespace(account=SimpleNamespace(snapshot=lambda: None))
+    loop.identity_provider = lambda _item: None
+    loop.multi_leg_plan_resolver = None
+    loop.fsm = SimpleNamespace(pending_client_order_ids=())
+    return loop
+
+
+def _ordering_probe_tick():
+    return SimpleNamespace(
+        timestamp=datetime(2026, 11, 21, 10, 2).isoformat(),
+        underlying_price=500, volume=1, seq_id=902, ask_price=500,
+    )
+
+
+def test_pending_fill_reconciliation_precedes_strategy_and_side_effects_follow_strategy():
+    trace = []
+    loop = _ordering_probe_loop(
+        trace,
+        planner=lambda _tick: trace.append("plan_lifecycle_actions"),
+        processor=lambda _tick: trace.append("pending_side_effects") or (),
+    )
+
+    with pytest.raises(_StopAfterArbitration):
+        loop.on_tick(_ordering_probe_tick())
+
+    assert trace == [
+        "reconcile_pending_fills",
+        "plan_lifecycle_actions",
+        "build_strategy_context",
+        "strategy_hub",
+        "pending_side_effects",
+        "signal_collection",
+        "arbitration",
+    ]
+
+
+def test_track6_failure_latches_x2_before_pending_side_effect_callback():
+    trace = []
+    failure = SimpleNamespace(
+        strategy_id="track6_daily_tail_insurance",
+        error_type="Track6LifecyclePersistenceError",
+        stage="on_market_state",
+        message="SYNTHETIC_PERSISTENCE_FAILURE",
+    )
+    loop = _ordering_probe_loop(
+        trace,
+        strategy_failures=(failure,),
+        planner=lambda _tick: trace.append("plan_lifecycle_actions"),
+        processor=lambda _tick: trace.append("FORBIDDEN_PENDING_SIDE_EFFECT") or (),
+    )
+
+    with pytest.raises(_StopAfterArbitration):
+        loop.on_tick(_ordering_probe_tick())
+
+    assert trace == [
+        "reconcile_pending_fills",
+        "plan_lifecycle_actions",
+        "build_strategy_context",
+        "strategy_hub",
+        ("x2_trip", "X2_TRACK6_LIFECYCLE_STATE_PERSISTENCE_FAILED"),
+        "signal_collection",
+        "arbitration",
+    ]
+
+
+def test_latched_x2_still_allows_pending_fill_reconciliation_but_not_side_effects():
+    trace = []
+    loop = _ordering_probe_loop(
+        trace,
+        blocked=True,
+        planner=lambda _tick: trace.append("FORBIDDEN_LIFECYCLE_PLANNING"),
+        processor=lambda _tick: trace.append("FORBIDDEN_PENDING_SIDE_EFFECT") or (),
+    )
+
+    with pytest.raises(_StopAfterArbitration):
+        loop.on_tick(_ordering_probe_tick())
+
+    assert trace == [
+        "reconcile_pending_fills",
+        "build_strategy_context",
+        "strategy_hub",
+        "signal_collection",
+        "arbitration",
+    ]
+
+
+def test_track6_clock_persistence_error_in_deferred_processor_trips_x2_before_collection():
+    trace = []
+
+    def processor(_tick):
+        trace.append("pending_processor")
+        raise Track6LifecyclePersistenceError("SYNTHETIC_CLOCK_PERSISTENCE_FAILURE")
+
+    loop = _ordering_probe_loop(
+        trace, planner=lambda _tick: trace.append("plan_lifecycle_actions"),
+        processor=processor,
+    )
+
+    with pytest.raises(_StopAfterArbitration):
+        loop.on_tick(_ordering_probe_tick())
+
+    assert trace == [
+        "reconcile_pending_fills",
+        "plan_lifecycle_actions",
+        "build_strategy_context",
+        "strategy_hub",
+        "pending_processor",
+        ("x2_trip", "X2_TRACK6_LIFECYCLE_STATE_PERSISTENCE_FAILED"),
+        "signal_collection",
+        "arbitration",
+    ]
+
+
+
+def test_track6_lifecycle_planning_persistence_error_trips_x2_before_strategy_and_cancel():
+    trace = []
+
+    def planner(_tick):
+        trace.append("lifecycle_planner")
+        raise Track6LifecyclePersistenceError("SYNTHETIC_CLOCK_PERSISTENCE_FAILURE")
+
+    loop = _ordering_probe_loop(
+        trace,
+        planner=planner,
+        processor=lambda _tick: trace.append("FORBIDDEN_CANCEL_OR_RETRY") or (),
+    )
+
+    with pytest.raises(_StopAfterArbitration):
+        loop.on_tick(_ordering_probe_tick())
+
+    assert trace == [
+        "reconcile_pending_fills",
+        "lifecycle_planner",
+        ("x2_trip", "X2_TRACK6_LIFECYCLE_STATE_PERSISTENCE_FAILED"),
+        "build_strategy_context",
+        "strategy_hub",
+        "signal_collection",
+        "arbitration",
+    ]
