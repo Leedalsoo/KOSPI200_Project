@@ -346,3 +346,12 @@
 - Aggregate contract suite: **24 passed**. Adjacent Track7 lifecycle/cutoff/spec/exit regression: **19 passed**. compileall, scoped Ruff F821/F401 and git diff-check: PASS. Separate batches; not one integrated acceptance count.
 - No.1652 candidate/account checkpoint isolation remains a distinct persistence boundary, not merged with Track7 strategy aggregate. No production persistence/restore API, broker reconciliation precedence/freshness/matching/cancel-retry policy, KIS/REAL_VTS/Live/account API, broker calls, actual orders/cancels/liquidation, collector restart, new collection, Raw/Canonical/accepted data or manifest changes.
 - Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+
+## T4 X3 Track7 restored observation comparison — No.1698 (2026-11-21)
+
+- Latest No.1697/1696/1695/1694/1693/1692, No.1546, Current Baseline, No.1652 checkpoint boundary and No.1534 source/provenance rules were checked before work.
+- Added a test-only read-only projection to compare restored group→expiry routing and expiry-scoped PUT/CALL peak marks with synthetic observation fixtures.
+- Two groups mapped to two distinct expiries and both matched their corresponding synthetic observations after aggregate round-trip. Deliberate expiry mismatch, mark mismatch and unmapped group were reported separately without mutating restored state or invoking side effects. An initial fixture omission of explicit zero-valued opposite-leg marks was corrected after inspecting the existing Track7State defaults; this was a fixture correction, not a production-data blocker.
+- Aggregate contract suite: **26 passed**. Adjacent Track7 lifecycle/cutoff/spec/exit regression: **19 passed**. Separate batches, not integrated acceptance. compileall, scoped Ruff F821/F401 and git diff-check: PASS.
+- No.1652 candidate/account aggregate checkpoint remains a separate boundary. No production persistence/restore API, Runtime wiring, authoritative broker reconciliation precedence/freshness/matching, cancel/retry policy, KIS/REAL_VTS/Live/account API, broker calls, real order/cancel/liquidation, collector restart, new collection or Raw/Canonical/accepted source changes.
+- Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.

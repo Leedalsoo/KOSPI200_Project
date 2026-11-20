@@ -446,3 +446,10 @@ Separate validation batches: Track6 13-file inventory + X2 suites 111 passed; fo
 - Late partial-restore failure cases: expiry/state identity mismatch, empty group identity, unknown group expiry, invalid active-expiry type. Target strategy state remains unchanged on each failure.
 - Aggregate contract suite: 24 passed. Adjacent Track7 lifecycle/cutoff/spec/exit regression: 19 passed. compileall, scoped Ruff F821/F401 and git diff-check passed.
 - No production persistence/restore API or broker reconciliation policy. No Live/account API, broker calls, real order/cancel/liquidation, collector restart, new data collection or raw/canonical/accepted source changes. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+
+## T4 X3 Track7 restored observation comparison (No.1698, 2026-11-21)
+
+- Added test-only read-only comparison of restored group→expiry bindings and expiry-scoped PUT/CALL peak marks against synthetic observation fixtures.
+- Two-group/two-expiry routing round-trip matched. Expiry mismatch, mark mismatch and unmapped group were reported distinctly; the comparison left restored state unchanged and did not trigger side effects.
+- Aggregate contract suite: 26 passed. Adjacent Track7 lifecycle/cutoff/spec/exit regression: 19 passed. compileall, scoped Ruff F821/F401 and git diff-check passed.
+- This is synthetic validation evidence, not authoritative broker reconciliation or production restore. No production/runtime/broker/persistence policy, Live/account API, actual order/cancel/liquidation, collector restart, new collection or raw/canonical source changed. Track7 strategy-state restart recovery and full T4 X3/integrated acceptance remain OPEN.

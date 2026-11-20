@@ -271,6 +271,42 @@ def _restore_aggregate_into(target, envelope, *, x2_latched=False, expected_conf
     return gate
 
 
+def _compare_restored_group_observations(strategy, observations):
+    """Read-only synthetic comparison; it neither mutates state nor triggers actions."""
+    comparisons = {}
+    for group_id, observed in observations.items():
+        expiry = strategy._group_expiry.get(group_id)
+        if expiry is None:
+            comparisons[group_id] = {"status": "UNMAPPED_GROUP"}
+            continue
+        if observed.get("expiry") != expiry:
+            comparisons[group_id] = {
+                "status": "EXPIRY_MISMATCH",
+                "snapshot_expiry": expiry,
+                "observed_expiry": observed.get("expiry"),
+            }
+            continue
+        state = strategy._states_by_expiry.get(expiry)
+        if state is None:
+            comparisons[group_id] = {"status": "SNAPSHOT_STATE_MISSING", "expiry": expiry}
+            continue
+        expected_marks = {
+            "put_peak_mark": state.put_peak_mark,
+            "call_peak_mark": state.call_peak_mark,
+        }
+        mark_mismatches = {
+            key: {"snapshot": value, "observed": observed.get(key)}
+            for key, value in expected_marks.items()
+            if value != observed.get(key)
+        }
+        comparisons[group_id] = {
+            "status": "MATCH" if not mark_mismatches else "MARK_MISMATCH",
+            "expiry": expiry,
+            "mark_mismatches": mark_mismatches,
+        }
+    return comparisons
+
+
 def _restore_observe_then_gate(envelope, *, x2_latched, reconcile_observation, side_effect_action):
     """Test-only ordering harness; it does not call any broker or runtime port."""
     strategy, gate = _restore_aggregate(envelope, x2_latched=x2_latched)
@@ -488,3 +524,64 @@ def test_track7_aggregate_snapshot_rejects_non_list_expiry_and_group_collections
         expected = "EXPIRY_STATES_INVALID" if field == "states_by_expiry" else "GROUP_BINDINGS_INVALID"
         with pytest.raises(ValueError, match=expected):
             _restore_aggregate(_seal(payload))
+
+
+
+def test_track7_restored_multi_group_routing_matches_synthetic_observations_read_only():
+    source = _multi_expiry_strategy()
+    restored, _ = _restore_aggregate(_capture_aggregate(source))
+    before = restored.__dict__.copy()
+    observations = {
+        "synthetic-group-a": {
+            "expiry": "20261126",
+            "put_peak_mark": Decimal("1.25"),
+            "call_peak_mark": Decimal("0"),
+        },
+        "synthetic-group-b": {
+            "expiry": "20261203",
+            "put_peak_mark": Decimal("0"),
+            "call_peak_mark": Decimal("2.75"),
+        },
+    }
+
+    result = _compare_restored_group_observations(restored, observations)
+
+    assert {group: item["status"] for group, item in result.items()} == {
+        "synthetic-group-a": "MATCH",
+        "synthetic-group-b": "MATCH",
+    }
+    assert restored.__dict__ == before
+
+
+def test_track7_restored_observation_discrepancies_are_reported_without_state_mutation():
+    source = _multi_expiry_strategy()
+    restored, _ = _restore_aggregate(_capture_aggregate(source))
+    before = restored.__dict__.copy()
+    observations = {
+        "synthetic-group-a": {
+            "expiry": "20261203",
+            "put_peak_mark": Decimal("1.25"),
+            "call_peak_mark": None,
+        },
+        "synthetic-group-b": {
+            "expiry": "20261203",
+            "put_peak_mark": None,
+            "call_peak_mark": Decimal("2.50"),
+        },
+        "synthetic-group-unmapped": {
+            "expiry": "20261203",
+            "put_peak_mark": None,
+            "call_peak_mark": None,
+        },
+    }
+
+    result = _compare_restored_group_observations(restored, observations)
+
+    assert result["synthetic-group-a"] == {
+        "status": "EXPIRY_MISMATCH",
+        "snapshot_expiry": "20261126",
+        "observed_expiry": "20261203",
+    }
+    assert result["synthetic-group-b"]["status"] == "MARK_MISMATCH"
+    assert result["synthetic-group-unmapped"] == {"status": "UNMAPPED_GROUP"}
+    assert restored.__dict__ == before

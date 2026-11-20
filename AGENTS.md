@@ -377,3 +377,9 @@
 - Expanded test-only aggregate structural validation: require expiry-state and group-binding collections to be lists; expiry/group identifiers must be non-empty strings; active expiry must be null or a non-empty string.
 - Synthetic late-failure cases cover a later expiry/state identity mismatch, malformed group identity, group mapped to an unknown expiry, and invalid active-expiry type. Each is applied after earlier valid entries to exercise partial-restore risk; target state must remain unchanged.
 - Candidate/account aggregate checkpoint isolation from No.1652 remains a separate persistence contract; no conflation with Track7 strategy state.
+## 2026-11-21 Track7 restored multi-group observation comparison
+
+- Continued from No.1697 using the latest Notion decisions and the isolated T4 worktree. No.1534's source/provenance rule remains: missing or conflicting observations are compared and reported separately; do not infer an authoritative identity or discard original evidence.
+- Added a test-only read-only projection comparing restored group→expiry bindings and expiry-scoped PUT/CALL peak marks against synthetic observation fixtures.
+- Verified two groups route to their own distinct expiry state after aggregate round-trip. Verified expiry mismatch, mark mismatch and an unmapped observed group are surfaced as distinct comparison outcomes without mutating the restored strategy state or triggering actions.
+- No production Runtime, broker, persistence, reconciliation precedence, cancellation/retry or live-account behavior was changed.
