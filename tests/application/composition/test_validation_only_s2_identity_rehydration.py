@@ -1,3 +1,4 @@
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -199,3 +200,85 @@ def test_source_rehydration_resolves_missing_manifest_partitions_from_original_r
     assert provider.last_source_resolution["accepted_manifest"] == "PROJECT_ROOT"
     assert provider.last_source_resolution["accepted_partition:20261012"] == "ORIGINAL_SOURCE_ROOT:0"
     assert provider.last_source_resolution["accepted_partition:20261013"] == "ORIGINAL_SOURCE_ROOT:0"
+
+
+@pytest.mark.parametrize(
+    ("tamper", "expected_error"),
+    (
+        ("candidate_id", "T7_S2_IDENTITY_CANDIDATE_ID_MISMATCH"),
+        ("quote_candidate_id", "T7_S2_IDENTITY_CANDIDATE_ID_MISMATCH:inner_put"),
+        ("candidate_role", "T7_S2_IDENTITY_ROLE_OR_INSTRUMENT_SET_MISMATCH"),
+        ("duplicate_role", "T7_S2_IDENTITY_ROLE_OR_INSTRUMENT_SET_MISMATCH"),
+        ("duplicate_instrument", "T7_S2_IDENTITY_ROLE_OR_INSTRUMENT_SET_MISMATCH"),
+        ("authority", "T7_S2_IDENTITY_AUTHORITY_NOT_VALIDATION_ONLY:inner_put"),
+        ("source", "T7_S2_IDENTITY_AUTHORITY_NOT_VALIDATION_ONLY:inner_put"),
+        ("multiplier_provenance", "T7_S2_IDENTITY_AUTHORITY_NOT_VALIDATION_ONLY:inner_put"),
+        ("option_type", "T7_S2_IDENTITY_CONTRACT_FIELDS_MISMATCH:inner_put"),
+        ("strike", "T7_S2_IDENTITY_CONTRACT_FIELDS_MISMATCH:inner_put"),
+        ("expiry", "T7_S2_IDENTITY_CONTRACT_FIELDS_MISMATCH:inner_put"),
+        ("multiplier", "T7_S2_IDENTITY_CONTRACT_FIELDS_MISMATCH:inner_put"),
+        ("malformed_multiplier", "T7_S2_IDENTITY_CONTRACT_FIELDS_INVALID:inner_put"),
+        ("instrument_id", "T7_S2_IDENTITY_CONTRACT_FIELDS_MISMATCH:inner_put"),
+    ),
+)
+def test_hash_verified_source_with_in_memory_candidate_or_leg_crosswalk_tamper_is_rejected_before_u19_build(
+    tamper, expected_error
+):
+    if not ORIGINAL_ROOT.is_dir():
+        pytest.skip("read-only exact original S2 source root is not mounted")
+
+    class _CaptureVssf:
+        calls = 0
+
+        def build_candidate(self, **kwargs):
+            self.calls += 1
+            return kwargs
+
+    class _TamperedProvider(ValidationOnlyS2ScenarioAlternativeProvider):
+        def _load_verified_sources(self):
+            manifest, candidate, profile, quotes, hashes = super()._load_verified_sources()
+            if tamper == "candidate_id":
+                candidate["candidate_id"] = "S2-CANDIDATE-OTHER"
+            elif tamper == "quote_candidate_id":
+                quotes[0]["candidate_id"] = "S2-CANDIDATE-OTHER"
+            elif tamper == "candidate_role":
+                candidate["legs"][0]["role"] = "unknown_role"
+            elif tamper == "duplicate_role":
+                quotes[1]["leg_role"] = quotes[0]["leg_role"]
+            elif tamper == "duplicate_instrument":
+                quotes[1]["instrument_id"] = quotes[0]["instrument_id"]
+            elif tamper == "authority":
+                quotes[0]["contract_identity_authority"] = "KIS_MASTER"
+            elif tamper == "source":
+                quotes[0]["source"] = "KIS:OPTION"
+            elif tamper == "multiplier_provenance":
+                quotes[0]["contract_multiplier_provenance"] = ""
+            elif tamper == "option_type":
+                quotes[0]["option_type"] = "CALL"
+            elif tamper == "strike":
+                quotes[0]["strike"] = str(Decimal(str(quotes[0]["strike"])) + Decimal("50"))
+            elif tamper == "expiry":
+                quotes[0]["expiry"] = "20261210"
+            elif tamper == "multiplier":
+                quotes[0]["contract_multiplier"] = "0"
+            elif tamper == "malformed_multiplier":
+                quotes[0]["contract_multiplier"] = "not-a-number"
+            elif tamper == "instrument_id":
+                quotes[0]["instrument_id"] = "KIS:NOT-A-SYNTHETIC-ID"
+            return manifest, candidate, profile, quotes, hashes
+
+    capture = _CaptureVssf()
+    provider = _TamperedProvider(
+        project_root=Path(__file__).resolve().parents[3],
+        run_id="S2-IDENTITY-TAMPER-MATRIX",
+        vssf_adapter=capture,
+        source_roots=(ORIGINAL_ROOT,),
+    )
+    tick = SimpleNamespace(
+        timestamp="2026-10-12T09:26:00+09:00",
+        underlying_price=1034.62,
+    )
+
+    with pytest.raises(ValueError, match=expected_error):
+        provider(tick)
+    assert capture.calls == 0

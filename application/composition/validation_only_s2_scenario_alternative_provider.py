@@ -224,6 +224,8 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
         quotes: list[dict[str, Any]],
         hashes: dict[str, str],
     ) -> tuple[ValidationOnlyS2IdentityEvidence, ...]:
+        if str(candidate.get("candidate_id") or "") != self.candidate_id:
+            raise ValueError("T7_S2_IDENTITY_CANDIDATE_ID_MISMATCH")
         expected_legs = {
             str(leg.get("role")): leg
             for leg in candidate.get("legs", ())
@@ -246,6 +248,8 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
             source = str(row.get("source") or "")
             provenance = str(row.get("provenance") or "")
             multiplier_provenance = str(row.get("contract_multiplier_provenance") or "")
+            if str(row.get("candidate_id") or "") != self.candidate_id:
+                raise ValueError(f"T7_S2_IDENTITY_CANDIDATE_ID_MISMATCH:{role}")
             if (
                 authority != "SYNTHETIC_ONLY_NOT_KIS_MASTER"
                 or source != "SYNTHETIC:DERIVED_SCENARIO"
