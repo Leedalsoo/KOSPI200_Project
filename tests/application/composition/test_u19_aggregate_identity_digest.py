@@ -515,6 +515,8 @@ def test_same_run_id_multiple_candidates_have_distinct_u19_group_and_checkpoint_
     coordinator = ValidationOnlyTrack2U19RecoveryCoordinator(
         store, require_expected_group_manifest=True
     )
+    child_decisions = {}
+    child_snapshots = {}
     for index, candidate_id in enumerate(("S2-CANDIDATE-001", "S2-CANDIDATE-002")):
         capture = captures[candidate_id]
         broker = capture.kwargs["broker_snapshot"]
@@ -534,9 +536,73 @@ def test_same_run_id_multiple_candidates_have_distinct_u19_group_and_checkpoint_
             expected_group_manifest=manifests[candidate_id],
         )
         assert decision.status in {U19RecoveryStatus.FLAT_CONFIRMED, U19RecoveryStatus.RESTORE_ALLOWED}
+        child_decisions[candidate_id] = decision
+        child_snapshots[candidate_id] = (broker, ledger)
+
+    account_aggregate = _compose_account_expected_group_manifest(
+        group_manifests=(manifest_a, manifest_b),
+        group_ids=(manifest_a.group_id, manifest_b.group_id),
+        aggregate_group_id=f"VALIDATION_ONLY:ACCOUNT:{run_id}",
+        opening_positions=(),
+        opening_evidence_sha256="f" * 64,
+    )
+    assert account_aggregate is not None
+    account_as_of = datetime(2026, 11, 20, 9, 30, tzinfo=timezone.utc)
+    account_broker = U19BrokerPositionSnapshot(
+        group_id=account_aggregate.group_id,
+        snapshot_id="SYNTHETIC:SAME-RUN:ACCOUNT:BROKER",
+        as_of=account_as_of,
+        source="VALIDATION_ONLY:BROKER_EXCHANGE",
+        positions=account_aggregate.expected_positions,
+        complete=True,
+        capability_verified=True,
+        payload_sha256="c" * 64,
+    )
+    account_ledger = U19ExecutionLedgerSnapshot(
+        group_id=account_aggregate.group_id,
+        snapshot_id="SYNTHETIC:SAME-RUN:ACCOUNT:LEDGER",
+        as_of=account_as_of,
+        source="VALIDATION_ONLY:EXECUTION_LEDGER",
+        positions=account_aggregate.expected_positions,
+        complete=True,
+        payload_sha256="d" * 64,
+    )
+    account_decision = coordinator.recover(
+        group_id=account_aggregate.group_id,
+        broker_snapshot=account_broker,
+        ledger_snapshot=account_ledger,
+        expected_group_manifest=account_aggregate,
+    )
+    assert account_decision.status is U19RecoveryStatus.FLAT_CONFIRMED
 
     latest_a = store.load_latest(manifest_a.group_id)
     latest_b = store.load_latest(manifest_b.group_id)
     assert latest_a["expected_group_manifest_id"] == manifest_a.manifest_id
     assert latest_b["expected_group_manifest_id"] == manifest_b.manifest_id
     assert latest_a["checkpoint_id"] != latest_b["checkpoint_id"]
+    latest_account = store.load_latest(account_aggregate.group_id)
+    assert latest_account["expected_group_manifest_id"] == account_aggregate.manifest_id
+
+    restarted_store = SqliteTrack2U19RecoveryStore(tmp_path / "same-run-multi-candidate.sqlite3")
+    restarted = ValidationOnlyTrack2U19RecoveryCoordinator(
+        restarted_store, require_expected_group_manifest=True
+    )
+    for candidate_id in ("S2-CANDIDATE-001", "S2-CANDIDATE-002"):
+        broker, ledger = child_snapshots[candidate_id]
+        replay = restarted.recover(
+            group_id=broker.group_id,
+            broker_snapshot=broker,
+            ledger_snapshot=ledger,
+            expected_group_manifest=manifests[candidate_id],
+        )
+        assert replay.checkpoint_id == child_decisions[candidate_id].checkpoint_id
+    account_replay = restarted.recover(
+        group_id=account_aggregate.group_id,
+        broker_snapshot=account_broker,
+        ledger_snapshot=account_ledger,
+        expected_group_manifest=account_aggregate,
+    )
+    assert account_replay.checkpoint_id == account_decision.checkpoint_id
+    assert restarted_store.load_latest(manifest_a.group_id)["expected_group_manifest_id"] == manifest_a.manifest_id
+    assert restarted_store.load_latest(manifest_b.group_id)["expected_group_manifest_id"] == manifest_b.manifest_id
+    assert restarted_store.load_latest(account_aggregate.group_id)["expected_group_manifest_id"] == account_aggregate.manifest_id
