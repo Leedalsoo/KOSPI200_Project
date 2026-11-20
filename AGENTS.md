@@ -180,3 +180,9 @@
 - S3/S4/S5 focused batch: 41 passed. `compileall`, scoped Ruff F821/F401, `git diff --check` passed.
 - S3 execution remains blocked because two economically valid tradable spread legs/sides/quantities/identities are not approved; no same-contract opposite orders were invented. S5 remains entry-blocked: R6 D1 Option-primary + 1 initial gap-fill option / 1 opposite option hedge structure is recorded, but D2-D8 thresholds, strike/expiry selection, costs, risk and lifecycle priorities remain unapproved. No policy activation or runtime entry was enabled.
 - No KIS/REAL_VTS/Live/account API, new collection, real order/cancel/liquidation. Original market data unchanged.
+## Synthetic validation execution rule (2026-11-20)
+
+- If authoritative real-account investment API inputs are not connected, continue verification with provenance-labelled synthetic/validation-only datasets and the latest approved criteria. Do not infer operational values or promote synthetic results to Live/REAL_VTS readiness.
+- When data is missing or inconsistent, reconcile the latest active Notion decision, prior execution evidence, canonical/local source files, manifest and raw hashes before deciding the test is unavailable. If an exact source cannot be recovered, use a clearly labelled synthetic alternative only for the scope it can prove; preserve originals.
+- Report each focused test invocation separately. Do not sum overlapping test batches as a unique test count or describe them as integrated acceptance.
+- Once an authoritative real-account API is separately connected and approved, remap and revalidate the complete codebase against confirmed contract identity, multiplier, tick, calendar, quotes, fees, margin, account risk and lifecycle fields.

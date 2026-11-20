@@ -249,3 +249,13 @@ The P5 manifest still explicitly marks identity owner unresolved and runtime use
 - S3/S4/S5 focused batch: 41 passed. `compileall`, scoped Ruff F821/F401, `git diff --check` passed.
 - S3 execution remains blocked because two economically valid tradable spread legs/sides/quantities/identities are not approved; no same-contract opposite orders were invented. S5 remains entry-blocked: R6 D1 Option-primary + 1 initial gap-fill option / 1 opposite option hedge structure is recorded, but D2-D8 thresholds, strike/expiry selection, costs, risk and lifecycle priorities remain unapproved. No policy activation or runtime entry was enabled.
 - No KIS/REAL_VTS/Live/account API, new collection, real order/cancel/liquidation. Original market data unchanged.
+## 16. T4 X3 continued strategy/common Runtime regression (2026-11-20)
+
+Latest focused regression in the isolated T4 worktree (`work/q25-t4-s4-runtime-fault-20261120`):
+
+| Scope | Result |
+|---|---:|
+| Track5 analytics/option contract source, Track7/Track9 contract source, Track7/8/9 policy and lifecycle | 108 passed |
+| Track4 MINI identity, Track6 close/marks, S7 group close/reconciliation, S8 natural normal/multi-contract partial fill, S9 retry/partial reject and Virtual retry/PnL | 49 passed |
+
+These are separate validation-only invocations and may overlap earlier batches. They are not a unique-test total, integrated T4 acceptance, or strategy-wide natural-signal certification. No production policy or economic spread leg was invented. S3 economic legs and S5 D2-D8 remain unapproved; P5 remains `runtime_use=PROHIBITED` synthetic-fixture-only. New-entry/order-submission safety flags remain disabled during recovery validation. No KIS/REAL_VTS/Live/account API, actual order/cancel/liquidation, or new data collection was used. See Notion No.1667.

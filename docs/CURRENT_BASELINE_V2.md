@@ -163,3 +163,9 @@
 - S3/S4/S5 focused batch: 41 passed. `compileall`, scoped Ruff F821/F401, `git diff --check` passed.
 - S3 execution remains blocked because two economically valid tradable spread legs/sides/quantities/identities are not approved; no same-contract opposite orders were invented. S5 remains entry-blocked: R6 D1 Option-primary + 1 initial gap-fill option / 1 opposite option hedge structure is recorded, but D2-D8 thresholds, strike/expiry selection, costs, risk and lifecycle priorities remain unapproved. No policy activation or runtime entry was enabled.
 - No KIS/REAL_VTS/Live/account API, new collection, real order/cancel/liquidation. Original market data unchanged.
+## 2026-11-20 T4 X3 continued strategy/common Runtime regression
+
+- Track5 analytics and option contract source; Track7/Track9 contract source; Track7/8/9 policy and lifecycle focused batch: 108 passed.
+- Track4 MINI identity; Track6 close/marks; S7 group close/reconciliation; S8 natural normal and multi-contract partial-fill Runtime; S9 retry/partial-reject and Virtual retry/PnL focused batch: 49 passed.
+- Separate batches may overlap earlier runs. Do not sum as unique tests or describe as integrated T4 acceptance. T4 branch remained clean at starting SHA `faf1c6e71e41998520d2a7fd4a909d54101f0c00` before documentation updates.
+- No policy or S3 spread legs invented. S3 economic legs and S5 D2-D8 remain unapproved; P5 `runtime_use=PROHIBITED`. No KIS/REAL_VTS/Live/account API, actual orders/cancels/liquidations, or new data collection.
