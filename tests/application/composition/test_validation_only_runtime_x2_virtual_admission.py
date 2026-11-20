@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
@@ -502,5 +503,86 @@ def test_t4_x2_tripped_allows_fill_reconciliation_but_skips_planning_and_actions
     assert reconciliation == (reconciled_fill,)
     assert actions == ()
     assert calls == [("reconcile", tick.timestamp)]
+    assert stop_switch.snapshot().status == "TRIPPED"
+    assert stop_switch.snapshot().order_admission_blocked is True
+
+def test_t4_x2_latched_on_tick_runs_reconciliation_before_strategy_and_skips_lifecycle_actions(tmp_path):
+    inputs = _inputs()
+    stop_switch = _switch(inputs, tmp_path)
+    admission = ValidationOnlyRuntimeStopAdmissionSource(
+        _BaseStatusSource(inputs[4]), stop_switch,
+    )
+    calls = []
+    tick = SimpleNamespace(
+        timestamp="2026-11-21T09:31:00+09:00",
+        seq_id=1711,
+        underlying_price=Decimal("350.25"),
+        volume=1,
+        ask_price=Decimal("350.25"),
+    )
+    reconciled_fill = SimpleNamespace(
+        strategy_id="SYNTHETIC_TRACK7",
+        routed_legs=1,
+        filled_legs=1,
+        reports=(SimpleNamespace(execution_id="SYNTHETIC:ON-TICK-LATE-FILL:001"),),
+    )
+
+    class _StrategyHub:
+        def run(self, contexts):
+            calls.append(("strategy", tuple(contexts)))
+            return SimpleNamespace(failures=(), signals=())
+
+    class _StrategyResults:
+        def collect(self, *, tick_sequence, context, result):
+            calls.append(("collect", tick_sequence))
+            return ()
+
+    class _StrategyDecision:
+        def arbitrate(self, evaluations, **kwargs):
+            calls.append(("arbitrate", len(evaluations)))
+            return SimpleNamespace(
+                arbitration=SimpleNamespace(approved_signals=(), rejected_signals=()),
+                execution_plans=(),
+                cancel_requests=(),
+            )
+
+    loop = _loop(inputs[1], stop_switch, admission)
+    loop.bundle.account = SimpleNamespace(snapshot=lambda: None)
+    loop.strategy_hub = _StrategyHub()
+    loop.context_builder = lambda observed_tick, state: (
+        calls.append(("context", observed_tick.seq_id)) or {}
+    )
+    loop.strategy_results = _StrategyResults()
+    loop.strategy_to_decision = _StrategyDecision()
+    loop.decision_to_command = SimpleNamespace(build_commands=lambda evaluations, approved: ())
+
+    def observer(observed_tick):
+        calls.append(("reconcile", observed_tick.seq_id))
+        return (reconciled_fill,)
+
+    def planner(_observed_tick):
+        calls.append(("plan", None))
+
+    def processor(_observed_tick):
+        calls.append(("action", None))
+        return ()
+
+    loop.pending_multi_leg_observer = observer
+    loop.pending_multi_leg_planner = planner
+    loop.pending_multi_leg_processor = processor
+    stop_switch.trip("T4_SYNTHETIC_X2_FULL_ON_TICK")
+
+    result = loop.on_tick(tick)
+
+    assert calls == [
+        ("reconcile", tick.seq_id),
+        ("context", tick.seq_id),
+        ("strategy", ()),
+        ("collect", tick.seq_id),
+        ("arbitrate", 0),
+    ]
+    assert result.execution_ids == ("SYNTHETIC:ON-TICK-LATE-FILL:001",)
+    assert result.routed == 1
+    assert result.filled == 1
     assert stop_switch.snapshot().status == "TRIPPED"
     assert stop_switch.snapshot().order_admission_blocked is True

@@ -565,3 +565,15 @@ The test-only restore-order harness now treats X2 gate accessor exceptions and u
 - This characterizes the helper-level boundary only; it does not claim broker reconciliation correctness, persisted position/fee update, or full on_tick/integrated acceptance. No production Runtime/X2 code, reconciliation implementation, lifecycle policy, callback cancellation, retry, atomic gate, lock scope, broker behavior, or side-effect semantics changed.
 - No.1652 separation maintained. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 - No KIS/REAL_VTS/Live/account API, broker call, actual order/cancel/liquidation, collector restart, new collection, or Raw/Canonical/accepted source/manifest change.
+
+
+
+## T4 X3 Track7 full on_tick ordering under X2 latch (No.1711, 2026-11-21)
+
+- Reconciled No.1710/1709, No.1689, No.1546, Current Baseline and No.1534 before editing. No.1652 candidate/account aggregate checkpoint remains separate from Track7 strategy aggregate.
+- Inspected the actual AutomatedVirtualTradingLoop.on_tick() path. Observed order: pending-fill reconciliation ? X2-gated lifecycle planning attempt ? context construction ? StrategyHub evaluation ? X2-gated pending action attempt ? pending-result aggregation ? strategy-result collection ? decision arbitration.
+- Added one deterministic synthetic test-only full-on_tick characterization with X2 already TRIPPED. The reconciliation observer ran first and its synthetic late-fill result flowed into the tick result; context/strategy evaluation and decision arbitration continued; lifecycle planner and pending action processor callbacks were not invoked; X2 remained TRIPPED and order admission remained blocked.
+- Test result batches (separate; not summed as integrated acceptance): X2 Virtual admission 13 passed; auto-stop/evidence-supervisor/U19 69 passed; Track7 aggregate snapshot contract 46 passed; adjacent Track7 lifecycle/cutoff/policy regression 19 passed. py -m compileall -q application tests, scoped Ruff F821/F401, and git diff --check passed.
+- The test uses empty synthetic strategy signals and no broker action. It does not establish correctness of real broker reconciliation, persisted position/fee updates, cancellation/repair/flatten/retry suppression for every downstream path, or integrated acceptance. No production Runtime/X2 implementation or strategy policy changed.
+- No.1652 separation maintained. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+- No KIS/REAL_VTS/Live/account API, broker call, actual order/cancel/liquidation, collector restart, new collection, or Raw/Canonical/accepted source/manifest change.
