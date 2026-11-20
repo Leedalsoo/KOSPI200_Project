@@ -192,3 +192,30 @@ def test_track6_lifecycle_recovery_failure_trips_runtime_stop_before_signal_coll
     assert calls[0] == ("trip", "X2_TRACK6_LIFECYCLE_STATE_RECOVERY_FAILED")
     assert calls[1] == ("collect", None)
     assert result.approved == result.routed == result.filled == 0
+
+
+def test_track6_torn_state_stream_is_wrapped_as_recovery_failure(tmp_path):
+    from core.strategy.track6_order_lifecycle import Track6LifecycleConfig
+    from core.strategy.track6_daily_tail_insurance import Track6LifecycleRecoveryError
+    from environments.high_speed.track6_validation_state_store import Track6ValidationStateStore
+
+    store = Track6ValidationStateStore(tmp_path, run_id="SYNTHETIC-TRACK6-TORN-RECOVERY")
+    store.append({
+        "run_id": "SYNTHETIC-TRACK6-TORN-RECOVERY",
+        "trading_date": "20261121",
+        "status": "FLAT_CONFIRMED",
+        "open_quantity": {"put": 0, "call": 0},
+        "working_client_order_id": None,
+    })
+    with store.path.open("ab") as stream:
+        stream.write(b'{"partial":')
+        stream.flush()
+
+    strategy = Track6DailyTailInsurance(
+        lifecycle_config=Track6LifecycleConfig(),
+        lifecycle_state_store=store,
+        lifecycle_run_id="SYNTHETIC-TRACK6-TORN-RECOVERY",
+    )
+    with pytest.raises(Track6LifecycleRecoveryError, match="TRACK6_LIFECYCLE_STATE_RECOVERY_FAILED") as error:
+        strategy._ensure_lifecycle("20261121")
+    assert error.value.__cause__ is not None

@@ -278,3 +278,12 @@
 - Full Track6 inventory (13 files) + X2 admission/auto-stop suites: **100 passed**. `compileall`, scoped Ruff F821/F401 for the changed store/test, scoped F821 for adjacent Track6 Runtime files, and `git diff --check` passed.
 - This enforces one active writer per run_id. It does not coordinate different run_ids, distributed/network filesystems with unverified lock semantics, or readers racing a write; readers still fail closed on a torn/incomplete record. No lock is held across Runtime lifecycle work, only the store append transaction.
 - Synthetic validation-only. No raw/canonical/accepted data, manifest, risk profile, operating config or Live integration changed. No KIS/REAL_VTS/Live/account API, actual order/cancel/liquidation or new data collection. Full T4 X3 matrix/integrated acceptance remains OPEN.
+
+## T4 X3 S6 process-crash lock release + concurrent-reader torn-tail boundary (2026-11-21)
+
+- Added spawned-process termination test: one child process acquires the per-run OS lock and is forcibly terminated while holding it; a fresh writer then acquires the same lock, appends sequence 1, and a fresh reader validates the chain. This verifies OS process-exit lock release on the current Windows host; it does not prove host/power-loss or network-filesystem behavior.
+- Added deterministic reader/writer overlap test: writer flushes a partial JSONL record and pauses; concurrent reader sees the incomplete tail and raises `TRACK6_VALIDATION_STATE_TORN_RECORD`. Writer then reports `TRACK6_VALIDATION_STATE_WRITE_INCOMPLETE`; partial bytes are preserved and subsequent read remains fail-closed.
+- Added Track6 lifecycle integration regression: a persisted torn tail is wrapped as `Track6LifecycleRecoveryError`, preserving the underlying cause; Runtime's previously tested X2 recovery-failure trip remains the gate before signal collection.
+- Focused store + lifecycle gate tests: 23 passed. Full Track6 inventory (13 files) + X2 admission/auto-stop suites: **103 passed in 7.70s**. compileall, scoped Ruff F821/F401 and `git diff --check` passed.
+- No production source changes in this batch; tests only. Per-run writer lock behavior remains local-filesystem/OS-specific. Readers do not acquire the writer lock; they reject an observed torn/incomplete tail. Full T4 X3 matrix/integrated acceptance remains OPEN.
+- Synthetic validation-only; no raw/canonical/accepted data, manifests, risk profiles, operating config, Live/account API, actual order/cancel/liquidation or new data collection.

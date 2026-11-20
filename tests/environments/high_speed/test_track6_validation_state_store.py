@@ -1,5 +1,7 @@
 import json
 import multiprocessing
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -194,3 +196,76 @@ def test_track6_validation_state_store_rejects_second_process_writer_and_recover
     latest = Track6ValidationStateStore(tmp_path, run_id="S6-RUN-MULTIPROCESS").load_latest()
     assert latest["sequence"] == 1
     assert latest["snapshot"]["status"] == "AFTER_LOCK_RELEASE"
+
+
+def test_track6_validation_state_store_recovers_lock_after_writer_process_crash(tmp_path):
+    context = multiprocessing.get_context("spawn")
+    ready = context.Event()
+    release = context.Event()
+    process = context.Process(
+        target=_hold_track6_writer_lock,
+        args=(str(tmp_path), "S6-RUN-CRASH-LOCK", ready, release),
+    )
+    process.start()
+    assert ready.wait(10), "writer process did not acquire the lock"
+    process.terminate()
+    process.join(10)
+    assert not process.is_alive()
+    assert process.exitcode is not None and process.exitcode != 0
+
+    store = Track6ValidationStateStore(tmp_path, run_id="S6-RUN-CRASH-LOCK")
+    store.append({"run_id": "S6-RUN-CRASH-LOCK", "status": "AFTER_CRASH"})
+    latest = Track6ValidationStateStore(tmp_path, run_id="S6-RUN-CRASH-LOCK").load_latest()
+    assert latest["sequence"] == 1
+    assert latest["snapshot"]["status"] == "AFTER_CRASH"
+
+
+def test_track6_reader_fails_closed_while_writer_has_persisted_partial_record(tmp_path, monkeypatch):
+    import environments.high_speed.track6_validation_state_store as state_store_module
+
+    store = Track6ValidationStateStore(tmp_path, run_id="S6-RUN-READER-RACE")
+    real_fdopen = state_store_module.os.fdopen
+    partial_written = threading.Event()
+    continue_write = threading.Event()
+
+    class PausedPartialWriteStream:
+        def __init__(self, raw):
+            self.raw = raw
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self.raw.close()
+
+        def write(self, payload):
+            count = max(1, len(payload) // 2)
+            written = self.raw.write(payload[:count])
+            self.raw.flush()
+            partial_written.set()
+            assert continue_write.wait(10), "test did not release paused writer"
+            return written
+
+        def flush(self):
+            self.raw.flush()
+
+        def fileno(self):
+            return self.raw.fileno()
+
+    monkeypatch.setattr(
+        state_store_module.os,
+        "fdopen",
+        lambda fd, mode, closefd=True: PausedPartialWriteStream(real_fdopen(fd, mode, closefd=closefd)),
+    )
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(store.append, {"run_id": "S6-RUN-READER-RACE", "status": "PARTIAL"})
+        assert partial_written.wait(10), "writer did not expose partial record"
+        reader = Track6ValidationStateStore(tmp_path, run_id="S6-RUN-READER-RACE")
+        with pytest.raises(Track6ValidationStateStoreError, match="TORN_RECORD"):
+            reader.load_latest()
+        continue_write.set()
+        with pytest.raises(Track6ValidationStateStoreError, match="WRITE_INCOMPLETE"):
+            future.result(timeout=10)
+    monkeypatch.undo()
+    with pytest.raises(Track6ValidationStateStoreError, match="TORN_RECORD"):
+        Track6ValidationStateStore(tmp_path, run_id="S6-RUN-READER-RACE").load_latest()

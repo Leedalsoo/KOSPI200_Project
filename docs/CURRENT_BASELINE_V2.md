@@ -253,3 +253,12 @@
 - Added a spawned second-process test proving competing writer rejection without a JSONL mutation and successful append after lock release.
 - Full Track6 inventory (13 files) + X2 admission/auto-stop suites: **100 passed in 7.39s**. compileall, scoped Ruff F821/F401 for changed store/test, adjacent Track6 F821 and diff-check passed.
 - Synthetic validation-only. No raw/canonical/accepted data, manifests, risk profiles, operating config, Live/account API, actual order/cancel/liquidation or new collection. Full T4 X3 matrix/integrated acceptance remains OPEN.
+
+## 2026-11-21 T4 X3 S6 process-crash + concurrent-reader recovery boundary ? No.1684
+
+- Spawned child process acquired the per-run OS writer lock and was forcibly terminated while holding it. A fresh process then acquired the same lock, appended sequence 1, and a new reader validated the chain. This verifies process-exit lock release on the current Windows host only; it is not a power-loss or network-filesystem test.
+- Deterministic reader/writer overlap: writer flushed a partial JSONL record and paused; concurrent reader rejected it with `TRACK6_VALIDATION_STATE_TORN_RECORD`. Writer returned `TRACK6_VALIDATION_STATE_WRITE_INCOMPLETE`; partial bytes were preserved and subsequent read remained fail-closed.
+- Added lifecycle integration test: persisted torn tail becomes `Track6LifecycleRecoveryError` with original cause preserved. Existing Runtime X2 recovery-failure stop-before-signal-collection test remains in the suite.
+- Focused store + lifecycle gate tests: 23 passed. Full Track6 inventory (13 files) + X2 admission/auto-stop suites: **103 passed in 7.70s**. compileall, scoped Ruff F821/F401 and git diff-check passed.
+- No production source change in this batch (tests/docs only). Readers do not acquire writer lock; they validate and fail closed on torn/incomplete records. Process-exit lock release is verified on current Windows host only; power-loss durability, network filesystem locking and full T4 integrated acceptance remain unproven/open.
+- Synthetic validation-only. No raw/canonical/accepted data, manifests, risk profiles, operating config, Live/account API, actual order/cancel/liquidation or new collection.
