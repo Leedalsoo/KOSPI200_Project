@@ -396,4 +396,4 @@ def test_t6_adapter_rejects_runtime_run_mismatch():
     adapter, broker, _report, _lot, _bridge, vssf = _fixture()
     vssf.validation_run_id = "RUN-OTHER"
     with pytest.raises(ValueError, match="T6_VSSF_RUNTIME_RUN_SCOPE_MISMATCH"):
-        _build(adapter, broker)\n
+        _build(adapter, broker)
