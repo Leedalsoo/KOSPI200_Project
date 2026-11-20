@@ -104,3 +104,14 @@
 - At the start of each task, fetch and verify that the local `Project200` HEAD matches `origin/Project200`; do not rely on a static SHA. The latest code baseline and validation evidence are recorded in `docs/CURRENT_BASELINE_V2.md` and Notion `Current Baseline v2`.
 - `cleanup/p2-quarantine-20261026` and `sync/q25-a7-batch1-integration-20261112` are historical integration-source branches; `integrate/q25-*` and Q25 A5 branches are retained as development/validation history, not as competing canonical branches.
 - `master` is unchanged and remains protected. New feature work should use isolated worktrees; integrate into `Project200` only after explicit user approval.
+
+
+## Current strategy revalidation addendum (2026-11-20)
+
+- Current isolated verification worktree: `Q25_A8_U22_Current_20261120`, branch `work/q25-a8-u22-current-strategy-e2e-20261120`. This is a validation branch, not `Project200`.
+- For missing scenario files, first compare the exact manifest-declared originals in `Project200` and R10, verify SHA-256 and provenance, then copy only into the isolated worktree as read-only validation fixtures. Never fabricate or overwrite an original to satisfy a test.
+- The P5 shared-runtime fixture declares `identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED` and `identity_policy.runtime_use=PROHIBITED`. Its use is limited to the explicit synthetic shared-runtime test harness; it is not authoritative instrument identity or a production runtime input.
+- Current U22 strategy regression evidence: S1-S4 266 passed (includes shared-runtime signal-driver plumbing, not proof of natural signal generation for every strategy); S5-S7 115 passed; S8/U19/U21/candidate isolation 256 passed; S9 focused 44 passed; shared S1/S9 freshness 12 passed. These suites are separate and must not be described as S1-S9 full integrated E2E.
+- S8 current natural multi-contract partial-fill E2E uses a hash-bound validation-only profile (3 contracts per leg, 1+2 fills), FAST/DETAILED parity, six orders/nine executions, six lots/six closes, group/account gross PnL +30,000 KRW and final FLAT. Default quantity remains one. Zero-fee fixture does not certify fee-inclusive PnL.
+- S9 current independent ATM PUT+CALL BUY/BUY synthetic Runtime reports: normal close +1,060,000 KRW; below-1% stop-loss -620,000 KRW; one-leg reject intentionally remains `OVERNIGHT_INSURANCE_PARTIAL`; process restart restore/resume ends `OVERNIGHT_INSURANCE_CLOSED` and FLAT. Official KIS/real-account inputs remain unavailable.
+- KIS API, REAL_VTS, Live, real account, actual orders/cancels/liquidations were not used. Keep all validation-only gates and provenance labels.

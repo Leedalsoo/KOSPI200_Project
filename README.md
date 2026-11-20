@@ -161,3 +161,24 @@ Windows Python 실행은 `py`를 사용한다.
 기존 공통 RiskConfig의 일일 손실 한도와 증거금 한도는 그대로 유지하며 옵션 프리미엄/최대손실 한도로 재해석하지 않는다. 임시 설정 금액은 최종 운용 한도로 확정되지 않았다. authoritative 데이터가 누락되거나 계산이 불가능하면 fail-closed한다. 전략 코드·manifest·매매 정책은 전략별 설계 및 회귀 범위 승인을 거친 뒤 변경한다.
 
 README는 프로젝트의 현재 구조와 작업 순서를 요약하고, 상세 절차는 AGENTS.md, 실제 결정 상태는 Notion의 최신 Q&A와 확정 Decision Log를 기준으로 한다.
+
+
+## 12. Current U22 strategy revalidation (2026-11-20)
+
+The current isolated worktree `Q25_A8_U22_Current_20261120` was rechecked against the present U22 source and the latest Notion decisions. Missing test data was reconciled against existing `Project200`/R10 originals by manifest and SHA-256 before using read-only copies in the isolated worktree.
+
+| Scope | Current result |
+|---|---:|
+| S1-S4 targeted + shared-runtime subset | 266 passed |
+| S5-S7 targeted regression | 115 passed |
+| S8/U19/U21/candidate isolation focused regression | 256 passed |
+| S9 focused regression | 44 passed |
+| Shared S1/S9 freshness | 12 passed |
+
+The S1-S4 shared-runtime subset uses a synthetic signal driver; it validates common routing/fault boundaries, not natural signal generation for every strategy. The P5 fixture manifest explicitly prohibits runtime use and leaves synthetic contract identity unresolved. S5-S7 counts are focused regression evidence, not full strategy acceptance.
+
+S8 natural multi-contract partial-fill: validation-only 3 contracts per leg, 1+2 fills, FAST/DETAILED parity, 6 order commands/9 execution events, 6 PositionLots/6 close events, gross group/account PnL +30,000 KRW and final FLAT. Default entry quantity remains 1; zero-fee assumptions do not certify fee-inclusive PnL.
+
+S9 independent ATM PUT+CALL BUY/BUY: normal close +1,060,000 KRW; below-1% stop-loss -620,000 KRW; one-leg reject intentionally retains `OVERNIGHT_INSURANCE_PARTIAL`; process restart restore/resume ends CLOSED/FLAT. All reports are synthetic validation-only.
+
+These results do not establish S1-S9 full integrated E2E, official KIS data readiness, REAL_VTS, Live or real-account readiness. No real order, cancel or liquidation API was used. Details: Notion No.1663 and the U22 follow-up record.

@@ -123,8 +123,13 @@ class Track8MacroRegimeMonthlyStrangle:
         expiry = self._m(a, "options.expiry_date")
         if not all(v is not None for v in (dte, call, put, qcall, qput, expiry)) or dte < self.DTE_ENTRY: return ()
         if qcall <= 0 or qput <= 0 or qcall != qput or not isinstance(expiry, str) or len(expiry) != 8 or not expiry.isdigit(): return ()
-        qty_call = 1
-        qty_put = 1
+        # Production/default remains one contract per leg. Only the explicit
+        # manifest-bound validation-only adapter may inject a larger test quantity.
+        validation_quantity = int(getattr(self, "validation_only_entry_quantity", 1))
+        if validation_quantity <= 0:
+            return ()
+        qty_call = validation_quantity
+        qty_put = validation_quantity
         self.state = replace(
             self.state, is_active=False, entry_pending=True, entry_stage="CALL_READY",
             entry_group_id=None, entry_block_reason=None, retry_window_started_at=None,
