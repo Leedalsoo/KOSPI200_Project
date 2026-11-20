@@ -144,3 +144,51 @@ def test_track6_lifecycle_wraps_state_store_oserror_as_critical_persistence_fail
     with pytest.raises(Track6LifecyclePersistenceError, match="TRACK6_LIFECYCLE_STATE_PERSISTENCE_FAILED") as error:
         strategy._persist_lifecycle()
     assert isinstance(error.value.__cause__, OSError)
+
+
+def test_track6_lifecycle_recovery_failure_is_wrapped_and_preserves_cause():
+    from core.strategy.track6_daily_tail_insurance import Track6LifecycleRecoveryError
+    from core.strategy.track6_order_lifecycle import Track6LifecycleConfig
+
+    strategy = Track6DailyTailInsurance(
+        lifecycle_config=Track6LifecycleConfig(),
+        lifecycle_state_store=SimpleNamespace(load_latest=lambda: (_ for _ in ()).throw(OSError("synthetic store read failure"))),
+        lifecycle_run_id="SYNTHETIC-TRACK6-RECOVERY",
+    )
+    with pytest.raises(Track6LifecycleRecoveryError, match="TRACK6_LIFECYCLE_STATE_RECOVERY_FAILED") as error:
+        strategy._ensure_lifecycle("20261121")
+    assert isinstance(error.value.__cause__, OSError)
+
+
+def test_track6_lifecycle_recovery_failure_trips_runtime_stop_before_signal_collection():
+    loop = AutomatedVirtualTradingLoop.__new__(AutomatedVirtualTradingLoop)
+    loop.signal_observation_only = True
+    loop.pending_multi_leg_processor = None
+    loop.runtime_evidence_supervisor = None
+    loop.context_builder = lambda tick, state: {
+        "track6_daily_tail_insurance": SimpleNamespace(strategy_id="track6_daily_tail_insurance")
+    }
+    calls = []
+
+    class _StopSwitch:
+        def trip(self, reason):
+            calls.append(("trip", reason))
+
+    loop.runtime_stop_switch = _StopSwitch()
+    loop.strategy_hub = SimpleNamespace(run=lambda _contexts: SimpleNamespace(
+        signals=(),
+        failures=(SimpleNamespace(
+            strategy_id="track6_daily_tail_insurance",
+            error_type="Track6LifecycleRecoveryError",
+            stage="initialize",
+            message="TRACK6_LIFECYCLE_STATE_RECOVERY_FAILED",
+        ),),
+    ))
+    loop.strategy_results = SimpleNamespace(collect=lambda **_kwargs: calls.append(("collect", None)) or ())
+    result = loop.on_tick(SimpleNamespace(
+        timestamp=datetime(2026, 11, 21, 10, 1).isoformat(),
+        underlying_price=500, volume=1, seq_id=100,
+    ))
+    assert calls[0] == ("trip", "X2_TRACK6_LIFECYCLE_STATE_RECOVERY_FAILED")
+    assert calls[1] == ("collect", None)
+    assert result.approved == result.routed == result.filled == 0

@@ -260,3 +260,12 @@
 - Combined Track6 inventory (13 files) plus X2 admission/auto-stop suites: **97 passed**. Separate focused Track6/X2 batch: 77 passed. `compileall`, scoped Ruff F821, and `git diff --check` passed.
 - Scoped Ruff F401 reported six pre-existing unused imports; the same six were confirmed on the HEAD baseline files and were not modified. No repo-wide cleanup performed.
 - Validation-only synthetic path. No raw/canonical/accepted data, manifests, risk profiles, operating config or Live integration changed. No KIS/REAL_VTS/Live/account API, actual order/cancel/liquidation or new data collection. Full T4 X3 matrix/integrated acceptance remains OPEN.
+
+## T4 X3 S6 lifecycle state recovery failure -> X2 Runtime stop (2026-11-21)
+
+- Follow-up review found the startup/restart path called `lifecycle_state_store.load_latest()` and `Track6OrderLifecycle.restore_snapshot()` outside the persistence-error wrapper. A read/hash-chain/restore failure could therefore surface as a generic StrategyHub initialization failure without explicitly tripping X2.
+- Added `Track6LifecycleRecoveryError` around the complete load + snapshot validation + restore block, preserving the original exception as `__cause__`.
+- Runtime now detects both `Track6LifecyclePersistenceError` and `Track6LifecycleRecoveryError` for `track6_daily_tail_insurance`, and trips distinct X2 reasons before signal collection/arbitration: `X2_TRACK6_LIFECYCLE_STATE_PERSISTENCE_FAILED` or `X2_TRACK6_LIFECYCLE_STATE_RECOVERY_FAILED`.
+- Added tests for read failure wrapping and recovery-failure stop-trip ordering. Full Track6 inventory (13 files) + X2 admission/auto-stop suites: **99 passed**. Separate focused Track6/X2 batch: 55 passed. `compileall`, scoped Ruff F821, and `git diff --check` passed.
+- This closes the inspected Track6 lifecycle state-store write/read/restore exception propagation boundary only. It does not prove actual power-loss durability, concurrent multi-process writers, or full integrated T4 acceptance.
+- Synthetic validation-only; no raw/canonical/accepted data, manifest, risk profile, operating config or Live integration changed. No KIS/REAL_VTS/Live/account API, actual order/cancel/liquidation or new data collection. Full T4 X3 matrix remains OPEN.

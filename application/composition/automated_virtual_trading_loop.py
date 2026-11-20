@@ -363,12 +363,21 @@ class AutomatedVirtualTradingLoop:
         )
         contexts = self.context_builder(tick, state)
         strategy_result = self.strategy_hub.run(contexts)
-        if any(
-            failure.strategy_id == "track6_daily_tail_insurance"
-            and failure.error_type == "Track6LifecyclePersistenceError"
-            for failure in strategy_result.failures
-        ):
-            self._trip_runtime_stop("X2_TRACK6_LIFECYCLE_STATE_PERSISTENCE_FAILED")
+        track6_state_failure = next((
+            failure for failure in strategy_result.failures
+            if failure.strategy_id == "track6_daily_tail_insurance"
+            and failure.error_type in {
+                "Track6LifecyclePersistenceError",
+                "Track6LifecycleRecoveryError",
+            }
+        ), None)
+        if track6_state_failure is not None:
+            reason = (
+                "X2_TRACK6_LIFECYCLE_STATE_RECOVERY_FAILED"
+                if track6_state_failure.error_type == "Track6LifecycleRecoveryError"
+                else "X2_TRACK6_LIFECYCLE_STATE_PERSISTENCE_FAILED"
+            )
+            self._trip_runtime_stop(reason)
         evaluations = self.strategy_results.collect(
             tick_sequence=tick.seq_id, context=contexts, result=strategy_result
         )

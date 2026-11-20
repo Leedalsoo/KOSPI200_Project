@@ -235,3 +235,12 @@
 - Added tests for OSError wrapping and stop-trip ordering before signal collection.
 - Combined Track6 inventory (13 files) + X2 admission/auto-stop suites: **97 passed**. Separate focused Track6/X2 batch: 77 passed. compileall, scoped Ruff F821 and `git diff --check` passed. Six F401 unused imports were reproduced on baseline HEAD; unchanged.
 - Validation-only synthetic. No raw/canonical/accepted data, manifests, risk profiles, operating config, Live/account API, actual orders/cancels/liquidations or new collection. Full T4 X3 matrix/integrated acceptance remains OPEN.
+
+## 2026-11-21 T4 X3 S6 recovery read/restore failure -> X2 stop ? No.1682
+
+- Follow-up source inspection found `load_latest()` and `Track6OrderLifecycle.restore_snapshot()` errors during strategy initialization were not covered by the new persistence wrapper and could remain generic StrategyHub failures.
+- Added `Track6LifecycleRecoveryError` around state-store load, chain/snapshot validation and restore, retaining the original exception as `__cause__`.
+- Runtime now detects both Track6 persistence and recovery error types and trips distinct X2 reasons before signal collection/arbitration: `X2_TRACK6_LIFECYCLE_STATE_PERSISTENCE_FAILED` and `X2_TRACK6_LIFECYCLE_STATE_RECOVERY_FAILED`.
+- Added regression tests for read failure wrapping and X2 stop-trip ordering.
+- Full Track6 inventory (13 files) + X2 admission/auto-stop suites: **99 passed in 6.95s**. Separate focused batch: 55 passed. `compileall`, scoped Ruff F821, and `git diff --check` passed.
+- Closes inspected Track6 store write/read/restore exception propagation only. Does not prove real power-loss durability, concurrent multi-process writer safety or integrated T4 acceptance. Synthetic validation-only; no raw/canonical/accepted data, risk profile, operating config, Live/account API, actual order/cancel/liquidation or new collection.

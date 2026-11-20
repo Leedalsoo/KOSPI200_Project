@@ -76,6 +76,10 @@ class Track6LifecyclePersistenceError(RuntimeError):
     """Raised when a validation lifecycle snapshot cannot be durably persisted."""
 
 
+class Track6LifecycleRecoveryError(RuntimeError):
+    """Raised when a persisted validation lifecycle snapshot cannot be trusted or restored."""
+
+
 class Track6DailyTailInsurance:
     strategy_id = "track6_daily_tail_insurance"
     version = "1.0"
@@ -133,18 +137,23 @@ class Track6DailyTailInsurance:
                 self.lifecycle_config, run_id=self.lifecycle_run_id, trading_date=trading_date,
             )
             if self.lifecycle_state_store is not None:
-                latest = self.lifecycle_state_store.load_latest()
-                if latest is not None:
-                    prior = latest["snapshot"]
-                    prior_flat = (
-                        prior.get("status") in {"FLAT_CONFIRMED", "ENTRY_WINDOW_CLOSED"}
-                        and not any(int(value) for value in prior.get("open_quantity", {}).values())
-                        and not prior.get("working_client_order_id")
-                    )
-                    if str(prior.get("trading_date")) == trading_date or not prior_flat:
-                        self.lifecycle = Track6OrderLifecycle.restore_snapshot(
-                            self.lifecycle_config, prior,
+                try:
+                    latest = self.lifecycle_state_store.load_latest()
+                    if latest is not None:
+                        prior = latest["snapshot"]
+                        prior_flat = (
+                            prior.get("status") in {"FLAT_CONFIRMED", "ENTRY_WINDOW_CLOSED"}
+                            and not any(int(value) for value in prior.get("open_quantity", {}).values())
+                            and not prior.get("working_client_order_id")
                         )
+                        if str(prior.get("trading_date")) == trading_date or not prior_flat:
+                            self.lifecycle = Track6OrderLifecycle.restore_snapshot(
+                                self.lifecycle_config, prior,
+                            )
+                except Exception as exc:
+                    raise Track6LifecycleRecoveryError(
+                        "TRACK6_LIFECYCLE_STATE_RECOVERY_FAILED"
+                    ) from exc
         return self.lifecycle
 
     def _persist_lifecycle(self) -> None:
