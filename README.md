@@ -263,3 +263,17 @@ Additional strategy guard/spec regression in the same T4 continuation: KRX futur
 ## 17. S2 source-root precedence regression correction (2026-11-20)
 
 The S2 identity rehydration test had a stale source-location assertion: it required `ORIGINAL_SOURCE_ROOT:0` even when `project_root` already contained the exact pinned bytes. No.1646/1647 define the resolver as project-root-first with hash-exact original fallback, and the T4 and R10 copies were confirmed byte-identical for all five pinned inputs (accepted manifest, scenario manifest, quote sidecar, candidate inputs, synthetic profile). The test now accepts either exact source location while retaining pinned hash and identity assertions. U16/U19 + S2 identity/source/recovery regression: **225 passed**. Static checks: py_compile, Ruff F821/F401, git diff check passed. Validation-only synthetic scope; no production policy, raw data or Live behavior changed.
+## 18. T4 continued strategy/common runtime regression (2026-11-20)
+
+Additional separate validation-only batches in the isolated T4 worktree:
+
+| Scope | Result |
+|---|---:|
+| Freshness/no-lookahead, S1 runtime input, Track2 execution-plan/group-PnL/monthly-option/product-identity/sequential progression, S1 and S2 stop/trailing/quote-profile E2E | 72 passed |
+| X2 auto-stop, runtime evidence/invariants/ledger/provider boundary, VSSF, raw-lineage/candidate scope, Track6 restart budget/state store | 95 passed |
+| S5 seed-ingestion boundary, S7/S8 adapters, synthetic source identity, Track2/Track6 adapters and freshness/gates, virtual identity/replay clock/determinism/isolation | 60 passed |
+| Track1-8 spec alignment, Track9 independent policy/recovery/insurance, Track6/7/8 lifecycle and retry policy | 140 passed |
+
+These are separate batches, not a unique-test total or integrated T4 acceptance. S5's 3 seed-ingestion adapter checks remain validation-only and do not certify canonical historical-order ingestion or S5 Runtime E2E. S3 economic spread legs and S5 D2-D8 remain unapproved; P5 runtime use remains prohibited. No live/account API or actual order/cancel/liquidation.
+
+Static checks: compileall passed; repo-scoped Ruff F821 passed; changed S2 test Ruff F821/F401 passed; git diff check passed. A broader Ruff F401 scan found 17 unused-import findings across pre-existing test files outside the changed scope. They were not mass-fixed; record as cleanup candidates only. No production code or raw source data changed.
