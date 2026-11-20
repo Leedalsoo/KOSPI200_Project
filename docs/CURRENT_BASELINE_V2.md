@@ -188,3 +188,8 @@
 - KIS REST cumulative order snapshots stay in reconciliation inbox, not individual execution journal or position mutation. No live transport/API or real order. Mock router release is test-only.
 - compileall, repo-scoped Ruff F821, diff-check passed. No code or raw/canonical/accepted data changed. Batches may overlap earlier tests and do not establish integrated acceptance.
 - S3 economic spread legs/S5 D2-D8 unapproved; P5 runtime prohibited. Full T4 integrated acceptance OPEN.
+## 2026-11-20 T4 replay trace + synthetic adapter boundary — No.1673
+
+- Replay observer/trace contract/synthetic replay adapter/Track2 validation runner wrapper: 24 passed in 0.78s.
+- Trace file collision and write-failure handling, stable trace schema, mock observer non-interference, source-row immutability, namespaced synthetic identity and validation-only runner flags verified. No standard identity promotion; Live/REAL_VTS/order submission remain disabled.
+- compileall, repo-scoped Ruff F821 and diff-check passed. No code or raw/canonical/accepted data changed. Wrapper/unit checks are not natural-signal, market-performance or integrated T4 acceptance.

@@ -210,3 +210,9 @@
 - The KIS REST recovery service tests use an injected in-memory transport and mocked correlation/route adapters. They validate order-level cumulative snapshots as reconciliation inbox evidence, never individual execution journal fills or position mutations. Do not connect a live transport or submit broker orders.
 - Keep U19 pending-order/startup reconciliation gates closed until each independent evidence item is resolved; test the router remains blocked while any required event remains unresolved. Mock-only route release in unit tests is not authorization for real order submission.
 - Report each pytest invocation separately. A full-stream replay pass is one deterministic synthetic replay test, not broad market replay certification. Keep compileall, repo-scoped F821, and diff-check evidence distinct.
+## Replay trace integrity + synthetic adapter boundary extension (2026-11-20)
+
+- Add replay-observer/trace-contract/synthetic-adapter and Track2 replay-runner wrapper tests as a distinct X3 evidence batch.
+- Detailed traces must use a new isolated output path; preserve existing trace files, reject invalid modes/payloads, and report trace-write failures without altering replay outcomes. FAST mode must not emit detailed files.
+- Synthetic replay adapters must preserve source rows and keep `SYNTHETIC_CONTRACT:` IDs namespaced; never promote unresolved synthetic identities to standard/production instrument IDs.
+- Track2 replay-runner tests must prove validation-only synthetic mode, explicit manifest/profile/quote-manifest inputs, bounded event count, trace SHA, and Live/REAL_VTS/order-submission disabled flags. These wrapper tests do not certify natural signal or market replay performance.

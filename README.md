@@ -303,3 +303,8 @@ Additional separate T4 validation-only batches:
 The four batches are separate and may overlap prior tests; do not sum as unique tests or integrated T4 acceptance. The KIS service tests use a mock transport and mock route adapter; they verify cumulative REST order snapshots remain reconciliation evidence, not per-fill execution journal entries or position mutations. No live transport/API or real order was used. Router-release assertions in the tests are mock-only and do not authorize real submission.
 
 Static: compileall passed; repo-scoped Ruff F821 passed; `git diff --check` passed. No code, production policy, raw/canonical data, or accepted source changed. S3 economic spread legs and S5 D2-D8 remain unapproved; P5 runtime use prohibited. Full integrated T4 acceptance remains OPEN.
+## 21. Replay trace integrity + synthetic adapter boundary (2026-11-20)
+
+- Replay execution observer, replay trace contract, synthetic replay adapter and Track2 validation replay-runner wrapper: **24 passed in 0.78s**.
+- Verified mock adapter tracing does not alter the result; trace output collision/invalid schema/write-failure handling; source-row immutability; `SYNTHETIC_CONTRACT:` namespace enforcement; Track2 runner validation-only flags and trace hash; Live/REAL_VTS/order submission disabled.
+- compileall, repo-scoped Ruff F821 and `git diff --check` passed. Synthetic unit/wrapper coverage only; no natural-signal/market-performance or integrated T4 acceptance claim. No code or raw/canonical/accepted data changed.
