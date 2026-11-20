@@ -182,3 +182,13 @@ S8 natural multi-contract partial-fill: validation-only 3 contracts per leg, 1+2
 S9 independent ATM PUT+CALL BUY/BUY: normal close +1,060,000 KRW; below-1% stop-loss -620,000 KRW; one-leg reject intentionally retains `OVERNIGHT_INSURANCE_PARTIAL`; process restart restore/resume ends CLOSED/FLAT. All reports are synthetic validation-only.
 
 These results do not establish S1-S9 full integrated E2E, official KIS data readiness, REAL_VTS, Live or real-account readiness. No real order, cancel or liquidation API was used. Details: Notion No.1663 and the U22 follow-up record.
+
+## 13. Project200 current strategy validation integration (2026-11-20)
+
+The current U22 strategy-validation branch was fast-forward integrated into `Project200` after checking its ancestry and changed-path overlap with the existing local worktree. The pre-existing 203 modified/untracked local items were preserved and were not included in the integration commit. The integration head is `c26c979cccc61a8899cc2b662bdd2778ce8bc030` before the follow-up correction recorded below.
+
+The U22 branch's separate targeted suites recorded 693 passed across S1-S4, S5-S7, S8/U19/U21/candidate isolation, S9, and shared freshness. These are separate scopes, not one S1-S9 integrated E2E run. After integration, Project200 reran 375 tests in four focused batches: U19/candidate/S2 identity and replay 176; S8/multi-leg/S2 quote and identity 99; broker/SQLite settlement 44; independent S9 policy/runtime/recovery/freshness 56.
+
+Project200's first S8 multi-contract rerun exposed a line-ending-only raw-hash mismatch between semantically identical risk-profile JSON files and a fee-specific error being masked by a generic profile error. The adapter now uses a CRLF/LF-normalized semantic digest for this profile binding, while exact-file sidecars continue to verify raw bytes; non-zero fee is rejected before the broader profile-integrity check. A CRLF/LF equivalence regression test was added. The focused S8 batch then passed 99 tests.
+
+`compileall`, scoped Ruff F821, Ruff F401 on the new S8 files, and `git diff --check` passed. A broader F401 scan still reports 33 existing unused-import findings in legacy/touched files; no unrelated cleanup was applied. Synthetic validation-only provenance and no-live-order boundaries remain unchanged. See Notion No.1663 and Current Baseline v2 for the full evidence and limitations.

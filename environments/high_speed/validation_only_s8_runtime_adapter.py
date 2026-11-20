@@ -100,12 +100,16 @@ class S8ValidationOnlyRuntimeAdapter:
             raise ValueError("S8_VALIDATION_RISK_LIMITS_OR_AUDIT_FIELDS_INVALID")
         self.profile = profile
         self._reserved: dict[str, dict[str, Decimal]] = {}
+        risk_profile_bytes = self.risk_profile_path.read_bytes()
+        # Bind the validation profile to semantic text content, not platform-specific CRLF/LF bytes.
+        normalized_risk_profile_bytes = risk_profile_bytes.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+        risk_profile_digest = sha256(normalized_risk_profile_bytes).hexdigest()
         self.evidence = S8ValidationEvidence(
             manifest_path=str(self.manifest_path),
             manifest_sha256=sha256(self.manifest_path.read_bytes()).hexdigest(),
             dataset_sha256=digest,
             risk_profile_path=str(self.risk_profile_path),
-            risk_profile_sha256=sha256(self.risk_profile_path.read_bytes()).hexdigest(),
+            risk_profile_sha256=risk_profile_digest,
             scenario_id=str(m["scenario_id"]),
             max_gross_premium_krw=limits[0],
             max_loss_krw=limits[1],
@@ -126,6 +130,9 @@ class S8ValidationOnlyRuntimeAdapter:
             partial = json.loads(partial_bytes.decode("utf-8"))
             schedule = tuple(int(value) for value in partial.get("execution_fill_schedule", ()))
             quantity = int(partial.get("entry_quantity_per_leg", 0))
+            fee_per_fill = partial.get("fee_per_fill_krw")
+            if fee_per_fill is not None and Decimal(str(fee_per_fill)) != 0:
+                raise ValueError("S8_VALIDATION_PARTIAL_FILL_FEE_UNSUPPORTED")
             if (
                 partial.get("schema_version") != "q25-s8-validation-only-partial-fill-profile-v1"
                 or partial.get("validation_only") is not True
@@ -150,8 +157,6 @@ class S8ValidationOnlyRuntimeAdapter:
             offsets = tuple(Decimal(str(value)) for value in partial.get("fill_price_offsets", ()))
             if len(offsets) != len(schedule) or any(value < 0 for value in offsets):
                 raise ValueError("S8_VALIDATION_PARTIAL_FILL_PRICE_SCHEDULE_INVALID")
-            if Decimal(str(partial.get("fee_per_fill_krw", "-1"))) != 0:
-                raise ValueError("S8_VALIDATION_PARTIAL_FILL_FEE_UNSUPPORTED")
             self.partial_fill_profile = partial
             self.entry_quantity_per_leg = quantity
         self.run_id = "UNBOUND"

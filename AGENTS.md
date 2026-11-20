@@ -115,3 +115,10 @@
 - S8 current natural multi-contract partial-fill E2E uses a hash-bound validation-only profile (3 contracts per leg, 1+2 fills), FAST/DETAILED parity, six orders/nine executions, six lots/six closes, group/account gross PnL +30,000 KRW and final FLAT. Default quantity remains one. Zero-fee fixture does not certify fee-inclusive PnL.
 - S9 current independent ATM PUT+CALL BUY/BUY synthetic Runtime reports: normal close +1,060,000 KRW; below-1% stop-loss -620,000 KRW; one-leg reject intentionally remains `OVERNIGHT_INSURANCE_PARTIAL`; process restart restore/resume ends `OVERNIGHT_INSURANCE_CLOSED` and FLAT. Official KIS/real-account inputs remain unavailable.
 - KIS API, REAL_VTS, Live, real account, actual orders/cancels/liquidations were not used. Keep all validation-only gates and provenance labels.
+
+## Synthetic validation and source reconciliation addendum (2026-11-20)
+
+- When data is missing or inconsistent, first compare the latest active Notion decisions, prior execution reports, the current local worktree, and the exact raw/accepted/manifest/sidecar sources. Do not inherit an old BLOCKED/PASS label without rechecking current evidence.
+- Preserve original data. Reuse only source files whose provenance and manifest references are verified; use isolated read-only copies or explicitly versioned derived fixtures for validation.
+- For text-based configuration bindings, distinguish raw-byte SHA-256 from semantic-content hashes. Normalize CRLF/LF only for the explicitly defined semantic hash; retain raw-byte hashes when exact-file integrity is required. A line-ending-only difference is not a policy mismatch when parsed content is identical.
+- Until the real-account investment API is connected, use provenance-labelled synthetic/validation-only data and criteria. Never promote these results to REAL_VTS, Live, authoritative contract identity, or real-account readiness. After authoritative account/API inputs are connected, revalidate the complete code against the then-confirmed identity, multiplier, calendar, quotes, fees, margin, and account-risk criteria.

@@ -231,6 +231,24 @@ def test_s8_current_natural_multicontract_partial_fill_fast_detailed_parity() ->
     assert fast == detailed
     assert fast["flat"] is True
 
+def test_s8_partial_fill_risk_profile_hash_is_line_ending_independent(tmp_path: Path) -> None:
+    risk_bytes = RISK_PROFILE.read_bytes()
+    normalized = risk_bytes.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    crlf_path = tmp_path / "risk_profile_crlf.json"
+    crlf_path.write_bytes(normalized.replace(b"\n", b"\r\n"))
+
+    gate = S8ValidationOnlyRuntimeAdapter(
+        dataset=DATASET,
+        manifest_path=MANIFEST,
+        risk_profile_path=crlf_path,
+        partial_fill_profile_path=PARTIAL_FILL_PROFILE,
+    )
+    expected = json.loads(PARTIAL_FILL_PROFILE.read_text(encoding="utf-8"))[
+        "risk_profile_sha256"
+    ]
+    assert gate.evidence.risk_profile_sha256 == expected
+
+
 def test_s8_partial_fill_profile_hash_mismatch_is_rejected(tmp_path: Path) -> None:
     tampered = json.loads(PARTIAL_FILL_PROFILE.read_text(encoding="utf-8"))
     tampered["entry_quantity_per_leg"] = 4
