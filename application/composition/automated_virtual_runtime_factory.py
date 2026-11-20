@@ -52,7 +52,7 @@ from application.composition.execution_multi_leg_resolver_registry import Execut
 from contracts.types import MultiLegExecutionPlan, ExecutionLeg
 from infrastructure.kis.instrument_master_provider import KisFuturesInstrumentMasterProvider
 from infrastructure.kis.kis_index_option_master_source import KIS_INDEX_MASTER_URL
-from contracts.futures_contract_spec import FuturesProductType
+from contracts.futures_contract_spec import FuturesProductType, KRXFuturesContractSpecSource
 from contracts.futures_identity_source_port import FuturesInstrumentIdentity, require_futures_identity
 from application.composition.futures_identity_source import KisFuturesIdentitySource
 from application.composition.futures_target_configuration import FuturesTargetConfiguration
@@ -333,11 +333,16 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
             if synthetic_runtime_sources is not None:
                 from contracts.futures_identity_source_port import FuturesInstrumentIdentity
                 # Synthetic replay ticks expose the underlying as a MarketTick,
-                # which intentionally has no broker futures contract field. Use the
-                # synthetic KRX-standard product specification explicitly rather than
-                # consulting the live/current KIS futures master.
-                multiplier = Decimal("250000")
-                product_type = FuturesProductType.STANDARD
+                # which intentionally has no broker futures contract field. Preserve
+                # each strategy's approved futures product in the validation identity:
+                # Track4 hedges Mini; other current synthetic futures routes remain Standard.
+                strategy_id = getattr(getattr(evaluation, "context", None), "strategy_id", None)
+                product_type = (
+                    FuturesProductType.MINI
+                    if strategy_id == "track4_gamma_scalping"
+                    else FuturesProductType.STANDARD
+                )
+                multiplier = KRXFuturesContractSpecSource.get(product_type).contract_multiplier
                 observed_symbol = str(
                     getattr(tick, "underlying_symbol", None)
                     or getattr(tick, "symbol", None)
