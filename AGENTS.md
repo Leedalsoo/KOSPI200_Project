@@ -358,3 +358,10 @@
 - Until the real-account investment API and approved criteria exist, validation remains synthetic/validation-only. After connection, remap the whole codebase to confirmed identity, multiplier, calendar, quote, fee, margin and account-risk criteria.
 - Track7 aggregate restart checks remain test-only. Do not invent production persistence, broker reconciliation, blind cancel/retry, or side effects. X2-latched recovery may preserve state and reconcile observations/fills, but must not cancel, repair, retry, flatten or submit new orders.
 - Keep Project200 pre-existing dirty/untracked files untouched. Verify local and remote T4/Project200 heads before non-force fast-forward pushes.
+
+## 2026-11-21 Track7 aggregate serialization edge validation
+
+- Follow the latest No.1694 next-step boundary: expand test-only aggregate serialization edge cases and keep authoritative broker-state reconciliation policy separate until explicitly approved.
+- Reject malformed tagged Decimal/datetime values, unknown serialization tags, malformed tagged envelopes, duplicate expiry records, duplicate exit-pending expiry entries and config type confusion. Do not silently coerce booleans to integers or collapse duplicate state keys.
+- This is synthetic contract validation only. It does not define broker-state precedence, freshness tolerances, order/position matching, cancel/retry or restart action policy. No production persistence or Runtime wiring.
+- Continue preserving Raw/Canonical/accepted sources, manifests, hashes and Project200 pre-existing dirty/untracked items. Synthetic validation is not Live/account acceptance.

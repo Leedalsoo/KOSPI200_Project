@@ -320,3 +320,11 @@
 
 - Additional test-only fault cases cover strategy identity/version mismatch, validation-config mismatch, and restore → authoritative-observation reconciliation → action-gate ordering. X2-latched flow preserves restored state and permits observation reconciliation while suppressing side-effect actions.
 - This does not approve production persistence or broker-reconciliation policy. No live/account API, real orders/cancels/liquidation, collector restart, new data collection, or raw/canonical/accepted data changes.
+
+## T4 X3 Track7 aggregate serialization edge validation — No.1695 (2026-11-21)
+
+- Compared No.1694/1693/1692, No.1546, Current Baseline, No.1652 candidate/account aggregate checkpoint boundary and No.1534 source/provenance rules. No.1652's candidate-scoped/account aggregate checkpoint behavior is a separate existing boundary; it was not conflated with Track7 strategy aggregate state.
+- Extended the test-only Track7 aggregate snapshot contract with negative cases for duplicate expiry-state records, duplicate exit-pending expiry entries, malformed Decimal/datetime values, unknown serialization tags, malformed tagged-value envelopes and bool-as-int config type confusion.
+- Aggregate contract suite: **16 passed**. Adjacent Track7 lifecycle/cutoff/spec/exit regression: **19 passed**. compileall, scoped Ruff F821/F401 and `git diff --check`: PASS. Separate batches; not a single integrated acceptance count.
+- Authoritative broker-state reconciliation policy remains unapproved. No precedence/freshness/order-position matching policy was invented. No production persistence/Runtime restore wiring, broker calls, cancel/retry, real order/liquidation, KIS/REAL_VTS/Live/account API, collector restart, new data collection, Raw/Canonical/accepted data or manifest changes.
+- Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.

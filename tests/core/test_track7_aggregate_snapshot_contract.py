@@ -26,10 +26,24 @@ def _encode_value(value):
 
 
 def _decode_value(value):
-    if isinstance(value, dict) and value.get("$type") == "decimal":
-        return Decimal(value["value"])
-    if isinstance(value, dict) and value.get("$type") == "datetime":
-        return datetime.fromisoformat(value["value"])
+    if isinstance(value, dict):
+        if "$type" in value:
+            if set(value) != {"$type", "value"}:
+                raise ValueError("TRACK7_SNAPSHOT_TAGGED_VALUE_INVALID")
+            if value["$type"] == "decimal":
+                try:
+                    return Decimal(value["value"])
+                except Exception as exc:
+                    raise ValueError("TRACK7_SNAPSHOT_DECIMAL_INVALID") from exc
+            if value["$type"] == "datetime":
+                try:
+                    return datetime.fromisoformat(value["value"])
+                except Exception as exc:
+                    raise ValueError("TRACK7_SNAPSHOT_DATETIME_INVALID") from exc
+            raise ValueError("TRACK7_SNAPSHOT_TAG_UNSUPPORTED")
+        return {key: _decode_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_decode_value(item) for item in value]
     return value
 
 
@@ -106,6 +120,10 @@ def _restore_aggregate(envelope, *, x2_latched=False, expected_config=None):
         raise ValueError("TRACK7_SNAPSHOT_CONFIG_INVALID")
     if expected_config is not None and config != expected_config:
         raise ValueError("TRACK7_SNAPSHOT_CONFIG_MISMATCH")
+    if (type(config["insurance_qty"]) is not int or config["insurance_qty"] <= 0
+            or type(config["runtime_config_verified"]) is not bool
+            or type(config["risk_limits_available"]) is not bool):
+        raise ValueError("TRACK7_SNAPSHOT_CONFIG_TYPES_INVALID")
     strategy = Track7VolatilitySkewWeeklyInsurance(**config)
     strategy._legacy_state = _state_from_payload(payload["legacy_state"])
 
@@ -135,8 +153,15 @@ def _restore_aggregate(envelope, *, x2_latched=False, expected_config=None):
     strategy._active_expiry = payload["active_expiry"]
     if strategy._active_expiry is not None and strategy._active_expiry not in states:
         raise ValueError("TRACK7_SNAPSHOT_ACTIVE_EXPIRY_UNKNOWN")
+    if type(payload["legacy_exit_pending"]) is not bool:
+        raise ValueError("TRACK7_SNAPSHOT_LEGACY_EXIT_PENDING_INVALID")
+    pending_expiries = payload["exit_pending_expiries"]
+    if (not isinstance(pending_expiries, list)
+            or any(not isinstance(item, str) for item in pending_expiries)
+            or len(pending_expiries) != len(set(pending_expiries))):
+        raise ValueError("TRACK7_SNAPSHOT_EXIT_PENDING_EXPIRIES_INVALID")
     strategy._legacy_exit_pending = payload["legacy_exit_pending"]
-    strategy._exit_pending_expiries = set(payload["exit_pending_expiries"])
+    strategy._exit_pending_expiries = set(pending_expiries)
     if not strategy._exit_pending_expiries.issubset(states):
         raise ValueError("TRACK7_SNAPSHOT_EXIT_PENDING_EXPIRY_UNKNOWN")
 
@@ -296,3 +321,51 @@ def test_track7_restore_order_under_x2_reconciles_observation_but_skips_side_eff
     assert restored._states_by_expiry["20261203"].entry_stage == "CALL_PENDING"
     assert observed == ["state_restored", "authoritative_observation_reconciled"]
     assert [item[0] for item in events] == ["reconcile"]
+
+
+
+def test_track7_aggregate_snapshot_rejects_duplicate_expiry_state_records():
+    payload = _open_sealed(_capture_aggregate(_multi_expiry_strategy()))
+    payload["states_by_expiry"].append(payload["states_by_expiry"][0])
+    with pytest.raises(ValueError, match="EXPIRY_STATE_CONFLICT"):
+        _restore_aggregate(_seal(payload))
+
+
+def test_track7_aggregate_snapshot_rejects_duplicate_exit_pending_expiry():
+    payload = _open_sealed(_capture_aggregate(_multi_expiry_strategy()))
+    payload["exit_pending_expiries"].append(payload["exit_pending_expiries"][0])
+    with pytest.raises(ValueError, match="EXIT_PENDING_EXPIRIES_INVALID"):
+        _restore_aggregate(_seal(payload))
+
+
+def test_track7_aggregate_snapshot_rejects_invalid_tagged_decimal_datetime_and_unknown_tag():
+    for field, invalid in (
+        ("reference_price", {"$type": "decimal", "value": "not-a-decimal"}),
+        ("put_entry_filled_at", {"$type": "datetime", "value": "not-a-datetime"}),
+        ("reference_price", {"$type": "pickle", "value": "opaque"}),
+    ):
+        payload = _open_sealed(_capture_aggregate(_multi_expiry_strategy()))
+        payload["states_by_expiry"][0][1][field] = invalid
+        expected = (
+            "DECIMAL_INVALID" if invalid["$type"] == "decimal"
+            else "DATETIME_INVALID" if invalid["$type"] == "datetime"
+            else "TAG_UNSUPPORTED"
+        )
+        with pytest.raises(ValueError, match=expected):
+            _restore_aggregate(_seal(payload))
+
+
+def test_track7_aggregate_snapshot_rejects_config_type_confusion():
+    payload = _open_sealed(_capture_aggregate(_multi_expiry_strategy()))
+    payload["config"]["insurance_qty"] = True
+    with pytest.raises(ValueError, match="CONFIG_TYPES_INVALID"):
+        _restore_aggregate(_seal(payload))
+
+
+def test_track7_aggregate_snapshot_rejects_malformed_tagged_value_envelope():
+    payload = _open_sealed(_capture_aggregate(_multi_expiry_strategy()))
+    payload["states_by_expiry"][0][1]["reference_price"] = {
+        "$type": "decimal", "value": "1.25", "unexpected": "field"
+    }
+    with pytest.raises(ValueError, match="TAGGED_VALUE_INVALID"):
+        _restore_aggregate(_seal(payload))

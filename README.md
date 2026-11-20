@@ -426,3 +426,9 @@ Separate validation batches: Track6 13-file inventory + X2 suites 111 passed; fo
 
 - Extended test-only validation for strategy identity/version mismatch, expected validation-config mismatch, and restore/reconciliation/action ordering under X2.
 - The tests use synthetic state only. They do not add production persistence or broker reconciliation behavior.
+
+## T4 X3 Track7 aggregate serialization edge validation (No.1695, 2026-11-21)
+
+- Added test-only negative cases for duplicate expiry state records, duplicate exit-pending expiry entries, malformed Decimal/datetime tags, unknown tags, malformed tagged-value envelopes and config type confusion.
+- Aggregate snapshot contract suite: 16 passed. Adjacent Track7 lifecycle/cutoff/spec/exit regression: 19 passed. compileall, scoped Ruff F821/F401 and `git diff --check` passed.
+- Broker-state reconciliation precedence/freshness/matching/action policy remains unapproved and intentionally unspecified. No production persistence, Runtime restore wiring, broker calls, real orders/cancels, Live/account API, collector restart or source data changes.
