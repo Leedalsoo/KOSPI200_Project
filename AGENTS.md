@@ -365,3 +365,9 @@
 - Reject malformed tagged Decimal/datetime values, unknown serialization tags, malformed tagged envelopes, duplicate expiry records, duplicate exit-pending expiry entries and config type confusion. Do not silently coerce booleans to integers or collapse duplicate state keys.
 - This is synthetic contract validation only. It does not define broker-state precedence, freshness tolerances, order/position matching, cancel/retry or restart action policy. No production persistence or Runtime wiring.
 - Continue preserving Raw/Canonical/accepted sources, manifests, hashes and Project200 pre-existing dirty/untracked items. Synthetic validation is not Live/account acceptance.
+## 2026-11-21 Track7 aggregate restore atomicity boundary
+
+- Continue from No.1695 with test-only staged restore validation. A candidate is fully decoded and checked before the target strategy state is swapped.
+- Synthetic negative tests confirm malformed Decimal payload and expected-config mismatch leave the target strategy __dict__ unchanged. A successful staged validation replaces the target state; with X2 latched, the restored state is preserved while side-effect actions remain disallowed.
+- This helper is test-only. It is not a production restore API, persistence transaction, broker reconciliation, or approval of lifecycle recovery semantics.
+- Preserve the No.1689 X2 boundary: observations/fills may reconcile; cancel, repair, retry, flatten and new submission remain suppressed while latched.

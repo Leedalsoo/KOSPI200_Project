@@ -432,3 +432,10 @@ Separate validation batches: Track6 13-file inventory + X2 suites 111 passed; fo
 - Added test-only negative cases for duplicate expiry state records, duplicate exit-pending expiry entries, malformed Decimal/datetime tags, unknown tags, malformed tagged-value envelopes and config type confusion.
 - Aggregate snapshot contract suite: 16 passed. Adjacent Track7 lifecycle/cutoff/spec/exit regression: 19 passed. compileall, scoped Ruff F821/F401 and `git diff --check` passed.
 - Broker-state reconciliation precedence/freshness/matching/action policy remains unapproved and intentionally unspecified. No production persistence, Runtime restore wiring, broker calls, real orders/cancels, Live/account API, collector restart or source data changes.
+
+## T4 X3 Track7 aggregate restore atomicity (No.1696, 2026-11-21)
+
+- Added test-only staged restore helper: decode/validate the complete candidate first, then swap the target strategy state.
+- Synthetic tests prove malformed Decimal and expected-config mismatch leave the existing target state unchanged; successful validation swaps state. X2-latched restore preserves state but keeps side-effect actions disabled.
+- Aggregate contract suite: 19 passed. Adjacent Track7 lifecycle/cutoff/spec/exit regression: 19 passed. compileall, scoped Ruff F821/F401 and git diff-check passed.
+- No production persistence/restore API, broker reconciliation policy, Live/account API, order/cancel/liquidation, collector restart, new data collection or raw/canonical/accepted source changes. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.

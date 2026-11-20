@@ -249,6 +249,15 @@ def test_track7_x2_latched_restore_preserves_state_but_disallows_side_effect_act
     assert gate["side_effect_actions_allowed"] is False
 
 
+def _restore_aggregate_into(target, envelope, *, x2_latched=False, expected_config=None):
+    """Test-only staged restore: validate a complete candidate before swapping state."""
+    staged, gate = _restore_aggregate(
+        envelope, x2_latched=x2_latched, expected_config=expected_config
+    )
+    target.__dict__ = staged.__dict__.copy()
+    return gate
+
+
 def _restore_observe_then_gate(envelope, *, x2_latched, reconcile_observation, side_effect_action):
     """Test-only ordering harness; it does not call any broker or runtime port."""
     strategy, gate = _restore_aggregate(envelope, x2_latched=x2_latched)
@@ -369,3 +378,52 @@ def test_track7_aggregate_snapshot_rejects_malformed_tagged_value_envelope():
     }
     with pytest.raises(ValueError, match="TAGGED_VALUE_INVALID"):
         _restore_aggregate(_seal(payload))
+
+
+
+def test_track7_aggregate_restore_validation_failure_leaves_target_state_unchanged():
+    target = _multi_expiry_strategy()
+    before = target.__dict__.copy()
+    payload = _open_sealed(_capture_aggregate(_multi_expiry_strategy()))
+    payload["states_by_expiry"][0][1]["reference_price"] = {
+        "$type": "decimal", "value": "not-a-decimal"
+    }
+
+    with pytest.raises(ValueError, match="DECIMAL_INVALID"):
+        _restore_aggregate_into(target, _seal(payload))
+
+    assert target.__dict__ == before
+
+
+def test_track7_aggregate_restore_config_mismatch_leaves_target_state_unchanged():
+    target = _multi_expiry_strategy()
+    before = target.__dict__.copy()
+    expected = {
+        "insurance_qty": 3,
+        "runtime_config_verified": True,
+        "risk_limits_available": True,
+    }
+
+    with pytest.raises(ValueError, match="CONFIG_MISMATCH"):
+        _restore_aggregate_into(
+            target, _capture_aggregate(_multi_expiry_strategy()),
+            expected_config=expected,
+        )
+
+    assert target.__dict__ == before
+
+
+def test_track7_aggregate_restore_swaps_state_only_after_full_validation():
+    target = Track7VolatilitySkewWeeklyInsurance(
+        insurance_qty=1, runtime_config_verified=False, risk_limits_available=False
+    )
+    before = target.__dict__.copy()
+
+    gate = _restore_aggregate_into(
+        target, _capture_aggregate(_multi_expiry_strategy()), x2_latched=True
+    )
+
+    assert target.__dict__ != before
+    assert target._active_expiry == "20261203"
+    assert target._states_by_expiry["20261203"].entry_stage == "CALL_PENDING"
+    assert gate == {"state_restored": True, "side_effect_actions_allowed": False}
