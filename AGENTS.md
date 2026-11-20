@@ -1,103 +1,103 @@
-﻿# AGENTS.md ??KOSPI200 Project ?묒뾽 湲곗?
+# AGENTS.md — KOSPI200 Project 작업 기준
 
-## 1. 理쒖슦??紐⑺몴
+## 1. 최우선 목표
 
-- 理쒖슦??紐⑺몴??KOSPI200 ?꾨줈洹몃옩??湲곕뒫 ?꾩꽦, ?ㅼ젣 肄붾뱶 寃쎈줈???듯빀, ?덉젙?곸씤 寃利앹씠??
-- ?묒뾽? ?꾩옱 援ы쁽??寃고븿怨?誘몄셿猷??곌껐???댁냼?섎뒗 ??吏묒쨷?쒕떎. 怨쇨굅 ?④퀎?? ?ㅻ옒??蹂닿퀬?? ?쇳쉶??泥댄겕由ъ뒪?몃? ?꾩옱 ?묒뾽???좏뻾 議곌굔?쇰줈 諛섎났 ?곸슜?섏? ?딅뒗??
-- 湲곗〈 湲곕뒫??蹂댁〈?섎㈃??媛??以묒슂??李⑤떒 寃고븿遺???묒? ?⑥쐞濡??섏젙?섍퀬, 媛??⑥쐞留덈떎 愿???뚯뒪?몄? ?듯빀 寃利앹쓣 ?섑뻾?쒕떎.
-- 吏꾪뻾 ?곹깭???꾩옱 肄붾뱶, ?곗씠?? ?ㅽ뻾 寃곌낵濡??ㅼ떆 ?뺤씤?쒕떎. 怨쇨굅 PASS/BLOCKED 湲곕줉???꾩옱 寃곌낵濡??ъ궗?⑺븯吏 ?딅뒗??
+- 최우선 목표는 KOSPI200 프로그램의 기능 완성, 실제 코드 경로의 통합, 안정적인 검증이다.
+- 작업은 현재 구현의 결함과 미완료 연결을 해소하는 데 집중한다. 과거 단계표, 오래된 보고서, 일회성 체크리스트를 현재 작업의 선행 조건으로 반복 적용하지 않는다.
+- 기존 기능을 보존하면서 가장 중요한 차단 결함부터 작은 단위로 수정하고, 각 단위마다 관련 테스트와 통합 검증을 수행한다.
+- 진행 상태는 현재 코드, 데이터, 실행 결과로 다시 확인한다. 과거 PASS/BLOCKED 기록을 현재 결과로 재사용하지 않는다.
 
-## 2. 湲곗?怨?異⑸룎 ?닿껐
+## 2. 기준과 충돌 해결
 
-?묒뾽 湲곗?? ?ㅼ쓬 ?쒖꽌濡??곸슜?쒕떎.
+작업 기준은 다음 순서로 적용한다.
 
-1. ?ъ슜?먯쓽 ?꾩옱 吏곸젒 吏??
-2. 理쒖떊 ?곹깭???ъ슜???뺤젙 寃곗젙 諛??뱀씤??紐낆꽭
-3. ?꾩옱 ??μ냼????AGENTS.md
-4. ?꾩옱 肄붾뱶쨌?곗씠?걔룹떎??寃곌낵
-5. 怨쇨굅 Q&A, 蹂닿퀬?? 而ㅻ컠 湲곕줉(??궗??李멸퀬留?
+1. 사용자의 현재 직접 지시
+2. 최신 상태의 사용자 확정 결정 및 승인된 명세
+3. 현재 저장소의 이 AGENTS.md
+4. 현재 코드·데이터·실행 결과
+5. 과거 Q&A, 보고서, 커밋 기록(역사적 참고만)
 
-- Notion??寃곗젙濡쒓렇???뺤젙???뺤콉쨌紐낆꽭瑜??뺤씤?섎뒗 ???ъ슜?섍퀬, 吏덈Ц怨쇰떟蹂? ?묒뾽 ?곗냽?깃낵 ?ㅽ뻾 利앷굅瑜?湲곕줉?섎뒗 ???ъ슜?쒕떎.
-- Current Baseline 諛?怨쇨굅 蹂닿퀬?쒕뒗 ?묒꽦 ?쒖젏???ㅻ깄?룹씠?? ?꾩옱 肄붾뱶????理쒖떊???ъ슜???뺤젙 寃곗젙怨?異⑸룎?섎㈃ ?먮룞?쇰줈 ?꾩옱 湲곗??쇰줈 媛꾩＜?섏? ?딅뒗??
-- ?뱀씤?섏? ?딆? 珥덉븞, 怨쇨굅 ?꾨왂蹂??곹깭, ?댁쟾 ?뚯뒪??PASS???덈줈???뱀씤?대굹 援ы쁽 ?꾨즺??洹쇨굅媛 ?꾨땲??
-- 臾몄꽌 媛?異⑸룎??諛쒓껄?섎㈃ ?꾩쓽濡??뺤콉??諛붽씀吏 留먭퀬 異⑸룎 ??ぉ留?遺꾨━???뺤씤?쒕떎. ?? 異⑸룎怨?臾닿????덉쟾??援ы쁽쨌寃利앹? 怨꾩냽 吏꾪뻾?쒕떎.
+- Notion의 결정로그는 확정된 정책·명세를 확인하는 데 사용하고, 질문과답변은 작업 연속성과 실행 증거를 기록하는 데 사용한다.
+- Current Baseline 및 과거 보고서는 작성 시점의 스냅샷이다. 현재 코드나 더 최신의 사용자 확정 결정과 충돌하면 자동으로 현재 기준으로 간주하지 않는다.
+- 승인되지 않은 초안, 과거 전략별 상태, 이전 테스트 PASS는 새로운 승인이나 구현 완료의 근거가 아니다.
+- 문서 간 충돌을 발견하면 임의로 정책을 바꾸지 말고 충돌 항목만 분리해 확인한다. 단, 충돌과 무관한 안전한 구현·검증은 계속 진행한다.
 
-## 3. ?꾩옱 ?곗꽑 媛쒕컻 諛⑺뼢
+## 3. 현재 우선 개발 방향
 
-?꾩옱 ?곗씠???뚯씠?꾨씪???묒뾽??湲곕낯 諛⑺뼢? ?먮낯??蹂댁〈?섍퀬, ?덉쭏??寃利앺븳 ?ㅼ쓬, 遺議깊븳 ?곗씠?곕쭔 蹂댁셿?섏뿬 ?ы쁽 媛?ν븳 媛??寃利??섍꼍???꾩꽦?섎뒗 寃껋씠??
+현재 데이터 파이프라인 작업의 기본 방향은 원본을 보존하고, 품질을 검증한 다음, 부족한 데이터만 보완하여 재현 가능한 가상 검증 환경을 완성하는 것이다.
 
-1. 湲곗〈 WebSocket 諛?REST ?먮낯 ?뚯씪??蹂寃승룹궘?쒗븯吏 ?딄퀬 湲곗??좎쑝濡?蹂댁〈?쒕떎.
-2. ?좎쭨쨌醫낅ぉ쨌怨꾩빟 ?꾨씫, 以묐났, ?쒓컙 ??쟾, 鍮꾩젙??媛寃? ?섏떊 吏??諛?manifest/hash ?뺥빀?깆쓣 ?꾩닔 ?먭??쒕떎.
-3. Option Master, Quote, OrderBook, Execution??怨꾩빟 identity? ?쒓컙쨌異쒖쿂 provenance瑜??議고븳??
-4. ?꾨씫 ?곗씠?곗? ?ㅼ젣 寃고븿??援щ텇?쒕떎. REST ?쒕낯 踰붿쐞 李⑥씠瑜?WebSocket ?곗씠???꾨씫?쇰줈 ?ㅽ뙋?섏? ?딅뒗??
-5. ?먮낯怨?湲곗〈 Canonical????뼱?곗? ?딅뒗?? ?섏젙???뺢퇋??寃곌낵????踰꾩쟾쨌??寃쎈줈濡??앹꽦?섍퀬 ?먮낯怨??곌껐?쒕떎.
-6. ?곗씠??寃利앹씠 ?앸궃 ??Runtime/Replay/Virtual 寃利앹쑝濡??곌껐?섍퀬, 媛??④퀎??誘몄셿猷뙿룹감???ъ쑀瑜?紐낆떆?쒕떎.
+1. 기존 WebSocket 및 REST 원본 파일을 변경·삭제하지 않고 기준선으로 보존한다.
+2. 날짜·종목·계약 누락, 중복, 시간 역전, 비정상 가격, 수신 지연 및 manifest/hash 정합성을 전수 점검한다.
+3. Option Master, Quote, OrderBook, Execution의 계약 identity와 시간·출처 provenance를 대조한다.
+4. 누락 데이터와 실제 결함을 구분한다. REST 표본 범위 차이를 WebSocket 데이터 누락으로 오판하지 않는다.
+5. 원본과 기존 Canonical을 덮어쓰지 않는다. 수정된 정규화 결과는 새 버전·새 경로로 생성하고 원본과 연결한다.
+6. 데이터 검증이 끝난 뒤 Runtime/Replay/Virtual 검증으로 연결하고, 각 단계의 미완료·차단 사유를 명시한다.
 
-### ?곗씠??諛?怨꾩빟 ?먯튃
+### 데이터 및 계약 원칙
 
-- REST? WebSocket? 蹂꾨룄 ?섏쭛 寃쎄퀎?? source timestamp, received_at, collected_at??援щ텇?섍퀬 ?쒕줈 ?泥댄븯吏 ?딅뒗??
-- ?먮낯 frame/response, transport/API ?앸퀎?? 嫄곕옒?? ?섏떊 ?쒓컖, ?먮낯 source timestamp(?쒓났 ??, schema version, master snapshot/hash, 寃利?寃곌낵 諛??ㅽ뙣 ?ъ쑀瑜?蹂댁〈?쒕떎. credential怨?token? ??ν븯吏 ?딅뒗??
-- 愿痢??곗씠??諛??고???怨꾩빟 湲곗??뺣낫??沅뚯쐞 異쒖쿂??KIS API? 怨듭떇 KIS 醫낅ぉ 留덉뒪?곕떎. ?꾩닔 ?꾨뱶媛 ?녾굅???ㅻ옒?섍굅???곸땐?섎㈃ 異붿젙?섏? ?딄퀬 BLOCKED/UNAVAILABLE 泥섎━?쒕떎.
-- KRX ?곗씠?곕뒗 肄붾뱶 援먯감?議?諛??낅┰?곸씤 寃利?利앷굅濡쒕쭔 ?ъ슜?????덈떎. KIS ?고???湲곗?媛? ?꾩닔 fallback ?먮뒗 KIS 怨꾩빟 identity???泥?異쒖쿂濡??ъ슜?섏? ?딅뒗??
-- ?듭뀡 怨꾩빟? ?쒖?/誘몃땲 援щ텇, CALL/PUT, ?됱궗媛, ?뺥솗??留뚭린?? KIS 醫낅ぉ肄붾뱶, ?뱀닔 諛?異쒖쿂瑜?媛곴컖 寃利앺븳?? ?뱀닔 ???꾩닔 媛믪? 洹쇨굅 ?놁씠 ?섎뱶肄붾뵫?섍굅???좎텛?섏? ?딅뒗??
-- REST??source timestamp媛 ?섏떊 ?쒓컖怨??ㅻⅤ嫄곕굹 ?ㅻ옒??寃쎌슦 freshness 湲곗???寃利앸릺湲??꾧퉴吏 tick-level 愿痢↔컪?쇰줈 痍④툒?섏? ?딅뒗??
-- 以묐났泥섎읆 蹂댁씠???덉퐫?쒕룄 ?먮낯 frame ??媛쒕퀎 嫄곕옒?????덈떎. ?먮낯 record ?섏? Canonical record ?섎? ??ы븯怨? 怨좎쑀 ID???먮낯 frame 諛?frame ?대? record源뚯? 異⑸룎 ?놁씠 ?앸퀎?댁빞 ?쒕떎.
+- REST와 WebSocket은 별도 수집 경계다. source timestamp, received_at, collected_at을 구분하고 서로 대체하지 않는다.
+- 원본 frame/response, transport/API 식별자, 거래일, 수신 시각, 원본 source timestamp(제공 시), schema version, master snapshot/hash, 검증 결과 및 실패 사유를 보존한다. credential과 token은 저장하지 않는다.
+- 관측 데이터 및 런타임 계약 기준정보의 권위 출처는 KIS API와 공식 KIS 종목 마스터다. 필수 필드가 없거나 오래되거나 상충하면 추정하지 않고 BLOCKED/UNAVAILABLE 처리한다.
+- KRX 데이터는 코드 교차대조 및 독립적인 검증 증거로만 사용할 수 있다. KIS 런타임 기준값, 필수 fallback 또는 KIS 계약 identity의 대체 출처로 사용하지 않는다.
+- 옵션 계약은 표준/미니 구분, CALL/PUT, 행사가, 정확한 만기일, KIS 종목코드, 승수 및 출처를 각각 검증한다. 승수 등 필수 값은 근거 없이 하드코딩하거나 유추하지 않는다.
+- REST의 source timestamp가 수신 시각과 다르거나 오래된 경우 freshness 기준이 검증되기 전까지 tick-level 관측값으로 취급하지 않는다.
+- 중복처럼 보이는 레코드도 원본 frame 내 개별 거래일 수 있다. 원본 record 수와 Canonical record 수를 대사하고, 고유 ID는 원본 frame 및 frame 내부 record까지 충돌 없이 식별해야 한다.
 
-## 4. ?꾨줈洹몃옩 ?꾪궎?띿쿂 諛?援ы쁽 ?먯튃
+## 4. 프로그램 아키텍처 및 구현 원칙
 
-- ?꾩옱 ??μ냼???ㅼ젣 援ъ“? 怨듦컻 怨꾩빟??癒쇱? ?뺤씤?섍퀬 湲곗〈 ?쒖? 寃쎄퀎瑜??곕Ⅸ??
-- 怨듯넻 怨꾩빟쨌DTO쨌port??contracts, ?섍꼍 ?낅┰ ?꾨찓?맞룹쟾?돠룹쐞?샕텽MS 洹쒖튃? core, orchestration? application, ?섍꼍蹂?援ы쁽? environments, ?몃? ?곕룞? infrastructure, UI/API??interfaces, 寃利앹? tests 諛?verification???붾떎. ?ㅼ젣 ??μ냼??理쒖떊 援ъ“? 紐낆묶???곗꽑 ?뺤씤?쒕떎.
-- Strategy/Runtime/UI媛 ?몃? 釉뚮줈而?援ы쁽?대굹 ?쒕줈???대? ?곹깭瑜?吏곸젒 李몄“?섏? ?딅룄濡??쒕떎. 怨듦컻 怨꾩빟 ?먮뒗 紐낆떆??application port瑜??ъ슜?쒕떎.
-- Quote/mark price? ?ㅼ젣 fill price瑜??쇱슜?섏? ?딅뒗?? 二쇰Ц쨌泥닿껐쨌?ъ??샕룹넀?듭뿉??instrument, group/leg/order/execution 諛??섎웾 provenance瑜??곌껐?쒕떎.
-- 遺遺꾩껜寃? 痍⑥냼 寃쏀빀, 吏??泥닿껐, ?곹깭 遺덈챸 諛??ъ떆??蹂듦뎄???ㅼ젣 泥닿껐?됯낵 authoritative ?곹깭瑜???ы븳 ??泥섎━?쒕떎. 遺덈챸?뺥븳 ?곹깭?먯꽌 blind retry ?먮뒗 ?좉퇋 二쇰Ц???ㅽ뻾?섏? ?딅뒗??
-- 湲곗〈 援ы쁽怨??뚯뒪?몃? 異⑸텇???뺤씤????蹂寃쏀븳?? ?⑥닚???뚯뒪?몃? ?듦낵?쒗궎湲??꾪븳 fixture, expected value, assertion ?꾪솕??湲덉??쒕떎.
-- Legacy 肄붾뱶???泥?寃쎈줈? ?몄텧 愿怨꾨? ?뺤씤?섍린 ???꾩쓽 ??젣?섍굅?????쒖? 寃쎈줈??臾대텇蹂꾪븯寃??곌껐?섏? ?딅뒗??
+- 현재 저장소의 실제 구조와 공개 계약을 먼저 확인하고 기존 표준 경계를 따른다.
+- 공통 계약·DTO·port는 contracts, 환경 독립 도메인·전략·위험·OMS 규칙은 core, orchestration은 application, 환경별 구현은 environments, 외부 연동은 infrastructure, UI/API는 interfaces, 검증은 tests 및 verification에 둔다. 실제 저장소의 최신 구조와 명칭을 우선 확인한다.
+- Strategy/Runtime/UI가 외부 브로커 구현이나 서로의 내부 상태를 직접 참조하지 않도록 한다. 공개 계약 또는 명시된 application port를 사용한다.
+- Quote/mark price와 실제 fill price를 혼용하지 않는다. 주문·체결·포지션·손익에는 instrument, group/leg/order/execution 및 수량 provenance를 연결한다.
+- 부분체결, 취소 경합, 지연 체결, 상태 불명 및 재시작 복구는 실제 체결량과 authoritative 상태를 대사한 뒤 처리한다. 불명확한 상태에서 blind retry 또는 신규 주문을 실행하지 않는다.
+- 기존 구현과 테스트를 충분히 확인한 후 변경한다. 단순히 테스트를 통과시키기 위한 fixture, expected value, assertion 완화는 금지한다.
+- Legacy 코드는 대체 경로와 호출 관계를 확인하기 전 임의 삭제하거나 새 표준 경로에 무분별하게 연결하지 않는다.
 
-## 5. ?덉쟾 諛??댁쁺 寃쎄퀎
+## 5. 안전 및 운영 경계
 
-- KIS Live, REAL_VTS ?댁쁺怨꾩젙, ?ㅺ퀎醫? ?ㅼ젣 二쇰Ц쨌?뺤젙쨌痍⑥냼, ?붽퀬쨌利앷굅湲???怨꾩쥖 API ?몄텧? ?ъ슜?먯쓽 蹂꾨룄 紐낆떆 ?뱀씤 ?놁씠???섑뻾?섏? ?딅뒗??
-- 媛쒕컻쨌寃利앹? 寃⑸━??Virtual/validation-only ?섍꼍???곗꽑 ?ъ슜?쒕떎. Synthetic, DERIVED_SCENARIO, VIRTUAL_EXECUTION, REAL_VTS, Live provenance瑜??쇰룞?섏? ?딅뒗??
-- Synthetic/Mock 寃곌낵??吏?뺣맂 寃利?踰붿쐞留?利앸챸?쒕떎. ?대? ?ㅻ뜲?댄꽣 寃利? ?ㅺ굅??以鍮??먮뒗 Live PASS濡??쒗쁽?섏? ?딅뒗??
-- credential, token, .env, ?몄쬆 罹먯떆 諛?誘쇨컧??怨꾩젙?뺣낫瑜??대엺쨌異쒕젰쨌蹂듭궗쨌而ㅻ컠?섏? ?딅뒗??
-- ?댁쁺 ?ㅼ젙, ?ㅼ젣 ?섏쭛湲??꾨줈?몄뒪쨌?ㅼ?以꾨윭, 沅뚰븳, ?먮낯 ?곗씠?곗쓽 蹂寃쎌? 蹂꾨룄 ?뱀씤??諛쏅뒗?? ?μ쨷 ?섏쭛湲?議곗옉? ?뱀씤 ?놁씠 ?섑뻾?섏? ?딅뒗??
-- ?먮낯 ?곗씠???먯긽, 鍮꾨??뺣낫 ?몄텧, ?ㅼ젣 二쇰Ц 媛?μ꽦 ?먮뒗 怨꾩젙 蹂寃?媛?μ꽦??諛쒓껄?섎㈃ 利됱떆 以묐떒?섍퀬 蹂닿퀬?쒕떎.
-- 紐⑤Ⅴ??媛믪쓣 0, False, 怨좎젙媛??먮뒗 異붿젙媛믪쑝濡?梨꾩썙 ?뺤긽 ?곹깭泥섎읆 蹂댁씠寃??섏? ?딅뒗?? ?대떦 ?낅젰怨??곹뼢 踰붿쐞瑜?紐낆떆?섍퀬 fail-closed 泥섎━?쒕떎.
+- KIS Live, REAL_VTS 운영계정, 실계좌, 실제 주문·정정·취소, 잔고·증거금 등 계좌 API 호출은 사용자의 별도 명시 승인 없이는 수행하지 않는다.
+- 개발·검증은 격리된 Virtual/validation-only 환경을 우선 사용한다. Synthetic, DERIVED_SCENARIO, VIRTUAL_EXECUTION, REAL_VTS, Live provenance를 혼동하지 않는다.
+- Synthetic/Mock 결과는 지정된 검증 범위만 증명한다. 이를 실데이터 검증, 실거래 준비 또는 Live PASS로 표현하지 않는다.
+- credential, token, .env, 인증 캐시 및 민감한 계정정보를 열람·출력·복사·커밋하지 않는다.
+- 운영 설정, 실제 수집기 프로세스·스케줄러, 권한, 원본 데이터의 변경은 별도 승인을 받는다. 장중 수집기 조작은 승인 없이 수행하지 않는다.
+- 원본 데이터 손상, 비밀정보 노출, 실제 주문 가능성 또는 계정 변경 가능성이 발견되면 즉시 중단하고 보고한다.
+- 모르는 값을 0, False, 고정값 또는 추정값으로 채워 정상 상태처럼 보이게 하지 않는다. 해당 입력과 영향 범위를 명시하고 fail-closed 처리한다.
 
-## 6. 濡쒖뺄 ?묒뾽 諛?Git 蹂댄샇
+## 6. 로컬 작업 및 Git 보호
 
-- ?ㅼ젣 ?섏젙? ?먮낯 ?묒뾽?대뜑??湲곗〈 蹂寃쎌궗??쓣 蹂댄샇?????덈뒗 寃⑸━ worktree/branch?먯꽌 ?섑뻾?쒕떎.
-- ?먮낯 ?묒뾽?대뜑??湲곗〈 dirty/untracked ?뚯씪????젣쨌珥덇린?붋톝tash쨌checkout쨌reset쨌clean쨌??뼱?곌린?섏? ?딅뒗??
-- ?묒뾽 ?쒖옉 ??branch, HEAD, git status? 蹂寃??뚯씪 踰붿쐞瑜??뺤씤?쒕떎. ?묒뾽 ?꾩뿉???숈씪 ??ぉ???뺤씤?섍퀬 ?섎룄?섏? ?딆? 蹂寃쎌씠 ?녿뒗吏 寃利앺븳??
-- ?먮낯 raw data, 湲곗〈 Canonical, manifest, ?ъ슜???곗텧臾쇱쓣 ??뼱?곗? ?딅뒗?? ?좉퇋 寃곌낵??append-only ?먮뒗 versioned 寃쎈줈???앹꽦?쒕떎.
-- Windows Python 紐낅졊? py瑜??ъ슜?쒕떎. ?ㅼ젣 ?ㅽ뻾 紐낅졊, 醫낅즺 肄붾뱶, ?뚯뒪??寃곌낵 諛??쒗븳?ы빆??湲곕줉?쒕떎.
-- ?ъ슜 媛?ν븳 寃쎌슦 Graphify瑜?肄붾뱶 ?먯깋쨌?곹뼢 遺꾩꽍???쒖슜?쒕떎. 肄붾뱶 蹂寃???graphify update瑜??ㅽ뻾?섎릺, Graphify ?곗텧臾쇱? 蹂꾨룄 寃???놁씠 而ㅻ컠???ы븿?섏? ?딅뒗??
-- 而ㅻ컠? 寃利앸맂 愿???뚯씪留??ы븿?쒕떎. 臾닿???蹂寃? ?먮낯 ?곗씠?? runtime output, cache, log, credential? 而ㅻ컠?섏? ?딅뒗??
-- commit怨?push??蹂꾨룄 ?④퀎?? ?뺤떇 ?듯빀 釉뚮옖移섎뒗 `Project200`?대떎. `Project200` push/merge???ъ슜?먯쓽 紐낆떆 ?뱀씤??諛쏆? 寃쎌슦?먮쭔 ?섑뻾?섍퀬, push ??fetch 諛?fast-forward 議곗긽 愿怨꾨? ?뺤씤????non-force 諛⑹떇?쇰줈 諛섏쁺?쒕떎. `master`??蹂꾨룄 蹂댄샇 釉뚮옖移섏씠硫??ъ슜?먭? 紐낆떆?섏? ?딆쑝硫?蹂寃쏀븯吏 ?딅뒗??
+- 실제 수정은 원본 작업폴더의 기존 변경사항을 보호할 수 있는 격리 worktree/branch에서 수행한다.
+- 원본 작업폴더의 기존 dirty/untracked 파일을 삭제·초기화·stash·checkout·reset·clean·덮어쓰기하지 않는다.
+- 작업 시작 전 branch, HEAD, git status와 변경 파일 범위를 확인한다. 작업 후에도 동일 항목을 확인하고 의도하지 않은 변경이 없는지 검증한다.
+- 원본 raw data, 기존 Canonical, manifest, 사용자 산출물을 덮어쓰지 않는다. 신규 결과는 append-only 또는 versioned 경로에 생성한다.
+- Windows Python 명령은 py를 사용한다. 실제 실행 명령, 종료 코드, 테스트 결과 및 제한사항을 기록한다.
+- 사용 가능한 경우 Graphify를 코드 탐색·영향 분석에 활용한다. 코드 변경 후 graphify update를 실행하되, Graphify 산출물은 별도 검토 없이 커밋에 포함하지 않는다.
+- 커밋은 검증된 관련 파일만 포함한다. 무관한 변경, 원본 데이터, runtime output, cache, log, credential은 커밋하지 않는다.
+- commit과 push는 별도 단계다. 정식 통합 브랜치는 `Project200`이다. `Project200` push/merge는 사용자의 명시 승인을 받은 경우에만 수행하고, push 전 fetch 및 fast-forward 조상 관계를 확인한 뒤 non-force 방식으로 반영한다. `master`는 별도 보호 브랜치이며 사용자가 명시하지 않으면 변경하지 않는다.
 
-## 7. 寃利?諛??꾨즺 ?먯젙
+## 7. 검증 및 완료 판정
 
-蹂寃??⑥쐞留덈떎 ?ㅼ쓬???섑뻾?쒕떎.
+변경 단위마다 다음을 수행한다.
 
-1. 蹂寃????곹깭? ?곹뼢 踰붿쐞瑜??뺤씤?쒕떎.
-2. 愿??focused tests瑜??ㅽ뻾?쒕떎.
-3. ?꾩슂???듯빀쨌?뚭? ?뚯뒪?몃? ?ㅽ뻾?쒕떎.
-4. ?곗씠??蹂寃쎌씠 ?덉쑝硫??먮낯 ?鍮?嫄댁닔, ID ?좎씪?? hash, provenance 諛?manifest瑜???ы븳??
-5. git diff --check? 理쒖쥌 git status瑜??뺤씤?쒕떎.
-6. ?ㅼ젣 ?ㅽ뻾 寃곌낵? 誘멸?利?踰붿쐞瑜?遺꾨━??湲곕줉?쒕떎.
+1. 변경 전 상태와 영향 범위를 확인한다.
+2. 관련 focused tests를 실행한다.
+3. 필요한 통합·회귀 테스트를 실행한다.
+4. 데이터 변경이 있으면 원본 대비 건수, ID 유일성, hash, provenance 및 manifest를 대사한다.
+5. git diff --check와 최종 git status를 확인한다.
+6. 실제 실행 결과와 미검증 범위를 분리해 기록한다.
 
-- PASS???ㅽ뻾??踰붿쐞? 利앷굅瑜??④퍡 紐낆떆?쒕떎.
-- FAIL? ?ы쁽 紐낅졊怨??ㅽ뙣 ?먯씤???④릿??
-- BLOCKED/UNAVAILABLE? 遺議깊븳 ?낅젰쨌沅뚰븳쨌利앷굅瑜?援ъ껜?곸쑝濡??쒖떆?쒕떎.
-- ?뚯뒪??PASS留뚯쑝濡??꾩껜 ?꾨줈洹몃옩 ?먮뒗 ?ㅼ젣 ?댁쁺 寃쎈줈???꾩꽦???좎뼵?섏? ?딅뒗??
-- 諛섎?濡?怨쇨굅 誘몄셿猷?泥댄겕由ъ뒪?몃쭔???댁쑀濡??꾩옱 肄붾뱶?먯꽌 ?대? 寃利앸맂 ?묒뾽??諛섎났?섏? ?딅뒗??
-- 援ы쁽 媛?ν븳 ?낅┰ ?묒뾽? 遺덊븘?뷀븳 臾몄꽌 ?湲곕굹 諛섎났 ?뺤씤?쇰줈 吏?고븯吏 留먭퀬 ?쒖감?곸쑝濡?吏꾪뻾?쒕떎. ?뺤콉쨌?댁쁺 ?꾪뿕쨌?몃? 怨꾩젙 ?곹뼢???덈뒗 蹂寃쎈쭔 ?꾩슂???뱀씤 寃뚯씠?몄뿉??硫덉텣??
+- PASS는 실행한 범위와 증거를 함께 명시한다.
+- FAIL은 재현 명령과 실패 원인을 남긴다.
+- BLOCKED/UNAVAILABLE은 부족한 입력·권한·증거를 구체적으로 표시한다.
+- 테스트 PASS만으로 전체 프로그램 또는 실제 운영 경로의 완성을 선언하지 않는다.
+- 반대로 과거 미완료 체크리스트만을 이유로 현재 코드에서 이미 검증된 작업을 반복하지 않는다.
+- 구현 가능한 독립 작업은 불필요한 문서 대기나 반복 확인으로 지연하지 말고 순차적으로 진행한다. 정책·운영 위험·외부 계정 영향이 있는 변경만 필요한 승인 게이트에서 멈춘다.
 
-## 8. 臾몄꽌 諛??묒뾽 湲곕줉
+## 8. 문서 및 작업 기록
 
-- ???뚯씪?먮뒗 吏???곸슜???묒뾽 洹쒖튃留??붾떎. ?좎쭨蹂?吏꾪뻾 ?꾪솴, 媛쒕퀎 ?뚯뒪???섏튂, ?쇳쉶???ㅻ쪟, ?꾨즺???묒뾽???곸꽭 濡쒓렇???ｌ? ?딅뒗??
-- ?꾩옱 ?곹깭? ?ㅽ뻾 寃곌낵???대떦 ?묒뾽??Notion 吏덈Ц怨쇰떟蹂 ?섏씠吏 諛?寃利?蹂닿퀬?쒖뿉 湲곕줉?쒕떎.
-- 怨쇨굅 湲곕줉? ??젣?섍굅???꾩옱 湲곗??쇰줈 ?꾩옣?섏? ?딅뒗?? ??궗??湲곕줉? ??궗???먮즺濡??④린怨? ?꾩옱 ?먮떒?먮뒗 理쒖떊 利앷굅瑜??ъ슜?쒕떎.
-- ??臾몄꽌 蹂寃???濡쒖뺄 ?먮낯 ?묒뾽?대뜑, 寃⑸━ ?꾨낫 ?묒뾽?대뜑 諛?吏?뺣맂 ?먭꺽 branch???댁슜???숈씪?쒖? ?뺤씤?쒕떎.
+- 이 파일에는 지속 적용할 작업 규칙만 둔다. 날짜별 진행 현황, 개별 테스트 수치, 일회성 오류, 완료된 작업의 상세 로그는 넣지 않는다.
+- 현재 상태와 실행 결과는 해당 작업의 Notion 질문과답변 페이지 및 검증 보고서에 기록한다.
+- 과거 기록은 삭제하거나 현재 기준으로 위장하지 않는다. 역사적 기록은 역사적 자료로 남기고, 현재 판단에는 최신 증거를 사용한다.
+- 이 문서 변경 후 로컬 원본 작업폴더, 격리 후보 작업폴더 및 지정된 원격 branch의 내용이 동일한지 확인한다.
 
 ## Current Git baseline (2026-11-15)
 - Canonical working branch: `Project200`.
@@ -172,7 +172,7 @@
 - S3 spread-leg definition remains blocked pending approved economic legs; no tradable legs were invented. S4 MINI identity/profile checks passed, but this does not close the full cross-strategy acceptance matrix.
 - Therefore the common and strategy-focused regression coverage is substantially expanded, but the full strategy-by-strategy fault-injection matrix and integrated T4 acceptance remain open until S3/S5 prerequisites and natural-signal/runtime evidence are available.
 
-## T4 X3 follow-up ??S3 authoritative basis source regression correction (2026-11-20)
+## T4 X3 follow-up — S3 authoritative basis source regression correction (2026-11-20)
 
 - No.956 and current code were rechecked. `KISTrack3RuntimeInputSource` correctly uses paired authoritative KIS H0IFCNT0/H0IFASP0 Futures and KOSPI200 index 2001 observations, 2-second source-time pairing, common volatility/regime, and basis normalization. The existing source had two defects: `_latest_total` selected the numerically largest fee/premium rather than the latest timestamp; historical basis pairing could select an index observation later than the Runtime `as_of` time.
 - Corrected `_latest_total` to select by timestamp and restricted historical nearest-index candidates to `<= as_of`. No spread formula, 2-second threshold, policy threshold, or strategy entry permission was changed.
@@ -324,7 +324,7 @@
 - compileall, scoped Ruff F821 and diff-check passed. No production source/test code changed. No KIS/Live/account API, real order/cancel/liquidation or new data collection.
 - The pending callback combines reconciliation and side-effect-capable cancel/repair/retry/entry progression. Next design must separate these phases and preserve fill/position freshness plus replay parity. Do not alter production flow until that mapping is converted into tests. Full T4 X3 integrated acceptance remains OPEN.
 
-## T4 X3 pending processor phase separation ??No.1689 (2026-11-21)
+## T4 X3 pending processor phase separation — No.1689 (2026-11-21)
 
 - Split pending processing into three explicit phases to prevent same-tick cancel/repair/retry/new-entry side effects from running before Track6 fault detection and X2 admission.
 - Observation phase, before StrategyHub: reconcile only already-routed VSSF reports/fills via `process_pending_quotes()` and refresh Track2 position-group marks. It does not cancel, repair, retry, flatten or submit. This phase remains active after X2 is latched so late fills still update execution/PositionLot/Fee state.
@@ -380,7 +380,7 @@
 ## 2026-11-21 Track7 restored multi-group observation comparison
 
 - Continued from No.1697 using the latest Notion decisions and the isolated T4 worktree. No.1534's source/provenance rule remains: missing or conflicting observations are compared and reported separately; do not infer an authoritative identity or discard original evidence.
-- Added a test-only read-only projection comparing restored group?뭙xpiry bindings and expiry-scoped PUT/CALL peak marks against synthetic observation fixtures.
+- Added a test-only read-only projection comparing restored group→expiry bindings and expiry-scoped PUT/CALL peak marks against synthetic observation fixtures.
 - Verified two groups route to their own distinct expiry state after aggregate round-trip. Verified expiry mismatch, mark mismatch and an unmapped observed group are surfaced as distinct comparison outcomes without mutating the restored strategy state or triggering actions.
 - No production Runtime, broker, persistence, reconciliation precedence, cancellation/retry or live-account behavior was changed.
 ## Track7 aggregate restore and X2 recheck (No.1699, 2026-11-21)
