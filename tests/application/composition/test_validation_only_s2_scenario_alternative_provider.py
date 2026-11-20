@@ -655,7 +655,7 @@ def test_t17_cross_type_iv_and_spread_fallbacks_match_recorded_source_contract_t
     } == {"S2-CANDIDATE-007": 2, "S2-CANDIDATE-008": 2}
 
 
-def test_t17_cross_type_iv_calibration_recomputes_from_recorded_accepted_anchor_rows():
+def test_t17_all_s2_candidate_iv_and_spread_medians_recompute_from_accepted_anchor_rows():
     import json
     from math import isclose
     from statistics import median
@@ -676,9 +676,8 @@ def test_t17_cross_type_iv_calibration_recomputes_from_recorded_accepted_anchor_
             if source_id:
                 accepted_by_id[source_id] = source_row
 
+    assert len(scenario_rows) == 84
     for row in scenario_rows:
-        if row["candidate_id"] not in {"S2-CANDIDATE-007", "S2-CANDIDATE-008"}:
-            continue
         calibration = row["market_calibration"]
         recomputed_iv = []
         for source_id in calibration["iv_anchor_observation_ids"]:
