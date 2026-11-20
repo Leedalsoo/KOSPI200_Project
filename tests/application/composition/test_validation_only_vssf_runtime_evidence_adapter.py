@@ -384,3 +384,16 @@ def test_t6_adapter_does_not_accept_other_candidate_account_pnl_as_candidate_pnl
 
     assert result.status == ValidationOnlyRuntimeInvariantChecker.RECONCILIATION_REQUIRED
     assert expected_issue in result.issues
+
+def test_t6_adapter_rejects_runtime_candidate_mismatch_even_without_other_group_rows():
+    adapter, broker, _report, _lot, _bridge, vssf = _fixture()
+    vssf.validation_candidate_id = "S2-CANDIDATE-002"
+    with pytest.raises(ValueError, match="T6_VSSF_RUNTIME_CANDIDATE_SCOPE_REQUIRED"):
+        _build(adapter, broker)
+
+
+def test_t6_adapter_rejects_runtime_run_mismatch():
+    adapter, broker, _report, _lot, _bridge, vssf = _fixture()
+    vssf.validation_run_id = "RUN-OTHER"
+    with pytest.raises(ValueError, match="T6_VSSF_RUNTIME_RUN_SCOPE_MISMATCH"):
+        _build(adapter, broker)\n

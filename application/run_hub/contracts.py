@@ -18,6 +18,7 @@ class RunContext:
     strategy_keys: tuple[tuple[str, str], ...] = ()
     initial_capital: float | None = None
     replay_speed: float | None = None
+    validation_candidate_id: str | None = None
 
 
 class RunContextFactory:
@@ -28,13 +29,17 @@ class RunContextFactory:
                track9_iv_history_path: str | None = None,
                strategy_keys: tuple[tuple[str, str], ...] = (),
                initial_capital: float | None = None,
-               replay_speed: float | None = None) -> RunContext:
+               replay_speed: float | None = None,
+               validation_candidate_id: str | None = None) -> RunContext:
         if not run_id.strip():
             raise ValueError("RUN_ID_REQUIRED")
         if not environment.strip():
             raise ValueError("RUN_ENVIRONMENT_REQUIRED")
+        if validation_candidate_id is not None and not validation_candidate_id.strip():
+            raise ValueError("VALIDATION_CANDIDATE_ID_REQUIRED")
         return RunContext(run_id=run_id, environment=environment, scenario=scenario,
                           historical_source=historical_source, historical_store_path=historical_store_path,
                           historical_daily_store_path=historical_daily_store_path,
                           track9_iv_history_path=track9_iv_history_path, strategy_keys=strategy_keys,
-                          initial_capital=initial_capital, replay_speed=replay_speed)
+                          initial_capital=initial_capital, replay_speed=replay_speed,
+                          validation_candidate_id=validation_candidate_id)

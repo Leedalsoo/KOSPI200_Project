@@ -113,13 +113,20 @@ class ValidationOnlyVSSFRuntimeEvidenceAdapter:
             str(group_id) for group_id in getattr(self.bridge, "groups", {})
             if str(group_id).startswith(candidate_group_prefix) and str(group_id) != scope_group_id
         }
-        if other_candidate_groups:
-            runtime_candidate_id = (
-                getattr(self.vssf_runtime, "validation_candidate_id", None)
-                or getattr(self.vssf_runtime.account, "validation_candidate_id", None)
-            )
-            if runtime_candidate_id != self.candidate_id:
-                raise ValueError("T6_VSSF_RUNTIME_CANDIDATE_SCOPE_REQUIRED")
+        runtime_run_id = (
+            getattr(self.vssf_runtime, "validation_run_id", None)
+            or getattr(self.vssf_runtime.account, "validation_run_id", None)
+        )
+        runtime_candidate_id = (
+            getattr(self.vssf_runtime, "validation_candidate_id", None)
+            or getattr(self.vssf_runtime.account, "validation_candidate_id", None)
+        )
+        if runtime_run_id is not None and runtime_run_id != self.run_id:
+            raise ValueError("T6_VSSF_RUNTIME_RUN_SCOPE_MISMATCH")
+        if runtime_candidate_id is not None and runtime_candidate_id != self.candidate_id:
+            raise ValueError("T6_VSSF_RUNTIME_CANDIDATE_SCOPE_REQUIRED")
+        if other_candidate_groups and runtime_candidate_id != self.candidate_id:
+            raise ValueError("T6_VSSF_RUNTIME_CANDIDATE_SCOPE_REQUIRED")
         if broker_snapshot.group_id != scope_group_id or expected_group_manifest.group_id != scope_group_id:
             raise ValueError("T6_BROKER_OR_EXPECTED_MANIFEST_RUN_SCOPE_MISMATCH")
         if self._aware(broker_snapshot.as_of, "T6_BROKER_SNAPSHOT_AS_OF_INVALID") != as_of_utc:

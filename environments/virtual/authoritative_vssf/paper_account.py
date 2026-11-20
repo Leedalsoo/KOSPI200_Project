@@ -7,7 +7,19 @@ from environments.virtual.authoritative_vssf.ledger_engine import LedgerEngine
 from shared.contracts.canonical import CanonicalAccountSummary
 
 class PaperTradingAccount:
-    def __init__(self, initial_capital=25000000.0):
+    def __init__(
+        self, initial_capital=25000000.0, *,
+        validation_run_id: str | None = None,
+        validation_candidate_id: str | None = None,
+    ):
+        if (validation_run_id is None) != (validation_candidate_id is None):
+            raise ValueError("VSSF_ACCOUNT_VALIDATION_RUN_AND_CANDIDATE_ID_REQUIRED_TOGETHER")
+        if validation_run_id is not None and (
+            not validation_run_id.strip() or not validation_candidate_id.strip()
+        ):
+            raise ValueError("VSSF_ACCOUNT_VALIDATION_SCOPE_ID_REQUIRED")
+        self.validation_run_id = validation_run_id
+        self.validation_candidate_id = validation_candidate_id
         capital=Decimal(str(initial_capital)); self.balance=capital; self.realized_pnl=Decimal('0'); self.unrealized_pnl=Decimal('0'); self.position_mgr=PositionManager(); self.pnl_engine=PnLEngine(); self.margin_engine=MarginEngine(initial_capital); self.ledger_engine=LedgerEngine(); self.free_margin=capital; self.used_margin=Decimal('0')
     @property
     def positions(self): return self.position_mgr.positions
@@ -29,4 +41,10 @@ class PaperTradingAccount:
         self.pnl_engine.add_realized(pnl)
         self.realized_pnl = self.pnl_engine.realized_pnl
         self.balance -= Decimal(str(rep.fee))
+        self.unrealized_pnl = self.pnl_engine.calculate_unrealized(
+            self.positions, rep.executed_price,
+        )
+        self.used_margin = self.margin_engine.calculate_used_margin(self.positions)
+        equity = self.balance + self.realized_pnl + self.unrealized_pnl
+        self.free_margin = self.margin_engine.calculate_free_margin(equity, self.used_margin)
         self.ledger_engine.transactions.append({"exec_id": rep.exec_id})

@@ -147,6 +147,8 @@ def create_virtual_run_session(
         contract_mappings={},
         initial_capital=float(context.initial_capital or 250_000_000.0),
         vssf_command_context=CanonicalVSSFCommandContextProvider(),
+        validation_run_id=context.run_id if context.validation_candidate_id else None,
+        validation_candidate_id=context.validation_candidate_id,
     )
     config = EnvironmentConfig(environment=EnvironmentType.VIRTUAL, name=f"run_{context.run_id}")
     # Virtual automated replay uses the established Track7 5-second limit;

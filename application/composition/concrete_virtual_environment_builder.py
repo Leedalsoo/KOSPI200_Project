@@ -24,7 +24,11 @@ class ReferenceVirtualAuthoritativeScopeFactory(VirtualAuthoritativeScopeFactory
 
     def create(self, config: Any, policy: Any) -> VirtualAuthoritativeScope:
         dependencies = self._dependencies
-        vssf = VirtualSecuritiesFirmRuntime(initial_capital=float(dependencies.initial_capital))
+        vssf = VirtualSecuritiesFirmRuntime(
+            initial_capital=float(dependencies.initial_capital),
+            validation_run_id=dependencies.validation_run_id,
+            validation_candidate_id=dependencies.validation_candidate_id,
+        )
         account = VSSFAccountSnapshotAdapter(vssf.account)
         position = VSSFPositionAggregateAdapter(vssf.account)
         execution_adapter = VSSFExecutionAdapter(command_context=dependencies.vssf_command_context, vssf_runtime=vssf)

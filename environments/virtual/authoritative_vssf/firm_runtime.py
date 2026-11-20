@@ -14,8 +14,24 @@ from environments.virtual.authoritative_vssf.state_recovery import StateRecovery
 class VirtualSecuritiesFirmRuntime:
     """Authoritative Virtual Broker/VSSF order and execution state owner."""
 
-    def __init__(self, initial_capital=25000000.0, *, clock: ClockProvider | None = None):
-        self.account = PaperTradingAccount(initial_capital)
+    def __init__(
+        self, initial_capital=25000000.0, *, clock: ClockProvider | None = None,
+        validation_run_id: str | None = None,
+        validation_candidate_id: str | None = None,
+    ):
+        if (validation_run_id is None) != (validation_candidate_id is None):
+            raise ValueError("VSSF_VALIDATION_RUN_AND_CANDIDATE_ID_REQUIRED_TOGETHER")
+        if validation_run_id is not None and (
+            not validation_run_id.strip() or not validation_candidate_id.strip()
+        ):
+            raise ValueError("VSSF_VALIDATION_SCOPE_ID_REQUIRED")
+        self.validation_run_id = validation_run_id
+        self.validation_candidate_id = validation_candidate_id
+        self.account = PaperTradingAccount(
+            initial_capital,
+            validation_run_id=validation_run_id,
+            validation_candidate_id=validation_candidate_id,
+        )
         self.execution_engine = ExecutionEngine()
         self.order_book = OrderBook()
         self.reconciliation_engine = AuthoritativeReconciliationEngine(initial_capital)

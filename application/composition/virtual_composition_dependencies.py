@@ -23,12 +23,20 @@ class VirtualCompositionDependencies:
     scenario_source: Any | None = None
     replay_source: Any | None = None
     option_master: IOptionContractMaster | None = None
+    validation_run_id: str | None = None
+    validation_candidate_id: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.initial_capital, (int, float)) or self.initial_capital <= 0:
             raise ValueError("VIRTUAL_INITIAL_CAPITAL_REQUIRED")
         if not callable(getattr(self.vssf_command_context, "build_command", None)):
             raise TypeError("VSSF_COMMAND_CONTEXT_REQUIRED")
+        if (self.validation_run_id is None) != (self.validation_candidate_id is None):
+            raise ValueError("VIRTUAL_VALIDATION_RUN_AND_CANDIDATE_ID_REQUIRED_TOGETHER")
+        if self.validation_run_id is not None and (
+            not self.validation_run_id.strip() or not self.validation_candidate_id.strip()
+        ):
+            raise ValueError("VIRTUAL_VALIDATION_SCOPE_ID_REQUIRED")
 
     def create_contract_resolver(self) -> VirtualContractResolver:
         """Create a resolver sharing this scope's authoritative registry instance."""
