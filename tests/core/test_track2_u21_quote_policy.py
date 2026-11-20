@@ -1,4 +1,4 @@
-﻿from datetime import datetime, timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 import pytest
@@ -119,3 +119,35 @@ def test_non_finite_quote_prices_are_rejected(bad):
 @pytest.mark.parametrize("bad", [Decimal("NaN"), Decimal("Infinity")])
 def test_non_finite_policy_limits_block(bad):
     assert run(quote(), p=policy(max_spread=bad)).decision is QuoteDecision.POLICY_INPUT_BLOCKED
+
+
+@pytest.mark.parametrize("bid,ask", [("1.10", "1.00"), ("0", "1.00"), ("1.00", "Infinity")])
+def test_crossed_or_invalid_bid_ask_is_rejected_without_alternate(bid, ask):
+    result = run(quote(bid=bid, ask=ask))
+    assert result.decision is QuoteDecision.FALLBACK_UNAVAILABLE_BLOCKED
+    assert "PRIMARY_BID_ASK_MISSING_OR_INVALID" in result.reason
+    assert result.price is None
+    assert result.order_submission_enabled is False
+
+
+def test_derived_synthetic_quote_requires_derived_digest_and_never_raw_hash():
+    missing_digest = U21Quote(
+        "STD1", "OPT1", Decimal("1.00"), Decimal("1.10"),
+        NOW - timedelta(seconds=1), True, True, "SYNTHETIC:DERIVED_SCENARIO",
+        None, provenance_kind="DERIVED_SYNTHETIC", derived_quote_digest=None,
+    )
+    result = run(missing_digest)
+    assert result.decision is QuoteDecision.FALLBACK_UNAVAILABLE_BLOCKED
+    assert "PRIMARY_QUOTE_PROVENANCE_INCOMPLETE" in result.reason
+    assert result.order_submission_enabled is False
+
+
+def test_derived_synthetic_quote_rejects_raw_hash_substitution():
+    substituted = U21Quote(
+        "STD1", "OPT1", Decimal("1.00"), Decimal("1.10"),
+        NOW - timedelta(seconds=1), True, True, "SYNTHETIC:DERIVED_SCENARIO",
+        "a" * 64, provenance_kind="DERIVED_SYNTHETIC", derived_quote_digest="b" * 64,
+    )
+    result = run(substituted)
+    assert result.decision is QuoteDecision.FALLBACK_UNAVAILABLE_BLOCKED
+    assert "PRIMARY_QUOTE_PROVENANCE_INCOMPLETE" in result.reason

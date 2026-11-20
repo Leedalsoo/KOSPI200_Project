@@ -421,3 +421,47 @@ def test_t10_quote_only_runtime_emits_per_contract_stale_fallback_diagnostics_wi
     assert all(len(event["u21_derived_quote_digest"]) == 64 for event in events)
     assert all(event["order_routing"] == "NOT_INVOKED" for event in events)
     assert loop.quote_only_events == tuple(events)
+
+
+def test_t10_u21_future_timestamp_is_reported_for_each_of_four_synthetic_contracts():
+    from dataclasses import replace
+    from application.composition.validation_only_u21_quote_policy_adapter import (
+        ValidationOnlyU21QuotePolicyAdapter,
+    )
+
+    provider = _provider("2026-10-12T09:26:00+09:00")
+    loop = _loop(None, [])
+    loop.validation_only_u21_quote_policy_adapter = ValidationOnlyU21QuotePolicyAdapter(provider)
+    events = [
+        loop.on_quote_only_tick(replace(tick, timestamp="2026-10-12T09:25:59+09:00"))
+        for tick in provider.build_quote_only_ticks(seq_id=90)
+    ]
+
+    assert len(events) == 4
+    assert {event["u21_policy_decision"] for event in events} == {"FALLBACK_UNAVAILABLE_BLOCKED"}
+    assert all("PRIMARY_QUOTE_TIMESTAMP_IN_FUTURE" in event["reason"] for event in events)
+    assert all(event["order_routing"] == "NOT_INVOKED" for event in events)
+    assert all(len(event["u21_derived_quote_digest"]) == 64 for event in events)
+
+
+def test_t10_u21_spread_limit_is_applied_to_each_four_leg_synthetic_quote():
+    from dataclasses import replace
+    from decimal import Decimal
+    from application.composition.validation_only_u21_quote_policy_adapter import (
+        ValidationOnlyU21QuotePolicyAdapter,
+    )
+
+    provider = _provider("2026-10-12T09:26:00+09:00")
+    loop = _loop(None, [])
+    adapter = ValidationOnlyU21QuotePolicyAdapter(provider)
+    adapter.policy = replace(adapter.policy, max_spread=Decimal("0.01"))
+    loop.validation_only_u21_quote_policy_adapter = adapter
+    events = [
+        loop.on_quote_only_tick(tick)
+        for tick in provider.build_quote_only_ticks(seq_id=91)
+    ]
+
+    assert len(events) == 4
+    assert {event["u21_policy_decision"] for event in events} == {"FALLBACK_UNAVAILABLE_BLOCKED"}
+    assert all("PRIMARY_SPREAD_EXCEEDS_LIMIT" in event["reason"] for event in events)
+    assert all(event["order_routing"] == "NOT_INVOKED" for event in events)
