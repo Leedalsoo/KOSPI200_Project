@@ -186,3 +186,8 @@
 - When data is missing or inconsistent, reconcile the latest active Notion decision, prior execution evidence, canonical/local source files, manifest and raw hashes before deciding the test is unavailable. If an exact source cannot be recovered, use a clearly labelled synthetic alternative only for the scope it can prove; preserve originals.
 - Report each focused test invocation separately. Do not sum overlapping test batches as a unique test count or describe them as integrated acceptance.
 - Once an authoritative real-account API is separately connected and approved, remap and revalidate the complete codebase against confirmed contract identity, multiplier, tick, calendar, quotes, fees, margin, account risk and lifecycle fields.
+## S2 exact-hash source-root rehydration regression (2026-11-20)
+
+- The validation-only S2 resolver checks `project_root` first, then explicitly supplied original source roots. A source is acceptable only when its raw SHA-256 matches the pinned manifest/sidecar digest; source-root label alone is not evidence.
+- Tests must accept `PROJECT_ROOT` when its file is byte-identical to the pinned original. They must still verify the pinned hashes and identity/crosswalk fields. Do not require `ORIGINAL_SOURCE_ROOT` merely because that root is mounted.
+- If the preferred root has a mismatch, an exact-hash original fallback may be used; if no exact-hash candidate exists, preserve the distinct hash-mismatch vs missing-source result. Never relax hashes or modify originals.

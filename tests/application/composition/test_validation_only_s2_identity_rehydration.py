@@ -40,9 +40,15 @@ def test_s2_identity_registry_rehydrates_four_exact_validation_only_identities_a
     first = first_provider.build_option_identity_evidence()
     restarted = restarted_provider.build_option_identity_evidence()
     if source_roots:
-        assert first_provider.last_source_resolution["scenario_manifest"] == "ORIGINAL_SOURCE_ROOT:0"
-        assert first_provider.last_source_resolution["quotes"] == "ORIGINAL_SOURCE_ROOT:0"
-
+        # The pinned resolver prefers an exact-hash copy in project_root before
+        # falling back to the original source root. Both locations are valid;
+        # identity evidence below pins the exact expected source hashes.
+        assert first_provider.last_source_resolution["scenario_manifest"] in {
+            "PROJECT_ROOT", "ORIGINAL_SOURCE_ROOT:0"
+        }
+        assert first_provider.last_source_resolution["quotes"] in {
+            "PROJECT_ROOT", "ORIGINAL_SOURCE_ROOT:0"
+        }
     assert len(first) == 4
     assert [item.leg_role for item in first] == [
         "inner_put", "inner_call", "outer_put", "outer_call"
