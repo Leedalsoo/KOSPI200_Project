@@ -37,10 +37,15 @@ class S8ValidationOnlyRuntimeAdapter:
     """Manifest-bound S8 readiness and per-group synthetic premium risk gate."""
 
     def __init__(self, *, dataset: str | Path, manifest_path: str | Path,
-                 risk_profile_path: str | Path) -> None:
+                 risk_profile_path: str | Path,
+                 partial_fill_profile_path: str | Path | None = None) -> None:
         self.dataset = Path(dataset).resolve()
         self.manifest_path = Path(manifest_path).resolve()
         self.risk_profile_path = Path(risk_profile_path).resolve()
+        self.partial_fill_profile_path = (
+            Path(partial_fill_profile_path).resolve()
+            if partial_fill_profile_path is not None else None
+        )
         self.manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
         profile_payload = json.loads(self.risk_profile_path.read_text(encoding="utf-8"))
         m = self.manifest
@@ -94,6 +99,48 @@ class S8ValidationOnlyRuntimeAdapter:
         if min(limits) <= 0 or not expected_audit.issubset(required_audit):
             raise ValueError("S8_VALIDATION_RISK_LIMITS_OR_AUDIT_FIELDS_INVALID")
         self.profile = profile
+        self.partial_fill_profile = None
+        self.entry_quantity_per_leg = 1
+        if self.partial_fill_profile_path is not None:
+            partial_bytes = self.partial_fill_profile_path.read_bytes()
+            partial_digest = sha256(partial_bytes).hexdigest()
+            sidecar_path = self.partial_fill_profile_path.with_suffix(
+                self.partial_fill_profile_path.suffix + ".sha256"
+            )
+            expected_partial_digest = sidecar_path.read_text(encoding="utf-8").split()[0]
+            if partial_digest != expected_partial_digest:
+                raise ValueError("S8_VALIDATION_PARTIAL_FILL_PROFILE_HASH_MISMATCH")
+            partial = json.loads(partial_bytes.decode("utf-8"))
+            schedule = tuple(int(value) for value in partial.get("execution_fill_schedule", ()))
+            quantity = int(partial.get("entry_quantity_per_leg", 0))
+            if (
+                partial.get("schema_version") != "q25-s8-validation-only-partial-fill-profile-v1"
+                or partial.get("validation_only") is not True
+                or partial.get("runtime_eligible") is not False
+                or partial.get("production_runtime_eligible") is not False
+                or partial.get("allow_kis_api") is not False
+                or partial.get("allow_real_vts") is not False
+                or partial.get("allow_live_orders") is not False
+                or partial.get("allow_real_account") is not False
+                or partial.get("allow_external_orders") is not False
+                or partial.get("provenance") != "SYNTHETIC:DERIVED_SCENARIO"
+                or partial.get("scenario_id") != str(m.get("scenario_id", ""))
+                or partial.get("manifest_sha256") != sha256(self.manifest_path.read_bytes()).hexdigest()
+                or partial.get("dataset_sha256") != digest
+                or partial.get("risk_profile_sha256") != sha256(self.risk_profile_path.read_bytes()).hexdigest()
+                or quantity <= 1
+                or not schedule
+                or any(value <= 0 for value in schedule)
+                or sum(schedule) != quantity
+            ):
+                raise ValueError("S8_VALIDATION_PARTIAL_FILL_PROFILE_INVALID")
+            offsets = tuple(Decimal(str(value)) for value in partial.get("fill_price_offsets", ()))
+            if len(offsets) != len(schedule) or any(value < 0 for value in offsets):
+                raise ValueError("S8_VALIDATION_PARTIAL_FILL_PRICE_SCHEDULE_INVALID")
+            if Decimal(str(partial.get("fee_per_fill_krw", "-1"))) != 0:
+                raise ValueError("S8_VALIDATION_PARTIAL_FILL_FEE_UNSUPPORTED")
+            self.partial_fill_profile = partial
+            self.entry_quantity_per_leg = quantity
         self._reserved: dict[str, dict[str, Decimal]] = {}
         self.evidence = S8ValidationEvidence(
             manifest_path=str(self.manifest_path),
@@ -132,6 +179,8 @@ class S8ValidationOnlyRuntimeAdapter:
         # Apply the manifest-declared No.1169 threshold to this strategy instance only;
         # never change the registry/production configurable default.
         strategy.DTE_ENTRY = Decimal(str(self.manifest["strategy_policy_inputs"]["strategy8_min_entry_dte_trading_days"]))
+        if self.partial_fill_profile is not None:
+            strategy.validation_only_entry_quantity = self.entry_quantity_per_leg
 
     def release_all_groups(self) -> None:
         """Release validation-only reservations after the strategy is confirmed flat."""
@@ -307,7 +356,7 @@ class S8ValidationOnlyRuntimeAdapter:
         instrument_id = str(getattr(identity, "instrument_id", ""))
         if (leg_id not in {"call", "put"} or option_type != leg_id.upper()
                 or str(getattr(leg, "side", "")).upper() != "BUY"
-                or int(getattr(leg, "quantity", 0)) != 1
+                or int(getattr(leg, "quantity", 0)) != self.entry_quantity_per_leg
                 or not instrument_id.startswith(SYNTHETIC_ID_PREFIX)
                 or str(getattr(identity, "identity_source", "")) != "OPTION_MASTER"):
             raise ValueError("S8_VALIDATION_LEG_IDENTITY_INVALID")

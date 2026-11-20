@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
@@ -45,6 +45,7 @@ def _run_scenario(regime: str, *, speed: float) -> dict[str, object]:
         manifest_path=folder / "manifest.json",
         risk_profile_path=ROOT / "config/validation_only/q25_s8_v3" / regime / "risk_profile.json",
     )
+    assert validation_gate.entry_quantity_per_leg == 1
     assert validation_gate.evidence.dataset_sha256 == EXPECTED_DATASET_SHA256[regime]
 
     sources = SyntheticRuntimeSources()

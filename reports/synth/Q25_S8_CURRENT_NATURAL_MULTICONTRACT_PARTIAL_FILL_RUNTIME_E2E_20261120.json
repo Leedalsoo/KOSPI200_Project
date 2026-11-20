@@ -1,0 +1,221 @@
+{
+  "schema": "q25-s8-current-natural-multicontract-partial-fill-runtime-e2e-v1",
+  "report_id": "Q25_S8_CURRENT_NATURAL_MULTICONTRACT_PARTIAL_FILL_RUNTIME_E2E_20261120",
+  "verdict": "PSB_PASS_VALIDATION_ONLY_NATURAL_RUNTIME_MULTI_CONTRACT_PARTIAL_FILL",
+  "scope": "Current Track8 StrategyHub natural signals through Decision/Risk/OMS/VSSF/PositionLot/PositionGroup/FeeLedger, with deterministic manifest-bound 1+2 synthetic partial fills; FAST/DETAILED parity.",
+  "input_hashes": {
+    "manifest_sha256": "a1eaeea94643db7aa7cb80ffc34627b348ee16aebec6dbe2b93dffb9192ae08a",
+    "dataset_sha256": "6667d0d0a7b700ceaa927289ad1bce6454342c8577af1ee0d3b6dc65aecd48a",
+    "risk_profile_sha256": "ef9f0d3ca2129ce0f2dcfdcabddbc30f4f77e27ff6f2dba58f1e7753ae758177",
+    "partial_fill_profile_sha256": "6e96b8260bb60eda141227c6cf7c3d32f3ac3898761cb5be59e7b7660395f952"
+  },
+  "validation_profile": {
+    "validation_only": true,
+    "runtime_eligible": false,
+    "production_runtime_eligible": false,
+    "kis_api_allowed": false,
+    "live_orders_allowed": false,
+    "real_account_allowed": false,
+    "strategy_default_quantity_per_leg": 1,
+    "validation_quantity_per_leg": 3,
+    "fill_schedule_per_entry_order": [
+      1,
+      2
+    ],
+    "synthetic_fee_per_fill_krw": 0,
+    "operating_size_approval": false
+  },
+  "fast": {
+    "events": 216,
+    "order_commands": 6,
+    "execution_events": 9,
+    "entry_partial_orders": 3,
+    "partial_fill_observations": [
+      {
+        "order_index": 1,
+        "steps": [
+          {
+            "intermediate": "PARTIALLY_FILLED",
+            "filled": 1,
+            "remaining": 2
+          },
+          {
+            "final": "FILLED",
+            "filled": 3,
+            "remaining": 0
+          }
+        ]
+      },
+      {
+        "order_index": 2,
+        "steps": [
+          {
+            "intermediate": "PARTIALLY_FILLED",
+            "filled": 1,
+            "remaining": 2
+          },
+          {
+            "final": "FILLED",
+            "filled": 3,
+            "remaining": 0
+          }
+        ]
+      },
+      {
+        "order_index": 3,
+        "steps": [
+          {
+            "intermediate": "PARTIALLY_FILLED",
+            "filled": 1,
+            "remaining": 2
+          },
+          {
+            "final": "FILLED",
+            "filled": 3,
+            "remaining": 0
+          }
+        ]
+      }
+    ],
+    "position_lots": 6,
+    "close_events": 6,
+    "fee_rows": 9,
+    "fee_total_krw": 0,
+    "group_count": 2,
+    "group_leg_counts": [
+      2,
+      1
+    ],
+    "open_lots": 0,
+    "pending_legs": 0,
+    "account_positions": 0,
+    "group_pnl_krw": 30000.0000000002,
+    "account_pnl_krw": 30000.0000000002,
+    "group_pnl_by_group_krw": [
+      1320000.0000000002,
+      -1290000.0
+    ],
+    "risk_audit": [
+      {
+        "leg": "CALL",
+        "gross_premium_krw": 870000,
+        "status": "ALLOW",
+        "validation_budget_overage_krw": 0
+      },
+      {
+        "leg": "PUT",
+        "gross_premium_krw": 1815000,
+        "status": "ALLOW",
+        "validation_budget_overage_krw": 0
+      },
+      {
+        "leg": "CALL",
+        "gross_premium_krw": 1650000,
+        "status": "ALLOW",
+        "validation_budget_overage_krw": 0
+      },
+      {
+        "leg": "PUT",
+        "gross_premium_krw": 3465000,
+        "status": "BLOCKED_VALIDATION_PREMIUM_LIMIT",
+        "validation_budget_overage_krw": 1165000
+      }
+    ],
+    "final_state": "FLAT"
+  },
+  "detailed": {
+    "events": 216,
+    "order_commands": 6,
+    "execution_events": 9,
+    "entry_partial_orders": 3,
+    "position_lots": 6,
+    "close_events": 6,
+    "fee_rows": 9,
+    "fee_total_krw": 0,
+    "group_count": 2,
+    "group_leg_counts": [
+      2,
+      1
+    ],
+    "open_lots": 0,
+    "pending_legs": 0,
+    "account_positions": 0,
+    "group_pnl_krw": 30000.0000000002,
+    "account_pnl_krw": 30000.0000000002,
+    "final_state": "FLAT",
+    "partial_fill_observations": [
+      {
+        "order_index": 1,
+        "steps": [
+          {
+            "intermediate": "PARTIALLY_FILLED",
+            "filled": 1,
+            "remaining": 2
+          },
+          {
+            "final": "FILLED",
+            "filled": 3,
+            "remaining": 0
+          }
+        ]
+      },
+      {
+        "order_index": 2,
+        "steps": [
+          {
+            "intermediate": "PARTIALLY_FILLED",
+            "filled": 1,
+            "remaining": 2
+          },
+          {
+            "final": "FILLED",
+            "filled": 3,
+            "remaining": 0
+          }
+        ]
+      },
+      {
+        "order_index": 3,
+        "steps": [
+          {
+            "intermediate": "PARTIALLY_FILLED",
+            "filled": 1,
+            "remaining": 2
+          },
+          {
+            "final": "FILLED",
+            "filled": 3,
+            "remaining": 0
+          }
+        ]
+      }
+    ]
+  },
+  "assertions": {
+    "fast_detailed_semantics_equal": true,
+    "partial_order_lifecycle_1_plus_2": true,
+    "unique_execution_ids_and_position_lots": true,
+    "close_events_reconcile_to_source_lots": true,
+    "validation_premium_cap_blocks_second_group_put": true,
+    "filled_call_after_put_block_is_closed": true,
+    "group_account_pnl_delta_lte_1e_6": true,
+    "no_open_lots_pending_legs_or_account_positions": true,
+    "validation_only_no_external_api_or_orders": true
+  },
+  "limitations": [
+    "The 3-contract quantity and 1+2 fill schedule are plumbing fixtures only; operating quantity remains one contract per leg unless separately approved.",
+    "The second group's PUT was blocked by the 2,300,000 KRW validation premium cap; this is an expected risk-gate outcome, not a test failure.",
+    "The VSSF fixture uses zero fees; fee-inclusive/net PnL is not certified.",
+    "Synthetic option identity, expiry/calendar and premium inputs are not authoritative KIS/exchange data.",
+    "No KIS API, REAL_VTS, live account, external broker or real order/cancel API was used."
+  ],
+  "safety": {
+    "validation_only": true,
+    "kis_api_called": false,
+    "live_or_real_account_used": false,
+    "external_orders_sent": false,
+    "original_scenario_data_modified": false,
+    "production_defaults_changed": false,
+    "validation_partial_fill_engine_installed_only_on_test_runtime_instance": true
+  }
+}

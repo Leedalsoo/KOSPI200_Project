@@ -1,0 +1,33 @@
+{
+  "schema_version": "q25-s8-validation-only-partial-fill-profile-v1",
+  "profile_id": "Q25_S8_NORMAL_MULTI_CONTRACT_PARTIAL_1_PLUS_2_V1",
+  "validation_only": true,
+  "runtime_eligible": false,
+  "production_runtime_eligible": false,
+  "allow_kis_api": false,
+  "allow_real_vts": false,
+  "allow_live_orders": false,
+  "allow_real_account": false,
+  "allow_external_orders": false,
+  "provenance": "SYNTHETIC:DERIVED_SCENARIO",
+  "scenario_id": "Q25_S8_MONTHLY_V3_NORMAL",
+  "manifest_sha256": "a1eaeea94643db7aa7cb80ffc34627b348ee16aebec6dbe2b93dffb9192ae08a",
+  "dataset_sha256": "6667d0d0a7b700ceaa927289ad1bce6454342c8577af1ee0d3b6dc65aecdc48a",
+  "risk_profile_sha256": "ef9f0d3ca2129ce0f2dcfdcabddbc30f4f77e27ff6f2dba58f1e7753ae758177",
+  "entry_quantity_per_leg": 3,
+  "execution_fill_schedule": [
+    1,
+    2
+  ],
+  "fill_price_offsets": [
+    0,
+    0
+  ],
+  "fee_per_fill_krw": 0,
+  "notes": [
+    "Explicitly authorized synthetic plumbing fixture based on No.1398/No.1563.",
+    "Three contracts per leg are not an operating size/default or investment recommendation.",
+    "Two execution events per order are generated at the same replay timestamp with distinct execution IDs.",
+    "Zero fees are a fixture limitation; fee-inclusive PnL is not certified."
+  ]
+}
