@@ -1,4 +1,5 @@
 import json
+import os
 import multiprocessing
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -269,3 +270,54 @@ def test_track6_reader_fails_closed_while_writer_has_persisted_partial_record(tm
     monkeypatch.undo()
     with pytest.raises(Track6ValidationStateStoreError, match="TORN_RECORD"):
         Track6ValidationStateStore(tmp_path, run_id="S6-RUN-READER-RACE").load_latest()
+
+
+def _write_partial_state_and_hold_lock(root, run_id, ready, release):
+    store = Track6ValidationStateStore(root, run_id=run_id)
+    handle = store._acquire_writer_lock()
+    try:
+        fd = os.open(store.path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(fd, "ab") as stream:
+            stream.write(b'{"schema_version":1,"run_id":"' + run_id.encode() + b'"')
+            stream.flush()
+        ready.set()
+        release.wait(10)
+    finally:
+        handle.close()
+
+
+def test_track6_process_crash_during_append_releases_lock_but_preserves_torn_tail(tmp_path):
+    context = multiprocessing.get_context("spawn")
+    ready = context.Event()
+    release = context.Event()
+    run_id = "S6-RUN-CRASH-DURING-APPEND"
+    process = context.Process(
+        target=_write_partial_state_and_hold_lock,
+        args=(str(tmp_path), run_id, ready, release),
+    )
+    process.start()
+    assert ready.wait(10), "writer did not persist partial tail"
+    process.terminate()
+    process.join(10)
+    assert not process.is_alive()
+    assert process.exitcode is not None and process.exitcode != 0
+
+    recovered = Track6ValidationStateStore(tmp_path, run_id=run_id)
+    with pytest.raises(Track6ValidationStateStoreError, match="TORN_RECORD"):
+        recovered.append({"run_id": run_id, "status": "MUST_NOT_APPEND"})
+    with pytest.raises(Track6ValidationStateStoreError, match="TORN_RECORD"):
+        Track6ValidationStateStore(tmp_path, run_id=run_id).load_latest()
+    assert recovered.path.read_bytes().endswith(b'"' )
+
+
+def test_track6_different_run_ids_have_independent_writer_locks(tmp_path):
+    first = Track6ValidationStateStore(tmp_path, run_id="S6-RUN-LOCK-A")
+    second = Track6ValidationStateStore(tmp_path, run_id="S6-RUN-LOCK-B")
+    handle = first._acquire_writer_lock()
+    try:
+        second.append({"run_id": "S6-RUN-LOCK-B", "status": "INDEPENDENT"})
+        latest = Track6ValidationStateStore(tmp_path, run_id="S6-RUN-LOCK-B").load_latest()
+        assert latest["sequence"] == 1
+        assert latest["snapshot"]["status"] == "INDEPENDENT"
+    finally:
+        handle.close()

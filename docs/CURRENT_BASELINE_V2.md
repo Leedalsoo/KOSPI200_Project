@@ -262,3 +262,11 @@
 - Focused store + lifecycle gate tests: 23 passed. Full Track6 inventory (13 files) + X2 admission/auto-stop suites: **103 passed in 7.70s**. compileall, scoped Ruff F821/F401 and git diff-check passed.
 - No production source change in this batch (tests/docs only). Readers do not acquire writer lock; they validate and fail closed on torn/incomplete records. Process-exit lock release is verified on current Windows host only; power-loss durability, network filesystem locking and full T4 integrated acceptance remain unproven/open.
 - Synthetic validation-only. No raw/canonical/accepted data, manifests, risk profiles, operating config, Live/account API, actual order/cancel/liquidation or new collection.
+
+## 2026-11-21 T4 X3 S6 crash-during-append + per-run lock isolation ? No.1685
+
+- Spawned writer acquired the run lock, flushed an intentionally incomplete JSONL record, and was forcibly terminated before completion. A fresh writer acquired the released lock, but append and fresh read both rejected the preserved tail with `TRACK6_VALIDATION_STATE_TORN_RECORD`. No truncation/repair occurred.
+- Confirmed run A's held lock does not block run B from appending and reopening sequence 1. This is per-run storage lock isolation only; it does not establish cross-run account/capital coordination.
+- Full Track6 inventory (13 files) + X2 admission/auto-stop suites: **105 passed in 8.11s**. compileall, scoped Ruff F821/F401, adjacent Track6 F821 and diff-check passed.
+- Tests only; no production source changes. OS lock release verified on current Windows host. Power-loss durability, network filesystem locking and full T4 integrated acceptance remain open.
+- Synthetic validation-only. No raw/canonical/accepted data, manifests, risk profiles, operating config, Live/account API, actual order/cancel/liquidation or new data collection.
