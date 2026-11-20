@@ -505,3 +505,15 @@ The test-only restore-order harness now treats X2 gate accessor exceptions and u
 - Results (separate batches): X2 Virtual admission 7 passed; auto-stop/evidence-supervisor/U19 latch persistence 28 passed; Track7 aggregate contract 46 passed; adjacent Track7 lifecycle/cutoff/identity/terminal-close/validation-only regression 15 passed. compileall, scoped Ruff F821/F401 and git diff-check passed.
 - Synthetic recorder only. No KIS/REAL_VTS/Live/account API, broker call, real order/cancel/liquidation, collector restart, new collection, or Raw/Canonical/accepted source/manifest change.
 - Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN. No.1652 checkpoint boundary remains separate.
+
+
+## T4 X3 Track7 X2 in-flight executor callback characterization (No.1706, 2026-11-21)
+
+- Continued from No.1705 after rechecking the latest Notion baseline and actual T4 source. The inspected `AutomatedVirtualTradingLoop._execute_multi_leg_if_admitted()` performs one admission read and then calls the executor synchronously; it does not expose a cancellation/interrupt handle for an already-running callback.
+- Added a deterministic test-only interleaving: the synthetic executor callback enters while X2 is ARMED and blocks on an Event; a second actor trips X2 while the callback is in progress; the callback then resumes and completes while observing TRIPPED at completion.
+- This characterizes a separate boundary from No.1705: a latch transition before callback entry can still race with callback dispatch, and a latch transition after callback entry does not itself interrupt an already-running callback. This is not a production side-effect safety PASS.
+- Results (separate batches): X2 Virtual admission 8 passed; auto-stop/evidence-supervisor/U19 latch persistence 28 passed; Track7 aggregate contract 46 passed; adjacent Track7 lifecycle/cutoff/identity/terminal-close/validation-only regression 15 passed. compileall, scoped Ruff F821/F401 and git diff-check passed.
+- No production Runtime/X2 code, callback cancellation protocol, synchronization primitive, lock scope, atomic contract, persistence/broker policy, or side-effect behavior was changed or selected. No.1652 candidate/account checkpoint remains separate from Track7 strategy aggregate.
+- Synthetic recorder only. No KIS/REAL_VTS/Live/account API, broker call, actual order/cancel/liquidation, collector restart, new collection, or Raw/Canonical/accepted source/manifest change.
+- Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+- Next design evidence needed before production implementation: callback ownership and lifetime, whether callbacks may be interrupted/cooperatively cancelled, which in-flight actions must drain vs abort, and the exact X2 latch precedence/critical-section boundary. Do not invent these policies.

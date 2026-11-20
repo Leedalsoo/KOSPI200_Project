@@ -276,3 +276,47 @@ def test_t4_x2_virtual_multileg_path_exposes_concurrent_latch_to_callback_window
     assert stop_switch.snapshot().status == "TRIPPED"
     assert callback_calls == ["invoked"]
     assert callback_observations == ["TRIPPED"]
+
+
+def test_t4_x2_latch_during_executor_callback_does_not_interrupt_inflight_callback(tmp_path):
+    from threading import Event, Thread
+
+    inputs = _inputs()
+    stop_switch = _switch(inputs, tmp_path)
+    loop = _loop(
+        inputs[1], stop_switch,
+        ValidationOnlyRuntimeStopAdmissionSource(_BaseStatusSource(inputs[4]), stop_switch),
+    )
+    callback_entered = Event()
+    allow_callback_to_finish = Event()
+    callback_observations = []
+
+    def synthetic_executor(_plan):
+        callback_observations.append(("entered", stop_switch.snapshot().status))
+        callback_entered.set()
+        assert allow_callback_to_finish.wait(timeout=5)
+        callback_observations.append(("finished", stop_switch.snapshot().status))
+        return "SYNTHETIC_CALLBACK_COMPLETED"
+
+    def concurrent_latch_actor():
+        assert callback_entered.wait(timeout=5)
+        stop_switch.trip("T4_SYNTHETIC_X2_LATCH_DURING_CALLBACK")
+        allow_callback_to_finish.set()
+
+    loop.multi_leg_executor = synthetic_executor
+    actor = Thread(target=concurrent_latch_actor)
+    actor.start()
+    try:
+        admitted, result = loop._execute_multi_leg_if_admitted(SimpleNamespace())
+    finally:
+        allow_callback_to_finish.set()
+        actor.join(timeout=5)
+
+    assert not actor.is_alive()
+    assert admitted is True
+    assert result == "SYNTHETIC_CALLBACK_COMPLETED"
+    assert stop_switch.snapshot().status == "TRIPPED"
+    assert callback_observations == [
+        ("entered", "ARMED"),
+        ("finished", "TRIPPED"),
+    ]
