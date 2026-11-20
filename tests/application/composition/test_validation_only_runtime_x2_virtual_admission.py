@@ -346,3 +346,48 @@ def test_t4_x2_latch_after_first_callback_blocks_next_multileg_dispatch(tmp_path
     assert second_result is None
     assert callback_calls == ["PLAN_1"]
     assert stop_switch.snapshot().status == "TRIPPED"
+
+
+def test_t4_x2_latch_during_executor_exception_preserves_latch_and_blocks_next_dispatch(tmp_path):
+    from threading import Event, Thread
+
+    inputs = _inputs()
+    stop_switch = _switch(inputs, tmp_path)
+    loop = _loop(
+        inputs[1], stop_switch,
+        ValidationOnlyRuntimeStopAdmissionSource(_BaseStatusSource(inputs[4]), stop_switch),
+    )
+    callback_entered = Event()
+    allow_callback_to_raise = Event()
+    callback_calls = []
+
+    def synthetic_executor(plan):
+        callback_calls.append(plan)
+        callback_entered.set()
+        assert allow_callback_to_raise.wait(timeout=5)
+        raise RuntimeError("T4_SYNTHETIC_EXECUTOR_FAILURE")
+
+    def concurrent_latch_actor():
+        assert callback_entered.wait(timeout=5)
+        stop_switch.trip("T4_SYNTHETIC_X2_LATCH_DURING_EXECUTOR_EXCEPTION")
+        allow_callback_to_raise.set()
+
+    loop.multi_leg_executor = synthetic_executor
+    actor = Thread(target=concurrent_latch_actor)
+    actor.start()
+    try:
+        with pytest.raises(RuntimeError, match="T4_SYNTHETIC_EXECUTOR_FAILURE"):
+            loop._execute_multi_leg_if_admitted("PLAN_EXCEPTION")
+    finally:
+        allow_callback_to_raise.set()
+        actor.join(timeout=5)
+
+    assert not actor.is_alive()
+    assert stop_switch.snapshot().status == "TRIPPED"
+    assert callback_calls == ["PLAN_EXCEPTION"]
+
+    admitted, result = loop._execute_multi_leg_if_admitted("PLAN_AFTER_EXCEPTION")
+    assert admitted is False
+    assert result is None
+    assert callback_calls == ["PLAN_EXCEPTION"]
+    assert stop_switch.snapshot().status == "TRIPPED"
