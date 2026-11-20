@@ -277,3 +277,11 @@
 - Combined with the existing Runtime failure regression, lock contention reaches the X2 stop-before-signal-collection path. No cancel/liquidation/live action.
 - Focused store + lifecycle gate tests: 26 passed. Full Track6 inventory (13 files) + X2 admission/auto-stop suites: **106 passed in 9.32s**. compileall, scoped Ruff F821/F401, adjacent Track6 F821 and diff-check passed.
 - Tests only; no production source changes. Synthetic validation-only; no raw/canonical/accepted data, risk profile, operating config, Live/account API, actual order activity or new collection. Full T4 X3/integrated acceptance OPEN.
+
+## 2026-11-21 T4 X3 S6 same-tick pending processor ordering audit — No.1687
+
+- Latest No.1686~1681, No.1671, No.1674, No.1534 and current Runtime/factory code were compared. The current `on_tick()` order is pending processor -> StrategyHub -> Track6 failure detection -> X2 trip -> signal collection -> arbitration.
+- Factory pending processing includes Track6/7 lifecycle cancellation, pending quote processing, U16 repair/flatten reconciliation and repair processing, S9 entry retries and Track2 entry progress. Therefore, a same-tick pending action can precede detection of a Track6 persistence failure and its X2 trip.
+- Once X2 is latched, existing checks block subsequent pending processing and multi-leg submission. Focused Track6/X2 ordering and pending/multi-leg blocking tests: 3 passed. compileall, scoped Ruff F821 and diff-check passed. Synthetic in-memory control-flow probe only.
+- No production source/test changes. Three pre-existing F401 findings in `automated_virtual_trading_loop.py` were recorded, not auto-fixed. No KIS/Live/account API, real order/cancel/liquidation or new data collection.
+- This is an ordering/design gap, not missing source data. Next design step is to split pending observation/reconciliation from repair/retry/new-order side effects while preserving current fill/position freshness. Do not reorder production flow until effects and replay parity are mapped. Full T4 X3 integrated acceptance remains OPEN.
