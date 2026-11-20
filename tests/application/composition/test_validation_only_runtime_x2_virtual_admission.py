@@ -320,3 +320,29 @@ def test_t4_x2_latch_during_executor_callback_does_not_interrupt_inflight_callba
         ("entered", "ARMED"),
         ("finished", "TRIPPED"),
     ]
+
+
+def test_t4_x2_latch_after_first_callback_blocks_next_multileg_dispatch(tmp_path):
+    inputs = _inputs()
+    stop_switch = _switch(inputs, tmp_path)
+    loop = _loop(
+        inputs[1], stop_switch,
+        ValidationOnlyRuntimeStopAdmissionSource(_BaseStatusSource(inputs[4]), stop_switch),
+    )
+    callback_calls = []
+
+    def synthetic_executor(plan):
+        callback_calls.append(plan)
+        stop_switch.trip("T4_SYNTHETIC_X2_LATCH_AFTER_FIRST_CALLBACK")
+        return "SYNTHETIC_FIRST_CALLBACK_COMPLETED"
+
+    loop.multi_leg_executor = synthetic_executor
+    first_admitted, first_result = loop._execute_multi_leg_if_admitted("PLAN_1")
+    second_admitted, second_result = loop._execute_multi_leg_if_admitted("PLAN_2")
+
+    assert first_admitted is True
+    assert first_result == "SYNTHETIC_FIRST_CALLBACK_COMPLETED"
+    assert second_admitted is False
+    assert second_result is None
+    assert callback_calls == ["PLAN_1"]
+    assert stop_switch.snapshot().status == "TRIPPED"

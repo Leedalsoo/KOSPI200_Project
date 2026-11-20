@@ -517,3 +517,16 @@ The test-only restore-order harness now treats X2 gate accessor exceptions and u
 - Synthetic recorder only. No KIS/REAL_VTS/Live/account API, broker call, actual order/cancel/liquidation, collector restart, new collection, or Raw/Canonical/accepted source/manifest change.
 - Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 - Next design evidence needed before production implementation: callback ownership and lifetime, whether callbacks may be interrupted/cooperatively cancelled, which in-flight actions must drain vs abort, and the exact X2 latch precedence/critical-section boundary. Do not invent these policies.
+
+
+## T4 X3 Track7 X2 post-callback next-dispatch boundary (No.1707, 2026-11-21)
+
+- Reconciled latest No.1706/1705/1704/1703/1702/1701/1700/1699/1689, No.1546, Current Baseline and No.1534 source/provenance-first rules. Kept No.1652 candidate/account aggregate checkpoint separate from Track7 strategy aggregate.
+- Inspected actual T4 Virtual Runtime dispatch path and the existing LiveRuntimeLifecycleCoordinator. The latter's graceful receive-drain/cancellation timeout applies to Live runtime receive shutdown; it is not evidence of cancellation semantics for the synchronous Virtual multi-leg executor callback and was not reused or generalized.
+- Added one deterministic test-only sequential dispatch characterization: first synthetic multi-leg callback enters and trips X2 before returning; the callback completes; a second multi-leg dispatch request re-reads the current gate and is rejected without invoking the executor.
+- This complements No.1705 pre-callback TOCTOU and No.1706 in-flight callback completion: current behavior allows an already-entered callback to finish, while a subsequent dispatch request is blocked after the latch is observed. This is not a production side-effect safety PASS and does not resolve the race between a gate read and callback entry.
+- Results (separate batches): X2 Virtual admission 9 passed; auto-stop/evidence-supervisor/U19 latch persistence 28 passed; Track7 aggregate contract 46 passed; adjacent Track7 lifecycle/cutoff/identity/terminal-close/validation-only regression 15 passed. compileall, scoped Ruff F821/F401 and git diff-check passed.
+- No production Runtime/X2 code, callback cancellation protocol, synchronization primitive, lock scope, atomic contract, persistence/broker policy or side-effect behavior was changed or selected. No.1652 checkpoint remains separate.
+- Synthetic recorder only. No KIS/REAL_VTS/Live/account API, broker call, actual order/cancel/liquidation, collector restart, new collection, or Raw/Canonical/accepted source/manifest change.
+- Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+- Remaining unresolved boundary: X2 latch can still race between the admission read and callback entry (No.1705); an already-entered callback is not interrupted (No.1706). Any production callback ownership, cancellation/drain policy and atomic admission contract require explicit approval.
