@@ -784,3 +784,48 @@ def test_t17_all_84_quote_rows_match_tick_rounding_spread_limit_and_synthetic_pr
             max_age_seconds=Decimal(manifest["u21"]["max_age_seconds"]),
             max_spread=max_spread,
         )
+
+
+def test_t17_all_84_quote_volume_and_depth_proxy_match_prior_spread_anchor_medians():
+    import json
+    from statistics import median
+
+    provider = _provider("2026-10-12T09:26:00+09:00")
+    _manifest, _candidate, _profile, _quotes, _hashes = provider._load_verified_sources()
+    scenario_rows = [
+        json.loads(line)
+        for line in (provider.scenario_dir / "four_leg_quotes.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    accepted_by_id = {}
+    for day in ("20261012", "20261013"):
+        source_path = provider.accepted_manifest_path.parent / f"{day}.jsonl"
+        for line in source_path.read_text(encoding="utf-8").splitlines():
+            source_row = json.loads(line)
+            source_id = (source_row.get("scenario_metadata") or {}).get("source_observation_id")
+            if source_id:
+                accepted_by_id[source_id] = source_row
+
+    assert len(scenario_rows) == 84
+    for row in scenario_rows:
+        calibration = row["market_calibration"]
+        source_rows = [
+            accepted_by_id[source_id]
+            for source_id in calibration["spread_anchor_observation_ids"]
+        ]
+        source_volumes = [max(1, int(source["tick"].get("volume") or 1)) for source in source_rows]
+        source_bid_depth = [
+            max(1, int(((source.get("scenario_metadata", {}).get("field_provenance") or {})
+                        .get("order_book_quantities") or {}).get("bid_quantity") or 1))
+            for source in source_rows
+        ]
+        source_ask_depth = [
+            max(1, int(((source.get("scenario_metadata", {}).get("field_provenance") or {})
+                        .get("order_book_quantities") or {}).get("ask_quantity") or 1))
+            for source in source_rows
+        ]
+        assert row["volume"] == max(1, int(round(median(source_volumes))))
+        assert row["bid_quantity"] == max(1, int(round(median(source_bid_depth))))
+        assert row["ask_quantity"] == max(1, int(round(median(source_ask_depth))))
+        assert calibration["volume_basis"] == "MEDIAN_PRIOR_ANCHOR_TRADE_SIZE"
+        assert calibration["depth_basis"] == "MEDIAN_ACCEPTED_SYNTHETIC_L1_DEPTH_PROXY"
