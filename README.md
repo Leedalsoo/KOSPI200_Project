@@ -192,3 +192,11 @@ The U22 branch's separate targeted suites recorded 693 passed across S1-S4, S5-S
 Project200's first S8 multi-contract rerun exposed a line-ending-only raw-hash mismatch between semantically identical risk-profile JSON files and a fee-specific error being masked by a generic profile error. The adapter now uses a CRLF/LF-normalized semantic digest for this profile binding, while exact-file sidecars continue to verify raw bytes; non-zero fee is rejected before the broader profile-integrity check. A CRLF/LF equivalence regression test was added. The focused S8 batch then passed 99 tests.
 
 `compileall`, scoped Ruff F821, Ruff F401 on the new S8 files, and `git diff --check` passed. A broader F401 scan still reports 33 existing unused-import findings in legacy/touched files; no unrelated cleanup was applied. Synthetic validation-only provenance and no-live-order boundaries remain unchanged. See Notion No.1663 and Current Baseline v2 for the full evidence and limitations.
+
+## 14. T4 X3 ? S4 Mini futures Virtual Runtime fault slice (2026-11-20)
+
+Track4 futures hedge identity is enforced as KRX MINI (`product_type=MINI`, multiplier 50,000) in the validation composition and Virtual multi-leg bridge. A stored STANDARD/250,000 identity is rejected with `TRACK4_MINI_FUTURES_IDENTITY_REQUIRED` before VSSF order submission. Existing synthetic STANDARD routes remain unchanged.
+
+Focused results: 14 S3/S4/Track4 tests passed (StrategyHub signal cycle, Mini identity, Virtual Risk/OMS/Router/VSSF entry fill and close-to-FLAT, and wrong-product fault injection). A separate 16-test multi-leg bridge, identity, U19, and T25 regression batch passed after hash-verifying the P5 scenario copy against Project200 originals. The P5 manifest retains `BLOCKED_IDENTITY_OWNER_UNRESOLVED` and `runtime_use=PROHIBITED`; it is used only by the synthetic shared-runtime harness.
+
+This is a validation-only S4 Runtime slice, not official KIS Mini identity or Live/real-account acceptance. Full T4 strategy/common Runtime fault matrix remains open.

@@ -8,6 +8,7 @@ from datetime import datetime, time, timedelta, timezone
 from typing import Any, Callable, Sequence
 
 from contracts.kis_option_product_spec import KIS_KOSPI200_OPTION_CONTRACT_MULTIPLIER
+from contracts.futures_contract_spec import FuturesProductType, KRXFuturesContractSpecSource
 from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
 from contracts.types import BrokerOrderCommand, ExecutionReport, MultiLegExecutionPlan, OptionInstrumentIdentity
 from contracts.market_data_freshness import FreshnessVerdict, admits_freshness_verdict_for_identity, permits_risk_increasing_order
@@ -770,6 +771,16 @@ class VirtualMultiLegExecutionBridge:
             elif isinstance(stored_identity, FuturesInstrumentIdentity):
                 if getattr(leg, "option_type", None) is not None or getattr(leg, "strike", None) is not None:
                     raise ValueError("MULTI_LEG_STORED_FUTURES_IDENTITY_LEG_MISMATCH")
+                if plan.strategy_id == "track4_gamma_scalping":
+                    mini_spec = KRXFuturesContractSpecSource.get(FuturesProductType.MINI)
+                    product_type = str(
+                        getattr(stored_identity.product_type, "value", stored_identity.product_type)
+                    ).strip().upper()
+                    if (
+                        product_type != FuturesProductType.MINI.value
+                        or Decimal(str(stored_identity.contract_multiplier)) != mini_spec.contract_multiplier
+                    ):
+                        raise ValueError("TRACK4_MINI_FUTURES_IDENTITY_REQUIRED")
             else:
                 raise ValueError("MULTI_LEG_STORED_INSTRUMENT_IDENTITY_TYPE_INVALID")
             return stored_identity
