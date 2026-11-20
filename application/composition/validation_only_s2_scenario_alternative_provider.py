@@ -191,9 +191,12 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
             raise ValueError("T7_SCENARIO_MUST_HAVE_EXACTLY_FOUR_QUOTES")
         return manifest, candidate, profile, selected_quotes, actual_hashes
 
-    def build_option_identity_evidence(self) -> tuple[ValidationOnlyS2IdentityEvidence, ...]:
-        """Rehydrate exact validation-only option identities from the hash-verified sidecar."""
-        _manifest, candidate, _profile, quotes, hashes = self._load_verified_sources()
+    def _build_option_identity_evidence_from_sources(
+        self,
+        candidate: dict[str, Any],
+        quotes: list[dict[str, Any]],
+        hashes: dict[str, str],
+    ) -> tuple[ValidationOnlyS2IdentityEvidence, ...]:
         expected_legs = {
             str(leg.get("role")): leg
             for leg in candidate.get("legs", ())
@@ -215,10 +218,12 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
             authority = str(row.get("contract_identity_authority") or "")
             source = str(row.get("source") or "")
             provenance = str(row.get("provenance") or "")
+            multiplier_provenance = str(row.get("contract_multiplier_provenance") or "")
             if (
                 authority != "SYNTHETIC_ONLY_NOT_KIS_MASTER"
                 or source != "SYNTHETIC:DERIVED_SCENARIO"
                 or provenance != "SYNTHETIC"
+                or not multiplier_provenance
             ):
                 raise ValueError(f"T7_S2_IDENTITY_AUTHORITY_NOT_VALIDATION_ONLY:{role}")
             instrument_id = str(row.get("instrument_id") or "").strip()
@@ -226,10 +231,10 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
             expiry = str(row.get("expiry") or "")
             try:
                 exact_expiry = require_exact_option_expiry(expiry)
-            except CanonicalOptionExpiryError as exc:
-                raise ValueError(f"T7_S2_IDENTITY_EXPIRY_INVALID:{role}") from exc
-            strike = Decimal(str(row.get("strike")))
-            multiplier = Decimal(str(row.get("contract_multiplier")))
+                strike = Decimal(str(row.get("strike")))
+                multiplier = Decimal(str(row.get("contract_multiplier")))
+            except (CanonicalOptionExpiryError, ArithmeticError, ValueError) as exc:
+                raise ValueError(f"T7_S2_IDENTITY_CONTRACT_FIELDS_INVALID:{role}") from exc
             if (
                 not instrument_id.startswith("SYNTHETIC_CONTRACT:")
                 or option_type not in {"CALL", "PUT"}
@@ -263,14 +268,14 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
                 },
                 "source_hashes": hashes,
                 "contract_identity_authority": authority,
-                "contract_multiplier_provenance": str(row.get("contract_multiplier_provenance") or ""),
+                "contract_multiplier_provenance": multiplier_provenance,
             }
             evidence.append(ValidationOnlyS2IdentityEvidence(
                 candidate_id=self.candidate_id,
                 leg_role=role,
                 identity=identity,
                 contract_identity_authority=authority,
-                contract_multiplier_provenance=str(row.get("contract_multiplier_provenance") or ""),
+                contract_multiplier_provenance=multiplier_provenance,
                 accepted_manifest_sha256=hashes["accepted_manifest"],
                 scenario_manifest_sha256=hashes["scenario_manifest"],
                 quote_sidecar_sha256=hashes["quotes"],
@@ -278,6 +283,11 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
                 derived_identity_digest=self._hash_json(identity_payload),
             ))
         return tuple(evidence)
+
+    def build_option_identity_evidence(self) -> tuple[ValidationOnlyS2IdentityEvidence, ...]:
+        """Rehydrate exact validation-only option identities from the hash-verified sidecar."""
+        _manifest, candidate, _profile, quotes, hashes = self._load_verified_sources()
+        return self._build_option_identity_evidence_from_sources(candidate, quotes, hashes)
 
     def is_applicable(self, tick: Any) -> bool:
         explicit_id = str(getattr(tick, "candidate_id", "") or "").strip()
@@ -410,6 +420,11 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
             self.last_diagnostic = "TICK_OUTSIDE_EVIDENCE_SCOPE"
             return None
         manifest, candidate, profile, quotes, hashes = self._load_verified_sources()
+        identity_evidence = self._build_option_identity_evidence_from_sources(candidate, quotes, hashes)
+        identity_registry_sha256 = self._hash_json([
+            {"leg_role": item.leg_role, "derived_identity_digest": item.derived_identity_digest}
+            for item in identity_evidence
+        ])
         scenario_time = self._aware(candidate.get("observed_at"), "T7_SCENARIO_TIMESTAMP_INVALID")
         as_of = self._aware(getattr(tick, "timestamp", None), "T7_TICK_TIMESTAMP_INVALID")
         if as_of < scenario_time:
@@ -532,7 +547,7 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
         expected_manifest_id = f"{self.candidate_id}:{self.position_phase}:{scenario_time.isoformat()}"
         expected_manifest_source = "VALIDATION_ONLY:EXPECTED_GROUP_MANIFEST"
         expected_manifest_provenance = (
-            f"VALIDATION_ONLY:{self.VERSION}:ACCEPTED={hashes['accepted_manifest']}:SCENARIO={hashes['scenario_manifest']}"
+            f"VALIDATION_ONLY:{self.VERSION}:ACCEPTED={hashes['accepted_manifest']}:SCENARIO={hashes['scenario_manifest']}:IDENTITY_REGISTRY={identity_registry_sha256}"
         )
         expected_manifest_payload = {
             "group_id": group_id,
@@ -592,6 +607,7 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
                 "profile_id": str(profile["profile_id"]),
                 "scenario_manifest_sha256": hashes["scenario_manifest"],
                 "accepted_manifest_sha256": hashes["accepted_manifest"],
+                "identity_registry_sha256": identity_registry_sha256,
                 "source_anchor_as_of": source_anchor_as_of.isoformat(),
                 "validation_only": "true",
             },
@@ -614,7 +630,7 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
             source_manifest_sha256=hashes["scenario_manifest"],
             source_anchor_refs=(
                 f"accepted_runtime_v2_manifest#sha256={hashes['accepted_manifest']}",
-                f"s2_scenario_manifest#sha256={hashes['scenario_manifest']}",
+                f"s2_scenario_manifest#sha256={hashes['scenario_manifest']}:identity_registry_sha256={identity_registry_sha256}",
                 *(f"source_anchor:{value}" for value in sorted({anchor.isoformat() for anchor in anchors})),
                 *(f"source_observation:{value}" for value in sorted(anchor_refs) if value),
             ),
@@ -622,6 +638,7 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
             scenario_timestamp=scenario_time,
             evidence_refs=(
                 f"s2_four_leg_quotes.jsonl#sha256={hashes['quotes']}",
+                f"s2_identity_registry#sha256={identity_registry_sha256}",
                 f"s2_candidate_inputs.json#sha256={hashes['candidate_inputs']}",
                 f"synthetic_profile.json#sha256={hashes['profile']}",
             ),

@@ -7,11 +7,11 @@ from application.composition.validation_only_s2_scenario_alternative_provider im
 from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
 
 
-def _provider(root):
+def _provider(root, vssf_adapter=None):
     return ValidationOnlyS2ScenarioAlternativeProvider(
         project_root=root,
         run_id="S2-IDENTITY-REHYDRATION-TEST",
-        vssf_adapter=object(),
+        vssf_adapter=vssf_adapter if vssf_adapter is not None else object(),
         candidate_id="S2-CANDIDATE-001",
         position_phase="PRE_ENTRY",
     )
@@ -52,3 +52,47 @@ def test_s2_identity_registry_rehydrates_four_exact_validation_only_identities_a
 
 def _bridge():
     return object.__new__(VirtualMultiLegExecutionBridge)
+
+
+def test_u19_expected_group_manifest_hash_binds_rehydrated_identity_registry():
+    project_root = Path(__file__).resolve().parents[3]
+
+    class _CaptureVssf:
+        def build_candidate(self, **kwargs):
+            self.kwargs = kwargs
+            return kwargs
+
+    capture = _CaptureVssf()
+    provider = _provider(project_root, vssf_adapter=capture)
+    tick = SimpleNamespace(
+        timestamp="2026-10-12T09:26:00+09:00",
+        underlying_price=1034.62,
+    )
+    result = provider(tick)
+    identity_evidence = provider.build_option_identity_evidence()
+    registry_digest = provider._hash_json([
+        {"leg_role": item.leg_role, "derived_identity_digest": item.derived_identity_digest}
+        for item in identity_evidence
+    ])
+    expected = capture.kwargs["expected_group_manifest"]
+
+    assert result is capture.kwargs
+    assert f"IDENTITY_REGISTRY={registry_digest}" in expected.provenance
+    assert capture.kwargs["source_manifest_sha256"] == identity_evidence[0].scenario_manifest_sha256
+    assert any(
+        ref.startswith(f"s2_scenario_manifest#sha256={identity_evidence[0].scenario_manifest_sha256}:identity_registry_sha256={registry_digest}")
+        for ref in capture.kwargs["source_anchor_refs"]
+    )
+    assert f"s2_identity_registry#sha256={registry_digest}" in capture.kwargs["evidence_refs"]
+    expected_payload = {
+        "group_id": expected.group_id,
+        "manifest_id": expected.manifest_id,
+        "source": expected.source,
+        "provenance": expected.provenance,
+        "leg_instrument_ids": list(expected.leg_instrument_ids),
+        "expected_positions": [
+            {"instrument_id": item.instrument_id, "signed_quantity": str(item.signed_quantity)}
+            for item in expected.expected_positions
+        ],
+    }
+    assert expected.payload_sha256 == provider._hash_json(expected_payload)
