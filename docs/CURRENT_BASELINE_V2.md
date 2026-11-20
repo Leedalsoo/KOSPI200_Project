@@ -199,3 +199,8 @@
 - Batches may overlap earlier coverage; no unique-test sum or integrated T4 acceptance claim. KIS test was inspected: injected in-memory mock transport, `virtual=True`; snapshots remain reconciliation inbox events, not execution fills or Position mutations. Unresolved events retain recovery gates.
 - Initial missing test path was corrected using repository inventory to `tests/core/test_track2_u19_recovery.py`; 45 passed. No product failure inferred from the absent path.
 - compileall, repo-scoped Ruff F821, diff-check passed. No production/raw/canonical/accepted data changed. No Live/account API or actual order activity. S3 economic legs/S5 D2-D8 unapproved; P5 runtime prohibited.
+## 2026-11-21 T4 candidate isolation + identity-tamper matrix — No.1675
+
+- Separate synthetic focused batches: candidate scope/restart identity 8; candidate/quote identity tamper + multi-leg asset identity 28; U19 aggregate identity digest/cross-candidate checkpoint replay 7; candidate multi-leg duplicate/ledger conflict/pending-order isolation 2 passed.
+- Confirms identity mismatch rejection, candidate-specific U19 aggregate/replay isolation, idempotent duplicate delivery, conflicting PositionLot/Fee replay rejected without mutation, and unresolved A pending order does not leak into B flat checkpoint. Counts may overlap previous suites; not unique-test total or integrated acceptance.
+- compileall, repo-scoped Ruff F821, diff-check passed. No production/raw/canonical/accepted data changed. No Live/account API or actual order activity. S3/S5 approvals and P5 runtime prohibition unchanged.

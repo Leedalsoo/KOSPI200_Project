@@ -223,3 +223,9 @@
 - Keep KIS REST `inquire-ccnl` order-level cumulative snapshots in the reconciliation inbox. Never promote them to individual execution journal fills or Position mutations. The KIS recovery service test is safe only as its inspected injected in-memory mock transport with `virtual=True`; do not connect to KIS.
 - U19 identity digest/persistence, cold-start, restart, candidate multi-leg recovery, ledger snapshot, Track6 restart budget and full-stream replay suites remain separate focused batches. Do not sum them as unique tests or integrated acceptance.
 - Recovery tests must preserve unresolved-snapshot gates and keep new-entry/order-submission disabled. No Live/REAL_VTS/account API, actual order/cancel/liquidation or new collection.
+## Candidate isolation and identity-tamper X3 extension (2026-11-21)
+
+- Extend the No.1657/1658 single-candidate and multi-candidate fault matrix with explicit candidate-scope/restart identity, candidate/quote identity tamper, multi-leg asset identity, U19 aggregate identity digest across candidates, and duplicate/pending-order isolation regressions.
+- Preserve the No.1658 distinction: candidate A unresolved pending order remains `PENDING_ORDER_RECONCILIATION_REQUIRED` with restore/new-entry/order-submission disabled; candidate B's independent flat checkpoint must not inherit A's pending order or ledger state. A permitted U19 restore decision is not automatic runtime restoration and does not enable entries/submission.
+- Keep identity mismatch, changed execution replay and conflicting ledger payloads fail-closed without mutating previously reconciled state. Do not weaken candidate/run/group/instrument identity or provenance checks.
+- Each focused pytest invocation is separate; counts may overlap existing U19/candidate coverage and are not a unique-test total or integrated acceptance. No real account, broker API, order/cancel/liquidation or new collection.

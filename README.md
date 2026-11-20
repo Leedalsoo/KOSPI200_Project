@@ -329,3 +329,17 @@ Separate focused validation-only batches on the isolated T4 branch:
 All batches are independent and may overlap previous coverage; do not sum counts as unique tests or describe as integrated T4 acceptance. KIS REST snapshots remain reconciliation inbox evidence, not individual fills or Position mutations. Unresolved reconciliation continues to gate recovery. One initially supplied test path was absent; repository inventory located the existing suite at `tests/core/test_track2_u19_recovery.py`, which passed (45 tests); this was a path correction, not a code defect.
 
 Static checks: compileall, repo-scoped Ruff F821 and `git diff --check` passed. No production source or raw/canonical/accepted data changed. S3 economic spread legs and S5 D2-D8 remain unapproved; P5 runtime use prohibited. No KIS/REAL_VTS/Live/account API, actual orders/cancels/liquidations or new collection.
+## 21. Candidate isolation + identity-tamper fault matrix (2026-11-21)
+
+Separate focused synthetic validation-only invocations:
+
+| Scope | Result |
+|---|---:|
+| Candidate scope and restart identity | 8 passed |
+| Candidate/quote identity tamper and multi-leg asset identity consistency | 28 passed |
+| U19 aggregate identity digest and cross-candidate checkpoint/replay isolation | 7 passed |
+| Candidate multi-leg duplicate execution/ledger conflict and pending-order isolation | 2 passed |
+
+The batches may overlap previous candidate/U19 suites; do not sum them as unique tests or integrated acceptance. They extend No.1657/1658 coverage: identity tamper is rejected; same-run candidates retain separate identity/aggregate checkpoint; duplicate delivery remains idempotent; conflicting PositionLot/Fee replay does not mutate existing ledger state; unresolved candidate A pending order does not leak into candidate B's flat checkpoint. Recovery/new-entry/order-submission remain disabled for unresolved state. A U19 restore decision is not automatic runtime restore.
+
+Static: compileall, repo-scoped Ruff F821 and `git diff --check` passed. No production code, raw/canonical/accepted data changed. S3 economic spread legs and S5 D2-D8 remain unapproved; P5 runtime use prohibited. No KIS/REAL_VTS/Live/account API, actual order/cancel/liquidation or new collection.
