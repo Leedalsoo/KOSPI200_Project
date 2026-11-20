@@ -553,3 +553,55 @@ def test_t17_four_leg_synthetic_quotes_share_candidate_time_while_source_anchor_
         assert max(ages) - min(ages) > 0
         assert len(set(calibration["iv_anchor_observation_ids"])) == 6
         assert len(set(calibration["spread_anchor_observation_ids"])) == 6
+
+
+def test_t17_all_s2_candidates_preserve_four_leg_time_alignment_and_source_anchor_lineage():
+    import json
+
+    provider = _provider("2026-10-12T09:26:00+09:00")
+    manifest, _candidate, _profile, _quotes, _hashes = provider._load_verified_sources()
+    scenario_rows = [
+        json.loads(line)
+        for line in (provider.scenario_dir / "four_leg_quotes.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    accepted_by_id = {}
+    for day in ("20261012", "20261013"):
+        source_path = provider.accepted_manifest_path.parent / f"{day}.jsonl"
+        for line in source_path.read_text(encoding="utf-8").splitlines():
+            source_row = json.loads(line)
+            source_id = (source_row.get("scenario_metadata") or {}).get("source_observation_id")
+            if source_id:
+                accepted_by_id[source_id] = source_row
+
+    all_anchor_ids = set()
+    for candidate in manifest["candidate_calibration"]:
+        group = [row for row in scenario_rows if row["candidate_id"] == candidate["candidate_id"]]
+        candidate_time = datetime.fromisoformat(candidate["timestamp"])
+        assert len(group) == 4
+        assert {row["timestamp"] for row in group} == {candidate_time.isoformat()}
+        assert {row["leg_role"] for row in group} == set(provider.ROLE_SIDE)
+        for row in group:
+            calibration = row["market_calibration"]
+            anchor_pairs = (
+                (calibration["iv_anchor_observation_ids"], calibration["iv_anchor_timestamps"]),
+                (calibration["spread_anchor_observation_ids"], calibration["spread_anchor_timestamps"]),
+            )
+            for ids, timestamps in anchor_pairs:
+                assert len(ids) == len(timestamps)
+                for source_id, timestamp in zip(ids, timestamps):
+                    all_anchor_ids.add(source_id)
+                    source_row = accepted_by_id[source_id]
+                    metadata = source_row["scenario_metadata"]
+                    observed_at = datetime.fromisoformat(metadata["source_observed_at"])
+                    assert timestamp == observed_at.isoformat()
+                    assert source_row["tick"]["timestamp"] == observed_at.isoformat()
+                    assert (candidate_time - observed_at).total_seconds() >= 0
+                    assert (candidate_time - observed_at).total_seconds() <= manifest["anchor_policy"]["max_source_anchor_age_seconds"]
+                    assert len(metadata["source_raw_sha256"]) == 64
+                    assert len(metadata["source_canonical_sha256"]) == 64
+
+    assert len(manifest["candidate_calibration"]) == 21
+    assert len(scenario_rows) == 84
+    assert len(all_anchor_ids) == 160
+    assert all_anchor_ids.issubset(accepted_by_id)
