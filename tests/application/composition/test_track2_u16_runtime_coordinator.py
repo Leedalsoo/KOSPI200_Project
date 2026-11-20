@@ -567,3 +567,75 @@ def test_virtual_bridge_repair_refuses_to_submit_without_explicit_limit_price_re
         entry_plan_provider=lambda group: plan, quote_policy=POLICY)
     with pytest.raises(ValueError, match="PRICE_RESOLVER_REQUIRED"):
         ports.submit_repair("g1", "inner_put", 1, "u16-repair-1", T0)
+
+
+
+def test_u16_runtime_rehydrates_after_real_u19_decision_without_blind_retry(tmp_path):
+    from environments.virtual.position.track2_u16_runtime_store import SqliteTrack2U16RuntimeStore
+    from core.oms.track2_u19_recovery import (
+        U19BrokerPositionSnapshot,
+        U19ExecutionEvent,
+        U19ExecutionLedgerSnapshot,
+        U19Position,
+        U19RecoveryStatus,
+        evaluate_u19_recovery,
+    )
+
+    store = SqliteTrack2U16RuntimeStore(tmp_path / "u16-rehydrate.sqlite")
+    submitted = []
+    first = ValidationOnlyU16RuntimeCoordinator(
+        validation_only=True,
+        submit_repair=lambda g, leg, qty, cid, now: submitted.append((g, leg, qty, cid))
+            or SimpleNamespace(client_order_id="repair-attempt-1", terminal=False, reconciled=False),
+        submit_flatten=lambda *args: pytest.fail("unexpected flatten"),
+        state_store=store,
+    )
+    initial = first.process(data())
+    assert initial.action == "REPAIR_SUBMITTED"
+    assert initial.submitted_quantity == 2
+    assert len(submitted) == 1
+
+    position = (U19Position("SYNTHETIC_CONTRACT:PUT300", Decimal("1")),)
+    broker = U19BrokerPositionSnapshot(
+        group_id="g1", snapshot_id="broker-restart-1", as_of=T0,
+        source="VALIDATION_ONLY:BROKER_EXCHANGE", positions=position,
+        complete=True, capability_verified=True, payload_sha256="a" * 64,
+    )
+    ledger = U19ExecutionLedgerSnapshot(
+        group_id="g1", snapshot_id="ledger-restart-1", as_of=T0,
+        source="VALIDATION_ONLY:EXECUTION_LEDGER", positions=position,
+        complete=True, payload_sha256="b" * 64,
+        execution_events=(U19ExecutionEvent("fill-original-1", "fingerprint-1"),),
+        pending_order_ids=(),
+    )
+    decision = evaluate_u19_recovery(
+        group_id="g1", broker_snapshot=broker, ledger_snapshot=ledger,
+    )
+    assert decision.status is U19RecoveryStatus.RESTORE_ALLOWED
+    assert decision.restore_allowed and decision.strategy_resume_allowed
+    assert decision.new_entry_enabled is False
+    assert decision.order_submission_enabled is False
+
+    restarted_submissions = []
+    restarted = ValidationOnlyU16RuntimeCoordinator(
+        validation_only=True,
+        submit_repair=lambda g, leg, qty, cid, now: restarted_submissions.append((g, leg, qty, cid))
+            or SimpleNamespace(client_order_id=cid, terminal=True, reconciled=True),
+        submit_flatten=lambda *args: pytest.fail("unexpected flatten"),
+        state_store=store,
+    )
+    assert restarted.restore_after_u19_recovery("g1", decision)
+
+    waiting = restarted.process(data(now=T0 + timedelta(seconds=30)))
+    assert waiting.action == "NO_SUBMISSION"
+    assert waiting.evaluation.state is U16RepairState.REPAIR_WAITING
+    assert not restarted_submissions
+
+    restarted.record_repair_reconciliation(
+        "g1", "inner_put", terminal=True, reconciled=True,
+    )
+    retry = restarted.process(data(now=T0 + timedelta(seconds=30)))
+    assert retry.action == "REPAIR_SUBMITTED"
+    assert retry.submitted_quantity == 2
+    assert len(restarted_submissions) == 1
+    assert restarted_submissions[0][3] == retry.client_order_id

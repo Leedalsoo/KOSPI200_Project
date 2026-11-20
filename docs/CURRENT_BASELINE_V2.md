@@ -122,3 +122,12 @@
 - Additional focused regression evidence in the T4 worktree: 165 passed across S4 MINI identity/runtime/late-fill/U19 (5), Track4 profile/spec (12), U19 recovery (114), shared StrategyHub (13), FRESH31 bridge/U19 (2), R4 multi-leg lifecycle (6), R4 strategy-decision lifecycle (2), Track6 cancel (2), and validation-only provider boundary (9).
 - compileall, Ruff F821, Ruff F401 on the new Track4 test, and `git diff --check` passed. These are separate targeted suites, not a complete integrated strategy or T4 fault matrix.
 - P5 remains synthetic-only: identity owner unresolved and runtime use prohibited by its manifest. U16/runtime rehydration and the full common/strategy fault matrix remain open. No KIS/REAL_VTS/Live/real-account or actual order/cancel/liquidation API was used.
+
+
+## T4 X3 follow-up - U16 Runtime rehydration after U19 recovery (2026-11-20)
+
+- Added one focused validation test joining the real `evaluate_u19_recovery` decision object with the append-only SQLite U16 Runtime state store and a restarted `ValidationOnlyU16RuntimeCoordinator`.
+- The test confirms U19 `RESTORE_ALLOWED` is required to reload the U16 state, while `new_entry_enabled` and `order_submission_enabled` remain false. A previously submitted repair with terminal/reconciliation evidence still pending is not blindly retried after restart. Only after explicit terminal + position-reconciled evidence is recorded can the next U16 retry slot submit the missing quantity.
+- Focused validation batches: U16 Runtime/core 61 passed; U19 ledger/recovery 26 passed; shared StrategyHub + runtime safety boundaries 68 passed; R4/Track4 MINI 16 passed; Track6 cancel boundary 2 passed. Total 173 passed across separate batches, not one integrated T4 acceptance run.
+- Static checks: `compileall`, scoped Ruff F821/F401, and `git diff --check` passed. Only the U16 coordinator test file changed; no production runtime code or raw source data changed.
+- Remaining: full T4 common/strategy fault-injection matrix and integrated end-to-end acceptance remain open. P5 remains synthetic fixture only (`runtime_use=PROHIBITED`). No KIS/REAL_VTS/Live/real-account API or actual order/cancel/liquidation was used.
