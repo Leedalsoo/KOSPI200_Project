@@ -189,6 +189,20 @@ def test_t10_session_attachment_replays_four_contract_events_with_individual_pol
     assert all(event["order_routing"] == "NOT_INVOKED" for event in events)
     assert len({event["u21_derived_quote_digest"] for event in events}) == 4
     assert len(order) == 4
+    assert len({event["timestamp"] for event in events}) == 1
+    assert [event["seq_id"] for event in events] == [tick.seq_id for tick in loop.validation_only_s2_candidate_ticks]
+    expected_by_instrument = {
+        tick.instrument_id: tick for tick in loop.validation_only_s2_candidate_ticks
+    }
+    assert len(market.option_quotes) == 4
+    for quote in market.option_quotes.values():
+        tick = expected_by_instrument[quote["instrument_id"]]
+        assert quote["timestamp"] == tick.timestamp
+        assert quote["option_type"] == tick.option_type
+        assert quote["strike"] == tick.strike_price
+        assert quote["bid"] == tick.bid_price
+        assert quote["ask"] == tick.ask_price
+        assert quote["contract_multiplier"] == tick.contract_multiplier
     assert {event["run_id"] for event in events} == {loop.run_id}
     assert len({event["replay_run_id"] for event in events}) == 1
     assert {event["replay_invocation"] for event in events} == {1}
@@ -315,3 +329,35 @@ def test_t10_s2_restart_uses_new_session_run_id_and_does_not_restore_ephemeral_q
         {event["replay_run_id"] for event in restarted_events}
     )
     assert restarted_loop.quote_only_events == restarted_events
+
+
+def test_t10_s2_replay_rejects_out_of_order_four_leg_event_publication():
+    alternative = _provider("2026-10-12T09:26:00+09:00")
+    chain = SimpleNamespace(
+        supervisor=SimpleNamespace(evaluate=lambda tick: SimpleNamespace(
+            candidate_source="PROVENANCE_PRESERVING_ALTERNATIVE",
+            stop_snapshot=SimpleNamespace(status="ARMED"),
+        )),
+        alternative_provider=alternative,
+    )
+    market = VirtualMarketSimulatorRuntime(option_master=None)
+    loop = _loop(chain.supervisor, [])
+    market.subscribe_quote_only(loop.on_quote_only_tick)
+    attach_validation_only_s2_quote_only_replay(loop, SimpleNamespace(market=market), chain)
+    original_publish = market.publish_replay_tick
+    pending = []
+
+    def reverse_publication(tick):
+        pending.append(tick)
+        if len(pending) == 4:
+            for item in reversed(pending):
+                original_publish(item)
+        return tick
+
+    market.publish_replay_tick = reverse_publication
+    with pytest.raises(ValueError, match="T10_S2_QUOTE_ONLY_REPLAY_EVENT_IDENTITY_OR_ORDER_MISMATCH"):
+        loop.replay_validation_only_s2_candidate()
+    assert [event["leg_role"] for event in loop.quote_only_events] == [
+        "outer_call", "outer_put", "inner_call", "inner_put",
+    ]
+    assert len(market.option_quotes) == 4
