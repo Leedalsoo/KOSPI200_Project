@@ -711,3 +711,76 @@ def test_t17_all_s2_candidate_iv_and_spread_medians_recompute_from_accepted_anch
             median(spreads), float(calibration["empirical_anchor_spread_median"]),
             rel_tol=1e-12, abs_tol=1e-12,
         )
+
+
+def test_t17_all_84_quote_rows_match_tick_rounding_spread_limit_and_synthetic_provenance():
+    import json
+    from decimal import ROUND_HALF_UP
+    from verification.track2_synthetic_quote_scenario import (
+        _market_bs_price,
+        validate_quote_snapshot,
+    )
+
+    provider = _provider("2026-10-12T09:26:00+09:00")
+    manifest, _candidate, _profile, _quotes, _hashes = provider._load_verified_sources()
+    rows = [
+        json.loads(line)
+        for line in (provider.scenario_dir / "four_leg_quotes.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    tick = Decimal(manifest["u21"]["tick_size"])
+    max_spread = Decimal(manifest["u21"]["max_spread"])
+    assert len(rows) == 84
+
+    for row in rows:
+        bid, ask, last = (Decimal(row[key]) for key in ("bid", "ask", "last"))
+        spread = ask - bid
+        calibration = row["market_calibration"]
+        assert row["source"] == "SYNTHETIC:DERIVED_SCENARIO"
+        assert row["provenance"] == "SYNTHETIC"
+        assert row["contract_identity_authority"] == "SYNTHETIC_ONLY_NOT_KIS_MASTER"
+        assert row["model"] == "BLACK_SCHOLES_ZERO_RATE_EMPIRICAL_IV_V1"
+        assert calibration["last_price_basis"] == "MODEL_FAIR_VALUE_NOT_OBSERVED_TRADE"
+        assert row["source_manifest_sha256"] and len(row["source_manifest_sha256"]) == 64
+        assert row["scenario_profile_sha256"] and len(row["scenario_profile_sha256"]) == 64
+        assert row["source_observation_id"]
+        assert "raw_payload_sha256" not in row
+        assert bid > 0 and ask > bid and spread > 0
+        assert bid % tick == ask % tick == last % tick == Decimal("0")
+        assert spread <= max_spread
+
+        empirical_spread = Decimal(calibration["empirical_anchor_spread_median"])
+        spread_ticks = max(
+            1,
+            int((empirical_spread / tick).to_integral_value(rounding=ROUND_HALF_UP)),
+        )
+        expected_spread = Decimal(spread_ticks) * tick
+        assert spread == expected_spread
+        assert expected_spread <= max_spread
+
+        observed_at = datetime.fromisoformat(row["timestamp"])
+        expiry_at = datetime.strptime(row["expiry"], "%Y%m%d").replace(
+            hour=15, minute=20, second=0, microsecond=0, tzinfo=observed_at.tzinfo,
+        )
+        years = (expiry_at - observed_at).total_seconds() / (365.0 * 24.0 * 60.0 * 60.0)
+        theoretical_mid = _market_bs_price(
+            float(calibration["candidate_underlying_price"]),
+            float(row["strike"]),
+            years,
+            float(calibration["implied_volatility"]),
+            row["option_type"],
+        )
+        expected_mid = (
+            Decimal(str(theoretical_mid)) / tick
+        ).to_integral_value(rounding=ROUND_HALF_UP) * tick
+        assert last == expected_mid
+        bid_ticks = spread_ticks // 2
+        ask_ticks = spread_ticks - bid_ticks
+        assert bid == expected_mid - Decimal(bid_ticks) * tick
+        assert ask == expected_mid + Decimal(ask_ticks) * tick
+        validate_quote_snapshot(
+            row,
+            observed_at=observed_at,
+            max_age_seconds=Decimal(manifest["u21"]["max_age_seconds"]),
+            max_spread=max_spread,
+        )
