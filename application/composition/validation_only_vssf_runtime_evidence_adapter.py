@@ -108,6 +108,18 @@ class ValidationOnlyVSSFRuntimeEvidenceAdapter:
             raise TypeError("T6_VALIDATION_EXPECTED_GROUP_MANIFEST_REQUIRED")
 
         scope_group_id = self.scope_group_id
+        candidate_group_prefix = f"VALIDATION_ONLY:RUN:{self.run_id}:CANDIDATE:"
+        other_candidate_groups = {
+            str(group_id) for group_id in getattr(self.bridge, "groups", {})
+            if str(group_id).startswith(candidate_group_prefix) and str(group_id) != scope_group_id
+        }
+        if other_candidate_groups:
+            runtime_candidate_id = (
+                getattr(self.vssf_runtime, "validation_candidate_id", None)
+                or getattr(self.vssf_runtime.account, "validation_candidate_id", None)
+            )
+            if runtime_candidate_id != self.candidate_id:
+                raise ValueError("T6_VSSF_RUNTIME_CANDIDATE_SCOPE_REQUIRED")
         if broker_snapshot.group_id != scope_group_id or expected_group_manifest.group_id != scope_group_id:
             raise ValueError("T6_BROKER_OR_EXPECTED_MANIFEST_RUN_SCOPE_MISMATCH")
         if self._aware(broker_snapshot.as_of, "T6_BROKER_SNAPSHOT_AS_OF_INVALID") != as_of_utc:
@@ -119,8 +131,20 @@ class ValidationOnlyVSSFRuntimeEvidenceAdapter:
         order_accumulator: dict[str, dict[str, Any]] = {}
         seen_execution_ids: set[str] = set()
 
+        report_group_by_execution_id: dict[str, str] = {}
         for group_id, reports in sorted(getattr(self.bridge, "groups", {}).items()):
             for report in tuple(reports):
+                report_group_id = str(self._value(report, "group_id", group_id) or group_id)
+                execution_key = str(self._value(report, "execution_id", "") or "").strip()
+                if execution_key:
+                    prior_group = report_group_by_execution_id.get(execution_key)
+                    if prior_group is not None and prior_group != group_id:
+                        raise ValueError(f"T6_VSSF_EXECUTION_CROSS_GROUP_COLLISION:{execution_key}")
+                    report_group_by_execution_id[execution_key] = group_id
+                if group_id != scope_group_id:
+                    continue
+                if report_group_id != scope_group_id:
+                    raise ValueError(f"T6_VSSF_REPORT_GROUP_SCOPE_MISMATCH:{execution_key}")
                 client_order_id = str(self._value(report, "client_order_id", "") or "").strip()
                 if not client_order_id:
                     raise ValueError("T6_VSSF_ORDER_CLIENT_ID_MISSING")
@@ -157,6 +181,8 @@ class ValidationOnlyVSSFRuntimeEvidenceAdapter:
                 leg_meta = execution_legs.get(execution_id)
                 if not isinstance(source, Mapping) or not isinstance(leg_meta, Mapping):
                     raise TypeError(f"T6_VSSF_EXECUTION_PROVENANCE_MISSING:{execution_id}")
+                if str(source.get("group_id") or "") != scope_group_id:
+                    raise ValueError(f"T6_VSSF_EXECUTION_PROVENANCE_GROUP_MISMATCH:{execution_id}")
                 instrument_id = str(source.get("instrument_id") or "").strip()
                 leg_id = str(source.get("leg_id") or self._value(report, "leg_id", "") or "").strip()
                 side = str(leg_meta.get("side") or "").upper()
@@ -193,6 +219,9 @@ class ValidationOnlyVSSFRuntimeEvidenceAdapter:
                 item["side"] = side
 
         for _plan, leg, command in getattr(self.bridge, "pending_legs", {}).values():
+            command_group_id = str(getattr(command, "group_id", "") or "")
+            if command_group_id != scope_group_id:
+                continue
             client_id = str(getattr(command, "client_order_id", "") or "").strip()
             if not client_id:
                 raise ValueError("T6_PENDING_VSSF_ORDER_CLIENT_ID_MISSING")
@@ -270,17 +299,48 @@ class ValidationOnlyVSSFRuntimeEvidenceAdapter:
         )
 
         lot_store = self.bridge.position_lot_store
-        history = tuple(lot for lot in lot_store.history() if getattr(lot, "run_id", None) == self.run_id)
-        open_lots = tuple(lot for lot in lot_store.open_lots() if getattr(lot, "run_id", None) == self.run_id)
-        close_events = tuple(lot_store.close_events())
-        fees = tuple(self.bridge.fee_ledger.snapshot(run_id=self.run_id))
+        all_run_history = tuple(lot for lot in lot_store.history() if getattr(lot, "run_id", None) == self.run_id)
+        all_run_open_lots = tuple(lot for lot in lot_store.open_lots() if getattr(lot, "run_id", None) == self.run_id)
+        lot_group_by_execution_id: dict[str, str] = {}
+        for lot in (*all_run_history, *all_run_open_lots):
+            lot_group_id = str(getattr(lot, "group_id", "") or "")
+            lot_execution_id = str(getattr(lot, "execution_id", "") or "")
+            if not lot_group_id or not lot_execution_id:
+                raise ValueError("T6_VSSF_POSITION_LOT_GROUP_LINEAGE_MISSING")
+            prior_group = lot_group_by_execution_id.get(lot_execution_id)
+            if prior_group is not None and prior_group != lot_group_id:
+                raise ValueError(f"T6_VSSF_POSITION_LOT_CROSS_GROUP_COLLISION:{lot_execution_id}")
+            lot_group_by_execution_id[lot_execution_id] = lot_group_id
+        history = tuple(lot for lot in all_run_history if getattr(lot, "group_id", None) == scope_group_id)
+        open_lots = tuple(lot for lot in all_run_open_lots if getattr(lot, "group_id", None) == scope_group_id)
+        close_events_all = tuple(lot_store.close_events())
+        close_events_list = []
+        for event in close_events_all:
+            closing_id = str(getattr(event, "execution_id", "") or "")
+            source_lot_id = str(getattr(event, "source_lot_execution_id", "") or "")
+            closing_group = report_group_by_execution_id.get(closing_id) or lot_group_by_execution_id.get(closing_id)
+            source_group = lot_group_by_execution_id.get(source_lot_id)
+            if scope_group_id not in {closing_group, source_group}:
+                continue
+            if not closing_group or not source_group:
+                raise ValueError("T6_VSSF_CLOSE_EVENT_GROUP_LINEAGE_INCOMPLETE")
+            if closing_group != source_group:
+                raise ValueError("T6_VSSF_CROSS_GROUP_POSITION_LOT_CLOSE")
+            if closing_group == scope_group_id:
+                close_events_list.append(event)
+        close_events = tuple(close_events_list)
+        fees_all = tuple(self.bridge.fee_ledger.snapshot(run_id=self.run_id))
+        for fee in fees_all:
+            if not str(self._value(fee, "group_id", "") or "").strip():
+                raise ValueError("T6_VSSF_FEE_GROUP_LINEAGE_MISSING")
+        fees = tuple(fee for fee in fees_all if self._value(fee, "group_id") == scope_group_id)
         # This is a run-from-flat ledger: every VSSF fill is in executions.
         # Do not also seed those same fills as opening_lots (that double counts).
         opening_lots: tuple[dict[str, Any], ...] = ()
 
         symbol_to_instrument: dict[str, str] = {}
         for value in provenance.values():
-            if not isinstance(value, Mapping):
+            if not isinstance(value, Mapping) or str(value.get("group_id") or "") != scope_group_id:
                 continue
             symbol = str(value.get("symbol") or "").strip()
             instrument = str(value.get("instrument_id") or "").strip()

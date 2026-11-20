@@ -32,6 +32,7 @@ SCOPE = "VALIDATION_ONLY:RUN:RUN-T6:CANDIDATE:S2-CANDIDATE-001"
 def _fixture(*, account_qty=1, broker_qty=1, include_provenance=True):
     lot = SimpleNamespace(
         run_id="RUN-T6",
+        group_id=SCOPE,
         instrument_id="SYNTHETIC_CONTRACT:T6:OPT1",
         execution_id="SYNTHETIC:T6:EXEC-1",
         side="BUY",
@@ -50,12 +51,12 @@ def _fixture(*, account_qty=1, broker_qty=1, include_provenance=True):
         execution_price=Decimal(100),
         execution_timestamp=AS_OF.replace(second=0),
         fee=Decimal(0),
-        group_id="SYNTHETIC:T6:GROUP-1",
+        group_id=SCOPE,
         leg_id="LEG-1",
     )
     bridge = SimpleNamespace(
         run_id="RUN-T6",
-        groups={"SYNTHETIC:T6:GROUP-1": (report,)},
+        groups={SCOPE: (report,)},
         provenance=(
             {
                 report.execution_id: {
@@ -82,6 +83,7 @@ def _fixture(*, account_qty=1, broker_qty=1, include_provenance=True):
             snapshot=lambda *, run_id: (
                 SimpleNamespace(
                     execution_id=report.execution_id,
+                    group_id=SCOPE,
                     fee_amount=Decimal(0),
                     executed_quantity=1,
                     executed_price=Decimal(100),
@@ -90,6 +92,7 @@ def _fixture(*, account_qty=1, broker_qty=1, include_provenance=True):
         ),
     )
     vssf = SimpleNamespace(
+        validation_candidate_id="S2-CANDIDATE-001",
         account=SimpleNamespace(
             positions=(
                 {
@@ -275,3 +278,69 @@ def test_adapter_scopes_same_run_candidates_to_distinct_group_ids():
     assert adapter.scope_group_id == SCOPE
     assert second.scope_group_id == "VALIDATION_ONLY:RUN:RUN-T6:CANDIDATE:S2-CANDIDATE-002"
     assert adapter.scope_group_id != second.scope_group_id
+
+
+def test_t6_adapter_excludes_other_candidate_reports_lots_and_fees():
+    adapter, broker, report_a, lot_a, bridge, vssf = _fixture()
+    group_b = "VALIDATION_ONLY:RUN:RUN-T6:CANDIDATE:S2-CANDIDATE-002"
+    report_b = SimpleNamespace(
+        client_order_id="SYNTHETIC:T6:ORDER-B", broker_order_id="SYNTHETIC:T6:BROKER-B",
+        execution_id="SYNTHETIC:T6:EXEC-B", status="FILLED", filled_quantity=1,
+        remaining_quantity=0, execution_price=Decimal(200), execution_timestamp=AS_OF,
+        fee=Decimal("0.25"), group_id=group_b, leg_id="LEG-B",
+    )
+    lot_b = SimpleNamespace(
+        run_id="RUN-T6", group_id=group_b, instrument_id="SYNTHETIC_CONTRACT:T6:OPT-B",
+        execution_id=report_b.execution_id, side="BUY", opened_quantity=1,
+        remaining_quantity=1, execution_timestamp=AS_OF, contract_multiplier=Decimal(10),
+    )
+    bridge.groups[group_b] = (report_b,)
+    bridge.provenance[report_b.execution_id] = {
+        "group_id": group_b, "leg_id": "LEG-B", "instrument_id": lot_b.instrument_id,
+        "symbol": "SYNTHETIC:T6:SYMBOL-B",
+    }
+    bridge.execution_legs[report_b.execution_id] = {"side": "BUY", "contract_multiplier": Decimal(10)}
+    bridge.position_lot_store.history = lambda: (lot_a, lot_b)
+    bridge.position_lot_store.open_lots = lambda: (lot_a, lot_b)
+    fee_a = SimpleNamespace(execution_id=report_a.execution_id, group_id=SCOPE, fee_amount=Decimal(0), executed_quantity=1, executed_price=Decimal(100))
+    fee_b = SimpleNamespace(execution_id=report_b.execution_id, group_id=group_b, fee_amount=Decimal("0.25"), executed_quantity=1, executed_price=Decimal(200))
+    bridge.fee_ledger.snapshot = lambda *, run_id: (fee_a, fee_b)
+
+    candidate = _build(adapter, broker)
+    evidence = candidate.invariant_inputs["ledger_evidence"]
+    assert [row["execution_id"] for row in candidate.invariant_inputs["executions"]] == [report_a.execution_id]
+    assert [row.execution_id for row in evidence["actual_position_lot_history"]] == [lot_a.execution_id]
+    assert [row.execution_id for row in evidence["actual_open_position_lots"]] == [lot_a.execution_id]
+    assert [row.execution_id for row in evidence["actual_fee_records"]] == [report_a.execution_id]
+
+
+def test_t6_adapter_rejects_report_group_tampering_inside_candidate_bucket():
+    adapter, broker, report, _lot, bridge, _vssf = _fixture()
+    report.group_id = "VALIDATION_ONLY:RUN:RUN-T6:CANDIDATE:S2-CANDIDATE-002"
+    with pytest.raises(ValueError, match="T6_VSSF_REPORT_GROUP_SCOPE_MISMATCH"):
+        _build(adapter, broker)
+
+
+def test_t6_adapter_rejects_cross_candidate_close_event_lineage():
+    adapter, broker, _report_a, lot_a, bridge, _vssf = _fixture()
+    group_b = "VALIDATION_ONLY:RUN:RUN-T6:CANDIDATE:S2-CANDIDATE-002"
+    report_b = SimpleNamespace(
+        client_order_id="ORDER-B", execution_id="EXEC-B", group_id=group_b,
+        status="FILLED", filled_quantity=1, remaining_quantity=0,
+    )
+    bridge.groups[group_b] = (report_b,)
+    bridge.position_lot_store.close_events = lambda: (
+        SimpleNamespace(execution_id="EXEC-B", source_lot_execution_id=lot_a.execution_id,
+                        quantity=1, execution_timestamp=AS_OF),
+    )
+    with pytest.raises(ValueError, match="T6_VSSF_CROSS_GROUP_POSITION_LOT_CLOSE"):
+        _build(adapter, broker)
+
+
+def test_t6_adapter_requires_explicit_candidate_scoped_vssf_account_for_multi_candidate_bridge():
+    adapter, broker, _report, _lot, bridge, vssf = _fixture()
+    group_b = "VALIDATION_ONLY:RUN:RUN-T6:CANDIDATE:S2-CANDIDATE-002"
+    bridge.groups[group_b] = ()
+    del vssf.validation_candidate_id
+    with pytest.raises(ValueError, match="T6_VSSF_RUNTIME_CANDIDATE_SCOPE_REQUIRED"):
+        _build(adapter, broker)

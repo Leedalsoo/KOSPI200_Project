@@ -25,7 +25,7 @@ class VirtualPositionLotStore:
         self._executions[lot.execution_id] = fingerprint
         opposite = "SELL" if lot.side == "BUY" else "BUY"
         remaining = lot.remaining_quantity
-        for key, current in self._ordered_open_lots(lot.instrument_id, opposite):
+        for key, current in self._ordered_open_lots(lot.instrument_id, opposite, lot.group_id):
             if remaining <= 0:
                 break
             consumed = min(remaining, current.remaining_quantity)
@@ -43,8 +43,8 @@ class VirtualPositionLotStore:
     def apply_close(self, execution_id: str, instrument_id: str, side: str, quantity: int, execution_timestamp: datetime) -> None:
         raise NotImplementedError("POSITION_LOT_CLOSE_REQUIRES_EXECUTION_PROVENANCE")
 
-    def _ordered_open_lots(self, instrument_id: str, side: str) -> Iterable[tuple[str, PositionLotProvenance]]:
-        return sorted(((k, v) for k, v in self._lots.items() if v.instrument_id == instrument_id and v.side == side and v.remaining_quantity > 0), key=lambda item: (item[1].execution_timestamp, item[1].execution_id))
+    def _ordered_open_lots(self, instrument_id: str, side: str, group_id: str) -> Iterable[tuple[str, PositionLotProvenance]]:
+        return sorted(((k, v) for k, v in self._lots.items() if v.instrument_id == instrument_id and v.side == side and v.group_id == group_id and v.remaining_quantity > 0), key=lambda item: (item[1].execution_timestamp, item[1].execution_id))
 
     def open_lots(self) -> tuple[PositionLotProvenance, ...]:
         return tuple(sorted((lot for lot in self._lots.values() if lot.remaining_quantity > 0), key=lambda x: (x.instrument_id, x.execution_timestamp, x.execution_id)))
