@@ -151,3 +151,47 @@ def test_derived_synthetic_quote_rejects_raw_hash_substitution():
     result = run(substituted)
     assert result.decision is QuoteDecision.FALLBACK_UNAVAILABLE_BLOCKED
     assert "PRIMARY_QUOTE_PROVENANCE_INCOMPLETE" in result.reason
+
+
+@pytest.mark.parametrize(
+    "ages, expected",
+    [
+        ((0, 1, 4, 5), (QuoteDecision.PRIMARY_QUOTE_ACCEPTED,) * 4),
+        ((0, 1, 4, 5.001), (
+            QuoteDecision.PRIMARY_QUOTE_ACCEPTED,
+            QuoteDecision.PRIMARY_QUOTE_ACCEPTED,
+            QuoteDecision.PRIMARY_QUOTE_ACCEPTED,
+            QuoteDecision.FALLBACK_UNAVAILABLE_BLOCKED,
+        )),
+    ],
+)
+def test_four_leg_synthetic_quote_freshness_matrix_uses_per_quote_five_second_boundary(ages, expected):
+    decisions = []
+    for index, age in enumerate(ages):
+        instrument_id = f"SYNTHETIC:LEG:{index}"
+        symbol = f"SYNTHETIC:SYMBOL:{index}"
+        item = U21Quote(
+            instrument_id,
+            symbol,
+            Decimal("1.00"),
+            Decimal("1.10"),
+            NOW - timedelta(seconds=age),
+            True,
+            True,
+            "SYNTHETIC:DERIVED_SCENARIO",
+            None,
+            provenance_kind="DERIVED_SYNTHETIC",
+            derived_quote_digest=(f"{index + 1:x}" * 64),
+        )
+        result = evaluate_u21_quote(
+            primary=item,
+            fallback=None,
+            side=QuoteSide.BUY if index < 2 else QuoteSide.SELL,
+            now=NOW,
+            policy=policy(max_age_seconds=Decimal("5"), max_spread=Decimal("4.70")),
+            expected_instrument_id=instrument_id,
+            expected_symbol=symbol,
+        )
+        decisions.append(result.decision)
+        assert result.order_submission_enabled is False
+    assert tuple(decisions) == expected
