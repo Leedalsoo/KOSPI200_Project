@@ -901,3 +901,26 @@ def test_track7_x2_missing_gate_read_never_reuses_previous_open_value():
         ("cancel", "synthetic_callback_invoked"),
         ("repair", "gate_unavailable"),
     ]
+
+
+def test_track7_x2_gate_read_to_callback_window_is_not_atomic():
+    gate_state = {"latched": False}
+    callback_gate_states = []
+
+    def read_then_transition():
+        observed = gate_state["latched"]
+        # Deterministic scheduler-boundary stand-in: X2 latches after the
+        # read returns its value but before the dispatcher invokes callback.
+        gate_state["latched"] = True
+        return observed
+
+    events = _dispatch_test_actions_with_fresh_x2_reads(
+        [("cancel", lambda: callback_gate_states.append(gate_state["latched"]))],
+        [read_then_transition],
+    )
+
+    # Characterize the existing limitation; this is not a safety-pass claim.
+    # A stale open read can reach the callback after X2 has become latched.
+    assert gate_state["latched"] is True
+    assert callback_gate_states == [True]
+    assert events == [("cancel", "synthetic_callback_invoked")]
