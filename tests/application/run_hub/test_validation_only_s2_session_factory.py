@@ -361,3 +361,68 @@ def test_t10_s2_replay_rejects_out_of_order_four_leg_event_publication():
         "outer_call", "outer_put", "inner_call", "inner_put",
     ]
     assert len(market.option_quotes) == 4
+
+
+@pytest.mark.parametrize("batch_shape", ["partial", "mixed_timestamp"])
+def test_t10_s2_attachment_rejects_partial_or_mixed_timestamp_quote_batch(batch_shape):
+    from dataclasses import replace
+
+    alternative = _provider("2026-10-12T09:26:00+09:00")
+    ticks = alternative.build_quote_only_ticks()
+    if batch_shape == "partial":
+        alternative.build_quote_only_ticks = lambda: ticks[:3]
+    else:
+        alternative.build_quote_only_ticks = lambda: (
+            *ticks[:3], replace(ticks[3], timestamp="2026-10-12T09:26:01+09:00"),
+        )
+    chain = SimpleNamespace(
+        supervisor=SimpleNamespace(evaluate=lambda tick: SimpleNamespace(
+            candidate_source="PROVENANCE_PRESERVING_ALTERNATIVE",
+            stop_snapshot=SimpleNamespace(status="ARMED"),
+        )),
+        alternative_provider=alternative,
+    )
+    market = VirtualMarketSimulatorRuntime(option_master=None)
+    loop = _loop(chain.supervisor, [])
+    with pytest.raises(ValueError, match="T10_S2_QUOTE_ONLY_CANDIDATE_SET_OR_TIME_ALIGNMENT_INVALID"):
+        attach_validation_only_s2_quote_only_replay(loop, SimpleNamespace(market=market), chain)
+    assert loop.quote_only_events == ()
+    assert market.option_quotes == {}
+
+
+def test_t10_s2_quote_map_preserves_per_contract_timestamps_after_one_later_quote():
+    from dataclasses import replace
+
+    alternative = _provider("2026-10-12T09:26:00+09:00")
+    chain = SimpleNamespace(
+        supervisor=SimpleNamespace(evaluate=lambda tick: SimpleNamespace(
+            candidate_source="PROVENANCE_PRESERVING_ALTERNATIVE",
+            stop_snapshot=SimpleNamespace(status="ARMED"),
+        )),
+        alternative_provider=alternative,
+    )
+    market = VirtualMarketSimulatorRuntime(option_master=None)
+    loop = _loop(chain.supervisor, [])
+    market.subscribe_quote_only(loop.on_quote_only_tick)
+    attach_validation_only_s2_quote_only_replay(loop, SimpleNamespace(market=market), chain)
+    loop.replay_validation_only_s2_candidate()
+    before = market.option_quotes
+    stale_tick = replace(
+        loop.validation_only_s2_candidate_ticks[0],
+        timestamp="2026-10-12T09:26:06+09:00",
+    )
+    market.publish_replay_tick(stale_tick)
+
+    event = loop.quote_only_events[-1]
+    after = market.option_quotes
+    assert len(before) == len(after) == 4
+    assert {quote["timestamp"] for quote in before.values()} == {"2026-10-12T09:26:00+09:00"}
+    assert sorted(quote["timestamp"] for quote in after.values()) == [
+        "2026-10-12T09:26:00+09:00",
+        "2026-10-12T09:26:00+09:00",
+        "2026-10-12T09:26:00+09:00",
+        "2026-10-12T09:26:06+09:00",
+    ]
+    assert event["u21_policy_decision"] == "FALLBACK_UNAVAILABLE_BLOCKED"
+    assert "PRIMARY_QUOTE_STALE" in event["reason"]
+    assert event["order_routing"] == "NOT_INVOKED"
