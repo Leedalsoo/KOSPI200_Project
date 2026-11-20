@@ -336,3 +336,10 @@
 - compileall, scoped Ruff F821, test F401 and git diff-check PASS. One existing F401 in `automated_virtual_runtime_factory.py` (`Track9OptionContractSource`) was confirmed on the pre-change HEAD and left untouched.
 - Synthetic validation-only. No raw/Canonical/accepted/manifest data, risk profile, operating configuration or source collection changed. No KIS/REAL_VTS/Live/account API, actual order/cancel/liquidation or collector restart.
 - Full T4 X3 strategy/fault matrix and integrated acceptance remain OPEN.
+
+## T4 X3 Track7 restart boundary (2026-11-21, No.1691)
+
+- Track7 sequential lifecycle, exit policy, pending identity reconciliation and validation-only runtime regression: 20 passed.
+- A synthetic CALL_PENDING instance with PUT fill evidence, CALL client_order_id/submitted_at, expiry and cancel-request state emitted `CANCEL_AND_RECONCILE/TIMEOUT_10M`. A newly constructed Track7 instance started at `IDLE` with no pending CALL ID, no cancel request and no open PUT state. The Track7 strategy class exposes no snapshot/restore/persistence method.
+- Track7 Strategy-state restart recovery remains OPEN. This does not imply broker order state is lost: authoritative open-order, Execution and PositionLot reconciliation is a separate boundary. Do not add blind cancel/retry or invent persistence semantics. Define minimum persisted fields and authoritative reconciliation order before implementation; validate mismatch, late-fill, duplicate-cancel and X2 cases with synthetic fixtures.
+- No code/policy/raw-data changes; no KIS/REAL_VTS/Live/account API, real order/cancel/liquidation, collector restart or new collection. Full T4 X3/integrated acceptance remains OPEN.
