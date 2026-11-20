@@ -395,4 +395,4 @@ def test_candidate_multileg_partial_cancel_latefill_close_reopen_restart_replay(
     assert first["account_unrealized_pnl"] == "0"
     assert first["account_balance"] == "24999999.0"
     assert first["fees_total"] == "1.0"
-    assert first["u19_status"] == U19RecoveryStatus.FLAT_CONFIRMED.value\n
+    assert first["u19_status"] == U19RecoveryStatus.FLAT_CONFIRMED.value
