@@ -189,6 +189,9 @@ def test_t10_session_attachment_replays_four_contract_events_with_individual_pol
     assert all(event["order_routing"] == "NOT_INVOKED" for event in events)
     assert len({event["u21_derived_quote_digest"] for event in events}) == 4
     assert len(order) == 4
+    assert {event["run_id"] for event in events} == {loop.run_id}
+    assert len({event["replay_run_id"] for event in events}) == 1
+    assert {event["replay_invocation"] for event in events} == {1}
 
 
 def test_t10_s2_replay_rejects_missing_quote_only_subscriber_events():
@@ -252,3 +255,63 @@ def test_t10_s2_replay_rejects_event_identity_or_order_mismatch(monkeypatch):
     market._quote_only_subscribers = [altered]
     with pytest.raises(ValueError, match="T10_S2_QUOTE_ONLY_REPLAY_EVENT_IDENTITY_OR_ORDER_MISMATCH"):
         loop.replay_validation_only_s2_candidate()
+
+
+def test_t10_s2_explicit_replay_invocations_have_distinct_run_identity():
+    alternative = _provider("2026-10-12T09:26:00+09:00")
+    chain = SimpleNamespace(
+        supervisor=SimpleNamespace(evaluate=lambda tick: SimpleNamespace(
+            candidate_source="PROVENANCE_PRESERVING_ALTERNATIVE",
+            stop_snapshot=SimpleNamespace(status="ARMED"),
+        )),
+        alternative_provider=alternative,
+    )
+    market = VirtualMarketSimulatorRuntime(option_master=None)
+    loop = _loop(chain.supervisor, [])
+    market.subscribe_quote_only(loop.on_quote_only_tick)
+    attach_validation_only_s2_quote_only_replay(loop, SimpleNamespace(market=market), chain)
+
+    first = loop.replay_validation_only_s2_candidate()
+    second = loop.replay_validation_only_s2_candidate()
+
+    assert len(first) == len(second) == 4
+    assert {event["replay_invocation"] for event in first} == {1}
+    assert {event["replay_invocation"] for event in second} == {2}
+    assert len({event["replay_run_id"] for event in first + second}) == 2
+    assert {event["run_id"] for event in first + second} == {loop.run_id}
+    assert len(loop.quote_only_events) == 8
+
+
+def test_t10_s2_restart_uses_new_session_run_id_and_does_not_restore_ephemeral_quote_diagnostics():
+    alternative = _provider("2026-10-12T09:26:00+09:00")
+    chain = SimpleNamespace(
+        supervisor=SimpleNamespace(evaluate=lambda tick: SimpleNamespace(
+            candidate_source="PROVENANCE_PRESERVING_ALTERNATIVE",
+            stop_snapshot=SimpleNamespace(status="ARMED"),
+        )),
+        alternative_provider=alternative,
+    )
+    first_market = VirtualMarketSimulatorRuntime(option_master=None)
+    first_loop = _loop(chain.supervisor, [])
+    first_loop.run_id = "SYNTHETIC:T10:SESSION-A"
+    first_market.subscribe_quote_only(first_loop.on_quote_only_tick)
+    attach_validation_only_s2_quote_only_replay(first_loop, SimpleNamespace(market=first_market), chain)
+    first_events = first_loop.replay_validation_only_s2_candidate()
+
+    restarted_market = VirtualMarketSimulatorRuntime(option_master=None)
+    restarted_loop = _loop(chain.supervisor, [])
+    restarted_loop.run_id = "SYNTHETIC:T10:SESSION-B"
+    restarted_market.subscribe_quote_only(restarted_loop.on_quote_only_tick)
+    attach_validation_only_s2_quote_only_replay(
+        restarted_loop, SimpleNamespace(market=restarted_market), chain,
+    )
+    assert restarted_loop.quote_only_events == ()
+    restarted_events = restarted_loop.replay_validation_only_s2_candidate()
+
+    assert len(first_events) == len(restarted_events) == 4
+    assert {event["run_id"] for event in first_events} == {"SYNTHETIC:T10:SESSION-A"}
+    assert {event["run_id"] for event in restarted_events} == {"SYNTHETIC:T10:SESSION-B"}
+    assert {event["replay_run_id"] for event in first_events}.isdisjoint(
+        {event["replay_run_id"] for event in restarted_events}
+    )
+    assert restarted_loop.quote_only_events == restarted_events

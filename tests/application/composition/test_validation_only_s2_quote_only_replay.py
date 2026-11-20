@@ -29,6 +29,7 @@ def _quote_tick():
 def _loop(supervisor, order):
     loop = AutomatedVirtualTradingLoop.__new__(AutomatedVirtualTradingLoop)
     loop.runtime_evidence_supervisor = supervisor
+    loop.run_id = "SYNTHETIC:T10:QUOTE-ONLY-TEST-RUN"
     loop.last_runtime_evidence_supervision = None
     loop._quote_only_events = []
     loop.context_builder = lambda tick, state: order.append("context") or {}

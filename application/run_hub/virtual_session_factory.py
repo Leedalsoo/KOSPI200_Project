@@ -66,15 +66,26 @@ def attach_validation_only_s2_quote_only_replay(loop, bundle, evidence_chain):
         or len({tick.leg_role for tick in candidate_ticks}) != 4
     ):
         raise ValueError("T10_S2_QUOTE_ONLY_CANDIDATE_SET_OR_TIME_ALIGNMENT_INVALID")
+    run_id = str(getattr(loop, "run_id", "") or "").strip()
+    if not run_id:
+        raise ValueError("T10_S2_REPLAY_RUN_ID_REQUIRED")
     candidate_tick = candidate_ticks[0]
+    loop.validation_only_s2_replay_invocation = 0
     loop.validation_only_s2_candidate_ticks = candidate_ticks
     loop.validation_only_s2_candidate_tick = candidate_tick
 
     def replay_validation_only_s2_candidate():
+        loop.validation_only_s2_replay_invocation += 1
+        invocation = loop.validation_only_s2_replay_invocation
+        replay_run_id = f"{run_id}:S2:{evidence_chain.alternative_provider.candidate_id}:replay:{invocation:06d}"
         before = len(loop.quote_only_events)
         for tick in candidate_ticks:
             bundle.market.publish_replay_tick(tick)
         events = tuple(loop.quote_only_events[before:])
+        for event in events:
+            event["run_id"] = run_id
+            event["replay_run_id"] = replay_run_id
+            event["replay_invocation"] = invocation
         if len(events) != len(expected_event_keys):
             raise ValueError("T10_S2_QUOTE_ONLY_REPLAY_EVENT_COUNT_MISMATCH")
         actual_event_keys = tuple(
