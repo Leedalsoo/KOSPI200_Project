@@ -383,4 +383,4 @@ def test_t6_adapter_does_not_accept_other_candidate_account_pnl_as_candidate_pnl
     )
 
     assert result.status == ValidationOnlyRuntimeInvariantChecker.RECONCILIATION_REQUIRED
-    assert expected_issue in result.issues\n
+    assert expected_issue in result.issues
