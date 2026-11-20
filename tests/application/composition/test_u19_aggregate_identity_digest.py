@@ -337,3 +337,139 @@ def test_rehydration_from_different_source_roots_reproduces_same_u19_checkpoint(
     assert replay.checkpoint_id == first.checkpoint_id
     assert replay.expected_group_manifest_sha256 == first.expected_group_manifest_sha256
     assert restarted_store.load_latest(aggregate_b.group_id)["expected_group_manifest_sha256"] == aggregate_b.payload_sha256
+
+
+def test_cross_candidate_child_digest_reuse_changes_account_checkpoint_identity(tmp_path):
+    original_root = Path(__file__).resolve().parents[3].parent / "Q25_A8_R10"
+    if not original_root.is_dir():
+        raise AssertionError("Read-only exact original S2 source root is required for this validation test")
+
+    candidate_children = []
+    candidate_digests = {}
+    for candidate_id, group_id in (
+        ("S2-CANDIDATE-001", "GROUP-A"),
+        ("S2-CANDIDATE-002", "GROUP-B"),
+    ):
+        provider = ValidationOnlyS2ScenarioAlternativeProvider(
+            project_root=Path(__file__).resolve().parents[3],
+            run_id=f"SYNTHETIC:CROSS-CANDIDATE:{candidate_id}",
+            vssf_adapter=object(),
+            candidate_id=candidate_id,
+            source_roots=(original_root,),
+        )
+        evidence = provider.build_option_identity_evidence()
+        registry_digest = provider._hash_json([
+            {"leg_role": item.leg_role, "derived_identity_digest": item.derived_identity_digest}
+            for item in evidence
+        ])
+        candidate_digests[candidate_id] = registry_digest
+        positions = tuple(
+            U19Position(
+                item.identity.instrument_id,
+                Decimal("1") if item.leg_role in {"inner_put", "inner_call"} else Decimal("-1"),
+            )
+            for item in evidence
+        )
+        manifest = U19ExpectedGroupManifest(
+            group_id=group_id,
+            manifest_id=f"{candidate_id}:POST_ENTRY:2026-10-12T09:26:00+09:00",
+            source="VALIDATION_ONLY:EXPECTED_GROUP_MANIFEST",
+            provenance=f"VALIDATION_ONLY:S2:CANDIDATE={candidate_id}:IDENTITY_REGISTRY={registry_digest}",
+            leg_instrument_ids=tuple(sorted(item.identity.instrument_id for item in evidence)),
+            expected_positions=tuple(sorted(positions, key=lambda item: item.instrument_id)),
+            payload_sha256="0" * 64,
+        )
+        candidate_children.append(
+            replace(manifest, payload_sha256=_expected_group_manifest_digest(manifest))
+        )
+
+    assert candidate_digests["S2-CANDIDATE-001"] != candidate_digests["S2-CANDIDATE-002"]
+    child_a, child_b = candidate_children
+    aggregate = _compose_account_expected_group_manifest(
+        group_manifests=(child_a, child_b),
+        group_ids=("GROUP-A", "GROUP-B"),
+        aggregate_group_id="SYNTHETIC:ACCOUNT:CROSS-CANDIDATE",
+        opening_positions=(),
+        opening_evidence_sha256="a" * 64,
+    )
+    assert aggregate is not None
+
+    reused_child_b = replace(
+        child_b,
+        provenance=child_b.provenance.replace(
+            candidate_digests["S2-CANDIDATE-002"],
+            candidate_digests["S2-CANDIDATE-001"],
+        ),
+        payload_sha256="0" * 64,
+    )
+    reused_child_b = replace(
+        reused_child_b,
+        payload_sha256=_expected_group_manifest_digest(reused_child_b),
+    )
+    reused_aggregate = _compose_account_expected_group_manifest(
+        group_manifests=(child_a, reused_child_b),
+        group_ids=("GROUP-A", "GROUP-B"),
+        aggregate_group_id="SYNTHETIC:ACCOUNT:CROSS-CANDIDATE",
+        opening_positions=(),
+        opening_evidence_sha256="a" * 64,
+    )
+    assert reused_aggregate is not None
+    assert reused_aggregate.payload_sha256 != aggregate.payload_sha256
+
+    as_of = datetime(2026, 11, 20, 9, 30, tzinfo=timezone.utc)
+    broker = U19BrokerPositionSnapshot(
+        group_id=aggregate.group_id,
+        snapshot_id="SYNTHETIC:CROSS-CANDIDATE:BROKER",
+        as_of=as_of,
+        source="VALIDATION_ONLY:BROKER_EXCHANGE",
+        positions=aggregate.expected_positions,
+        complete=True,
+        capability_verified=True,
+        payload_sha256="a" * 64,
+    )
+    ledger = U19ExecutionLedgerSnapshot(
+        group_id=aggregate.group_id,
+        snapshot_id="SYNTHETIC:CROSS-CANDIDATE:LEDGER",
+        as_of=as_of,
+        source="VALIDATION_ONLY:EXECUTION_LEDGER",
+        positions=aggregate.expected_positions,
+        complete=True,
+        payload_sha256="b" * 64,
+    )
+    path = tmp_path / "u19-cross-candidate.sqlite3"
+    store = SqliteTrack2U19RecoveryStore(path)
+    coordinator = ValidationOnlyTrack2U19RecoveryCoordinator(
+        store, require_expected_group_manifest=True
+    )
+    correct = coordinator.recover(
+        group_id=aggregate.group_id,
+        broker_snapshot=broker,
+        ledger_snapshot=ledger,
+        expected_group_manifest=aggregate,
+    )
+    assert correct.status is U19RecoveryStatus.RESTORE_ALLOWED
+
+    restarted_store = SqliteTrack2U19RecoveryStore(path)
+    restarted_coordinator = ValidationOnlyTrack2U19RecoveryCoordinator(
+        restarted_store, require_expected_group_manifest=True
+    )
+    reused = restarted_coordinator.recover(
+        group_id=reused_aggregate.group_id,
+        broker_snapshot=broker,
+        ledger_snapshot=ledger,
+        expected_group_manifest=reused_aggregate,
+    )
+    assert reused.status is U19RecoveryStatus.RESTORE_ALLOWED
+    assert reused.checkpoint_id != correct.checkpoint_id
+    assert reused.expected_group_manifest_sha256 != correct.expected_group_manifest_sha256
+
+    correct_replay = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(path), require_expected_group_manifest=True
+    ).recover(
+        group_id=aggregate.group_id,
+        broker_snapshot=broker,
+        ledger_snapshot=ledger,
+        expected_group_manifest=aggregate,
+    )
+    assert correct_replay.checkpoint_id == correct.checkpoint_id
+    assert correct_replay.expected_group_manifest_sha256 == aggregate.payload_sha256
