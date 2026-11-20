@@ -219,3 +219,24 @@ def test_track6_torn_state_stream_is_wrapped_as_recovery_failure(tmp_path):
     with pytest.raises(Track6LifecycleRecoveryError, match="TRACK6_LIFECYCLE_STATE_RECOVERY_FAILED") as error:
         strategy._ensure_lifecycle("20261121")
     assert error.value.__cause__ is not None
+
+
+def test_track6_writer_lock_contention_propagates_as_runtime_critical_persistence_error(tmp_path):
+    from core.strategy.track6_daily_tail_insurance import Track6LifecyclePersistenceError
+    from environments.high_speed.track6_validation_state_store import (
+        Track6ValidationStateStore, Track6ValidationStateStoreError,
+    )
+
+    run_id = "SYNTHETIC-TRACK6-RUNTIME-WRITER-CONTENTION"
+    store = Track6ValidationStateStore(tmp_path, run_id=run_id)
+    strategy = Track6DailyTailInsurance(lifecycle_state_store=store)
+    strategy.lifecycle = SimpleNamespace(export_snapshot=lambda: {"run_id": run_id})
+    competing_handle = store._acquire_writer_lock()
+    try:
+        with pytest.raises(Track6LifecyclePersistenceError, match="TRACK6_LIFECYCLE_STATE_PERSISTENCE_FAILED") as error:
+            strategy._persist_lifecycle()
+        assert isinstance(error.value.__cause__, Track6ValidationStateStoreError)
+        assert "WRITER_LOCKED" in str(error.value.__cause__)
+        assert not store.path.exists()
+    finally:
+        competing_handle.close()

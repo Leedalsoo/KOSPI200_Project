@@ -295,3 +295,10 @@
 - Full Track6 inventory (13 files) + X2 admission/auto-stop suites: **105 passed in 8.11s**. compileall, scoped Ruff F821/F401, adjacent Track6 F821 and git diff-check passed.
 - Tests only in this batch; no production source changes. OS lock release verified on current Windows host. Partial-tail recovery remains fail-closed; power-loss durability/network filesystem semantics and full T4 integrated acceptance remain open.
 - Synthetic validation-only. No raw/canonical/accepted data, manifest, risk profile, operating config, Live/account API, actual order/cancel/liquidation or new data collection.
+
+## T4 X3 S6 writer-lock contention -> lifecycle critical failure ? No.1686 (2026-11-21)
+
+- Added an integration-boundary regression using the actual `Track6ValidationStateStore`: while a competing writer holds the per-run lock, Track6 lifecycle persistence attempts append, receives `TRACK6_VALIDATION_STATE_WRITER_LOCKED`, and wraps it as `Track6LifecyclePersistenceError` while preserving the store error as `__cause__`. No JSONL record is created.
+- Combined with the existing Runtime regression, this confirms the lock-contention failure type reaches the already-tested X2 stop path before signal collection. No order/cancel/liquidation action is invoked.
+- Focused store + lifecycle gate tests: 26 passed. Full Track6 inventory (13 files) + X2 admission/auto-stop suites: **106 passed in 9.32s**. compileall, scoped Ruff F821/F401, adjacent Track6 F821 and git diff-check passed.
+- Tests only; no production source change. Synthetic validation-only; no raw/canonical/accepted data, risk profile, operating config, Live/account API, actual order activity or new collection. Full T4 X3/integrated acceptance remains OPEN.
