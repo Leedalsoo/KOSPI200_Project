@@ -107,6 +107,7 @@
 - S9 is the independent ATM PUT + ATM CALL BUY/BUY overnight insurance strategy. S1-linked OTM PUT scope is obsolete; follow the latest confirmed decision in No.1437/1441/1451 and correction No.1661.
 - S5 has Option-primary D1-A selected; D2-D8 and production entry policy remain unapproved. Keep production entry disabled until those decisions are confirmed.
 - S3 basis signal/statistical validation is distinct from its unresolved tradable spread plan; do not invent economic legs. S4 natural StrategyHub hedge/trailing-close signals and a validation-only Mini identity-bound execution plan are tested, but OMS/VSSF fill lifecycle, observed Mini orderbook and account risk/activation gates remain separate. Synthetic Mini identity is not KIS master authority.
+- S7 now has a current-code natural StrategyHub Runtime PSB_PASS: U17 cutoff/cancel-race cases plus normal and fee-aware FAST/DETAILED parity. Reference fee model is benchmark-only, not the user's negotiated KIS rate; the cutoff case remains a safely blocked one-leg outcome, not a complete pair entry.
 - S6-S8 regression results are validation-only unless a specific run explicitly proves a natural StrategyHub signal-to-flat path on the current Project200 source. Historical R4 S8 evidence is not automatically current-code evidence.
 - These results do not certify KIS Live, REAL_VTS account execution, authoritative current KIS Option Master identity, account-level premium/margin/fee limits, or real order/cancel/liquidation readiness.
 
