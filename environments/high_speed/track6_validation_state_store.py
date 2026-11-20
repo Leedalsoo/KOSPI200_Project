@@ -35,9 +35,10 @@ class Track6ValidationStateStore:
         if str(snapshot.get("run_id", "")) != self.run_id:
             raise Track6ValidationStateStoreError("TRACK6_VALIDATION_RUN_ID_MISMATCH")
         self.root.mkdir(parents=True, exist_ok=True)
-        prior = self._last_record
-        if prior is None and self.path.exists():
-            prior = self.load_latest()
+        # Revalidate the persisted append-only chain before every append.
+        # A cached in-memory head must not let external tampering or a torn
+        # write bypass integrity checks on the next append.
+        prior = self.load_latest() if self.path.exists() else self._last_record
         sequence = int(prior.get("sequence", 0)) + 1 if prior else 1
         previous_hash = str(prior.get("record_sha256", "")) if prior else None
         body = {

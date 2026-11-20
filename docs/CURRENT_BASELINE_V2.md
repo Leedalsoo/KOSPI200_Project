@@ -209,3 +209,11 @@
 - Shared StrategyHub Runtime E2E: 13 passed; validation-only option risk budget: 4 passed, separate focused batches.
 - These do not prove shared-capital pool allocation or simultaneous cross-strategy capital competition. Repository inventory found no dedicated allocator/test; no priority, strategy budget, leverage, margin, or risk thresholds invented. Shared-capital competition remains an explicit X3 gap pending approved policy and implementation/test contract.
 - compileall, repo-scoped Ruff F821, diff-check passed. No production/raw data changed; no Live/account API or actual order activity.
+## 2026-11-21 T4 X3 S6 state-store integrity fault injection ? No.1679
+
+- S6 existing restart budget/state store/option risk/freshness/gate/order lifecycle focused batch: 48 passed before the additional fault cases.
+- Reproduced a real integrity gap: an already-cached in-memory head let `append()` skip revalidation of the existing JSONL file; after external on-disk tampering, another record could be appended.
+- Fixed `Track6ValidationStateStore.append()` to reload and validate the persisted chain before every append whenever the file exists. Added tests for broken previous-hash chain, sequence gap, and tampered cached-head append rejection.
+- Full Track6 test inventory: 13 files, **67 passed**. Combined focused S6 invocation: **51 passed**. `compileall`, scoped Ruff F821/F401, and `git diff --check` passed.
+- Changed only `environments/high_speed/track6_validation_state_store.py` and `tests/environments/high_speed/test_track6_validation_state_store.py`, plus project documentation. No raw/canonical/accepted data, risk profiles, operational configuration, or production/live integration changed.
+- Synthetic validation-only. No KIS/REAL_VTS/Live/account API, real order/cancel/liquidation, or new data collection. S3 economic legs/S5 D2-D8 remain unapproved; P5 runtime use prohibited; shared-capital allocation/competition unresolved. Full T4 X3 fault matrix and integrated acceptance remain OPEN.

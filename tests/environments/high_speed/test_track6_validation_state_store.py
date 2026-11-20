@@ -53,3 +53,41 @@ def test_track6_validation_state_store_rejects_torn_tail(tmp_path):
 def test_track6_validation_state_store_rejects_path_traversal(tmp_path):
     with pytest.raises(ValueError, match="RUN_ID_INVALID"):
         Track6ValidationStateStore(tmp_path, run_id="../outside")
+
+
+def test_track6_validation_state_store_rejects_broken_previous_hash_chain(tmp_path):
+    store = Track6ValidationStateStore(tmp_path, run_id="S6-RUN-CHAIN")
+    store.append({"run_id": "S6-RUN-CHAIN", "status": "FIRST"})
+    store.append({"run_id": "S6-RUN-CHAIN", "status": "SECOND"})
+    lines = store.path.read_text(encoding="utf-8").splitlines()
+    record = json.loads(lines[1])
+    record["previous_record_sha256"] = "0" * 64
+    lines[1] = json.dumps(record)
+    store.path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    with pytest.raises(Track6ValidationStateStoreError, match="CHAIN_INVALID"):
+        Track6ValidationStateStore(tmp_path, run_id="S6-RUN-CHAIN").load_latest()
+
+
+def test_track6_validation_state_store_rejects_sequence_gap(tmp_path):
+    store = Track6ValidationStateStore(tmp_path, run_id="S6-RUN-SEQ")
+    store.append({"run_id": "S6-RUN-SEQ", "status": "FIRST"})
+    lines = store.path.read_text(encoding="utf-8").splitlines()
+    record = json.loads(lines[0])
+    record["sequence"] = 2
+    body = {key: value for key, value in record.items() if key != "record_sha256"}
+    record["record_sha256"] = __import__("hashlib").sha256(Track6ValidationStateStore._canonical(body)).hexdigest()
+    store.path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    with pytest.raises(Track6ValidationStateStoreError, match="SEQUENCE_INVALID"):
+        Track6ValidationStateStore(tmp_path, run_id="S6-RUN-SEQ").load_latest()
+
+
+def test_track6_validation_state_store_revalidates_cached_stream_before_append(tmp_path):
+    store = Track6ValidationStateStore(tmp_path, run_id="S6-RUN-CACHED")
+    store.append({"run_id": "S6-RUN-CACHED", "status": "ORIGINAL"})
+    lines = store.path.read_text(encoding="utf-8").splitlines()
+    record = json.loads(lines[0])
+    record["snapshot"]["status"] = "TAMPERED"
+    store.path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    with pytest.raises(Track6ValidationStateStoreError, match="HASH_MISMATCH"):
+        store.append({"run_id": "S6-RUN-CACHED", "status": "SHOULD_NOT_APPEND"})
+    assert len(store.path.read_text(encoding="utf-8").splitlines()) == 1
