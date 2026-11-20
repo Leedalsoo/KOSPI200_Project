@@ -26,6 +26,8 @@ class U21Quote:
     capability_verified: bool
     source: str | None
     raw_payload_sha256: str | None
+    provenance_kind: str = "RAW_OBSERVATION"
+    derived_quote_digest: str | None = None
 
 def _finite_decimal(value) -> bool:
     return isinstance(value, Decimal) and value.is_finite()
@@ -83,11 +85,23 @@ def _quote_problem(quote, *, now, policy, expected_instrument_id, expected_symbo
         return "QUOTE_TIMESTAMP_UNVERIFIED", None
     if not quote.source_time_semantics_verified or not quote.capability_verified:
         return "SOURCE_TIME_OR_CAPABILITY_UNVERIFIED", None
-    if (
-        not isinstance(quote.source, str) or not quote.source.strip()
-        or not isinstance(quote.raw_payload_sha256, str)
-        or not re.fullmatch(r"[0-9a-fA-F]{64}", quote.raw_payload_sha256)
-    ):
+    if not isinstance(quote.source, str) or not quote.source.strip():
+        return "QUOTE_PROVENANCE_INCOMPLETE", None
+    if quote.provenance_kind == "RAW_OBSERVATION":
+        if (
+            not isinstance(quote.raw_payload_sha256, str)
+            or not re.fullmatch(r"[0-9a-fA-F]{64}", quote.raw_payload_sha256)
+        ):
+            return "QUOTE_PROVENANCE_INCOMPLETE", None
+    elif quote.provenance_kind == "DERIVED_SYNTHETIC":
+        if (
+            not quote.source.startswith("SYNTHETIC:")
+            or quote.raw_payload_sha256 is not None
+            or not isinstance(quote.derived_quote_digest, str)
+            or not re.fullmatch(r"[0-9a-fA-F]{64}", quote.derived_quote_digest)
+        ):
+            return "QUOTE_PROVENANCE_INCOMPLETE", None
+    else:
         return "QUOTE_PROVENANCE_INCOMPLETE", None
     age = (now - quote.observed_at).total_seconds()
     if age < 0:

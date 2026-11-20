@@ -99,7 +99,8 @@ class AutomatedVirtualTradingLoop:
                  pending_multi_leg_processor: Callable[[object], object] | None = None,
                  risk_config: RiskConfig | None = None, risk_guard_status_source: RiskGuardStatusSource | None = None,
                  risk_engine: RiskEngine | None = None, runtime_stop_switch=None, runtime_evidence_supervisor=None,
-                 signal_observation_only: bool = False) -> None:
+                 signal_observation_only: bool = False,
+                 validation_only_u21_quote_policy_adapter=None) -> None:
         if not run_id.strip():
             raise ValueError("AUTOMATED_RUNTIME_RUN_ID_REQUIRED")
         self.bundle = bundle
@@ -112,6 +113,12 @@ class AutomatedVirtualTradingLoop:
         self.multi_leg_executor = multi_leg_executor
         self.pending_multi_leg_processor = pending_multi_leg_processor
         self.signal_observation_only = bool(signal_observation_only)
+        if validation_only_u21_quote_policy_adapter is not None and (
+            getattr(validation_only_u21_quote_policy_adapter, "validation_only", False) is not True
+            or getattr(validation_only_u21_quote_policy_adapter, "order_submission_enabled", True) is not False
+        ):
+            raise ValueError("U21_QUOTE_POLICY_ADAPTER_MUST_BE_VALIDATION_ONLY_NO_ORDERS")
+        self.validation_only_u21_quote_policy_adapter = validation_only_u21_quote_policy_adapter
         self.strategy_results = RuntimeStrategyResultCollectionAdapter()
         self.strategy_to_decision = RuntimeStrategyToDecisionAdapter(DecisionArbiter())
         self.decision_to_command = RuntimeDecisionCommandAdapter()
@@ -222,6 +229,32 @@ class AutomatedVirtualTradingLoop:
                 event["reason"] = f"{type(exc).__name__}:{exc}"
                 self._quote_only_events.append(event)
                 return event
+        u21_adapter = getattr(self, "validation_only_u21_quote_policy_adapter", None)
+        if u21_adapter is not None:
+            try:
+                if (
+                    getattr(u21_adapter, "validation_only", False) is not True
+                    or getattr(u21_adapter, "order_submission_enabled", True) is not False
+                ):
+                    raise ValueError("U21_QUOTE_POLICY_ADAPTER_MUST_BE_VALIDATION_ONLY_NO_ORDERS")
+                u21_result = u21_adapter.evaluate(tick)
+                event["u21_policy_decision"] = getattr(getattr(u21_result, "decision", None), "value", None)
+                event["u21_policy_reason"] = getattr(u21_result, "reason", None)
+                event["u21_policy_source"] = getattr(u21_result, "source", None)
+                event["u21_policy_spread"] = str(getattr(u21_result, "spread_value", None)) if getattr(u21_result, "spread_value", None) is not None else None
+                event["u21_derived_quote_digest"] = getattr(u21_adapter, "last_quote_digest", None)
+                if getattr(u21_result, "order_submission_enabled", True) is not False:
+                    raise ValueError("U21_POLICY_RESULT_ORDER_SUBMISSION_MUST_REMAIN_DISABLED")
+                if getattr(getattr(u21_result, "decision", None), "value", None) != "PRIMARY_QUOTE_ACCEPTED":
+                    event["reason"] = "U21_QUOTE_POLICY_NOT_ACCEPTED:" + str(getattr(u21_result, "reason", "UNKNOWN"))
+                    self._quote_only_events.append(event)
+                    return event
+            except Exception as exc:  # noqa: BLE001 - quote policy errors must not reach strategy evaluation
+                event["status"] = "U21_POLICY_EVALUATION_FAILED"
+                event["reason"] = f"{type(exc).__name__}:{exc}"
+                self._quote_only_events.append(event)
+                return event
+
         try:
             valid_book = (
                 bid_price is not None

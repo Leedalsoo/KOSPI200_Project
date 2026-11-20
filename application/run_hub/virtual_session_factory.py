@@ -63,6 +63,12 @@ def attach_validation_only_s2_quote_only_replay(loop, bundle, evidence_chain):
         return events[-1] if len(events) > before else None
 
     loop.replay_validation_only_s2_candidate = replay_validation_only_s2_candidate
+    from application.composition.validation_only_u21_quote_policy_adapter import (
+        ValidationOnlyU21QuotePolicyAdapter,
+    )
+    loop.validation_only_u21_quote_policy_adapter = ValidationOnlyU21QuotePolicyAdapter(
+        evidence_chain.alternative_provider,
+    )
     loop.validation_only_s2_replay = True
     loop.signal_observation_only = True
     return candidate_tick

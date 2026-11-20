@@ -173,3 +173,139 @@ def test_t10_s2_evidence_only_mode_skips_strategy_and_decision_context():
     assert event["status"] == "EVIDENCE_VALIDATED_NO_EXECUTION"
     assert event["order_routing"] == "NOT_INVOKED"
     assert "NO STRATEGY/DECISION/ORDER PATH" in event["reason"]
+
+
+def test_t10_u21_policy_adapter_accepts_manifest_bound_synthetic_quote_without_raw_hash():
+    from application.composition.validation_only_u21_quote_policy_adapter import (
+        ValidationOnlyU21QuotePolicyAdapter,
+    )
+
+    provider = _provider("2026-10-12T09:26:00+09:00")
+    tick = provider.build_quote_only_tick(seq_id=29)
+    adapter = ValidationOnlyU21QuotePolicyAdapter(provider)
+    result = adapter.evaluate(tick)
+
+    assert result.decision.value == "PRIMARY_QUOTE_ACCEPTED"
+    assert result.order_submission_enabled is False
+    assert adapter.order_submission_enabled is False
+    assert len(adapter.last_quote_digest) == 64
+    assert result.source == "SYNTHETIC:DERIVED_SCENARIO"
+
+
+def test_t10_u21_policy_adapter_stale_quote_reports_fallback_unavailable():
+    from dataclasses import replace
+    from application.composition.validation_only_u21_quote_policy_adapter import (
+        ValidationOnlyU21QuotePolicyAdapter,
+    )
+
+    provider = _provider("2026-10-12T09:26:00+09:00")
+    tick = provider.build_quote_only_tick(seq_id=30)
+    stale_tick = replace(tick, timestamp="2026-10-12T09:26:06+09:00")
+    result = ValidationOnlyU21QuotePolicyAdapter(provider).evaluate(stale_tick)
+
+    assert result.decision.value == "FALLBACK_UNAVAILABLE_BLOCKED"
+    assert "PRIMARY_QUOTE_STALE" in result.reason
+    assert "FALLBACK_QUOTE_MISSING" in result.reason
+    assert result.order_submission_enabled is False
+
+
+def test_t10_u21_policy_adapter_missing_identity_provenance_does_not_accept():
+    from dataclasses import replace
+    from application.composition.validation_only_u21_quote_policy_adapter import (
+        ValidationOnlyU21QuotePolicyAdapter,
+    )
+
+    provider = _provider("2026-10-12T09:26:00+09:00")
+    tick = provider.build_quote_only_tick(seq_id=31)
+    incomplete = replace(tick, instrument_id="", symbol="")
+    result = ValidationOnlyU21QuotePolicyAdapter(provider).evaluate(incomplete)
+
+    assert result.decision.value == "POLICY_INPUT_BLOCKED"
+    assert result.reason == "U21_EVALUATION_CONTEXT_UNVERIFIED"
+    assert result.order_submission_enabled is False
+
+
+def test_t10_quote_only_u21_adapter_exception_skips_strategy_and_orders():
+    order = []
+
+    class _BrokenAdapter:
+        validation_only = True
+        order_submission_enabled = False
+        def evaluate(self, tick):
+            raise RuntimeError("U21_POLICY_TEST_FAILURE")
+
+    loop = _loop(None, order)
+    loop.validation_only_u21_quote_policy_adapter = _BrokenAdapter()
+    event = loop.on_quote_only_tick(_quote_tick())
+
+    assert event["status"] == "U21_POLICY_EVALUATION_FAILED"
+    assert "U21_POLICY_TEST_FAILURE" in event["reason"]
+    assert order == []
+    assert event["order_routing"] == "NOT_INVOKED"
+
+
+def test_t10_quote_only_u21_adapter_rejects_order_enabled_result():
+    order = []
+
+    class _UnsafeAdapter:
+        validation_only = True
+        order_submission_enabled = False
+        def evaluate(self, tick):
+            return SimpleNamespace(
+                decision=SimpleNamespace(value="PRIMARY_QUOTE_ACCEPTED"),
+                reason="synthetic-test",
+                source="SYNTHETIC:DERIVED_SCENARIO",
+                spread_value=None,
+                order_submission_enabled=True,
+            )
+
+    loop = _loop(None, order)
+    loop.validation_only_u21_quote_policy_adapter = _UnsafeAdapter()
+    event = loop.on_quote_only_tick(_quote_tick())
+
+    assert event["status"] == "U21_POLICY_EVALUATION_FAILED"
+    assert "ORDER_SUBMISSION_MUST_REMAIN_DISABLED" in event["reason"]
+    assert order == []
+    assert event["order_routing"] == "NOT_INVOKED"
+
+
+def test_t10_u21_policy_adapter_gates_quote_only_strategy_until_policy_accepts():
+    from application.composition.validation_only_u21_quote_policy_adapter import (
+        ValidationOnlyU21QuotePolicyAdapter,
+    )
+
+    provider = _provider("2026-10-12T09:26:00+09:00")
+    tick = provider.build_quote_only_tick(seq_id=32)
+    order = []
+    loop = _loop(None, order)
+    loop.validation_only_u21_quote_policy_adapter = ValidationOnlyU21QuotePolicyAdapter(provider)
+    event = loop.on_quote_only_tick(tick)
+
+    assert order == ["context", "strategy"]
+    assert event["status"] == "EVALUATED_NO_EXECUTION"
+    assert event["u21_policy_decision"] == "PRIMARY_QUOTE_ACCEPTED"
+    assert len(event["u21_derived_quote_digest"]) == 64
+    assert event["order_routing"] == "NOT_INVOKED"
+
+
+def test_t10_u21_policy_rejection_prevents_quote_only_strategy_evaluation():
+    from dataclasses import replace
+    from application.composition.validation_only_u21_quote_policy_adapter import (
+        ValidationOnlyU21QuotePolicyAdapter,
+    )
+
+    provider = _provider("2026-10-12T09:26:00+09:00")
+    tick = replace(
+        provider.build_quote_only_tick(seq_id=33),
+        timestamp="2026-10-12T09:26:06+09:00",
+    )
+    order = []
+    loop = _loop(None, order)
+    loop.validation_only_u21_quote_policy_adapter = ValidationOnlyU21QuotePolicyAdapter(provider)
+    event = loop.on_quote_only_tick(tick)
+
+    assert order == []
+    assert event["status"] == "BLOCKED"
+    assert event["u21_policy_decision"] == "FALLBACK_UNAVAILABLE_BLOCKED"
+    assert "PRIMARY_QUOTE_STALE" in event["reason"]
+    assert event["order_routing"] == "NOT_INVOKED"
