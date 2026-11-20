@@ -204,3 +204,9 @@
 - Cross-source auditor passes establish only the tested synthetic provider/evidence consistency contracts. They do not certify broker/API connectivity or authoritative account truth.
 - OMS cancel/replace, fill/cancel race, restart recovery and multi-leg reconciliation are validation-only; maintain `new_entry_enabled=false` and `order_submission_enabled=false` for recovery/safety tests.
 - If a source or fixture is absent, compare current Notion decisions, previous run records, local/canonical raw source and manifest hashes before choosing an exact-hash alternative synthetic fixture. Do not weaken identity, time-order, quantity or reconciliation checks.
+## U19 snapshot identity + full-stream/cold-start recovery extension (2026-11-20)
+
+- Extend X3 only with isolated, validation-only recovery surfaces not already represented by the latest batches: aggregate identity digest/persistence, REST cumulative snapshot reconciliation, complete synthetic virtual-stream replay, offline OMS cold-start, Track2 U19 recovery, Track9 independent recovery, and the KIS recovery adapter/service boundary.
+- The KIS REST recovery service tests use an injected in-memory transport and mocked correlation/route adapters. They validate order-level cumulative snapshots as reconciliation inbox evidence, never individual execution journal fills or position mutations. Do not connect a live transport or submit broker orders.
+- Keep U19 pending-order/startup reconciliation gates closed until each independent evidence item is resolved; test the router remains blocked while any required event remains unresolved. Mock-only route release in unit tests is not authorization for real order submission.
+- Report each pytest invocation separately. A full-stream replay pass is one deterministic synthetic replay test, not broad market replay certification. Keep compileall, repo-scoped F821, and diff-check evidence distinct.

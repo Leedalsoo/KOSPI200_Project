@@ -289,3 +289,17 @@ Additional separate T4 validation-only batches:
 The batches are separate and may overlap earlier suites; they are not a unique-test sum or integrated T4 acceptance. The first batch validates synthetic cross-source/evidence consistency only, not broker/API truth. The second validates synthetic OMS/Virtual lifecycle and race handling only; recovery/new-entry/order-submission safety remains closed. No missing-source skips occurred in these selected runs.
 
 Static: compileall passed; repo-scoped Ruff F821 passed; `git diff --check` passed. No production source or raw/canonical/accepted data changed. S3 economic spread legs and S5 D2-D8 remain unapproved; P5 runtime use prohibited. No KIS/REAL_VTS/Live/account API, actual orders/cancels/liquidations or new collection.
+## 20. U19 snapshot identity + full-stream/cold-start recovery extension (2026-11-20)
+
+Additional separate T4 validation-only batches:
+
+| Scope | Result |
+|---|---:|
+| U19 aggregate identity digest, identity persistence, REST cumulative snapshot/account reconciliation | 69 passed in 15.61s |
+| Complete synthetic full-stream Virtual market replay | 1 passed in 2.06s |
+| Offline OMS cold-start, Track2 U19 recovery, Track9 independent recovery | 57 passed in 0.56s |
+| KIS REST cumulative-snapshot recovery service and reconciliation-handler boundary (injected mock transport only) | 9 passed in 0.58s |
+
+The four batches are separate and may overlap prior tests; do not sum as unique tests or integrated T4 acceptance. The KIS service tests use a mock transport and mock route adapter; they verify cumulative REST order snapshots remain reconciliation evidence, not per-fill execution journal entries or position mutations. No live transport/API or real order was used. Router-release assertions in the tests are mock-only and do not authorize real submission.
+
+Static: compileall passed; repo-scoped Ruff F821 passed; `git diff --check` passed. No code, production policy, raw/canonical data, or accepted source changed. S3 economic spread legs and S5 D2-D8 remain unapproved; P5 runtime use prohibited. Full integrated T4 acceptance remains OPEN.

@@ -182,3 +182,9 @@
 - Counts may overlap previous batches; not a unique-test sum or integrated acceptance. No missing-source skip in these selected runs.
 - compileall, repo-scoped Ruff F821, diff-check passed. No production or raw data changed. Cross-source consistency is not broker/account authority; OMS recovery tests do not enable entries or submissions.
 - S3 economic spread legs/S5 D2-D8 unapproved; P5 runtime prohibited. No Live/account API or actual orders.
+## 2026-11-20 T4 U19 snapshot identity + full-stream/cold-start recovery — No.1672
+
+- Separate synthetic validation-only batches: U19 aggregate identity digest/persistence/REST snapshot reconciliation 69 passed; deterministic full-stream Virtual replay 1 passed; offline OMS cold-start + Track2 U19 + Track9 recovery 57 passed; KIS cumulative-snapshot recovery service (injected mock transport) 9 passed.
+- KIS REST cumulative order snapshots stay in reconciliation inbox, not individual execution journal or position mutation. No live transport/API or real order. Mock router release is test-only.
+- compileall, repo-scoped Ruff F821, diff-check passed. No code or raw/canonical/accepted data changed. Batches may overlap earlier tests and do not establish integrated acceptance.
+- S3 economic spread legs/S5 D2-D8 unapproved; P5 runtime prohibited. Full T4 integrated acceptance OPEN.
