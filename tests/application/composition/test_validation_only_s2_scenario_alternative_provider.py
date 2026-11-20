@@ -22,6 +22,7 @@ RUN_ID = "SYNTHETIC:T7:S2-CANDIDATE-001"
 
 def _runtime_fixture(provider_timestamp: str):
     scenario_time = datetime.fromisoformat(provider_timestamp)
+    candidate_group_id = f"VALIDATION_ONLY:RUN:{RUN_ID}:CANDIDATE:S2-CANDIDATE-001"
     candidate_path = (
         (ORIGINAL_ROOT if SOURCE_ROOTS else ROOT) / "data" / "derived_scenario"
         / "q25_a8_p2_recovered_track2_four_leg_quotes_v3_market_calibrated_r3_20261115"
@@ -60,12 +61,12 @@ def _runtime_fixture(provider_timestamp: str):
             execution_price=price,
             execution_timestamp=scenario_time,
             fee=fee,
-            group_id="SYNTHETIC:T7:GROUP",
+            group_id=candidate_group_id,
             leg_id=role,
         )
         reports.append(report)
         provenance[execution_id] = {
-            "group_id": report.group_id,
+            "group_id": candidate_group_id,
             "leg_id": role,
             "instrument_id": instrument_id,
             "symbol": instrument_id,
@@ -79,6 +80,7 @@ def _runtime_fixture(provider_timestamp: str):
             run_id=RUN_ID,
             instrument_id=instrument_id,
             execution_id=execution_id,
+            group_id=candidate_group_id,
             side=side,
             opened_quantity=1,
             remaining_quantity=1,
@@ -87,6 +89,7 @@ def _runtime_fixture(provider_timestamp: str):
         ))
         fees.append(SimpleNamespace(
             execution_id=execution_id,
+            group_id=candidate_group_id,
             fee_amount=fee,
             executed_quantity=1,
             executed_price=price,
@@ -99,7 +102,7 @@ def _runtime_fixture(provider_timestamp: str):
         }
     bridge = SimpleNamespace(
         run_id=RUN_ID,
-        groups={"SYNTHETIC:T7:GROUP": tuple(reports)},
+        groups={candidate_group_id: tuple(reports)},
         provenance=provenance,
         execution_legs=execution_legs,
         pending_legs={},

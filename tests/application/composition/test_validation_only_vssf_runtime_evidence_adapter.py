@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+﻿from datetime import UTC, datetime
 from decimal import Decimal
 import hashlib
 import json
@@ -344,3 +344,43 @@ def test_t6_adapter_requires_explicit_candidate_scoped_vssf_account_for_multi_ca
     del vssf.validation_candidate_id
     with pytest.raises(ValueError, match="T6_VSSF_RUNTIME_CANDIDATE_SCOPE_REQUIRED"):
         _build(adapter, broker)
+
+
+def test_t6_adapter_rejects_runtime_scope_from_another_candidate():
+    adapter, broker, _report, _lot, bridge, vssf = _fixture()
+    group_b = "VALIDATION_ONLY:RUN:RUN-T6:CANDIDATE:S2-CANDIDATE-002"
+    bridge.groups[group_b] = ()
+    vssf.validation_candidate_id = "S2-CANDIDATE-002"
+    with pytest.raises(ValueError, match="T6_VSSF_RUNTIME_CANDIDATE_SCOPE_REQUIRED"):
+        _build(adapter, broker)
+
+
+@pytest.mark.parametrize(
+    ("field", "contaminated_value", "expected_issue"),
+    [
+        ("realized_pnl", Decimal("12.5"), "RUNTIME_LEDGER_VSSF_REALIZED_PNL_DIVERGENCE"),
+        ("unrealized_pnl", Decimal("62.5"), "RUNTIME_LEDGER_VSSF_UNREALIZED_PNL_DIVERGENCE"),
+    ],
+)
+def test_t6_adapter_does_not_accept_other_candidate_account_pnl_as_candidate_pnl(
+    field, contaminated_value, expected_issue
+):
+    adapter, broker, _report, _lot, bridge, vssf = _fixture()
+    bridge.groups["VALIDATION_ONLY:RUN:RUN-T6:CANDIDATE:S2-CANDIDATE-002"] = ()
+    setattr(vssf.account, field, contaminated_value)
+
+    candidate = _build(adapter, broker)
+    decision = evaluate_u19_recovery(
+        group_id=candidate.group_id,
+        broker_snapshot=candidate.broker_snapshot,
+        ledger_snapshot=candidate.ledger_snapshot,
+    )
+    result = ValidationOnlyRuntimeInvariantChecker().check(
+        **{
+            **dict(candidate.invariant_inputs),
+            "u19_decision": decision,
+        }
+    )
+
+    assert result.status == ValidationOnlyRuntimeInvariantChecker.RECONCILIATION_REQUIRED
+    assert expected_issue in result.issues\n
