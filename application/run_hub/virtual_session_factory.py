@@ -78,6 +78,7 @@ def attach_validation_only_s2_quote_only_replay(loop, bundle, evidence_chain):
         loop.validation_only_s2_replay_invocation += 1
         invocation = loop.validation_only_s2_replay_invocation
         replay_run_id = f"{run_id}:S2:{evidence_chain.alternative_provider.candidate_id}:replay:{invocation:06d}"
+        bundle.market.begin_validation_only_replay_invocation(replay_run_id)
         before = len(loop.quote_only_events)
         for tick in candidate_ticks:
             bundle.market.publish_replay_tick(tick)

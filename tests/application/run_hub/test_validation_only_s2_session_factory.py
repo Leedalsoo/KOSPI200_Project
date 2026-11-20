@@ -450,3 +450,23 @@ def test_t10_s2_virtual_market_does_not_allow_older_tick_to_overwrite_newer_cont
     assert market.option_quotes[key]["timestamp"] == latest_before["timestamp"]
     assert market.last_tick is later
     assert market.clock.current_time == clock_before == datetime.fromisoformat("2026-10-12T09:26:06+09:00")
+
+
+def test_t10_s2_virtual_market_rejects_same_contract_duplicate_tick_in_same_invocation():
+    alternative = _provider("2026-10-12T09:26:00+09:00")
+    market = VirtualMarketSimulatorRuntime(option_master=None)
+    market.set_authoritative_option_quote_provider(alternative.option_quotes_at)
+    market.begin_validation_only_replay_invocation("SYNTHETIC:T10:RUN-1")
+    tick = alternative.build_quote_only_ticks()[0]
+    market.publish_replay_tick(tick)
+    quote_before = market.option_quotes
+    recent_before = market.recent_ticks
+    clock_before = market.clock.current_time
+
+    with pytest.raises(ValueError, match="VMS_VALIDATION_ONLY_REPLAY_DUPLICATE_EVENT"):
+        market.publish_replay_tick(tick)
+
+    assert market.option_quotes == quote_before
+    assert market.recent_ticks == recent_before
+    assert market.clock.current_time == clock_before
+    assert market.last_tick is tick

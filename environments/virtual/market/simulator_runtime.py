@@ -48,6 +48,8 @@ class VirtualMarketSimulatorRuntime:
         self._option_quotes_by_instrument_id = {}
         self._authoritative_option_quote_provider = None
         self._last_validation_only_replay_timestamp = None
+        self._active_validation_only_replay_invocation = "UNSCOPED"
+        self._seen_validation_only_replay_event_keys: set[tuple[str, str, int, str]] = set()
         self._futures_price = self._price
 
     @property
@@ -242,6 +244,11 @@ class VirtualMarketSimulatorRuntime:
             subscriber(quote)
         return quote
 
+    def begin_validation_only_replay_invocation(self, replay_run_id: str) -> None:
+        if not isinstance(replay_run_id, str) or not replay_run_id.strip():
+            raise ValueError("VMS_VALIDATION_ONLY_REPLAY_INVOCATION_ID_REQUIRED")
+        self._active_validation_only_replay_invocation = replay_run_id
+
     def publish_replay_tick(self, tick: ReferenceCanonicalMarketTick):
         """Publish one externally supplied replay tick through the Virtual Market boundary."""
         if not isinstance(tick, ReferenceCanonicalMarketTick):
@@ -262,6 +269,15 @@ class VirtualMarketSimulatorRuntime:
                     raise ValueError("VMS_VALIDATION_ONLY_REPLAY_TIMESTAMP_UNVERIFIED")
                 if observed_at < previous_validation_time:
                     raise ValueError("VMS_VALIDATION_ONLY_REPLAY_TIMESTAMP_REGRESSION")
+            event_key = (
+                self._active_validation_only_replay_invocation,
+                str(getattr(tick, "instrument_id", None) or tick.symbol),
+                int(tick.seq_id),
+                str(tick.timestamp),
+            )
+            if event_key in self._seen_validation_only_replay_event_keys:
+                raise ValueError("VMS_VALIDATION_ONLY_REPLAY_DUPLICATE_EVENT")
+            self._seen_validation_only_replay_event_keys.add(event_key)
             self._last_validation_only_replay_timestamp = observed_at
         self.clock.current_time = observed_at
         self.last_tick = tick
