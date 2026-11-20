@@ -308,3 +308,24 @@ Static: compileall passed; repo-scoped Ruff F821 passed; `git diff --check` pass
 - Replay execution observer, replay trace contract, synthetic replay adapter and Track2 validation replay-runner wrapper: **24 passed in 0.78s**.
 - Verified mock adapter tracing does not alter the result; trace output collision/invalid schema/write-failure handling; source-row immutability; `SYNTHETIC_CONTRACT:` namespace enforcement; Track2 runner validation-only flags and trace hash; Live/REAL_VTS/order submission disabled.
 - compileall, repo-scoped Ruff F821 and `git diff --check` passed. Synthetic unit/wrapper coverage only; no natural-signal/market-performance or integrated T4 acceptance claim. No code or raw/canonical/accepted data changed.
+## 20. U19 restart/snapshot/offline recovery extension (2026-11-21)
+
+Separate focused validation-only batches on the isolated T4 branch:
+
+| Scope | Result |
+|---|---:|
+| U19 aggregate identity digest, persistence boundary, account snapshot reconciler | 69 passed |
+| Deterministic full-stream Virtual market replay | 1 passed |
+| Offline OMS cold-start recovery | 3 passed |
+| Track2 U19 recovery | 45 passed |
+| Track9 independent strategy recovery | 9 passed |
+| Q25 A8 R9 S2 U19 runtime restart E2E | 2 passed |
+| Bridge/VSSF/U19 cross-validation | 2 passed |
+| Track6 restart budget reconciliation | 3 passed |
+| Track2 U19 ledger snapshot builder | 24 passed |
+| Candidate multi-leg restart integration | 2 passed |
+| KIS REST cumulative-order-snapshot recovery boundary, inspected injected mock transport only (`virtual=True`) | 9 passed |
+
+All batches are independent and may overlap previous coverage; do not sum counts as unique tests or describe as integrated T4 acceptance. KIS REST snapshots remain reconciliation inbox evidence, not individual fills or Position mutations. Unresolved reconciliation continues to gate recovery. One initially supplied test path was absent; repository inventory located the existing suite at `tests/core/test_track2_u19_recovery.py`, which passed (45 tests); this was a path correction, not a code defect.
+
+Static checks: compileall, repo-scoped Ruff F821 and `git diff --check` passed. No production source or raw/canonical/accepted data changed. S3 economic spread legs and S5 D2-D8 remain unapproved; P5 runtime use prohibited. No KIS/REAL_VTS/Live/account API, actual orders/cancels/liquidations or new collection.

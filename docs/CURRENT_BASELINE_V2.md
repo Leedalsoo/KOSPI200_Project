@@ -193,3 +193,9 @@
 - Replay observer/trace contract/synthetic replay adapter/Track2 validation runner wrapper: 24 passed in 0.78s.
 - Trace file collision and write-failure handling, stable trace schema, mock observer non-interference, source-row immutability, namespaced synthetic identity and validation-only runner flags verified. No standard identity promotion; Live/REAL_VTS/order submission remain disabled.
 - compileall, repo-scoped Ruff F821 and diff-check passed. No code or raw/canonical/accepted data changed. Wrapper/unit checks are not natural-signal, market-performance or integrated T4 acceptance.
+## 2026-11-21 T4 U19 restart/snapshot/offline recovery — No.1674
+
+- Separate synthetic focused batches: U19 identity/persistence/account snapshot 69; full-stream Virtual replay 1; offline cold-start 3; Track2 U19 45; Track9 independent recovery 9; R9 S2 U19 restart E2E 2; bridge/VSSF/U19 2; Track6 restart budget 3; Track2 ledger snapshot builder 24; candidate multi-leg restart 2; KIS REST cumulative snapshot mock-only boundary 9 passed.
+- Batches may overlap earlier coverage; no unique-test sum or integrated T4 acceptance claim. KIS test was inspected: injected in-memory mock transport, `virtual=True`; snapshots remain reconciliation inbox events, not execution fills or Position mutations. Unresolved events retain recovery gates.
+- Initial missing test path was corrected using repository inventory to `tests/core/test_track2_u19_recovery.py`; 45 passed. No product failure inferred from the absent path.
+- compileall, repo-scoped Ruff F821, diff-check passed. No production/raw/canonical/accepted data changed. No Live/account API or actual order activity. S3 economic legs/S5 D2-D8 unapproved; P5 runtime prohibited.

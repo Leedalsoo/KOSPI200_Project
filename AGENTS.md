@@ -216,3 +216,10 @@
 - Detailed traces must use a new isolated output path; preserve existing trace files, reject invalid modes/payloads, and report trace-write failures without altering replay outcomes. FAST mode must not emit detailed files.
 - Synthetic replay adapters must preserve source rows and keep `SYNTHETIC_CONTRACT:` IDs namespaced; never promote unresolved synthetic identities to standard/production instrument IDs.
 - Track2 replay-runner tests must prove validation-only synthetic mode, explicit manifest/profile/quote-manifest inputs, bounded event count, trace SHA, and Live/REAL_VTS/order-submission disabled flags. These wrapper tests do not certify natural signal or market replay performance.
+## U19 restart, snapshot and offline recovery extension (2026-11-21)
+
+- Continue X3 using only the isolated synthetic/validation-only worktree. Confirm the current No.1672/1673 records and Current Baseline before adding coverage.
+- A test path that is not present in this worktree is not evidence of a product failure. Resolve it against the actual repository inventory and use the corresponding existing suite; record the corrected path and outcome.
+- Keep KIS REST `inquire-ccnl` order-level cumulative snapshots in the reconciliation inbox. Never promote them to individual execution journal fills or Position mutations. The KIS recovery service test is safe only as its inspected injected in-memory mock transport with `virtual=True`; do not connect to KIS.
+- U19 identity digest/persistence, cold-start, restart, candidate multi-leg recovery, ledger snapshot, Track6 restart budget and full-stream replay suites remain separate focused batches. Do not sum them as unique tests or integrated acceptance.
+- Recovery tests must preserve unresolved-snapshot gates and keep new-entry/order-submission disabled. No Live/REAL_VTS/account API, actual order/cancel/liquidation or new collection.
