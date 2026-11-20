@@ -99,8 +99,24 @@
 - 과거 기록은 삭제하거나 현재 기준으로 위장하지 않는다. 역사적 기록은 역사적 자료로 남기고, 현재 판단에는 최신 증거를 사용한다.
 - 이 문서 변경 후 로컬 원본 작업폴더, 격리 후보 작업폴더 및 지정된 원격 branch의 내용이 동일한지 확인한다.
 
-## Current Git baseline (2026-11-15)
-- Canonical working branch: `Project200`.
-- At the start of each task, fetch and verify that the local `Project200` HEAD matches `origin/Project200`; do not rely on a static SHA. The latest code baseline and validation evidence are recorded in `docs/CURRENT_BASELINE_V2.md` and Notion `Current Baseline v2`.
-- `cleanup/p2-quarantine-20261026` and `sync/q25-a7-batch1-integration-20261112` are historical integration-source branches; `integrate/q25-*` and Q25 A5 branches are retained as development/validation history, not as competing canonical branches.
-- `master` is unchanged and remains protected. New feature work should use isolated worktrees; integrate into `Project200` only after explicit user approval.
+## Current validation baseline (2026-11-20)
+
+- Canonical project branch: `Project200`. At task start, fetch and verify local `Project200` against `origin/Project200`; never rely on this document's historical SHA as a live value.
+- The latest strategy revalidation record is Notion **No.1662**: https://app.notion.com/p/41e5f4f6eaa1813a88d2c6be572f0eaa. It supersedes earlier strategy status summaries where current-code evidence differs.
+- The 2026-11-20 evidence is deliberately split by run and validation scope: S1-S8 first-pass regression (402 strategy tests + 13 shared-runtime tests), S2 focused suite (370), S5 option-only runtime plumbing (33), S6-S8 focused regression (149), and S9 focused independent overnight PUT+CALL regression (44). These counts overlap in purpose and must not be added into a single coverage claim.
+- S9 is the independent ATM PUT + ATM CALL BUY/BUY overnight insurance strategy. S1-linked OTM PUT scope is obsolete; follow the latest confirmed decision in No.1437/1441/1451 and correction No.1661.
+- S5 has Option-primary D1-A selected; D2-D8 and production entry policy remain unapproved. Keep production entry disabled until those decisions are confirmed.
+- S3 signal/statistical basis validation and S4 Mini hedge calculation/state-cycle validation are distinct from their not-yet-proven tradable spread/Mini futures Runtime execution paths. Do not invent economic legs or contract identity to force a pass.
+- S6-S8 regression results are validation-only unless a specific run explicitly proves a natural StrategyHub signal-to-flat path on the current Project200 source. Historical R4 S8 evidence is not automatically current-code evidence.
+- These results do not certify KIS Live, REAL_VTS account execution, authoritative current KIS Option Master identity, account-level premium/margin/fee limits, or real order/cancel/liquidation readiness.
+
+### Missing or inconsistent data — required verification sequence
+
+1. Read the latest relevant Notion decision/spec and identify which fields are truly required for the specific test.
+2. Compare the current workspace with existing Raw, Canonical, accepted Runtime, sidecar, manifest, backup and other preserved originals. Verify provenance and SHA-256 before reuse.
+3. Distinguish an actual contradiction from an absent optional field, a different source sampling boundary, a path-resolution issue, stale test fixture, or missing test-only input.
+4. If authoritative data is unavailable, use a clearly labelled synthetic/derived validation-only input when it can verify the relevant logic. Keep synthetic IDs, prices, multipliers, timestamps, fees and risk assumptions separate from KIS/REAL_VTS authority.
+5. Report exactly what the alternative test proves and what remains unverified. Do not immediately mark the whole strategy BLOCKED merely because one data source or field is unavailable; do not promote synthetic PASS to live/production PASS.
+
+- Until the real-account investment API is connected and its field semantics are verified, apply the approved synthetic validation criteria. Once connected, reconcile the complete codebase against confirmed real API semantics and the final accepted synthetic/real criteria.
+- `AGENTS.md` contains durable work rules; dated test counts and detailed execution logs belong in Notion No.1662 and subsequent Q&A records.

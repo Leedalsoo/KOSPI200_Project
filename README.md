@@ -132,19 +132,32 @@ Windows Python 실행은 `py`를 사용한다.
 
 상세 작업 절차와 현재 세부 기준은 **[AGENTS.md](AGENTS.md)**를 기준으로 한다.
 
-## 10. 현재 미완료 범주
+## 10. 전략별 최신 검증 현황 (2026-11-20)
 
-실제 evidence가 확보될 때까지 다음 항목은 전체 PASS로 취급하지 않는다.
+최신 실행 근거와 상세 범위: [Notion No.1662](https://app.notion.com/p/41e5f4f6eaa1813a88d2c6be572f0eaa). 과거 BLOCKED/PASS 표기를 그대로 승계하지 않고 현재 코드와 실행 결과를 기준으로 갱신한다.
 
-- Strategy 1~9 전체의 REAL_VTS signal → execution → Position/PnL Full E2E
-- 동일 3개월 replay와 동일 runtime state를 대상으로 한 실제 browser DOM Playwright 자동 검증
-- Strategy Trade P/L / Account P/L / Position open·closed semantics의 완전한 회계 정합성
-- KIS VTS Collector manifest/lifecycle과 실제 evidence의 완전한 정합성
-- KIS Live credential 및 실제 Live E2E
-- 옵션 매수호가·승수·수량·수수료·슬리피지를 반영하는 Runtime 프리미엄 검사
-- 옵션 레그별 만기 payoff/max-loss 및 기존 미청산 포지션·체결 원장 기반 계좌 전체 위험 집계
-- 부분체결·거절·청산·만기 회귀 검증
-- Strategy 1 헤지 구조와 Strategy 3·4·5 선물 레그의 경제적 목적·위험 한도 확정
+| 전략 | 현재 확인된 검증 | 남은 구분·주의사항 |
+|---|---|---|
+| S1 | 현재 전략 회귀 34 passed, S15b observed-option Runtime E2E 1 passed. S15a 자연 신호 생성 및 FAST/DETAILED 증거 보유. | S15b fee-inclusive PnL은 verified=false. 한 건의 CALL lot 검증을 전체 전략 lifecycle 완료로 확대하지 않는다. |
+| S2 | 현재 S2 집중 30개 파일 370 passed. U18 stop-close/trailing, 4-leg group-flat 및 U19 SQLite restart E2E 4 passed. | 21 candidates/84 quotes 등 시장보정 sidecar는 accepted L1 anchor 기반 synthetic validation-only이며 실제 동시 호가·KIS Option Master가 아니다. |
+| S3 | Futures-Index basis 입력·통계·신호 state-cycle 검증 통과. 20개 exact-time matched observations 및 기존 KIS WS 원본 hash 대조. | 승인된 경제적 spread leg/side/quantity/identity 정의가 없어 spread execution plan 및 Runtime fill/close는 미검증. 같은 계약의 반대 주문으로 우회하지 않는다. |
+| S4 | Mini futures synthetic hedge 계산, basecamp/5 Mini signal 및 close cycle, configured hedge cap 검증 통과. | Mini L1 depth는 synthetic proxy. Mini futures identity-bound Runtime order execution은 별도 검증 대상. |
+| S5 | No.1565 D1-A Option-primary 방향으로 option-only two-lot Shared Virtual Runtime plumbing 검증 33 passed; open lots 1→2→1→0. | D2-D8 및 신규 진입 trigger/hedge timing 미승인. Production entry disabled. Synthetic multiplier/identity는 KIS authority가 아니다. |
+| S6 | S6-S8 current-code regression suite에서 관련 테스트 통과. 기존 rank5/6 × per_order/shared_elapsed 4-case validation-only matrix도 PASS. | matrix 결과는 별도 증거이며 149개 회귀 수에 합산하지 않는다. Synthetic identity 및 운영 risk gate는 별도. |
+| S7 | S6-S8 current-code regression suite 통과. 기존 자연 StrategyHub signal 및 FAST/DETAILED parity/fee-aware PnL/flat validation-only 증거 보유. | 현재 회귀 통과만으로 과거 자연 신호 E2E를 새로 실행했다고 주장하지 않는다. |
+| S8 | S6-S8 current-code regression suite 통과. 현재 sidecar high-vol/normal identity isolation, partial position reconciliation, mark refresh, retry/timeout 검증. | R4 natural Runtime E2E는 구 R4 코드 증거이며 현재 Project200의 Runtime/VSSF 코드와 달라 현재 코드의 새 PASS로 승격하지 않는다. |
+| S9 | 독립 ATM PUT + ATM CALL BUY/BUY overnight insurance. 최신 focused regression 44 passed. | S1-linked OTM PUT은 obsolete. 공식 source/freshness, account premium/risk gate, residual close, full acceptance 및 Live readiness는 별도 검증. |
+
+검증 수치는 서로 다른 테스트 실행과 범위를 나타내며 합산해 전체 커버리지로 표현하지 않는다. 2026-11-20 S1-S8 first-pass run은 43개 파일 402 passed와 공통 shared-runtime 13 passed(총 415)였고, 이후 S2/S5/S6-S8은 별도 focused run으로 재검증했다. S6-S8 focused suite: 29 files, 149 passed. S9 44 passed 역시 별도 실행이다.
+
+### 현재 공통 원칙
+
+- 현재 작업폴더의 코드와 새 실행 결과를 우선한다. 오래된 단계표나 과거 BLOCKED 표기를 현재 판정으로 자동 승계하지 않는다.
+- 자료 부족·불일치가 발견되면 먼저 관련 Notion 결정과 기존 Raw/Canonical/accepted/manifest/sidecar/backup 원본을 대조하고 hash/provenance를 확인한다.
+- 권위 데이터가 없더라도 해당 로직을 검증할 수 있으면 명시적 synthetic validation-only 데이터로 대체 검증한다. 이는 운영/Live PASS가 아니다.
+- 전략별 자연 신호 생성, Runtime 주문/체결, Position/PnL, 청산/flat, fault/restart, FAST/DETAILED parity를 서로 구분해 기록한다.
+- 실계좌 투자 API가 연결되기 전까지 검증용 합성 데이터와 확정된 synthetic 기준을 적용한다. API 연결 후에는 확인된 실제 필드·단위·상태·비용·계좌 의미에 전체 코드를 대조한다.
+- KIS Live, REAL_VTS 계좌 주문, 실제 취소·청산은 별도 명시 승인 없이 실행하지 않는다.
 
 ## 11. 옵션 헤지 위험 검사 — 현재 계획
 
