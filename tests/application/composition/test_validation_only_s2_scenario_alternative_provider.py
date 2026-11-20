@@ -829,3 +829,46 @@ def test_t17_all_84_quote_volume_and_depth_proxy_match_prior_spread_anchor_media
         assert row["ask_quantity"] == max(1, int(round(median(source_ask_depth))))
         assert calibration["volume_basis"] == "MEDIAN_PRIOR_ANCHOR_TRADE_SIZE"
         assert calibration["depth_basis"] == "MEDIAN_ACCEPTED_SYNTHETIC_L1_DEPTH_PROXY"
+
+
+def test_t17_all_84_synthetic_contract_identities_match_candidate_legs_and_product_spec():
+    import json
+    from contracts.kis_option_product_spec import (
+        KIS_KOSPI200_OPTION_CONTRACT_MULTIPLIER,
+        KIS_OPTION_PRODUCT_SPEC_URL,
+        kis_option_contract_multiplier,
+    )
+    from verification.track2_synthetic_quote_scenario import _identity
+
+    provider = _provider("2026-10-12T09:26:00+09:00")
+    _manifest, _candidate, _profile, _quotes, _hashes = provider._load_verified_sources()
+    candidates = json.loads((provider.scenario_dir / "candidate_inputs.json").read_text(encoding="utf-8"))
+    rows = [
+        json.loads(line)
+        for line in (provider.scenario_dir / "four_leg_quotes.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    accepted_manifest = json.loads(provider.accepted_manifest_path.read_text(encoding="utf-8"))
+    registry_id = accepted_manifest["registry_id"]
+    multiplier = kis_option_contract_multiplier("STANDARD")
+    assert multiplier == KIS_KOSPI200_OPTION_CONTRACT_MULTIPLIER == Decimal("250000")
+    assert len(candidates) == 21 and len(rows) == 84
+
+    candidate_by_id = {item["candidate_id"]: item for item in candidates}
+    for row in rows:
+        candidate = candidate_by_id[row["candidate_id"]]
+        leg = next(item for item in candidate["legs"] if item["role"] == row["leg_role"])
+        option_type = "PUT" if row["leg_role"].endswith("put") else "CALL"
+        strike = Decimal(str(leg["strike"]))
+        expiry = str(candidate["expiry"])
+        assert row["option_type"] == leg["option_type"] == option_type
+        assert Decimal(row["strike"]) == strike
+        assert row["expiry"] == expiry
+        assert row["contract_product_family"] == "STANDARD"
+        assert row["contract_cycle"] == "MONTHLY"
+        assert Decimal(row["contract_multiplier"]) == multiplier
+        assert row["contract_multiplier_provenance"] == "KIS_OFFICIAL_PRODUCT_SPEC"
+        assert row["contract_multiplier_source"] == KIS_OPTION_PRODUCT_SPEC_URL
+        assert row["source_registry_id"] == registry_id
+        assert row["contract_identity_authority"] == "SYNTHETIC_ONLY_NOT_KIS_MASTER"
+        assert row["instrument_id"] == _identity(registry_id, expiry, option_type, strike)
