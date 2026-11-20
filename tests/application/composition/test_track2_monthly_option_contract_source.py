@@ -171,7 +171,7 @@ def test_virtual_bridge_accepts_matching_stored_monthly_standard_identity():
     from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
     from core.oms.multi_leg_plan import build_trap_plan
 
-    monthly = identity("MONTHLY-P-490", "20261210", "PUT", 490)
+    monthly = identity("MONTHLY-P-495", "20261210", "PUT", 495)
     master = Master((monthly,))
     plan = build_trap_plan(
         group_id="s2-monthly-identity",
@@ -200,7 +200,7 @@ def test_virtual_bridge_blocks_stored_identity_multiplier_mismatch():
     from core.oms.multi_leg_plan import build_trap_plan
     from dataclasses import replace
 
-    monthly = identity("MONTHLY-P-490", "20261210", "PUT", 490)
+    monthly = identity("MONTHLY-P-495", "20261210", "PUT", 495)
     master = Master((monthly,))
     plan = build_trap_plan(
         group_id="s2-monthly-multiplier",

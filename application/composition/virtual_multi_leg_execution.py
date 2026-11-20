@@ -5,7 +5,7 @@ from dataclasses import dataclass, replace
 from hashlib import sha256
 from decimal import Decimal
 from datetime import datetime, time, timedelta, timezone
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 from contracts.kis_option_product_spec import KIS_KOSPI200_OPTION_CONTRACT_MULTIPLIER
 from contracts.option_expiry import CanonicalOptionExpiryError, require_exact_option_expiry
@@ -731,6 +731,14 @@ class VirtualMultiLegExecutionBridge:
             if isinstance(stored_identity, OptionInstrumentIdentity):
                 if stored_identity.option_type not in {"CALL", "PUT"} or stored_identity.strike is None or not stored_identity.expiry:
                     raise ValueError("MULTI_LEG_STORED_OPTION_IDENTITY_INVALID")
+                leg_option_type = str(getattr(leg, "option_type", "") or "").upper()
+                leg_strike = getattr(leg, "strike", None)
+                if (
+                    leg_option_type != stored_identity.option_type
+                    or leg_strike is None
+                    or Decimal(str(leg_strike)) != Decimal(str(stored_identity.strike))
+                ):
+                    raise ValueError("MULTI_LEG_STORED_OPTION_IDENTITY_LEG_MISMATCH")
                 if (plan.strategy_id == "track2_asymmetric_trap"
                         and getattr(self, "validation_only_track2_identity_validator", None) is not None):
                     if not getattr(self, "validation_only_track2_identity_validator")(plan, stored_identity, self.option_master.get_contract_identity(stored_identity.instrument_id)):
@@ -760,7 +768,10 @@ class VirtualMultiLegExecutionBridge:
                         or Decimal(str(stored_identity.contract_multiplier)) != KIS_KOSPI200_OPTION_CONTRACT_MULTIPLIER
                     ):
                         raise ValueError("TRACK2_STORED_IDENTITY_NOT_AUTHORITATIVE_MONTHLY_STANDARD")
-            elif not isinstance(stored_identity, FuturesInstrumentIdentity):
+            elif isinstance(stored_identity, FuturesInstrumentIdentity):
+                if getattr(leg, "option_type", None) is not None or getattr(leg, "strike", None) is not None:
+                    raise ValueError("MULTI_LEG_STORED_FUTURES_IDENTITY_LEG_MISMATCH")
+            else:
                 raise ValueError("MULTI_LEG_STORED_INSTRUMENT_IDENTITY_TYPE_INVALID")
             return stored_identity
         if leg.option_type is None and plan.strategy_id in {"Strategy_3_StatArb", "track5_gap_divergence"}:

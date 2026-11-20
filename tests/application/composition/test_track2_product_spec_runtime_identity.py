@@ -53,7 +53,7 @@ def test_virtual_runtime_bridge_accepts_kis_product_spec_bound_monthly_standard_
 
     resolved = _bridge_for(master_identity).identity_for_leg(
         SimpleNamespace(strategy_id="track2_asymmetric_trap"),
-        SimpleNamespace(instrument_identity=stored),
+        SimpleNamespace(instrument_identity=stored, option_type="CALL", strike=Decimal("887.5")),
     )
 
     assert resolved == stored
@@ -88,7 +88,7 @@ def test_virtual_runtime_bridge_rejects_wrong_multiplier_or_expiry(stored):
     with pytest.raises(ValueError, match="TRACK2_STORED_IDENTITY_NOT_AUTHORITATIVE_MONTHLY_STANDARD"):
         _bridge_for(master_identity).identity_for_leg(
             SimpleNamespace(strategy_id="track2_asymmetric_trap"),
-            SimpleNamespace(instrument_identity=stored),
+            SimpleNamespace(instrument_identity=stored, option_type="CALL", strike=Decimal("887.5")),
         )
 
 
