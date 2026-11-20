@@ -693,3 +693,89 @@ def test_track7_restored_observation_discrepancies_are_reported_without_state_mu
     assert result["synthetic-group-b"]["status"] == "MARK_MISMATCH"
     assert result["synthetic-group-unmapped"] == {"status": "UNMAPPED_GROUP"}
     assert restored.__dict__ == before
+
+
+def _read_x2_gate_with_test_retries(reads):
+    """Test-only explicit gate-read retry probe; never invokes side-effect ports."""
+    diagnostics = []
+    for read_result in reads:
+        try:
+            value = read_result() if callable(read_result) else read_result
+        except Exception:
+            diagnostics.append("read_failed")
+            continue
+        if type(value) is not bool:
+            diagnostics.append("read_invalid")
+            continue
+        state = "latched" if value else "open"
+        diagnostics.append(f"read_{state}")
+        return state, diagnostics
+    return "unavailable", diagnostics
+
+
+def test_track7_x2_retry_does_not_unlatch_after_read_failure_without_explicit_open():
+    def failed_read():
+        raise RuntimeError("synthetic unavailable")
+
+    state, diagnostics = _read_x2_gate_with_test_retries([failed_read, None, "OPEN", 1])
+
+    assert state == "unavailable"
+    assert diagnostics == ["read_failed", "read_invalid", "read_invalid", "read_invalid"]
+
+
+def test_track7_x2_retry_preserves_latched_state_when_later_read_is_latched():
+    state, diagnostics = _read_x2_gate_with_test_retries([True, True])
+
+    assert state == "latched"
+    assert diagnostics == ["read_latched"]
+
+
+def test_track7_x2_retry_only_recognizes_explicit_exact_false_as_open():
+    def failed_read():
+        raise RuntimeError("synthetic unavailable")
+
+    state, diagnostics = _read_x2_gate_with_test_retries([failed_read, False])
+
+    assert state == "open"
+    assert diagnostics == ["read_failed", "read_open"]
+
+
+def test_track7_x2_retry_never_invokes_side_effects_and_requires_fresh_open_recheck():
+    effects = []
+
+    def failed_read():
+        raise RuntimeError("synthetic unavailable")
+
+    retry_state, retry_diagnostics = _read_x2_gate_with_test_retries([failed_read, False])
+    assert retry_state == "open"
+    assert retry_diagnostics == ["read_failed", "read_open"]
+    assert effects == []
+
+    restored, observed = _restore_observe_then_gate(
+        _capture_aggregate(_multi_expiry_strategy()),
+        x2_latched=lambda: False,
+        reconcile_observation=lambda strategy: effects.append(("reconcile", strategy._active_expiry)),
+        side_effect_action=lambda strategy: effects.append(("action", strategy._active_expiry)),
+    )
+
+    assert restored._active_expiry == "20261203"
+    assert observed[-2:] == ["x2_gate_rechecked_open", "side_effect_action"]
+    assert [item[0] for item in effects] == ["reconcile", "action"]
+
+
+def test_track7_x2_retry_later_latched_read_suppresses_all_side_effects():
+    effects = []
+
+    retry_state, _ = _read_x2_gate_with_test_retries([True, True])
+    assert retry_state == "latched"
+
+    restored, observed = _restore_observe_then_gate(
+        _capture_aggregate(_multi_expiry_strategy()),
+        x2_latched=lambda: True,
+        reconcile_observation=lambda strategy: effects.append(("reconcile", strategy._active_expiry)),
+        side_effect_action=lambda strategy: effects.append(("action", strategy._active_expiry)),
+    )
+
+    assert restored._states_by_expiry["20261203"].entry_stage == "CALL_PENDING"
+    assert observed[-1] == "x2_gate_rechecked_latched"
+    assert [item[0] for item in effects] == ["reconcile"]

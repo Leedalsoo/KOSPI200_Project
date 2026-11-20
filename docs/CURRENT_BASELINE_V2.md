@@ -371,3 +371,13 @@
 - Track7 aggregate snapshot contract: 34 passed. Adjacent Track7 lifecycle/cutoff/identity/terminal-close/validation-only regression: 15 passed. Separate batches, not integrated acceptance. compileall, scoped Ruff F821/F401 and git diff-check passed.
 - No production Runtime wiring, durable persistence, broker reconciliation policy, X2 auto-unlatch/recovery implementation, Live/account API, broker calls, real orders/cancels/liquidation, collector restart, new collection or Raw/Canonical/accepted source/manifest changes.
 - Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN. Synthetic/validation-only criteria remain in force pending authoritative real-account API inputs and separately approved exact criteria.
+
+
+## Track7 X2 gate retry/recovery verification (No.1701, 2026-11-21)
+
+- Extended the test-only gate-read probe to exercise repeated reads after accessor exceptions and unknown/non-boolean values. Retry reads do not call cancel, repair, retry, flatten, or new-submission callbacks.
+- An unavailable/invalid read sequence remains unavailable unless a later read returns an exact boolean. Exact `True` remains latched; exact `False` is only a candidate open observation and is not itself an action authorization.
+- A separate fresh current-gate recheck is still required immediately before the test-only action callback. A latched recheck preserves restored state and read-only observation while suppressing action.
+- Synthetic results: aggregate snapshot contract **39 passed**; adjacent Track7 lifecycle/cutoff/identity/terminal-close/validation-only regression **15 passed**. Separate batches, not integrated acceptance. compileall, scoped Ruff F821/F401, and git diff-check passed.
+- Test-only synthetic harness; no production retry policy, retry count/backoff/cache, Runtime wiring, durable persistence, broker reconciliation policy, or X2 auto-unlatch implementation. No.1652 candidate/account aggregate remains separate from Track7 strategy aggregate.
+- No Live/account API, broker calls, actual order/cancel/liquidation, collector restart, new collection, or Raw/Canonical/accepted source/manifest changes. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.\n
