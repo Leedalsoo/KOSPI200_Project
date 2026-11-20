@@ -308,12 +308,17 @@ def _compare_restored_group_observations(strategy, observations):
 
 
 def _restore_observe_then_gate(envelope, *, x2_latched, reconcile_observation, side_effect_action):
-    """Test-only ordering harness; it does not call any broker or runtime port."""
-    strategy, gate = _restore_aggregate(envelope, x2_latched=x2_latched)
+    """Test-only ordering harness; re-reads the explicit X2 gate after observation."""
+    strategy, _ = _restore_aggregate(envelope)
     events = ["state_restored"]
     reconcile_observation(strategy)
     events.append("authoritative_observation_reconciled")
-    if gate["side_effect_actions_allowed"]:
+
+    # A previously latched state is never inferred to be open. The current
+    # gate value must be explicitly supplied at the action boundary.
+    current_x2_latched = x2_latched() if callable(x2_latched) else x2_latched
+    events.append("x2_gate_rechecked_latched" if current_x2_latched else "x2_gate_rechecked_open")
+    if not current_x2_latched:
         side_effect_action(strategy)
         events.append("side_effect_action")
     return strategy, events
@@ -363,7 +368,7 @@ def test_track7_restore_order_reconciles_observations_before_any_action_when_x2_
         side_effect_action=lambda strategy: events.append(("action", strategy._active_expiry)),
     )
     assert restored._active_expiry == "20261203"
-    assert observed == ["state_restored", "authoritative_observation_reconciled", "side_effect_action"]
+    assert observed == ["state_restored", "authoritative_observation_reconciled", "x2_gate_rechecked_open", "side_effect_action"]
     assert [item[0] for item in events] == ["reconcile", "action"]
 
 
@@ -377,9 +382,63 @@ def test_track7_restore_order_under_x2_reconciles_observation_but_skips_side_eff
     )
     assert restored._active_expiry == "20261203"
     assert restored._states_by_expiry["20261203"].entry_stage == "CALL_PENDING"
-    assert observed == ["state_restored", "authoritative_observation_reconciled"]
+    assert observed == ["state_restored", "authoritative_observation_reconciled", "x2_gate_rechecked_latched"]
     assert [item[0] for item in events] == ["reconcile"]
 
+
+
+def test_track7_restore_rechecks_x2_and_suppresses_action_if_latched_during_observation():
+    events = []
+    gate = {"latched": False}
+
+    def reconcile(strategy):
+        events.append(("reconcile", strategy._active_expiry))
+        gate["latched"] = True
+
+    restored, observed = _restore_observe_then_gate(
+        _capture_aggregate(_multi_expiry_strategy()),
+        x2_latched=lambda: gate["latched"],
+        reconcile_observation=reconcile,
+        side_effect_action=lambda strategy: events.append(("action", strategy._active_expiry)),
+    )
+
+    assert restored._active_expiry == "20261203"
+    assert observed == [
+        "state_restored", "authoritative_observation_reconciled",
+        "x2_gate_rechecked_latched",
+    ]
+    assert [item[0] for item in events] == ["reconcile"]
+
+
+def test_track7_latched_x2_is_not_auto_unlatched():
+    events = []
+    restored, observed = _restore_observe_then_gate(
+        _capture_aggregate(_multi_expiry_strategy()),
+        x2_latched=True,
+        reconcile_observation=lambda strategy: events.append(("reconcile", strategy._active_expiry)),
+        side_effect_action=lambda strategy: events.append(("action", strategy._active_expiry)),
+    )
+
+    assert restored._states_by_expiry["20261203"].entry_stage == "CALL_PENDING"
+    assert observed[-1] == "x2_gate_rechecked_latched"
+    assert [item[0] for item in events] == ["reconcile"]
+
+
+def test_track7_explicit_open_gate_read_is_required_before_action():
+    events = []
+    restored, observed = _restore_observe_then_gate(
+        _capture_aggregate(_multi_expiry_strategy()),
+        x2_latched=lambda: False,
+        reconcile_observation=lambda strategy: events.append(("reconcile", strategy._active_expiry)),
+        side_effect_action=lambda strategy: events.append(("action", strategy._active_expiry)),
+    )
+
+    assert restored._active_expiry == "20261203"
+    assert observed == [
+        "state_restored", "authoritative_observation_reconciled",
+        "x2_gate_rechecked_open", "side_effect_action",
+    ]
+    assert [item[0] for item in events] == ["reconcile", "action"]
 
 
 def test_track7_aggregate_snapshot_rejects_duplicate_expiry_state_records():

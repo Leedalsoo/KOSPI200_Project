@@ -383,3 +383,10 @@
 - Added a test-only read-only projection comparing restored group→expiry bindings and expiry-scoped PUT/CALL peak marks against synthetic observation fixtures.
 - Verified two groups route to their own distinct expiry state after aggregate round-trip. Verified expiry mismatch, mark mismatch and an unmapped observed group are surfaced as distinct comparison outcomes without mutating the restored strategy state or triggering actions.
 - No production Runtime, broker, persistence, reconciliation precedence, cancellation/retry or live-account behavior was changed.
+## Track7 aggregate restore and X2 recheck (No.1699, 2026-11-21)
+
+- Track7 aggregate restore remains a test-only contract; do not treat it as production persistence or Runtime restart recovery.
+- Preserve the No.1689 phase boundary: observation/fill reconciliation may run while X2 is latched; planning and all side-effect actions remain suppressed.
+- After restore and observation, re-read the current explicit X2 gate immediately before any action. An earlier open state does not authorize action after a later latch. Never infer an unlatch; require an explicit current open-gate value.
+- No.1652 candidate/account aggregate checkpoints remain separate from Track7 strategy aggregate state.
+- Continue synthetic/validation-only evidence until authoritative real-account API criteria are connected and separately approved. Preserve raw/canonical/accepted sources and manifests. Full Track7 restart recovery and integrated T4 X3 acceptance remain OPEN.

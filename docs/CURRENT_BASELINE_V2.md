@@ -355,3 +355,11 @@
 - Aggregate contract suite: **26 passed**. Adjacent Track7 lifecycle/cutoff/spec/exit regression: **19 passed**. Separate batches, not integrated acceptance. compileall, scoped Ruff F821/F401 and git diff-check: PASS.
 - No.1652 candidate/account aggregate checkpoint remains a separate boundary. No production persistence/restore API, Runtime wiring, authoritative broker reconciliation precedence/freshness/matching, cancel/retry policy, KIS/REAL_VTS/Live/account API, broker calls, real order/cancel/liquidation, collector restart, new collection or Raw/Canonical/accepted source changes.
 - Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+## T4 X3 Track7 restore / X2 gate recheck ? No.1699 (2026-11-21)
+
+- Compared latest No.1698/1697/1696/1689, No.1546, Current Baseline, No.1652 checkpoint separation and No.1534 source/provenance rules before implementation.
+- Test-only harness now enforces aggregate restore -> read-only observation reconciliation -> fresh current X2 gate read -> optional side-effect callback.
+- Synthetic cases cover X2 open, X2 latched, open-to-latched during observation, persistent latch without inferred unlatch, and explicit current open-gate read. X2-latched cases preserve restored state and permit observation only; action callback is suppressed.
+- Track7 aggregate contract suite: 29 passed. Adjacent Track7 lifecycle/cutoff/identity/terminal-close/validation-only suite: 15 passed. Separate invocations; not integrated acceptance. compileall, scoped Ruff F821/F401 and git diff-check passed.
+- This is a test-only ordering contract, not production restore wiring, durable persistence, approved broker-state reconciliation, or X2 auto-unlatch policy. No.1652 candidate/account aggregate remains separate. No Live/account API, broker calls, real order/cancel/liquidation, collector restart, new collection, or Raw/Canonical/accepted source/manifest changes.
+- Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN. Synthetic/validation-only criteria remain in force until authoritative real-account API inputs and exact acceptance criteria are connected and approved.
