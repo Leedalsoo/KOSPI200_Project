@@ -653,3 +653,62 @@ def test_t17_cross_type_iv_and_spread_fallbacks_match_recorded_source_contract_t
         for candidate in manifest["candidate_calibration"]
         if candidate["cross_type_iv_fallback_legs"]
     } == {"S2-CANDIDATE-007": 2, "S2-CANDIDATE-008": 2}
+
+
+def test_t17_cross_type_iv_calibration_recomputes_from_recorded_accepted_anchor_rows():
+    import json
+    from math import isclose
+    from statistics import median
+    from verification.track2_synthetic_quote_scenario import _market_implied_volatility
+
+    provider = _provider("2026-10-13T08:49:10+09:00")
+    scenario_rows = [
+        json.loads(line)
+        for line in (provider.scenario_dir / "four_leg_quotes.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    accepted_by_id = {}
+    for day in ("20261012", "20261013"):
+        source_path = provider.accepted_manifest_path.parent / f"{day}.jsonl"
+        for line in source_path.read_text(encoding="utf-8").splitlines():
+            source_row = json.loads(line)
+            source_id = (source_row.get("scenario_metadata") or {}).get("source_observation_id")
+            if source_id:
+                accepted_by_id[source_id] = source_row
+
+    for row in scenario_rows:
+        if row["candidate_id"] not in {"S2-CANDIDATE-007", "S2-CANDIDATE-008"}:
+            continue
+        calibration = row["market_calibration"]
+        recomputed_iv = []
+        for source_id in calibration["iv_anchor_observation_ids"]:
+            source = accepted_by_id[source_id]["tick"]
+            observed_at = datetime.fromisoformat(source["timestamp"])
+            expiry_at = datetime.strptime(source["expiry"], "%Y%m%d").replace(
+                hour=15, minute=20, second=0, microsecond=0, tzinfo=observed_at.tzinfo,
+            )
+            years = (expiry_at - observed_at).total_seconds() / (365.0 * 24.0 * 60.0 * 60.0)
+            mid = (float(source["bid_price"]) + float(source["ask_price"])) / 2.0
+            value = _market_implied_volatility(
+                float(source["underlying_price"]),
+                float(source["strike_price"]),
+                years,
+                mid,
+                source["option_type"],
+            )
+            assert value is not None
+            recomputed_iv.append(value)
+        assert isclose(
+            median(recomputed_iv), float(calibration["implied_volatility"]),
+            rel_tol=1e-12, abs_tol=1e-12,
+        )
+
+        spreads = [
+            float(accepted_by_id[source_id]["tick"]["ask_price"])
+            - float(accepted_by_id[source_id]["tick"]["bid_price"])
+            for source_id in calibration["spread_anchor_observation_ids"]
+        ]
+        assert isclose(
+            median(spreads), float(calibration["empirical_anchor_spread_median"]),
+            rel_tol=1e-12, abs_tol=1e-12,
+        )
