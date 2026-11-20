@@ -554,3 +554,14 @@ The test-only restore-order harness now treats X2 gate accessor exceptions and u
 - No production Runtime/X2 code, persistence schema, callback protocol, synchronization primitive, lock scope, or broker policy changed. No.1652 checkpoint separation maintained.
 - No KIS/REAL_VTS/Live/account API, broker call, actual order/cancel/liquidation, collector restart, new collection, or Raw/Canonical/accepted source/manifest change.
 - Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+
+
+## T4 X3 Track7 X2 latched reconciliation-only boundary (No.1710, 2026-11-21)
+
+- Reconciled latest No.1709?1705, No.1689, No.1546, Current Baseline and No.1534 against actual T4 worktree. No.1652 candidate/account aggregate checkpoint remains distinct from Track7 strategy aggregate.
+- Inspected actual `AutomatedVirtualTradingLoop.on_tick()` ordering and helpers: pending fill reconciliation runs before lifecycle planning; planning and action processing each perform their own X2 admission check. The reconciliation observer itself is intentionally not gated by X2 and is documented as reconciliation-only (no cancel/submit).
+- Added one deterministic synthetic test: after X2 is TRIPPED, an already-routed synthetic late-fill reconciliation observer is still invoked and its result returned; pending lifecycle planner and action processor are skipped; X2 remains TRIPPED and order admission remains blocked.
+- Separate validation batches: X2 Virtual admission 12 passed; auto-stop/evidence-supervisor/U19 latch persistence 28 passed; Track7 aggregate snapshot contract 46 passed; adjacent Track7 lifecycle/cutoff/identity/terminal-close/validation-only regression 15 passed. compileall, scoped Ruff F821/F401 and git diff-check passed.
+- This characterizes the helper-level boundary only; it does not claim broker reconciliation correctness, persisted position/fee update, or full on_tick/integrated acceptance. No production Runtime/X2 code, reconciliation implementation, lifecycle policy, callback cancellation, retry, atomic gate, lock scope, broker behavior, or side-effect semantics changed.
+- No.1652 separation maintained. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+- No KIS/REAL_VTS/Live/account API, broker call, actual order/cancel/liquidation, collector restart, new collection, or Raw/Canonical/accepted source/manifest change.

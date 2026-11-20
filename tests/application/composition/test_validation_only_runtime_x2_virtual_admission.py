@@ -460,3 +460,47 @@ def test_t4_x2_executor_exception_latch_survives_switch_recreation_and_blocks_di
     assert result is None
     assert reopened_calls == []
     assert reopened_switch.snapshot().status == "TRIPPED"
+
+
+def test_t4_x2_tripped_allows_fill_reconciliation_but_skips_planning_and_actions(tmp_path):
+    inputs = _inputs()
+    stop_switch = _switch(inputs, tmp_path)
+    admission = ValidationOnlyRuntimeStopAdmissionSource(
+        _BaseStatusSource(inputs[4]), stop_switch,
+    )
+    loop = _loop(inputs[1], stop_switch, admission)
+    tick = SimpleNamespace(timestamp="2026-11-21T09:31:00+09:00")
+    calls = []
+    reconciled_fill = SimpleNamespace(
+        strategy_id="SYNTHETIC_TRACK7",
+        routed_legs=1,
+        filled_legs=1,
+        execution_ids=("SYNTHETIC:LATE-FILL:001",),
+    )
+
+    def observer(observed_tick):
+        calls.append(("reconcile", observed_tick.timestamp))
+        return (reconciled_fill,)
+
+    def planner(_observed_tick):
+        calls.append(("plan", None))
+
+    def processor(_observed_tick):
+        calls.append(("action", None))
+        return (SimpleNamespace(strategy_id="SYNTHETIC_TRACK7"),)
+
+    loop.pending_multi_leg_observer = observer
+    loop.pending_multi_leg_planner = planner
+    loop.pending_multi_leg_processor = processor
+
+    stop_switch.trip("T4_SYNTHETIC_X2_RECONCILIATION_ONLY")
+
+    reconciliation = loop._reconcile_pending_multi_leg(tick)
+    loop._plan_pending_multi_leg_if_admitted(tick)
+    actions = loop._process_pending_multi_leg_if_admitted(tick)
+
+    assert reconciliation == (reconciled_fill,)
+    assert actions == ()
+    assert calls == [("reconcile", tick.timestamp)]
+    assert stop_switch.snapshot().status == "TRIPPED"
+    assert stop_switch.snapshot().order_admission_blocked is True
