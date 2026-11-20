@@ -253,3 +253,125 @@ def test_track4_standard_futures_identity_is_rejected_before_vssf_submission() -
 
     assert vssf.metrics["order_commands"] == before == 0
     assert bridge.position_lot_store.open_lots() == ()
+
+
+def test_track4_mini_partial_fill_cancel_late_fill_reconciles_exactly_once(monkeypatch) -> None:
+    loop = _loop(("track4_gamma_scalping", "1.0"), "S4-MINI-LATE-FILL-FAULT")
+    bridge = loop.multi_leg_bridge
+    tick = SimpleNamespace(
+        underlying_symbol="SYNTHETIC_KOSPI200",
+        symbol="SYNTHETIC_KOSPI200",
+        instrument_id="SYNTHETIC_KOSPI200",
+        timestamp="2026-10-08T09:00:49+09:00",
+    )
+    proposal = StrategyExecutionProposal(
+        proposed_quantity=5,
+        asset_type="FUTURES",
+        requested_price=None,
+        side="SELL",
+        track_id="track4_gamma_scalping",
+        tag_id="GAMMA_REBALANCE",
+        option_type=None,
+        strike=None,
+    )
+    evaluation = SimpleNamespace(
+        context=SimpleNamespace(
+            strategy_id="track4_gamma_scalping",
+            market_state=SimpleNamespace(ticks={"synthetic": tick}),
+        ),
+        result=SimpleNamespace(execution_proposal=proposal),
+    )
+    canonical = SimpleNamespace(
+        side=SimpleNamespace(value="SELL"),
+        qty=5,
+        tag_id="GAMMA_REBALANCE",
+        track_id="track4_gamma_scalping",
+    )
+    plan = loop.multi_leg_plan_resolver(evaluation, canonical)
+    assert plan is not None
+    identity = plan.legs[0].instrument_identity
+    assert identity.product_type is FuturesProductType.MINI
+
+    vssf = bridge.bundle.execution._authoritative_execute.__self__.vssf_runtime
+    bridge.bundle.market._futures_price = Decimal("1000")
+    vssf.order_book.update_bid_ask(1000, 1000, identity.instrument_id)
+
+    def freshness(_plan, _leg, resolved_identity, command):
+        observed_at = datetime.fromisoformat(tick.timestamp)
+        return FreshnessVerdict(
+            status=FreshnessStatus.FRESH,
+            reason="S4_SYNTHETIC_DERIVED_SCENARIO",
+            policy_version="S4-MINI-LATE-FILL-v1",
+            source="SYNTHETIC:DERIVED_SCENARIO",
+            tr_id="S4-SYNTHETIC-VIRTUAL",
+            environment="VIRTUAL_VALIDATION_ONLY",
+            instrument_id=command.instrument_id,
+            symbol=command.broker_symbol,
+            source_instant=observed_at,
+            received_at=observed_at,
+            evidence_sha256=sha256(
+                f"{observed_at.isoformat()}|{resolved_identity.instrument_id}|LATE".encode()
+            ).hexdigest(),
+        )
+
+    bridge.freshness_verdict_provider = freshness
+    original_execute = vssf._execute
+    partial_state = {"done": False}
+
+    def partial_first_fill(command, price, now, *, quantity=None):
+        if not partial_state["done"]:
+            partial_state["done"] = True
+            return original_execute(command, price, now, quantity=2)
+        return original_execute(command, price, now, quantity=quantity)
+
+    monkeypatch.setattr(vssf, "_execute", partial_first_fill)
+    initial = bridge.execute(plan)
+    assert initial.routed_legs == 1
+    assert initial.filled_legs == 2
+    assert initial.reports[0].status == "PARTIALLY_FILLED"
+    assert initial.reports[0].remaining_quantity == 3
+    client_order_id = initial.reports[0].client_order_id
+    pending_group_plan, pending_leg, broker_command = bridge.pending_legs[client_order_id]
+
+    cancelled = bridge.cancel_pending_order(client_order_id, reason="S4_VALIDATION_CANCEL")
+    assert cancelled.reports[0].status == "CANCELLED"
+    assert cancelled.reports[0].filled_quantity == 2
+    assert cancelled.reports[0].remaining_quantity == 3
+    assert bridge.position_lot_store.open_lots()
+    assert sum(lot.remaining_quantity for lot in bridge.position_lot_store.open_lots()) == 2
+
+    canonical_command = bridge.command_context.build_command(broker_command)
+    original_execute(canonical_command, Decimal("1000"), vssf._now(), quantity=3)
+    latest = bridge.ack.broker.query(client_order_id)
+    assert latest is not None
+    assert latest.status == "FILLED"
+    assert latest.filled_quantity == 5
+    assert len(latest.execution_fills) == 2
+    assert sorted(fill.filled_quantity for fill in latest.execution_fills) == [2, 3]
+    assert len({fill.execution_id for fill in latest.execution_fills}) == 2
+
+    reconciled = bridge.execute(
+        plan,
+        group_plan=pending_group_plan,
+        reconciled_reports={client_order_id: latest},
+        reconciled_commands={client_order_id: broker_command},
+    )
+    assert reconciled.filled_legs == 5
+    assert reconciled.group_complete is True
+    lots = bridge.position_lot_store.open_lots()
+    assert sum(lot.remaining_quantity for lot in lots) == 5
+    assert len({lot.execution_id for lot in lots}) == 2
+    assert vssf.account.positions[identity.instrument_id]["qty"] == 5
+
+    monkeypatch.setattr(vssf, "_execute", original_execute)
+    close_plan = bridge.build_close_plan_from_open_lots(
+        strategy_id="track4_gamma_scalping",
+        purpose="S4_VALIDATION_LATE_FILL_CLOSE",
+        asset_type="FUTURES",
+    )
+    closed = bridge.execute(close_plan)
+    assert closed.filled_legs == 5
+    assert closed.group_complete is True
+    assert bridge.position_lot_store.open_lots() == ()
+    assert identity.instrument_id not in vssf.account.positions
+    assert closed.position_flat is True
