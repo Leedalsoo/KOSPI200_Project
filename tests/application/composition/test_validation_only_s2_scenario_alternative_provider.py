@@ -531,3 +531,25 @@ def test_t17_source_observed_and_collected_times_remain_separate_from_synthetic_
     assert max(anchor_ages) <= manifest["anchor_policy"]["max_source_anchor_age_seconds"]
     assert min(collection_latencies) >= 0
     assert collection_latencies
+
+
+def test_t17_four_leg_synthetic_quotes_share_candidate_time_while_source_anchor_times_remain_distinct():
+    provider = _provider("2026-10-12T09:26:00+09:00")
+    manifest, candidate, _profile, quote_rows, _hashes = provider._load_verified_sources()
+    candidate_time = datetime.fromisoformat(candidate["observed_at"])
+
+    assert len(quote_rows) == 4
+    assert {row["timestamp"] for row in quote_rows} == {candidate_time.isoformat()}
+    for row in quote_rows:
+        calibration = row["market_calibration"]
+        anchors = tuple(calibration["iv_anchor_timestamps"]) + tuple(
+            calibration["spread_anchor_timestamps"]
+        )
+        anchor_times = [datetime.fromisoformat(value) for value in anchors]
+        ages = [(candidate_time - value).total_seconds() for value in anchor_times]
+        assert len(anchor_times) == 12
+        assert min(ages) >= 0
+        assert max(ages) <= manifest["anchor_policy"]["max_source_anchor_age_seconds"]
+        assert max(ages) - min(ages) > 0
+        assert len(set(calibration["iv_anchor_observation_ids"])) == 6
+        assert len(set(calibration["spread_anchor_observation_ids"])) == 6
