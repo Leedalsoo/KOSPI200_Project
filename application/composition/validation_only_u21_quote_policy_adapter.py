@@ -38,6 +38,8 @@ class ValidationOnlyU21QuotePolicyAdapter:
             approved=values.get("approved_for_synthetic_scenarios_only") is True,
         )
         self.last_quote_digest: str | None = None
+        self.last_leg_role: str | None = None
+        self.last_quote_side: str | None = None
 
     def evaluate(self, tick: Any):
         if getattr(tick, "validation_only", False) is not True:
@@ -48,9 +50,27 @@ class ValidationOnlyU21QuotePolicyAdapter:
         if getattr(tick, "candidate_id", None) != self.provider.candidate_id:
             raise ValueError("U21_SCENARIO_CANDIDATE_MISMATCH")
         self.last_quote_digest = None
+        self.last_leg_role = None
+        self.last_quote_side = None
         instrument_id = getattr(tick, "instrument_id", None)
+        leg_role = str(getattr(tick, "leg_role", "") or "")
+        quote_side = str(getattr(tick, "u21_quote_side", "") or "")
+        expected_side = self.provider.ROLE_SIDE.get(leg_role)
+        if expected_side is None or quote_side != expected_side:
+            raise ValueError("U21_SYNTHETIC_LEG_ROLE_SIDE_MISMATCH")
+        self.last_leg_role = leg_role
+        self.last_quote_side = quote_side
         symbol = getattr(tick, "symbol", None)
-        row = next((item for item in quotes if item.get("instrument_id") == instrument_id), None)
+        identity_valid = bool(
+            instrument_id
+            and symbol == instrument_id
+            and getattr(tick, "synthetic_contract_id", None) == instrument_id
+            and getattr(tick, "instrument_identity_status", None) == "SYNTHETIC_VALIDATION_ONLY"
+        )
+        row = (
+            next((item for item in quotes if item.get("instrument_id") == instrument_id), None)
+            if identity_valid else None
+        )
         observed_at = None
         bid = ask = None
         derived_digest = None
@@ -58,6 +78,18 @@ class ValidationOnlyU21QuotePolicyAdapter:
         source_time_verified = False
         capability_verified = False
         if row is not None:
+            if (
+                row.get("leg_role") != leg_role
+                or str(row.get("option_type", "")).upper() != str(getattr(tick, "option_type", "")).upper()
+                or Decimal(str(row.get("strike"))) != Decimal(str(getattr(tick, "strike_price", "NaN")))
+                or str(row.get("expiry")) != str(getattr(tick, "expiry", ""))
+                or Decimal(str(row.get("bid"))) != Decimal(str(getattr(tick, "bid_price", "NaN")))
+                or Decimal(str(row.get("ask"))) != Decimal(str(getattr(tick, "ask_price", "NaN")))
+                or Decimal(str(row.get("contract_multiplier"))) != Decimal(str(getattr(tick, "contract_multiplier", "NaN")))
+                or row.get("candidate_id") != self.provider.candidate_id
+                or row.get("source") != "SYNTHETIC:DERIVED_SCENARIO"
+            ):
+                raise ValueError("U21_SYNTHETIC_QUOTE_ROW_TICK_MISMATCH")
             observed_at = datetime.fromisoformat(str(row.get("timestamp")))
             bid = Decimal(str(row.get("bid"))) if row.get("bid") is not None else None
             ask = Decimal(str(row.get("ask"))) if row.get("ask") is not None else None
@@ -91,9 +123,9 @@ class ValidationOnlyU21QuotePolicyAdapter:
         return evaluate_u21_quote(
             primary=quote,
             fallback=None,
-            side=QuoteSide.BUY,
+            side=QuoteSide[quote_side],
             now=now,
             policy=self.policy,
-            expected_instrument_id=str(instrument_id or ""),
-            expected_symbol=str(symbol or ""),
+            expected_instrument_id=str(instrument_id or "") if identity_valid else "",
+            expected_symbol=str(symbol or "") if identity_valid else "",
         )

@@ -1,5 +1,6 @@
 
 from datetime import datetime
+from decimal import Decimal
 from types import SimpleNamespace
 
 from application.composition.automated_virtual_trading_loop import (
@@ -309,3 +310,114 @@ def test_t10_u21_policy_rejection_prevents_quote_only_strategy_evaluation():
     assert event["u21_policy_decision"] == "FALLBACK_UNAVAILABLE_BLOCKED"
     assert "PRIMARY_QUOTE_STALE" in event["reason"]
     assert event["order_routing"] == "NOT_INVOKED"
+
+
+def test_t10_u21_policy_evaluates_all_four_manifest_bound_contracts_with_role_side():
+    from application.composition.validation_only_u21_quote_policy_adapter import (
+        ValidationOnlyU21QuotePolicyAdapter,
+    )
+
+    provider = _provider("2026-10-12T09:26:00+09:00")
+    ticks = provider.build_quote_only_ticks(seq_id=40)
+    adapter = ValidationOnlyU21QuotePolicyAdapter(provider)
+    expected = {
+        "inner_put": ("BUY", "PUT", "41.50"),
+        "inner_call": ("BUY", "CALL", "43.00"),
+        "outer_put": ("SELL", "PUT", "37.10"),
+        "outer_call": ("SELL", "CALL", "39.45"),
+    }
+
+    assert len(ticks) == 4
+    assert len({tick.instrument_id for tick in ticks}) == 4
+    digests = []
+    for tick in ticks:
+        result = adapter.evaluate(tick)
+        side, option_type, expected_price = expected[tick.leg_role]
+        assert tick.u21_quote_side == side
+        assert tick.option_type == option_type
+        assert result.decision.value == "PRIMARY_QUOTE_ACCEPTED"
+        assert result.price == Decimal(expected_price)
+        assert result.order_submission_enabled is False
+        assert adapter.last_leg_role == tick.leg_role
+        assert adapter.last_quote_side == side
+        digests.append(adapter.last_quote_digest)
+    assert len(set(digests)) == 4
+
+
+def test_t10_u21_policy_rejects_role_side_tampering_for_synthetic_leg():
+    from dataclasses import replace
+    from application.composition.validation_only_u21_quote_policy_adapter import (
+        ValidationOnlyU21QuotePolicyAdapter,
+    )
+
+    provider = _provider("2026-10-12T09:26:00+09:00")
+    tick = provider.build_quote_only_ticks()[0]
+    tampered = replace(tick, u21_quote_side="SELL")
+    adapter = ValidationOnlyU21QuotePolicyAdapter(provider)
+
+    import pytest
+    with pytest.raises(ValueError, match="U21_SYNTHETIC_LEG_ROLE_SIDE_MISMATCH"):
+        adapter.evaluate(tampered)
+
+
+def test_t10_u21_policy_rejects_quote_tick_contract_field_mismatch():
+    from dataclasses import replace
+    from application.composition.validation_only_u21_quote_policy_adapter import (
+        ValidationOnlyU21QuotePolicyAdapter,
+    )
+
+    provider = _provider("2026-10-12T09:26:00+09:00")
+    tick = provider.build_quote_only_ticks()[0]
+    tampered = replace(tick, strike_price=tick.strike_price + 5.0)
+    adapter = ValidationOnlyU21QuotePolicyAdapter(provider)
+
+    import pytest
+    with pytest.raises(ValueError, match="U21_SYNTHETIC_QUOTE_ROW_TICK_MISMATCH"):
+        adapter.evaluate(tampered)
+
+
+def test_t10_u21_policy_fallback_unavailable_is_reported_independently_for_all_four_legs():
+    from dataclasses import replace
+    from application.composition.validation_only_u21_quote_policy_adapter import (
+        ValidationOnlyU21QuotePolicyAdapter,
+    )
+
+    provider = _provider("2026-10-12T09:26:00+09:00")
+    adapter = ValidationOnlyU21QuotePolicyAdapter(provider)
+    ticks = provider.build_quote_only_ticks(seq_id=60)
+
+    for tick in ticks:
+        stale_tick = replace(tick, timestamp="2026-10-12T09:26:06+09:00")
+        result = adapter.evaluate(stale_tick)
+        assert result.decision.value == "FALLBACK_UNAVAILABLE_BLOCKED"
+        assert result.reason == "PRIMARY_QUOTE_STALE;FALLBACK_QUOTE_MISSING"
+        assert result.order_submission_enabled is False
+        assert adapter.last_leg_role == tick.leg_role
+        assert adapter.last_quote_side == tick.u21_quote_side
+        assert len(adapter.last_quote_digest) == 64
+
+
+def test_t10_quote_only_runtime_emits_per_contract_stale_fallback_diagnostics_without_strategy():
+    from dataclasses import replace
+    from application.composition.validation_only_u21_quote_policy_adapter import (
+        ValidationOnlyU21QuotePolicyAdapter,
+    )
+
+    provider = _provider("2026-10-12T09:26:00+09:00")
+    loop = _loop(None, [])
+    loop.validation_only_u21_quote_policy_adapter = ValidationOnlyU21QuotePolicyAdapter(provider)
+
+    events = []
+    for tick in provider.build_quote_only_ticks(seq_id=80):
+        stale_tick = replace(tick, timestamp="2026-10-12T09:26:06+09:00")
+        events.append(loop.on_quote_only_tick(stale_tick))
+
+    assert len(events) == 4
+    assert [event["leg_role"] for event in events] == [
+        "inner_put", "inner_call", "outer_put", "outer_call",
+    ]
+    assert all(event["u21_policy_decision"] == "FALLBACK_UNAVAILABLE_BLOCKED" for event in events)
+    assert all("PRIMARY_QUOTE_STALE;FALLBACK_QUOTE_MISSING" in event["reason"] for event in events)
+    assert all(len(event["u21_derived_quote_digest"]) == 64 for event in events)
+    assert all(event["order_routing"] == "NOT_INVOKED" for event in events)
+    assert loop.quote_only_events == tuple(events)

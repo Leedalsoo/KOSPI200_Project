@@ -146,6 +146,46 @@ def test_t10_session_attachment_publishes_one_evidence_only_s2_candidate():
     assert loop.validation_only_s2_replay is True
     assert loop.signal_observation_only is True
     assert len(market.option_quotes) == 4
-    assert order == ["supervisor"]
-    assert event["status"] == "EVIDENCE_VALIDATED_NO_EXECUTION"
-    assert event["order_routing"] == "NOT_INVOKED"
+    assert order == ["supervisor"] * 4
+    assert len(event) == 4
+    assert {item["u21_leg_role"] for item in event} == {
+        "inner_put", "inner_call", "outer_put", "outer_call",
+    }
+    assert {item["u21_quote_side"] for item in event} == {"BUY", "SELL"}
+    assert all(item["u21_policy_decision"] == "PRIMARY_QUOTE_ACCEPTED" for item in event)
+    assert all(item["status"] == "EVIDENCE_VALIDATED_NO_EXECUTION" for item in event)
+    assert all(item["order_routing"] == "NOT_INVOKED" for item in event)
+    assert len({item["u21_derived_quote_digest"] for item in event}) == 4
+
+
+def test_t10_session_attachment_replays_four_contract_events_with_individual_policy_diagnostics():
+    order = []
+
+    class _Supervisor:
+        def evaluate(self, tick):
+            order.append(("supervisor", tick.leg_role))
+            return SimpleNamespace(
+                candidate_source="PROVENANCE_PRESERVING_ALTERNATIVE",
+                stop_snapshot=SimpleNamespace(status="ARMED"),
+            )
+
+    alternative = _provider("2026-10-12T09:26:00+09:00")
+    chain = SimpleNamespace(supervisor=_Supervisor(), alternative_provider=alternative)
+    market = VirtualMarketSimulatorRuntime(option_master=None)
+    bundle = SimpleNamespace(market=market)
+    loop = _loop(chain.supervisor, order)
+    market.subscribe_quote_only(loop.on_quote_only_tick)
+
+    attach_validation_only_s2_quote_only_replay(loop, bundle, chain)
+    events = loop.replay_validation_only_s2_candidate()
+
+    assert len(events) == 4
+    assert [event["u21_leg_role"] for event in events] == [
+        "inner_put", "inner_call", "outer_put", "outer_call",
+    ]
+    assert [event["u21_quote_side"] for event in events] == ["BUY", "BUY", "SELL", "SELL"]
+    assert all(event["u21_policy_decision"] == "PRIMARY_QUOTE_ACCEPTED" for event in events)
+    assert all(event["u21_policy_reason"] == "PRIMARY_QUOTE_WITHIN_EXPLICIT_VALIDATION_POLICY" for event in events)
+    assert all(event["order_routing"] == "NOT_INVOKED" for event in events)
+    assert len({event["u21_derived_quote_digest"] for event in events}) == 4
+    assert len(order) == 4

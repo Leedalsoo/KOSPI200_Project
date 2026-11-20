@@ -199,6 +199,11 @@ class AutomatedVirtualTradingLoop:
             "timestamp": tick.timestamp,
             "seq_id": tick.seq_id,
             "symbol": tick.symbol,
+            "instrument_id": getattr(tick, "instrument_id", None),
+            "leg_role": getattr(tick, "leg_role", None),
+            "option_type": getattr(tick, "option_type", None),
+            "strike_price": getattr(tick, "strike_price", None),
+            "expiry": getattr(tick, "expiry", None),
             "source": getattr(tick, "option_source", None) or "UNKNOWN",
             "status": "BLOCKED",
             "reason": None,
@@ -238,6 +243,8 @@ class AutomatedVirtualTradingLoop:
                 ):
                     raise ValueError("U21_QUOTE_POLICY_ADAPTER_MUST_BE_VALIDATION_ONLY_NO_ORDERS")
                 u21_result = u21_adapter.evaluate(tick)
+                event["u21_leg_role"] = getattr(u21_adapter, "last_leg_role", None)
+                event["u21_quote_side"] = getattr(u21_adapter, "last_quote_side", None)
                 event["u21_policy_decision"] = getattr(getattr(u21_result, "decision", None), "value", None)
                 event["u21_policy_reason"] = getattr(u21_result, "reason", None)
                 event["u21_policy_source"] = getattr(u21_result, "source", None)

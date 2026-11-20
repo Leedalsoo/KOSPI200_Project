@@ -24,6 +24,8 @@ from environments.virtual.market.canonical import ReferenceCanonicalMarketTick
 @dataclass(frozen=True)
 class ValidationOnlyS2CandidateTick(ReferenceCanonicalMarketTick):
     candidate_id: str = ""
+    leg_role: str = ""
+    u21_quote_side: str = ""
 
 
 class ValidationOnlyS2ScenarioAlternativeProvider:
@@ -231,41 +233,71 @@ class ValidationOnlyS2ScenarioAlternativeProvider:
             raise ValueError("T10_S2_MARKET_QUOTE_PROVIDER_REQUIRES_FOUR_UNIQUE_LEGS")
         return payload
 
-    def build_quote_only_tick(self, *, seq_id: int = 1) -> ReferenceCanonicalMarketTick:
-        """Build one quote-only event to evaluate the scenario without trade/order fields."""
+    def build_quote_only_ticks(self, *, seq_id: int = 1) -> tuple[ReferenceCanonicalMarketTick, ...]:
+        """Build one no-trade quote event for each manifest-bound synthetic S2 leg."""
         _manifest, candidate, _profile, quotes, _hashes = self._load_verified_sources()
-        row = quotes[0]
         observed_at = self._aware(candidate.get("observed_at"), "T7_SCENARIO_TIMESTAMP_INVALID")
-        instrument_id = str(row["instrument_id"])
-        return ValidationOnlyS2CandidateTick(
-            timestamp=observed_at.isoformat(),
-            underlying_price=float(Decimal(str(candidate["underlying_price"]))),
-            underlying_symbol="KOSPI200",
-            underlying_source="SYNTHETIC:ACCEPTED_RUNTIME_V2_SCENARIO_INPUT",
-            strike_price=float(Decimal(str(row["strike"]))),
-            option_type=str(row["option_type"]).upper(),
-            contract_multiplier=float(Decimal(str(row["contract_multiplier"]))),
-            bid_price=float(Decimal(str(row["bid"]))),
-            ask_price=float(Decimal(str(row["ask"]))),
-            last_price=None,
-            volume=None,
-            bid_quantity=int(row["bid_quantity"]),
-            ask_quantity=int(row["ask_quantity"]),
-            seq_id=seq_id,
-            expiry=str(row["expiry"]),
-            symbol=instrument_id,
-            option_observed_hour=observed_at.strftime("%H"),
-            option_source="SYNTHETIC:DERIVED_SCENARIO",
-            instrument_id=instrument_id,
-            synthetic_contract_id=instrument_id,
-            instrument_identity_status="SYNTHETIC_VALIDATION_ONLY",
-            contract_class="synthetic_validation",
-            validation_only=True,
-            scenario_id=str(candidate.get("scenario_id") or self.candidate_id),
-            scenario_group_id=str(candidate.get("scenario_group_id") or self.candidate_id),
-            scenario_regime=str(candidate.get("scenario_regime") or "S2_VALIDATION_ONLY"),
-            candidate_id=self.candidate_id,
-        )
+        expected_legs = {
+            str(leg.get("role")): leg
+            for leg in candidate.get("legs", ())
+            if isinstance(leg, dict) and leg.get("role")
+        }
+        if set(expected_legs) != set(self.ROLE_SIDE):
+            raise ValueError("T10_S2_CANDIDATE_ROLE_SET_MISMATCH")
+        rows_by_role = {str(row.get("leg_role")): row for row in quotes}
+        if (
+            len(rows_by_role) != 4
+            or set(rows_by_role) != set(self.ROLE_SIDE)
+            or len({str(row.get("instrument_id")) for row in quotes}) != 4
+        ):
+            raise ValueError("T10_S2_QUOTE_ROLE_OR_INSTRUMENT_SET_MISMATCH")
+        ticks = []
+        for offset, role in enumerate(self.ROLE_SIDE):
+            row = rows_by_role[role]
+            expected_leg = expected_legs[role]
+            if (
+                str(row.get("option_type", "")).upper() != str(expected_leg.get("option_type", "")).upper()
+                or Decimal(str(row.get("strike"))) != Decimal(str(expected_leg.get("strike")))
+                or str(row.get("expiry")) != str(candidate.get("expiry"))
+            ):
+                raise ValueError(f"T10_S2_QUOTE_ROLE_CONTRACT_MISMATCH:{role}")
+            instrument_id = str(row["instrument_id"])
+            ticks.append(ValidationOnlyS2CandidateTick(
+                timestamp=observed_at.isoformat(),
+                underlying_price=float(Decimal(str(candidate["underlying_price"]))),
+                underlying_symbol="KOSPI200",
+                underlying_source="SYNTHETIC:ACCEPTED_RUNTIME_V2_SCENARIO_INPUT",
+                strike_price=float(Decimal(str(row["strike"]))),
+                option_type=str(row["option_type"]).upper(),
+                contract_multiplier=float(Decimal(str(row["contract_multiplier"]))),
+                bid_price=float(Decimal(str(row["bid"]))),
+                ask_price=float(Decimal(str(row["ask"]))),
+                last_price=None,
+                volume=None,
+                bid_quantity=int(row["bid_quantity"]),
+                ask_quantity=int(row["ask_quantity"]),
+                seq_id=seq_id + offset,
+                expiry=str(row["expiry"]),
+                symbol=instrument_id,
+                option_observed_hour=observed_at.strftime("%H"),
+                option_source="SYNTHETIC:DERIVED_SCENARIO",
+                instrument_id=instrument_id,
+                synthetic_contract_id=instrument_id,
+                instrument_identity_status="SYNTHETIC_VALIDATION_ONLY",
+                contract_class="synthetic_validation",
+                validation_only=True,
+                scenario_id=str(candidate.get("scenario_id") or self.candidate_id),
+                scenario_group_id=str(candidate.get("scenario_group_id") or self.candidate_id),
+                scenario_regime=str(candidate.get("scenario_regime") or "S2_VALIDATION_ONLY"),
+                candidate_id=self.candidate_id,
+                leg_role=role,
+                u21_quote_side=self.ROLE_SIDE[role],
+            ))
+        return tuple(ticks)
+
+    def build_quote_only_tick(self, *, seq_id: int = 1) -> ReferenceCanonicalMarketTick:
+        """Backward-compatible first-leg accessor; full replay uses all four ticks."""
+        return self.build_quote_only_ticks(seq_id=seq_id)[0]
 
     def __call__(self, tick: Any, attempts: tuple[str, ...] = ()):
         del attempts  # The alternative is deterministic and does not alter its source selection.

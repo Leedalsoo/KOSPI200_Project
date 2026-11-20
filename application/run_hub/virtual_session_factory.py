@@ -47,20 +47,23 @@ from application.composition.virtual_risk_guard_status_source import VirtualRisk
 
 
 def attach_validation_only_s2_quote_only_replay(loop, bundle, evidence_chain):
-    """Attach one no-trade S2 scenario quote event to an isolated Virtual loop."""
+    """Attach four manifest-bound no-trade S2 quote events to an isolated Virtual loop."""
     loop.runtime_evidence_supervisor = evidence_chain.supervisor
     loop.validation_only_s2_evidence_chain = evidence_chain
     bundle.market.set_authoritative_option_quote_provider(
         evidence_chain.alternative_provider.option_quotes_at
     )
-    candidate_tick = evidence_chain.alternative_provider.build_quote_only_tick()
+    candidate_ticks = evidence_chain.alternative_provider.build_quote_only_ticks()
+    candidate_tick = candidate_ticks[0]
+    loop.validation_only_s2_candidate_ticks = candidate_ticks
     loop.validation_only_s2_candidate_tick = candidate_tick
 
     def replay_validation_only_s2_candidate():
         before = len(loop.quote_only_events)
-        bundle.market.publish_replay_tick(candidate_tick)
+        for tick in candidate_ticks:
+            bundle.market.publish_replay_tick(tick)
         events = loop.quote_only_events
-        return events[-1] if len(events) > before else None
+        return tuple(events[before:])
 
     loop.replay_validation_only_s2_candidate = replay_validation_only_s2_candidate
     from application.composition.validation_only_u21_quote_policy_adapter import (
