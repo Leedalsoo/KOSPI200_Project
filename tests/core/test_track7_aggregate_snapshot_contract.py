@@ -724,10 +724,13 @@ def test_track7_x2_retry_does_not_unlatch_after_read_failure_without_explicit_op
 
 
 def test_track7_x2_retry_preserves_latched_state_when_later_read_is_latched():
-    state, diagnostics = _read_x2_gate_with_test_retries([True, True])
+    def failed_read():
+        raise RuntimeError("synthetic unavailable")
+
+    state, diagnostics = _read_x2_gate_with_test_retries([failed_read, True])
 
     assert state == "latched"
-    assert diagnostics == ["read_latched"]
+    assert diagnostics == ["read_failed", "read_latched"]
 
 
 def test_track7_x2_retry_only_recognizes_explicit_exact_false_as_open():
@@ -779,3 +782,13 @@ def test_track7_x2_retry_later_latched_read_suppresses_all_side_effects():
     assert restored._states_by_expiry["20261203"].entry_stage == "CALL_PENDING"
     assert observed[-1] == "x2_gate_rechecked_latched"
     assert [item[0] for item in effects] == ["reconcile"]
+
+
+
+def test_track7_x2_latched_state_changes_only_after_later_explicit_false_read():
+    prior_state, _ = _read_x2_gate_with_test_retries([True])
+    later_state, diagnostics = _read_x2_gate_with_test_retries([False])
+
+    assert prior_state == "latched"
+    assert later_state == "open"
+    assert diagnostics == ["read_open"]

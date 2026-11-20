@@ -1,166 +1,166 @@
-# KOSPI200 Project200
+﻿# KOSPI200 Project200
 
-KOSPI200 선물·옵션 자동매매 시스템 개발 프로젝트다. 현재 개발·검증의 중심은 **Virtual Trading / KIS VTS / Control Tower / Strategy 1~9 / REAL_VTS 기반 E2E**이며, Live 주문은 실행하지 않는다.
+KOSPI200 ?좊Ъ쨌?듭뀡 ?먮룞留ㅻℓ ?쒖뒪??媛쒕컻 ?꾨줈?앺듃?? ?꾩옱 媛쒕컻쨌寃利앹쓽 以묒떖? **Virtual Trading / KIS VTS / Control Tower / Strategy 1~9 / REAL_VTS 湲곕컲 E2E**?대ŉ, Live 二쇰Ц? ?ㅽ뻾?섏? ?딅뒗??
 
-상세 작업 기준은 [AGENTS.md](AGENTS.md)를 따른다.
+?곸꽭 ?묒뾽 湲곗?? [AGENTS.md](AGENTS.md)瑜??곕Ⅸ??
 
-## 1. 현재 표준 실행 구조
+## 1. ?꾩옱 ?쒖? ?ㅽ뻾 援ъ“
 
-**Market Data Source → Runtime Input → Strategy → Decision → Risk → OMS/Order Router → Broker → Execution → Position/Margin/PnL → Control Tower Read Model**
+**Market Data Source ??Runtime Input ??Strategy ??Decision ??Risk ??OMS/Order Router ??Broker ??Execution ??Position/Margin/PnL ??Control Tower Read Model**
 
-Control Tower는 감독·운영·read-model 계층이며 정상적인 주문 생성이나 전략 로직을 소유하지 않는다.
+Control Tower??媛먮룆쨌?댁쁺쨌read-model 怨꾩링?대ŉ ?뺤긽?곸씤 二쇰Ц ?앹꽦?대굹 ?꾨왂 濡쒖쭅???뚯쑀?섏? ?딅뒗??
 
-| 경로 | 역할 |
+| 寃쎈줈 | ??븷 |
 |---|---|
-| `contracts/` | 표준 계약·DTO·Port |
-| `core/` | 환경 독립 Domain·Strategy·Risk·OMS |
-| `application/` | Orchestration·Composition·Hub |
-| `environments/` | Virtual/Paper/Live/High-Speed 구현 |
-| `infrastructure/` | KIS/KRX 등 외부 Adapter/Source |
+| `contracts/` | ?쒖? 怨꾩빟쨌DTO쨌Port |
+| `core/` | ?섍꼍 ?낅┰ Domain쨌Strategy쨌Risk쨌OMS |
+| `application/` | Orchestration쨌Composition쨌Hub |
+| `environments/` | Virtual/Paper/Live/High-Speed 援ы쁽 |
+| `infrastructure/` | KIS/KRX ???몃? Adapter/Source |
 | `interfaces/` | Control Tower/API/UI |
-| `tests/` | 회귀·통합 검증 |
+| `tests/` | ?뚭?쨌?듯빀 寃利?|
 
-## 2. Strategy 기준
+## 2. Strategy 湲곗?
 
-Strategy 1~9는 독립적인 Strategy Plugin/Registry 경계를 유지한다.
+Strategy 1~9???낅┰?곸씤 Strategy Plugin/Registry 寃쎄퀎瑜??좎??쒕떎.
 
-공통 시장지표와 계산은 Common Analytics가 소유하고 표준 `AnalyticsSnapshot`으로 제공한다. Strategy는 이를 소비하고 전략 고유의 진입·청산·헤지·상태전이·포지션 규칙을 담당한다.
+怨듯넻 ?쒖옣吏?쒖? 怨꾩궛? Common Analytics媛 ?뚯쑀?섍퀬 ?쒖? `AnalyticsSnapshot`?쇰줈 ?쒓났?쒕떎. Strategy???대? ?뚮퉬?섍퀬 ?꾨왂 怨좎쑀??吏꾩엯쨌泥?궛쨌?ㅼ?쨌?곹깭?꾩씠쨌?ъ???洹쒖튃???대떦?쒕떎.
 
-Authoritative source가 없는 값을 고정값, 0/False, 추정값 또는 synthetic 값으로 채워 정상 신호를 만들지 않는다.
+Authoritative source媛 ?녿뒗 媛믪쓣 怨좎젙媛? 0/False, 異붿젙媛??먮뒗 synthetic 媛믪쑝濡?梨꾩썙 ?뺤긽 ?좏샇瑜?留뚮뱾吏 ?딅뒗??
 
-## 3. KIS VTS / REAL_VTS 데이터
+## 3. KIS VTS / REAL_VTS ?곗씠??
 
-KIS VTS 모의계좌에서 수집한 실제 시장데이터는 **REAL_VTS 원본**으로 취급한다. REAL_VTS는 Live 데이터가 아니며 Live E2E PASS를 의미하지 않는다.
+KIS VTS 紐⑥쓽怨꾩쥖?먯꽌 ?섏쭛???ㅼ젣 ?쒖옣?곗씠?곕뒗 **REAL_VTS ?먮낯**?쇰줈 痍④툒?쒕떎. REAL_VTS??Live ?곗씠?곌? ?꾨땲硫?Live E2E PASS瑜??섎??섏? ?딅뒗??
 
-현재 운영 저장 루트:
+?꾩옱 ?댁쁺 ???猷⑦듃:
 
 `data/kis_market_data_restart/YYYYMMDD/`
 
-날짜별 partition은 독립적인 테스트 데이터셋이 아니라 누적되는 실제 시장 데이터 stream의 저장 단위다.
+?좎쭨蹂?partition? ?낅┰?곸씤 ?뚯뒪???곗씠?곗뀑???꾨땲???꾩쟻?섎뒗 ?ㅼ젣 ?쒖옣 ?곗씠??stream??????⑥쐞??
 
-REST와 WebSocket은 독립적인 수집 경계로 유지한다.
+REST? WebSocket? ?낅┰?곸씤 ?섏쭛 寃쎄퀎濡??좎??쒕떎.
 
-- REST: 시장관측/Historical Store 원본
-- WebSocket: raw frame 원본
-- source/provenance와 timestamp를 transport 간 혼용하지 않는다.
-- WebSocket 연결 성공만으로 frame 수신 PASS를 선언하지 않는다.
-- manifest와 실제 raw/canonical evidence가 다르면 collector lifecycle 문제로 별도 조사한다.
+- REST: ?쒖옣愿痢?Historical Store ?먮낯
+- WebSocket: raw frame ?먮낯
+- source/provenance? timestamp瑜?transport 媛??쇱슜?섏? ?딅뒗??
+- WebSocket ?곌껐 ?깃났留뚯쑝濡?frame ?섏떊 PASS瑜??좎뼵?섏? ?딅뒗??
+- manifest? ?ㅼ젣 raw/canonical evidence媛 ?ㅻⅤ硫?collector lifecycle 臾몄젣濡?蹂꾨룄 議곗궗?쒕떎.
 
-## 4. Replay / E2E 검증
+## 4. Replay / E2E 寃利?
 
-Strategy 1~9는 가능한 authoritative input 범위에서 독립적으로 검증한다.
+Strategy 1~9??媛?ν븳 authoritative input 踰붿쐞?먯꽌 ?낅┰?곸쑝濡?寃利앺븳??
 
-**Source → Runtime Input → Strategy Signal → Decision → Risk → OMS/Router → Virtual Execution → Position/PnL → Regression**
+**Source ??Runtime Input ??Strategy Signal ??Decision ??Risk ??OMS/Router ??Virtual Execution ??Position/PnL ??Regression**
 
-실제 signal이 관찰되지 않은 전략은 signal-driven execution lifecycle PASS를 선언하지 않는다.
+?ㅼ젣 signal??愿李곕릺吏 ?딆? ?꾨왂? signal-driven execution lifecycle PASS瑜??좎뼵?섏? ?딅뒗??
 
-REAL_VTS, DERIVED_SCENARIO, SYNTHETIC, VIRTUAL_EXECUTION provenance는 서로 구분한다.
+REAL_VTS, DERIVED_SCENARIO, SYNTHETIC, VIRTUAL_EXECUTION provenance???쒕줈 援щ텇?쒕떎.
 
-각 실행은 독립 Run ID와 독립적인 execution/position/strategy state를 사용한다.
+媛??ㅽ뻾? ?낅┰ Run ID? ?낅┰?곸씤 execution/position/strategy state瑜??ъ슜?쒕떎.
 
-High-Speed Replay은 필요에 따라 가속 실행하되 원본 event timestamp의 순서와 시간관계를 보존한다.
+High-Speed Replay? ?꾩슂???곕씪 媛???ㅽ뻾?섎릺 ?먮낯 event timestamp???쒖꽌? ?쒓컙愿怨꾨? 蹂댁〈?쒕떎.
 
 ## 5. Control Tower
 
-현재 UI는 다음 구조를 유지한다.
+?꾩옱 UI???ㅼ쓬 援ъ“瑜??좎??쒕떎.
 
-- 6개 운영 탭
+- 6媛??댁쁺 ??
 - Strategy 1~9
-- 3×3 동일 크기 Strategy Grid
-- Strategy별 독립 Composition Graph
-- Strategy Control의 USE / ENTRY / EXIT
-- Strategy Trade P/L과 Account P/L 분리
-- Strategy 카드의 월별 Trade P/L: ENTRY → CLOSE/EXPIRY
-- 카드 하단의 Strategy Integrated P/L
-- Graph에서는 BUY/SELL trade value와 계약 구조를 표시하며 P/L을 계산하지 않음
+- 3횞3 ?숈씪 ?ш린 Strategy Grid
+- Strategy蹂??낅┰ Composition Graph
+- Strategy Control??USE / ENTRY / EXIT
+- Strategy Trade P/L怨?Account P/L 遺꾨━
+- Strategy 移대뱶???붾퀎 Trade P/L: ENTRY ??CLOSE/EXPIRY
+- 移대뱶 ?섎떒??Strategy Integrated P/L
+- Graph?먯꽌??BUY/SELL trade value? 怨꾩빟 援ъ“瑜??쒖떆?섎ŉ P/L??怨꾩궛?섏? ?딆쓬
 
-UI 표준 경로:
+UI ?쒖? 寃쎈줈:
 
-**Authoritative Runtime / Execution / Position Read Model → Option Program Read Model → Control Tower API → UI**
+**Authoritative Runtime / Execution / Position Read Model ??Option Program Read Model ??Control Tower API ??UI**
 
-UI가 Strategy/Core를 직접 호출하거나 없는 데이터를 임의 생성하지 않는다.
+UI媛 Strategy/Core瑜?吏곸젒 ?몄텧?섍굅???녿뒗 ?곗씠?곕? ?꾩쓽 ?앹꽦?섏? ?딅뒗??
 
-## 6. Filled → Position → Trade P/L → UI
+## 6. Filled ??Position ??Trade P/L ??UI
 
-**ExecutionReport → Position Group → Strategy Trade P/L → Strategy Card P/L**
+**ExecutionReport ??Position Group ??Strategy Trade P/L ??Strategy Card P/L**
 
-Runtime execution과 Control Tower Read Model은 동일한 authoritative execution/position-group 상태를 바라보아야 한다.
+Runtime execution怨?Control Tower Read Model? ?숈씪??authoritative execution/position-group ?곹깭瑜?諛붾씪蹂댁븘???쒕떎.
 
-Account P/L과 Strategy Trade P/L은 의미가 다를 수 있으므로 임의로 동일하게 맞추지 않는다. Position open/closed와 Trade Ledger 상태가 불일치하면 별도 accounting/read-model 검증 대상으로 취급한다.
+Account P/L怨?Strategy Trade P/L? ?섎?媛 ?ㅻ? ???덉쑝誘濡??꾩쓽濡??숈씪?섍쾶 留욎텛吏 ?딅뒗?? Position open/closed? Trade Ledger ?곹깭媛 遺덉씪移섑븯硫?蹂꾨룄 accounting/read-model 寃利???곸쑝濡?痍④툒?쒕떎.
 
-현재 일부 실제 VTS 연결 증거가 확보되어 있지만 이를 Strategy 1~9 전체 Full E2E PASS로 확대하지 않는다.
+?꾩옱 ?쇰? ?ㅼ젣 VTS ?곌껐 利앷굅媛 ?뺣낫?섏뼱 ?덉?留??대? Strategy 1~9 ?꾩껜 Full E2E PASS濡??뺣??섏? ?딅뒗??
 
-## 7. 3개월 자동 E2E
+## 7. 3媛쒖썡 ?먮룞 E2E
 
-자동 검증 pattern:
+?먮룞 寃利?pattern:
 
-**trend_up → trend_down → mean_revert → high_volatility → low_volatility → shock**
+**trend_up ??trend_down ??mean_revert ??high_volatility ??low_volatility ??shock**
 
-판정 규칙:
+?먯젙 洹쒖튃:
 
-- Replay PASS + UI smoke PASS → PASS
-- Replay FAIL → FAIL
-- UI smoke FAIL → FAIL
-- Replay FAIL이어도 UI smoke는 실행
-- UI smoke FAIL이면 다음 pattern으로 회전
-- Replay만 FAIL이고 UI smoke가 PASS이면 같은 pattern 재시도
+- Replay PASS + UI smoke PASS ??PASS
+- Replay FAIL ??FAIL
+- UI smoke FAIL ??FAIL
+- Replay FAIL?댁뼱??UI smoke???ㅽ뻾
+- UI smoke FAIL?대㈃ ?ㅼ쓬 pattern?쇰줈 ?뚯쟾
+- Replay留?FAIL?닿퀬 UI smoke媛 PASS?대㈃ 媛숈? pattern ?ъ떆??
 
-현재 scheduled UI smoke는 HTTP/API/UI contract를 검증한다. 동일 replay의 실제 브라우저 DOM Playwright 검증과는 구분한다.
+?꾩옱 scheduled UI smoke??HTTP/API/UI contract瑜?寃利앺븳?? ?숈씪 replay???ㅼ젣 釉뚮씪?곗? DOM Playwright 寃利앷낵??援щ텇?쒕떎.
 
-## 8. 검증 원칙
+## 8. 寃利??먯튃
 
-테스트 파일의 PASS만으로 production 기능의 PASS를 선언하지 않는다.
+?뚯뒪???뚯씪??PASS留뚯쑝濡?production 湲곕뒫??PASS瑜??좎뼵?섏? ?딅뒗??
 
-실제 검증은 현재 코드와 실제 실행 evidence를 우선한다.
+?ㅼ젣 寃利앹? ?꾩옱 肄붾뱶? ?ㅼ젣 ?ㅽ뻾 evidence瑜??곗꽑?쒕떎.
 
-기본 참조 순서:
+湲곕낯 李몄“ ?쒖꽌:
 
-**Current Baseline → 최신 활성 Decision Log → AGENTS.md → 현재 코드/실제 데이터/source → 새 검증**
+**Current Baseline ??理쒖떊 ?쒖꽦 Decision Log ??AGENTS.md ???꾩옱 肄붾뱶/?ㅼ젣 ?곗씠??source ????寃利?*
 
-Windows Python 실행은 `py`를 사용한다.
+Windows Python ?ㅽ뻾? `py`瑜??ъ슜?쒕떎.
 
-판정은 실제 실행 명령, 출력, exit code 및 관련 evidence를 기준으로 **PASS / FAIL / BLOCKED**를 구분한다.
+?먯젙? ?ㅼ젣 ?ㅽ뻾 紐낅졊, 異쒕젰, exit code 諛?愿??evidence瑜?湲곗??쇰줈 **PASS / FAIL / BLOCKED**瑜?援щ텇?쒕떎.
 
-## 9. Git / 작업 기준
+## 9. Git / ?묒뾽 湲곗?
 
-- `.env` 및 credential은 commit하지 않는다.
-- 사용자 작업 중인 unrelated 변경은 임의로 수정하거나 함께 commit하지 않는다.
-- 일회성 실행 로그, cache 및 폐기된 Legacy 산출물은 저장소에 남기지 않는다.
-- 변경 후 focused test 및 필요한 E2E를 수행한다.
-- `git diff --check`와 `git status`를 확인한다.
-- commit/push 후 원격 `Project200` HEAD를 확인한다.
+- `.env` 諛?credential? commit?섏? ?딅뒗??
+- ?ъ슜???묒뾽 以묒씤 unrelated 蹂寃쎌? ?꾩쓽濡??섏젙?섍굅???④퍡 commit?섏? ?딅뒗??
+- ?쇳쉶???ㅽ뻾 濡쒓렇, cache 諛??먭린??Legacy ?곗텧臾쇱? ??μ냼???④린吏 ?딅뒗??
+- 蹂寃???focused test 諛??꾩슂??E2E瑜??섑뻾?쒕떎.
+- `git diff --check`? `git status`瑜??뺤씤?쒕떎.
+- commit/push ???먭꺽 `Project200` HEAD瑜??뺤씤?쒕떎.
 
-상세 작업 절차와 현재 세부 기준은 **[AGENTS.md](AGENTS.md)**를 기준으로 한다.
+?곸꽭 ?묒뾽 ?덉감? ?꾩옱 ?몃? 湲곗?? **[AGENTS.md](AGENTS.md)**瑜?湲곗??쇰줈 ?쒕떎.
 
-## 10. 현재 미완료 범주
+## 10. ?꾩옱 誘몄셿猷?踰붿＜
 
-실제 evidence가 확보될 때까지 다음 항목은 전체 PASS로 취급하지 않는다.
+?ㅼ젣 evidence媛 ?뺣낫???뚭퉴吏 ?ㅼ쓬 ??ぉ? ?꾩껜 PASS濡?痍④툒?섏? ?딅뒗??
 
-- Strategy 1~9 전체의 REAL_VTS signal → execution → Position/PnL Full E2E
-- 동일 3개월 replay와 동일 runtime state를 대상으로 한 실제 browser DOM Playwright 자동 검증
-- Strategy Trade P/L / Account P/L / Position open·closed semantics의 완전한 회계 정합성
-- KIS VTS Collector manifest/lifecycle과 실제 evidence의 완전한 정합성
-- KIS Live credential 및 실제 Live E2E
-- 옵션 매수호가·승수·수량·수수료·슬리피지를 반영하는 Runtime 프리미엄 검사
-- 옵션 레그별 만기 payoff/max-loss 및 기존 미청산 포지션·체결 원장 기반 계좌 전체 위험 집계
-- 부분체결·거절·청산·만기 회귀 검증
-- Strategy 1 헤지 구조와 Strategy 3·4·5 선물 레그의 경제적 목적·위험 한도 확정
+- Strategy 1~9 ?꾩껜??REAL_VTS signal ??execution ??Position/PnL Full E2E
+- ?숈씪 3媛쒖썡 replay? ?숈씪 runtime state瑜???곸쑝濡????ㅼ젣 browser DOM Playwright ?먮룞 寃利?
+- Strategy Trade P/L / Account P/L / Position open쨌closed semantics???꾩쟾???뚭퀎 ?뺥빀??
+- KIS VTS Collector manifest/lifecycle怨??ㅼ젣 evidence???꾩쟾???뺥빀??
+- KIS Live credential 諛??ㅼ젣 Live E2E
+- ?듭뀡 留ㅼ닔?멸?쨌?뱀닔쨌?섎웾쨌?섏닔猷뙿룹뒳由ы뵾吏瑜?諛섏쁺?섎뒗 Runtime ?꾨━誘몄뾼 寃??
+- ?듭뀡 ?덇렇蹂?留뚭린 payoff/max-loss 諛?湲곗〈 誘몄껌???ъ??샕룹껜寃??먯옣 湲곕컲 怨꾩쥖 ?꾩껜 ?꾪뿕 吏묎퀎
+- 遺遺꾩껜寃걔룰굅?댟룹껌?걔룸쭔湲??뚭? 寃利?
+- Strategy 1 ?ㅼ? 援ъ“? Strategy 3쨌4쨌5 ?좊Ъ ?덇렇??寃쎌젣??紐⑹쟻쨌?꾪뿕 ?쒕룄 ?뺤젙
 
-## 11. 옵션 헤지 위험 검사 — 현재 계획
+## 11. ?듭뀡 ?ㅼ? ?꾪뿕 寃?????꾩옱 怨꾪쉷
 
-옵션 헤지 설정 초안은 config/risk/option-hedge-risk.v1.json, 검증 모델은 core/risk/option_hedge_risk_config.py에 있다. 현재 DISABLED_UNTIL_RUNTIME_INTEGRATION 상태이므로 실제 주문 경로의 위험 차단 기능으로 간주하지 않는다. 단위 테스트가 통과해도 Runtime enforcement PASS를 의미하지 않는다.
+?듭뀡 ?ㅼ? ?ㅼ젙 珥덉븞? config/risk/option-hedge-risk.v1.json, 寃利?紐⑤뜽? core/risk/option_hedge_risk_config.py???덈떎. ?꾩옱 DISABLED_UNTIL_RUNTIME_INTEGRATION ?곹깭?대?濡??ㅼ젣 二쇰Ц 寃쎈줈???꾪뿕 李⑤떒 湲곕뒫?쇰줈 媛꾩＜?섏? ?딅뒗?? ?⑥쐞 ?뚯뒪?멸? ?듦낵?대룄 Runtime enforcement PASS瑜??섎??섏? ?딅뒗??
 
-구현 순서는 다음과 같다.
+援ы쁽 ?쒖꽌???ㅼ쓬怨?媛숇떎.
 
-1. Strategy 1 보호 구조와 Strategy 3·4·5 선물 레그의 경제적 목적·위험 한도를 별도 검토한다.
-2. authoritative 매수호가, 계약 승수, 수량, 수수료 및 보수적 슬리피지를 포함해 프리미엄을 검사한다.
-3. 각 레그의 정확한 만기·행사가·방향·수량으로 만기 payoff와 최대손실을 계산한다.
-4. 기존 미청산 포지션과 실제 체결 원장을 연결해 중복 없는 계좌 전체 위험을 집계한다.
-5. 부분체결·거절·청산·만기 및 입력 누락/오류 회귀를 검증한다.
+1. Strategy 1 蹂댄샇 援ъ“? Strategy 3쨌4쨌5 ?좊Ъ ?덇렇??寃쎌젣??紐⑹쟻쨌?꾪뿕 ?쒕룄瑜?蹂꾨룄 寃?좏븳??
+2. authoritative 留ㅼ닔?멸?, 怨꾩빟 ?뱀닔, ?섎웾, ?섏닔猷?諛?蹂댁닔???щ━?쇱?瑜??ы븿???꾨━誘몄뾼??寃?ы븳??
+3. 媛??덇렇???뺥솗??留뚭린쨌?됱궗媛쨌諛⑺뼢쨌?섎웾?쇰줈 留뚭린 payoff? 理쒕??먯떎??怨꾩궛?쒕떎.
+4. 湲곗〈 誘몄껌???ъ??섍낵 ?ㅼ젣 泥닿껐 ?먯옣???곌껐??以묐났 ?녿뒗 怨꾩쥖 ?꾩껜 ?꾪뿕??吏묎퀎?쒕떎.
+5. 遺遺꾩껜寃걔룰굅?댟룹껌?걔룸쭔湲?諛??낅젰 ?꾨씫/?ㅻ쪟 ?뚭?瑜?寃利앺븳??
 
-기존 공통 RiskConfig의 일일 손실 한도와 증거금 한도는 그대로 유지하며 옵션 프리미엄/최대손실 한도로 재해석하지 않는다. 임시 설정 금액은 최종 운용 한도로 확정되지 않았다. authoritative 데이터가 누락되거나 계산이 불가능하면 fail-closed한다. 전략 코드·manifest·매매 정책은 전략별 설계 및 회귀 범위 승인을 거친 뒤 변경한다.
+湲곗〈 怨듯넻 RiskConfig???쇱씪 ?먯떎 ?쒕룄? 利앷굅湲??쒕룄??洹몃?濡??좎??섎ŉ ?듭뀡 ?꾨━誘몄뾼/理쒕??먯떎 ?쒕룄濡??ы빐?앺븯吏 ?딅뒗?? ?꾩떆 ?ㅼ젙 湲덉븸? 理쒖쥌 ?댁슜 ?쒕룄濡??뺤젙?섏? ?딆븯?? authoritative ?곗씠?곌? ?꾨씫?섍굅??怨꾩궛??遺덇??ν븯硫?fail-closed?쒕떎. ?꾨왂 肄붾뱶쨌manifest쨌留ㅻℓ ?뺤콉? ?꾨왂蹂??ㅺ퀎 諛??뚭? 踰붿쐞 ?뱀씤??嫄곗튇 ??蹂寃쏀븳??
 
-README는 프로젝트의 현재 구조와 작업 순서를 요약하고, 상세 절차는 AGENTS.md, 실제 결정 상태는 Notion의 최신 Q&A와 확정 Decision Log를 기준으로 한다.
+README???꾨줈?앺듃???꾩옱 援ъ“? ?묒뾽 ?쒖꽌瑜??붿빟?섍퀬, ?곸꽭 ?덉감??AGENTS.md, ?ㅼ젣 寃곗젙 ?곹깭??Notion??理쒖떊 Q&A? ?뺤젙 Decision Log瑜?湲곗??쇰줈 ?쒕떎.
 
 
 ## 12. Current U22 strategy revalidation (2026-11-20)
@@ -241,7 +241,7 @@ The P5 manifest still explicitly marks identity owner unresolved and runtime use
 - S3 spread-leg definition remains blocked pending approved economic legs; no tradable legs were invented. S4 MINI identity/profile checks passed, but this does not close the full cross-strategy acceptance matrix.
 - Therefore the common and strategy-focused regression coverage is substantially expanded, but the full strategy-by-strategy fault-injection matrix and integrated T4 acceptance remain open until S3/S5 prerequisites and natural-signal/runtime evidence are available.
 
-## T4 X3 follow-up — S3 authoritative basis source regression correction (2026-11-20)
+## T4 X3 follow-up ??S3 authoritative basis source regression correction (2026-11-20)
 
 - No.956 and current code were rechecked. `KISTrack3RuntimeInputSource` correctly uses paired authoritative KIS H0IFCNT0/H0IFASP0 Futures and KOSPI200 index 2001 observations, 2-second source-time pairing, common volatility/regime, and basis normalization. The existing source had two defects: `_latest_total` selected the numerically largest fee/premium rather than the latest timestamp; historical basis pairing could select an index observation later than the Runtime `as_of` time.
 - Corrected `_latest_total` to select by timestamp and restricted historical nearest-index candidates to `<= as_of`. No spread formula, 2-second threshold, policy threshold, or strategy entry permission was changed.
@@ -449,7 +449,7 @@ Separate validation batches: Track6 13-file inventory + X2 suites 111 passed; fo
 
 ## T4 X3 Track7 restored observation comparison (No.1698, 2026-11-21)
 
-- Added test-only read-only comparison of restored group→expiry bindings and expiry-scoped PUT/CALL peak marks against synthetic observation fixtures.
+- Added test-only read-only comparison of restored group?뭙xpiry bindings and expiry-scoped PUT/CALL peak marks against synthetic observation fixtures.
 - Two-group/two-expiry routing round-trip matched. Expiry mismatch, mark mismatch and unmapped group were reported distinctly; the comparison left restored state unchanged and did not trigger side effects.
 - Aggregate contract suite: 26 passed. Adjacent Track7 lifecycle/cutoff/spec/exit regression: 19 passed. compileall, scoped Ruff F821/F401 and git diff-check passed.
 - This is synthetic validation evidence, not authoritative broker reconciliation or production restore. No production/runtime/broker/persistence policy, Live/account API, actual order/cancel/liquidation, collector restart, new collection or raw/canonical source changed. Track7 strategy-state restart recovery and full T4 X3/integrated acceptance remain OPEN.
@@ -466,6 +466,6 @@ The test-only restore-order harness now treats X2 gate accessor exceptions and u
 - Extended the test-only gate-read probe to exercise repeated reads after accessor exceptions and unknown/non-boolean values. Retry reads do not call cancel, repair, retry, flatten, or new-submission callbacks.
 - An unavailable/invalid read sequence remains unavailable unless a later read returns an exact boolean. Exact `True` remains latched; exact `False` is only a candidate open observation and is not itself an action authorization.
 - A separate fresh current-gate recheck is still required immediately before the test-only action callback. A latched recheck preserves restored state and read-only observation while suppressing action.
-- Synthetic results: aggregate snapshot contract **39 passed**; adjacent Track7 lifecycle/cutoff/identity/terminal-close/validation-only regression **15 passed**. Separate batches, not integrated acceptance. compileall, scoped Ruff F821/F401, and git diff-check passed.
+- Synthetic results: aggregate snapshot contract **40 passed**; adjacent Track7 lifecycle/cutoff/identity/terminal-close/validation-only regression **15 passed**. Separate batches, not integrated acceptance. compileall, scoped Ruff F821/F401, and git diff-check passed.
 - Test-only synthetic harness; no production retry policy, retry count/backoff/cache, Runtime wiring, durable persistence, broker reconciliation policy, or X2 auto-unlatch implementation. No.1652 candidate/account aggregate remains separate from Track7 strategy aggregate.
 - No Live/account API, broker calls, actual order/cancel/liquidation, collector restart, new collection, or Raw/Canonical/accepted source/manifest changes. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.\n

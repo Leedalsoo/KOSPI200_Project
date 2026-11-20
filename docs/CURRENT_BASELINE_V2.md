@@ -1,42 +1,42 @@
-# Current Baseline v2 — SSOT
+﻿# Current Baseline v2 ??SSOT
 
 > Notion decision source: `4135f4f6-eaa1-81f7-ac42-dea70e10fa42`. This repository file is the synchronized state snapshot. Detailed chronological updates are maintained separately in the A8 update log; the pre-rewrite SSOT is preserved in the linked archive.
 
-## 기준 헤더 — 2026-11-17 (KST)
+## 湲곗? ?ㅻ뜑 ??2026-11-17 (KST)
 
 - CB2 ID: `4135f4f6-eaa1-81f7-ac42-dea70e10fa42`.
-- 유일한 활성 개발 기준 브랜치: `Project200`.
-- 시작 시마다 `AGENTS.md`, 이 SSOT, `git status`, 현재 브랜치, 로컬 HEAD 및 live `origin/Project200` HEAD를 확인한다. SHA는 고정 기준으로 사용하지 않는다.
-- A8 진행표: [No.1546 Q25 A8 로드맵](https://app.notion.com/p/4195f4f6eaa1811a9da1d2072a9b3fd1).
-- 변경 이력: [A8 SSOT 갱신 로그](https://app.notion.com/p/4195f4f6eaa181869a49c12e5aa83076).
-- 변경 전 SSOT 전체 보존본: [A8 pre-rewrite archive](https://app.notion.com/p/4195f4f6eaa181d1858ff03dca454fee).
+- ?좎씪???쒖꽦 媛쒕컻 湲곗? 釉뚮옖移? `Project200`.
+- ?쒖옉 ?쒕쭏??`AGENTS.md`, ??SSOT, `git status`, ?꾩옱 釉뚮옖移? 濡쒖뺄 HEAD 諛?live `origin/Project200` HEAD瑜??뺤씤?쒕떎. SHA??怨좎젙 湲곗??쇰줈 ?ъ슜?섏? ?딅뒗??
+- A8 吏꾪뻾?? [No.1546 Q25 A8 濡쒕뱶留?(https://app.notion.com/p/4195f4f6eaa1811a9da1d2072a9b3fd1).
+- 蹂寃??대젰: [A8 SSOT 媛깆떊 濡쒓렇](https://app.notion.com/p/4195f4f6eaa181869a49c12e5aa83076).
+- 蹂寃???SSOT ?꾩껜 蹂댁〈蹂? [A8 pre-rewrite archive](https://app.notion.com/p/4195f4f6eaa181d1858ff03dca454fee).
 
-## 1. Git 기준 및 작업 규칙
+## 1. Git 湲곗? 諛??묒뾽 洹쒖튃
 
-- `Project200`만 정식 개발·통합 기준이다. 단계 작업은 live `origin/Project200`에서 만든 격리 worktree의 `work/q25-a8-<단계>` 브랜치에서 수행한다.
-- A8에서 `푸시`로 표시된 단계는 사용자의 A8 명시 지시에 따라 Project200으로 non-force fast-forward push할 수 있다. push 직전 fetch 및 조상 관계를 재확인하고, push 후 local/remote SHA 일치를 확인한다.
-- `master`는 GitHub 기본 브랜치이며 변경·삭제 금지. `Project200_First`(고유 커밋 1개)와 `archive/remote-head-before-local-sync-20261111`(고유 커밋 14개)는 보존한다.
-- 2026-11-15 사용자 승인으로 원격 정리 후보 5개를 삭제했다: `KOSPI200_BASE`, `Project200_Second`, `baseline/current-implementation-20261011`, `cleanup/p2-quarantine-20261026`, `sync/q25-a7-batch1-integration-20261112`. 로컬 브랜치·worktree·사용자 파일은 별도 승인 없이 삭제하지 않는다. 상세는 No.1545.
-- 원본 작업폴더의 untracked 파일, Graphify 산출물, nested worktree 및 기타 사용자 자료는 삭제·이동·stage·커밋하지 않는다. `clean/reset/stash` 금지. 원본 폴더 동기화가 필요한 경우 `git pull --ff-only`만 허용하고 충돌 시 중단한다.
-- 2026-11-15 A8 P1 시작 전 실제 확인: 원본 작업폴더는 `Project200`, local HEAD와 live remote HEAD 모두 `d70b27cd845bf5dce89318afb39187186e109321`. 기존 Graphify tracked 파일 2개가 modified이고 다수의 untracked 항목이 확인됐다. 모두 그대로 보존했다. A8 지시서의 tracked diff 0 표기와 달라 실제 관측 상태를 우선 기록한다.
-- Windows Python 실행은 `py`를 사용한다. 검증 결과는 실행 명령·종료 코드·범위와 함께 기록한다.
+- `Project200`留??뺤떇 媛쒕컻쨌?듯빀 湲곗??대떎. ?④퀎 ?묒뾽? live `origin/Project200`?먯꽌 留뚮뱺 寃⑸━ worktree??`work/q25-a8-<?④퀎>` 釉뚮옖移섏뿉???섑뻾?쒕떎.
+- A8?먯꽌 `?몄떆`濡??쒖떆???④퀎???ъ슜?먯쓽 A8 紐낆떆 吏?쒖뿉 ?곕씪 Project200?쇰줈 non-force fast-forward push?????덈떎. push 吏곸쟾 fetch 諛?議곗긽 愿怨꾨? ?ы솗?명븯怨? push ??local/remote SHA ?쇱튂瑜??뺤씤?쒕떎.
+- `master`??GitHub 湲곕낯 釉뚮옖移섏씠硫?蹂寃승룹궘??湲덉?. `Project200_First`(怨좎쑀 而ㅻ컠 1媛?? `archive/remote-head-before-local-sync-20261111`(怨좎쑀 而ㅻ컠 14媛???蹂댁〈?쒕떎.
+- 2026-11-15 ?ъ슜???뱀씤?쇰줈 ?먭꺽 ?뺣━ ?꾨낫 5媛쒕? ??젣?덈떎: `KOSPI200_BASE`, `Project200_Second`, `baseline/current-implementation-20261011`, `cleanup/p2-quarantine-20261026`, `sync/q25-a7-batch1-integration-20261112`. 濡쒖뺄 釉뚮옖移샕톣orktree쨌?ъ슜???뚯씪? 蹂꾨룄 ?뱀씤 ?놁씠 ??젣?섏? ?딅뒗?? ?곸꽭??No.1545.
+- ?먮낯 ?묒뾽?대뜑??untracked ?뚯씪, Graphify ?곗텧臾? nested worktree 諛?湲고? ?ъ슜???먮즺????젣쨌?대룞쨌stage쨌而ㅻ컠?섏? ?딅뒗?? `clean/reset/stash` 湲덉?. ?먮낯 ?대뜑 ?숆린?붽? ?꾩슂??寃쎌슦 `git pull --ff-only`留??덉슜?섍퀬 異⑸룎 ??以묐떒?쒕떎.
+- 2026-11-15 A8 P1 ?쒖옉 ???ㅼ젣 ?뺤씤: ?먮낯 ?묒뾽?대뜑??`Project200`, local HEAD? live remote HEAD 紐⑤몢 `d70b27cd845bf5dce89318afb39187186e109321`. 湲곗〈 Graphify tracked ?뚯씪 2媛쒓? modified?닿퀬 ?ㅼ닔??untracked ??ぉ???뺤씤?먮떎. 紐⑤몢 洹몃?濡?蹂댁〈?덈떎. A8 吏?쒖꽌??tracked diff 0 ?쒓린? ?щ씪 ?ㅼ젣 愿痢??곹깭瑜??곗꽑 湲곕줉?쒕떎.
+- Windows Python ?ㅽ뻾? `py`瑜??ъ슜?쒕떎. 寃利?寃곌낵???ㅽ뻾 紐낅졊쨌醫낅즺 肄붾뱶쨌踰붿쐞? ?④퍡 湲곕줉?쒕떎.
 
-## 2. 데이터 인정·보존 정책 (No.1535 확정)
+## 2. ?곗씠???몄젙쨌蹂댁〈 ?뺤콉 (No.1535 ?뺤젙)
 
 - Mandatory No.1534 inventory/reuse-first rule: when data sources disagree, compare the relevant confirmed Notion decisions and existing Raw/Canonical/manifest/Master/REST/expiry lineage first; then try crosswalk, independent replay, schema/contract validation or provenance-preserving deterministic fixtures. Do not immediately label a mismatch BLOCKED. Use BLOCKED/UNAVAILABLE only if critical identity, event-time, provenance or required validation evidence remains unresolved.
 
-- 기존 REST·WebSocket 원본 수집 데이터는 프로젝트 검증 입력으로 인정한다.
-- 기존 수집 데이터를 기반으로 생성한 합성·보완 데이터도 프로젝트의 공식 검증 입력으로 인정한다. 합성·보완이라는 이유로 별도 격리하거나 검증 자격에서 배제하지 않는다.
-- provenance, 원본 연결, 생성 근거, 모델·변환 규칙, manifest 및 SHA-256은 추적 가능하게 보존한다. 생성값을 원본 관측값 또는 Production authoritative 값으로 표기하지 않는다.
-- 신규 REST·WebSocket 수집은 중단 상태를 유지한다. 수집기 재시작 및 예약작업 재활성화 금지. 기존 Raw, Canonical, Manifest, accepted dataset 및 synthetic tree는 삭제·덮어쓰기 금지.
-- 통합 인정 인벤토리: `data/accepted_market_data/registry_20261114.json`, 9개 그룹, SHA-256 `9e31f8a63b8df515b2c491934617e88f4c3d7f72f6feda545054ae498c3768f6`.
-- 10/12·10/13 Canonical v2는 686건 + 1,386건 = 2,072건. 생성 경로는 `data/kis_market_data_restart/{date}/canonical_v2_h0iocnt0_identity_timefix/`. H0IOCNT0 `observed_at`은 거래일과 `BSOP_HOUR`로 만들고 `collected_at`은 WebSocket 수신시각을 보존한다. 해당 생성 결과에서 ID collision 0건.
-- Canonical v2 코드 근거는 `scripts/ingest_kis_vts_websocket_canonical.py`, `infrastructure/kis/kis_websocket_market_observation_normalizer.py` 및 `tests/infrastructure/kis/test_kis_websocket_canonical_pipeline.py`에 존재한다. 코드에 frame 내 record index 기반 식별 보조와 관측/수신 시각 분리가 확인됐다.
-- Canonical sidecar 자체 SHA와 상위 날짜 manifest 기대 SHA 사이 불일치는 미해결 provenance 항목이다. 이를 정합 완료로 주장하지 않는다.
-- Registry에 연결된 accepted Runtime v2는 10/12·10/13 2,072 events를 처리했다. 이 결과는 데이터 입력·Runtime 경로 검증이며 S2 전략 성능 PASS가 아니다.
-- 기존 synthetic market data tree는 약 10.744 GiB이며 복사 없이 원본 위치를 참조한다. 2026-11-14 기준 C: 여유 공간은 약 9.8 GiB로 기록됐다. 백업 단일본 위험은 P3에서 재확인한다.
+- 湲곗〈 REST쨌WebSocket ?먮낯 ?섏쭛 ?곗씠?곕뒗 ?꾨줈?앺듃 寃利??낅젰?쇰줈 ?몄젙?쒕떎.
+- 湲곗〈 ?섏쭛 ?곗씠?곕? 湲곕컲?쇰줈 ?앹꽦???⑹꽦쨌蹂댁셿 ?곗씠?곕룄 ?꾨줈?앺듃??怨듭떇 寃利??낅젰?쇰줈 ?몄젙?쒕떎. ?⑹꽦쨌蹂댁셿?대씪???댁쑀濡?蹂꾨룄 寃⑸━?섍굅??寃利??먭꺽?먯꽌 諛곗젣?섏? ?딅뒗??
+- provenance, ?먮낯 ?곌껐, ?앹꽦 洹쇨굅, 紐⑤뜽쨌蹂??洹쒖튃, manifest 諛?SHA-256? 異붿쟻 媛?ν븯寃?蹂댁〈?쒕떎. ?앹꽦媛믪쓣 ?먮낯 愿痢↔컪 ?먮뒗 Production authoritative 媛믪쑝濡??쒓린?섏? ?딅뒗??
+- ?좉퇋 REST쨌WebSocket ?섏쭛? 以묐떒 ?곹깭瑜??좎??쒕떎. ?섏쭛湲??ъ떆??諛??덉빟?묒뾽 ?ы솢?깊솕 湲덉?. 湲곗〈 Raw, Canonical, Manifest, accepted dataset 諛?synthetic tree????젣쨌??뼱?곌린 湲덉?.
+- ?듯빀 ?몄젙 ?몃깽?좊━: `data/accepted_market_data/registry_20261114.json`, 9媛?洹몃９, SHA-256 `9e31f8a63b8df515b2c491934617e88f4c3d7f72f6feda545054ae498c3768f6`.
+- 10/12쨌10/13 Canonical v2??686嫄?+ 1,386嫄?= 2,072嫄? ?앹꽦 寃쎈줈??`data/kis_market_data_restart/{date}/canonical_v2_h0iocnt0_identity_timefix/`. H0IOCNT0 `observed_at`? 嫄곕옒?쇨낵 `BSOP_HOUR`濡?留뚮뱾怨?`collected_at`? WebSocket ?섏떊?쒓컖??蹂댁〈?쒕떎. ?대떦 ?앹꽦 寃곌낵?먯꽌 ID collision 0嫄?
+- Canonical v2 肄붾뱶 洹쇨굅??`scripts/ingest_kis_vts_websocket_canonical.py`, `infrastructure/kis/kis_websocket_market_observation_normalizer.py` 諛?`tests/infrastructure/kis/test_kis_websocket_canonical_pipeline.py`??議댁옱?쒕떎. 肄붾뱶??frame ??record index 湲곕컲 ?앸퀎 蹂댁“? 愿痢??섏떊 ?쒓컖 遺꾨━媛 ?뺤씤?먮떎.
+- Canonical sidecar ?먯껜 SHA? ?곸쐞 ?좎쭨 manifest 湲곕? SHA ?ъ씠 遺덉씪移섎뒗 誘명빐寃?provenance ??ぉ?대떎. ?대? ?뺥빀 ?꾨즺濡?二쇱옣?섏? ?딅뒗??
+- Registry???곌껐??accepted Runtime v2??10/12쨌10/13 2,072 events瑜?泥섎━?덈떎. ??寃곌낵???곗씠???낅젰쨌Runtime 寃쎈줈 寃利앹씠硫?S2 ?꾨왂 ?깅뒫 PASS媛 ?꾨땲??
+- 湲곗〈 synthetic market data tree????10.744 GiB?대ŉ 蹂듭궗 ?놁씠 ?먮낯 ?꾩튂瑜?李몄“?쒕떎. 2026-11-14 湲곗? C: ?ъ쑀 怨듦컙? ??9.8 GiB濡?湲곕줉?먮떎. 諛깆뾽 ?⑥씪蹂??꾪뿕? P3?먯꽌 ?ы솗?명븳??
 
-## 3. 정책 충돌 결정 카드
+## 3. ?뺤콉 異⑸룎 寃곗젙 移대뱶
 
 ### K-1 - Synthetic contract identity vs authoritative KIS identity
 
@@ -45,17 +45,17 @@
 - Synthetic identities/values must not be promoted to actual KIS contract identity, account/broker facts, Production or Live. No.1469 authoritative-anchor requirements remain in force for real KIS identity and Production.
 - Until a separately connected and approved real-account investment API exists, use existing observations and provenance-preserving synthetic/complementary inputs for software and Virtual Runtime validation. No.1554 does not authorize API calls, orders or Live activation.
 
-## 4. 전략별 현재 상태
+## 4. ?꾨왂蹂??꾩옱 ?곹깭
 
-| 전략 | 현재 판정 | 검증 범위 및 잔여 제한 |
+| ?꾨왂 | ?꾩옱 ?먯젙 | 寃利?踰붿쐞 諛??붿뿬 ?쒗븳 |
 | --- | --- | --- |
-| S1 | `PLUMBING_ONLY` | 단일 short CALL plumbing만. base strangle, multi-leg, exit, fee-inclusive PnL 미완료. |
+| S1 | `PLUMBING_ONLY` | ?⑥씪 short CALL plumbing留? base strangle, multi-leg, exit, fee-inclusive PnL 誘몄셿猷? |
 | S2 | PSB_UNVERIFIED | Q3 completed four validation-only 4-leg E2E scenarios and Fast/Detailed parity: full-fill baseline, group-close/exit, U16 partial-fill repair + U19 evidence-gated recovery, and zero-fill cancel -> group-flat. Q4 residuals: U17 IV basis BLOCKED_INPUT/fail-closed; U18/U19/U21 validation-only checks pass but operating values/providers/Runtime wiring remain unverified; actual fee/tax/slippage/margin and KIS/account identity mapping remain unverified. All 12 operating risk limits remain null/fail-closed. No natural-signal, account, Production or Live certification. |
-| S5 | `PSB_PASS_VALIDATION_ONLY_SYNTHETIC` (close-only) | 기존 포지션 close lifecycle 검증 범위. 신규 진입 BLOCKED. |
-| S6 | `PSB_PASS` (rank 5 범위) | rank 6 및 나머지 matrix 조합 미완료. |
-| S7 | `PSB_PASS` (validation-only synthetic) | 승인된 검증 subset 범위만. Production 승격 아님. |
-| S8 | `PSB_PASS` (subset) | No.1398 다중계약 partial-fill 승격 미완료. |
-| S9 | `PSB_PASS` (subset) | retry timer 재시작 복원 및 비대칭 체결 repair/flatten 미완료. |
+| S5 | `PSB_PASS_VALIDATION_ONLY_SYNTHETIC` (close-only) | 湲곗〈 ?ъ???close lifecycle 寃利?踰붿쐞. ?좉퇋 吏꾩엯 BLOCKED. |
+| S6 | `PSB_PASS` (rank 5 踰붿쐞) | rank 6 諛??섎㉧吏 matrix 議고빀 誘몄셿猷? |
+| S7 | `PSB_PASS` (validation-only synthetic) | ?뱀씤??寃利?subset 踰붿쐞留? Production ?밴꺽 ?꾨떂. |
+| S8 | `PSB_PASS` (subset) | No.1398 ?ㅼ쨷怨꾩빟 partial-fill ?밴꺽 誘몄셿猷? |
+| S9 | `PSB_PASS` (subset) | retry timer ?ъ떆??蹂듭썝 諛?鍮꾨?移?泥닿껐 repair/flatten 誘몄셿猷? |
 
 ### S2 Q3 validation-only 4-leg evidence (2026-11-16)
 
@@ -83,38 +83,38 @@
 - After a separately connected and approved real-account investment API, reconcile contract code/product type/CP/strike/exact expiry/multiplier/tick/tradability, quote source/time, order/fill, fee/tax, balance/margin, risk and lifecycle fields across the full codebase against official KIS/account definitions.
 - Until then, use existing observations and provenance-preserving synthetic/complementary data for validation-only work. No Live/REAL_VTS/account/order API calls, new collection or collector restart.
 
-## 5. Runtime·Risk·OMS 안전 경계
+## 5. Runtime쨌Risk쨌OMS ?덉쟾 寃쎄퀎
 
-- 주문/체결/포지션/PnL의 identity·수량·group/leg/order/execution provenance를 대조한다. 상태 불명, partial fill, cancel race, late fill, mismatch는 fail-closed.
-- Validation-only fixture는 테스트 입력으로 주입할 수 있으나 운영 기본값이나 production risk profile에 복사·승격하지 않는다.
-- 운영 risk limits null, Live/REAL_VTS/order submission flags false를 유지한다. 실제 repair/flatten order submission은 별도 명시 승인 전 금지.
-- KIS Live, REAL_VTS, 실계좌, 주문·정정·취소·잔고·증거금 API 호출 금지.
-- 운영 설정, 권한, scheduler, `.env`, credential/token cache 변경·출력·커밋 금지.
-- 신규 REST/WS 수집, collector 재시작, 예약작업 활성화 금지.
-- Raw/Canonical/manifest/accepted dataset/synthetic tree는 read-only 입력으로 취급한다. 신규 산출물은 versioned 신규 경로만 사용한다.
+- 二쇰Ц/泥닿껐/?ъ???PnL??identity쨌?섎웾쨌group/leg/order/execution provenance瑜??議고븳?? ?곹깭 遺덈챸, partial fill, cancel race, late fill, mismatch??fail-closed.
+- Validation-only fixture???뚯뒪???낅젰?쇰줈 二쇱엯?????덉쑝???댁쁺 湲곕낯媛믪씠??production risk profile??蹂듭궗쨌?밴꺽?섏? ?딅뒗??
+- ?댁쁺 risk limits null, Live/REAL_VTS/order submission flags false瑜??좎??쒕떎. ?ㅼ젣 repair/flatten order submission? 蹂꾨룄 紐낆떆 ?뱀씤 ??湲덉?.
+- KIS Live, REAL_VTS, ?ㅺ퀎醫? 二쇰Ц쨌?뺤젙쨌痍⑥냼쨌?붽퀬쨌利앷굅湲?API ?몄텧 湲덉?.
+- ?댁쁺 ?ㅼ젙, 沅뚰븳, scheduler, `.env`, credential/token cache 蹂寃승룹텧?Β룹빱諛?湲덉?.
+- ?좉퇋 REST/WS ?섏쭛, collector ?ъ떆?? ?덉빟?묒뾽 ?쒖꽦??湲덉?.
+- Raw/Canonical/manifest/accepted dataset/synthetic tree??read-only ?낅젰?쇰줈 痍④툒?쒕떎. ?좉퇋 ?곗텧臾쇱? versioned ?좉퇋 寃쎈줈留??ъ슜?쒕떎.
 
-## 6. 미해결 및 후속 단계
+## 6. 誘명빐寃?諛??꾩냽 ?④퀎
 
 - K-1 conflict resolved by No.1554: option A allows provenance-preserving synthetic inputs for validation-only use while retaining No.1469 real-KIS/Production authority boundaries.
-- Canonical v2: 10/12·10/13의 ID 충돌 0 및 BSOP_HOUR/receive-time 분리는 산출물과 코드 경로에서 확인. 상위 manifest와 sidecar SHA 불일치는 여전히 미해결.
+- Canonical v2: 10/12쨌10/13??ID 異⑸룎 0 諛?BSOP_HOUR/receive-time 遺꾨━???곗텧臾쇨낵 肄붾뱶 寃쎈줈?먯꽌 ?뺤씤. ?곸쐞 manifest? sidecar SHA 遺덉씪移섎뒗 ?ъ쟾??誘명빐寃?
 - S2 residuals: U17 IV metric/source/window/threshold; U18 operating exit values; U19 real broker/persistence/automatic restore; U21 Runtime/OMS and authoritative provider wiring; actual fee/tax/slippage/margin; and KIS/account identity field mapping. The 12 operating risk limits remain null/fail-closed.
-- S2 실제 4-leg 데이터 후보 21건은 실제 동시·신선한 네 레그 호가 커버리지가 충분하지 않다. 합성 quote를 실제 quote로 주장하지 않는다.
-- 백업·재생성 가능성, 단일본 데이터, C: 저장공간 위험은 P3에서 read-only로 확인하고 K-2를 제출한다.
-- A8 후속 단계는 No.1546 진행표만 기준으로 한다. A5(No.1415), A6(No.1476), A7(No.1517)은 역사 참고다.
+- S2 ?ㅼ젣 4-leg ?곗씠???꾨낫 21嫄댁? ?ㅼ젣 ?숈떆쨌?좎꽑?????덇렇 ?멸? 而ㅻ쾭由ъ?媛 異⑸텇?섏? ?딅떎. ?⑹꽦 quote瑜??ㅼ젣 quote濡?二쇱옣?섏? ?딅뒗??
+- 諛깆뾽쨌?ъ깮??媛?μ꽦, ?⑥씪蹂??곗씠?? C: ??κ났媛??꾪뿕? P3?먯꽌 read-only濡??뺤씤?섍퀬 K-2瑜??쒖텧?쒕떎.
+- A8 ?꾩냽 ?④퀎??No.1546 吏꾪뻾?쒕쭔 湲곗??쇰줈 ?쒕떎. A5(No.1415), A6(No.1476), A7(No.1517)? ??궗 李멸퀬??
 
-## 7. 확인된 근거
+## 7. ?뺤씤??洹쇨굅
 
-- No.1469: [anchor 없는 계약 UNAVAILABLE 및 validation-only synthetic 원칙](https://app.notion.com/p/4125f4f6eaa181d29441f757645d1ca9)
+- No.1469: [anchor ?녿뒗 怨꾩빟 UNAVAILABLE 諛?validation-only synthetic ?먯튃](https://app.notion.com/p/4125f4f6eaa181d29441f757645d1ca9)
 - No.1534: [Full source-data inventory and reuse baseline](https://app.notion.com/p/4175f4f6eaa181268573ea21a5aef01f)
 - No.1554: [K-1 validation-only synthetic identity and real-account API boundary](https://app.notion.com/p/41a5f4f6eaa18188aac6dc511b1f87a5)
 - No.1559: [Q4 S2 final verdict and remaining blockers](https://app.notion.com/p/41a5f4f6eaa18129ac88e4cfcdce4f2b)
-- No.1535: [기존 수집·합성 데이터 인정 및 추가 수집 중단 결정](https://app.notion.com/p/4185f4f6eaa18106ac1cc19962c109a7)
-- No.1537: [S2 10/12·10/13 실제 4-leg 데이터 커버리지 검증](https://app.notion.com/p/4185f4f6eaa18177861be9960ef72097)
-- No.1538: [S2 시장보정형 합성 4-leg 데이터 및 Runtime 검증](https://app.notion.com/p/4185f4f6eaa181689b07c6e919b30fc4)
-- No.1544: [Project200 브랜치 통합 및 작업폴더 최신화](https://app.notion.com/p/4185f4f6eaa18184a3cfd728c080e34e)
-- No.1545: [Project200 단일 기준 및 브랜치 보존·정리 원칙](https://app.notion.com/p/4185f4f6eaa1816b80c9ce740c8ba37d)
-- A8 진행: [No.1546](https://app.notion.com/p/4195f4f6eaa1811a9da1d2072a9b3fd1)
-- A8 변경 로그: [Current Baseline v2 update log](https://app.notion.com/p/4195f4f6eaa181869a49c12e5aa83076)
+- No.1535: [湲곗〈 ?섏쭛쨌?⑹꽦 ?곗씠???몄젙 諛?異붽? ?섏쭛 以묐떒 寃곗젙](https://app.notion.com/p/4185f4f6eaa18106ac1cc19962c109a7)
+- No.1537: [S2 10/12쨌10/13 ?ㅼ젣 4-leg ?곗씠??而ㅻ쾭由ъ? 寃利?(https://app.notion.com/p/4185f4f6eaa18177861be9960ef72097)
+- No.1538: [S2 ?쒖옣蹂댁젙???⑹꽦 4-leg ?곗씠??諛?Runtime 寃利?(https://app.notion.com/p/4185f4f6eaa181689b07c6e919b30fc4)
+- No.1544: [Project200 釉뚮옖移??듯빀 諛??묒뾽?대뜑 理쒖떊??(https://app.notion.com/p/4185f4f6eaa18184a3cfd728c080e34e)
+- No.1545: [Project200 ?⑥씪 湲곗? 諛?釉뚮옖移?蹂댁〈쨌?뺣━ ?먯튃](https://app.notion.com/p/4185f4f6eaa1816b80c9ce740c8ba37d)
+- A8 吏꾪뻾: [No.1546](https://app.notion.com/p/4195f4f6eaa1811a9da1d2072a9b3fd1)
+- A8 蹂寃?濡쒓렇: [Current Baseline v2 update log](https://app.notion.com/p/4195f4f6eaa181869a49c12e5aa83076)
 
 ## 2026-11-20 T4 source-reconciled shared Runtime verification
 
@@ -155,7 +155,7 @@
 - S3 spread-leg definition remains blocked pending approved economic legs; no tradable legs were invented. S4 MINI identity/profile checks passed, but this does not close the full cross-strategy acceptance matrix.
 - Therefore the common and strategy-focused regression coverage is substantially expanded, but the full strategy-by-strategy fault-injection matrix and integrated T4 acceptance remain open until S3/S5 prerequisites and natural-signal/runtime evidence are available.
 
-## T4 X3 follow-up — S3 authoritative basis source regression correction (2026-11-20)
+## T4 X3 follow-up ??S3 authoritative basis source regression correction (2026-11-20)
 
 - No.956 and current code were rechecked. `KISTrack3RuntimeInputSource` correctly uses paired authoritative KIS H0IFCNT0/H0IFASP0 Futures and KOSPI200 index 2001 observations, 2-second source-time pairing, common volatility/regime, and basis normalization. The existing source had two defects: `_latest_total` selected the numerically largest fee/premium rather than the latest timestamp; historical basis pairing could select an index observation later than the Runtime `as_of` time.
 - Corrected `_latest_total` to select by timestamp and restricted historical nearest-index candidates to `<= as_of`. No spread formula, 2-second threshold, policy threshold, or strategy entry permission was changed.
@@ -171,40 +171,40 @@
 - No policy or S3 spread legs invented. S3 economic legs and S5 D2-D8 remain unapproved; P5 `runtime_use=PROHIBITED`. No KIS/REAL_VTS/Live/account API, actual orders/cancels/liquidations, or new data collection.
 - Additional guard/spec batch: KRX futures identity, quote-only evaluation, S3 spread-leg fail-closed contract, Track4 hedge cap, Track1/2/3/4/6 spec alignment, Track6 cutoff/order/trailing lifecycle, and S7 exit policy: 66 passed in 0.43s. This does not approve S3 economics or S5 D2-D8; separate focused batch only.
 - S2 source-root precedence correction: T4 `project_root` and R10 original files matched byte-for-byte for all five pinned source inputs. Updated stale test expectation to accept project-root exact-hash resolution or original-root fallback; hash and identity assertions remain. U16/U19 + S2 identity/source/recovery batch: 225 passed. py_compile, Ruff F821/F401, diff-check passed. No source data or production behavior changed.
-## 2026-11-20 T4 strategy/common regression extension — No.1670
+## 2026-11-20 T4 strategy/common regression extension ??No.1670
 
 - Separate focused batches: freshness/no-lookahead + S1 + Track2 + S1/S2 verification 72 passed; X2 auto-stop/evidence/invariant/ledger/provider/VSSF/lineage/candidate/Track6 state 95 passed; S5/S7/S8 adapters + Track2/6 adapters + virtual identity/replay 60 passed; Track1-8 specs + Track9 policy/recovery + Track6/7/8 lifecycle 140 passed.
 - Counts are separate invocations, may overlap with earlier work and are not an integrated acceptance or unique-test sum. Synthetic validation-only only. S3 economic legs and S5 D2-D8 unapproved; P5 runtime use prohibited.
 - compileall and Ruff F821 passed; changed S2 test F821/F401 passed. Repo-wide Ruff F401 identified 17 unused imports in existing files outside this change; no broad cleanup performed. No production or raw data changes.
-## 2026-11-20 T4 cross-source + OMS race regression — No.1671
+## 2026-11-20 T4 cross-source + OMS race regression ??No.1671
 
 - Separate synthetic validation-only batches: cross-source/orderbook/H0IFCNT0/no-lookahead/S2 evidence/candidate restart/source diagnostics/KIS capability **44 passed**; freshness restart/OMS cancel-replace/fill-cancel race/router guard/S7 pending identity/S8 multi-partial natural runtime/S9 partial reject/Track6 cancel **34 passed**.
 - Counts may overlap previous batches; not a unique-test sum or integrated acceptance. No missing-source skip in these selected runs.
 - compileall, repo-scoped Ruff F821, diff-check passed. No production or raw data changed. Cross-source consistency is not broker/account authority; OMS recovery tests do not enable entries or submissions.
 - S3 economic spread legs/S5 D2-D8 unapproved; P5 runtime prohibited. No Live/account API or actual orders.
-## 2026-11-20 T4 U19 snapshot identity + full-stream/cold-start recovery — No.1672
+## 2026-11-20 T4 U19 snapshot identity + full-stream/cold-start recovery ??No.1672
 
 - Separate synthetic validation-only batches: U19 aggregate identity digest/persistence/REST snapshot reconciliation 69 passed; deterministic full-stream Virtual replay 1 passed; offline OMS cold-start + Track2 U19 + Track9 recovery 57 passed; KIS cumulative-snapshot recovery service (injected mock transport) 9 passed.
 - KIS REST cumulative order snapshots stay in reconciliation inbox, not individual execution journal or position mutation. No live transport/API or real order. Mock router release is test-only.
 - compileall, repo-scoped Ruff F821, diff-check passed. No code or raw/canonical/accepted data changed. Batches may overlap earlier tests and do not establish integrated acceptance.
 - S3 economic spread legs/S5 D2-D8 unapproved; P5 runtime prohibited. Full T4 integrated acceptance OPEN.
-## 2026-11-20 T4 replay trace + synthetic adapter boundary — No.1673
+## 2026-11-20 T4 replay trace + synthetic adapter boundary ??No.1673
 
 - Replay observer/trace contract/synthetic replay adapter/Track2 validation runner wrapper: 24 passed in 0.78s.
 - Trace file collision and write-failure handling, stable trace schema, mock observer non-interference, source-row immutability, namespaced synthetic identity and validation-only runner flags verified. No standard identity promotion; Live/REAL_VTS/order submission remain disabled.
 - compileall, repo-scoped Ruff F821 and diff-check passed. No code or raw/canonical/accepted data changed. Wrapper/unit checks are not natural-signal, market-performance or integrated T4 acceptance.
-## 2026-11-21 T4 U19 restart/snapshot/offline recovery — No.1674
+## 2026-11-21 T4 U19 restart/snapshot/offline recovery ??No.1674
 
 - Separate synthetic focused batches: U19 identity/persistence/account snapshot 69; full-stream Virtual replay 1; offline cold-start 3; Track2 U19 45; Track9 independent recovery 9; R9 S2 U19 restart E2E 2; bridge/VSSF/U19 2; Track6 restart budget 3; Track2 ledger snapshot builder 24; candidate multi-leg restart 2; KIS REST cumulative snapshot mock-only boundary 9 passed.
 - Batches may overlap earlier coverage; no unique-test sum or integrated T4 acceptance claim. KIS test was inspected: injected in-memory mock transport, `virtual=True`; snapshots remain reconciliation inbox events, not execution fills or Position mutations. Unresolved events retain recovery gates.
 - Initial missing test path was corrected using repository inventory to `tests/core/test_track2_u19_recovery.py`; 45 passed. No product failure inferred from the absent path.
 - compileall, repo-scoped Ruff F821, diff-check passed. No production/raw/canonical/accepted data changed. No Live/account API or actual order activity. S3 economic legs/S5 D2-D8 unapproved; P5 runtime prohibited.
-## 2026-11-21 T4 candidate isolation + identity-tamper matrix — No.1675
+## 2026-11-21 T4 candidate isolation + identity-tamper matrix ??No.1675
 
 - Separate synthetic focused batches: candidate scope/restart identity 8; candidate/quote identity tamper + multi-leg asset identity 28; U19 aggregate identity digest/cross-candidate checkpoint replay 7; candidate multi-leg duplicate/ledger conflict/pending-order isolation 2 passed.
 - Confirms identity mismatch rejection, candidate-specific U19 aggregate/replay isolation, idempotent duplicate delivery, conflicting PositionLot/Fee replay rejected without mutation, and unresolved A pending order does not leak into B flat checkpoint. Counts may overlap previous suites; not unique-test total or integrated acceptance.
 - compileall, repo-scoped Ruff F821, diff-check passed. No production/raw/canonical/accepted data changed. No Live/account API or actual order activity. S3/S5 approvals and P5 runtime prohibition unchanged.
-## 2026-11-21 T4 shared StrategyHub / option-risk boundary — No.1676
+## 2026-11-21 T4 shared StrategyHub / option-risk boundary ??No.1676
 
 - Shared StrategyHub Runtime E2E: 13 passed; validation-only option risk budget: 4 passed, separate focused batches.
 - These do not prove shared-capital pool allocation or simultaneous cross-strategy capital competition. Repository inventory found no dedicated allocator/test; no priority, strategy budget, leverage, margin, or risk thresholds invented. Shared-capital competition remains an explicit X3 gap pending approved policy and implementation/test contract.
@@ -278,7 +278,7 @@
 - Focused store + lifecycle gate tests: 26 passed. Full Track6 inventory (13 files) + X2 admission/auto-stop suites: **106 passed in 9.32s**. compileall, scoped Ruff F821/F401, adjacent Track6 F821 and diff-check passed.
 - Tests only; no production source changes. Synthetic validation-only; no raw/canonical/accepted data, risk profile, operating config, Live/account API, actual order activity or new collection. Full T4 X3/integrated acceptance OPEN.
 
-## 2026-11-21 T4 X3 S6 same-tick pending processor ordering audit — No.1687
+## 2026-11-21 T4 X3 S6 same-tick pending processor ordering audit ??No.1687
 
 - Latest No.1686~1681, No.1671, No.1674, No.1534 and current Runtime/factory code were compared. The current `on_tick()` order is pending processor -> StrategyHub -> Track6 failure detection -> X2 trip -> signal collection -> arbitration.
 - Factory pending processing includes Track6/7 lifecycle cancellation, pending quote processing, U16 repair/flatten reconciliation and repair processing, S9 entry retries and Track2 entry progress. Therefore, a same-tick pending action can precede detection of a Track6 persistence failure and its X2 trip.
@@ -286,13 +286,13 @@
 - No production source/test changes. Three pre-existing F401 findings in `automated_virtual_trading_loop.py` were recorded, not auto-fixed. No KIS/Live/account API, real order/cancel/liquidation or new data collection.
 - This is an ordering/design gap, not missing source data. Next design step is to split pending observation/reconciliation from repair/retry/new-order side effects while preserving current fill/position freshness. Do not reorder production flow until effects and replay parity are mapped. Full T4 X3 integrated acceptance remains OPEN.
 
-## 2026-11-21 T4 X3 pending processor side-effect inventory — No.1688
+## 2026-11-21 T4 X3 pending processor side-effect inventory ??No.1688
 
 - `process_pending_quotes()` reconciles already-routed VSSF order reports/fills into execution, PositionLot and Fee evidence. Track6/7 lifecycle clock branches can cancel pending orders. U16 coordinator may call injected validation-only repair/flatten submit ports. S9 retry logic can cancel timed-out BUY orders and later `execute()` the remaining quantity. Track2 entry progression can `execute()` the next leg after confirmed zero-fill cancel and flat position/lot reconciliation. Track2 mark/PnL refresh is state mutation only.
-- Four focused synthetic tests: U16 repair, S9 delayed retry, Track2 next-leg progression, VSSF pending fill reconciliation — **4 passed in 4.13s**. Initial guessed pytest node absent; repository inventory found the actual test name and corrected invocation passed. compileall, scoped Ruff F821 and diff-check PASS.
+- Four focused synthetic tests: U16 repair, S9 delayed retry, Track2 next-leg progression, VSSF pending fill reconciliation ??**4 passed in 4.13s**. Initial guessed pytest node absent; repository inventory found the actual test name and corrected invocation passed. compileall, scoped Ruff F821 and diff-check PASS.
 - No production source/test changes. This confirms the pending callback combines reconciliation and side-effect-capable operations. Next design: split observation/reconciliation from cancel/repair/retry/entry side effects while preserving fill/position freshness and replay parity. No KIS/Live/account API, real order/cancel/liquidation or new collection. Full T4 X3 integrated acceptance OPEN.
 
-## 2026-11-21 T4 X3 pending processor phase separation — No.1689
+## 2026-11-21 T4 X3 pending processor phase separation ??No.1689
 
 - Runtime pending work split into three phases. Observation before StrategyHub reconciles existing VSSF order reports/fills and refreshes Track2 group marks; it performs no cancel/repair/retry/flatten/new submit and continues after X2 for late-fill PositionLot/Fee truth. Planning before StrategyHub, only if X2 admission is open, evaluates Track6/Track7 lifecycle clocks and queues cancel intents without sending them. Action after StrategyHub Track6 failure detection and X2 recheck executes queued cancels, U16 repair/flatten/reconciliation, S9 retry, and Track2 sequential next-leg progression.
 - Track6 lifecycle persistence/recovery failure in planning trips X2 before StrategyHub. A Track6 failure returned by StrategyHub trips X2 before the action phase. Track6 persistence/recovery errors in deferred action processing also trip X2 before signal collection. X2-latched ticks retain observation but skip planning and actions.
@@ -316,12 +316,12 @@
 - This is a test-only serialization contract, not production persistence, approved recovery policy, Runtime restore wiring or broker reconciliation. No blind cancel/retry, actual broker state inference, KIS/REAL_VTS/Live/account API, actual order/cancel/liquidation, collector restart, new data collection, raw/canonical/accepted source, manifest, policy or operating config was changed.
 - Next boundary: compare the test-only aggregate contract against any future approved persistence/reconciliation decision, then extend fault tests for strategy/config mismatch and restore ordering only without side effects. Full T4 X3 fault matrix and integrated acceptance remain OPEN.
 
-## T4 X3 Track7 aggregate snapshot follow-up — No.1694 (2026-11-21)
+## T4 X3 Track7 aggregate snapshot follow-up ??No.1694 (2026-11-21)
 
-- Additional test-only fault cases cover strategy identity/version mismatch, validation-config mismatch, and restore → authoritative-observation reconciliation → action-gate ordering. X2-latched flow preserves restored state and permits observation reconciliation while suppressing side-effect actions.
+- Additional test-only fault cases cover strategy identity/version mismatch, validation-config mismatch, and restore ??authoritative-observation reconciliation ??action-gate ordering. X2-latched flow preserves restored state and permits observation reconciliation while suppressing side-effect actions.
 - This does not approve production persistence or broker-reconciliation policy. No live/account API, real orders/cancels/liquidation, collector restart, new data collection, or raw/canonical/accepted data changes.
 
-## T4 X3 Track7 aggregate serialization edge validation — No.1695 (2026-11-21)
+## T4 X3 Track7 aggregate serialization edge validation ??No.1695 (2026-11-21)
 
 - Compared No.1694/1693/1692, No.1546, Current Baseline, No.1652 candidate/account aggregate checkpoint boundary and No.1534 source/provenance rules. No.1652's candidate-scoped/account aggregate checkpoint behavior is a separate existing boundary; it was not conflated with Track7 strategy aggregate state.
 - Extended the test-only Track7 aggregate snapshot contract with negative cases for duplicate expiry-state records, duplicate exit-pending expiry entries, malformed Decimal/datetime values, unknown serialization tags, malformed tagged-value envelopes and bool-as-int config type confusion.
@@ -329,7 +329,7 @@
 - Authoritative broker-state reconciliation policy remains unapproved. No precedence/freshness/order-position matching policy was invented. No production persistence/Runtime restore wiring, broker calls, cancel/retry, real order/liquidation, KIS/REAL_VTS/Live/account API, collector restart, new data collection, Raw/Canonical/accepted data or manifest changes.
 - Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 
-## T4 X3 Track7 aggregate restore atomicity — No.1696 (2026-11-21)
+## T4 X3 Track7 aggregate restore atomicity ??No.1696 (2026-11-21)
 
 - Compared latest No.1695/1694/1693/1692, No.1546, Current Baseline, No.1652 candidate/account aggregate checkpoint separation, No.1689 X2 phase boundary and No.1534 source/provenance preservation rules.
 - Added test-only staged restore validation: the full aggregate candidate is decoded and validated into a temporary strategy before the target state reference is swapped.
@@ -338,7 +338,7 @@
 - This is a test-only validation harness, not production persistence/restore API or a transactional guarantee for runtime state. Broker-state precedence/freshness/order-position matching/cancel-retry policy remains unapproved and unspecified. No KIS/REAL_VTS/Live/account API, broker calls, real orders/cancels/liquidation, collector restart, new collection, Raw/Canonical/accepted source or manifest changes.
 - Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 
-## T4 X3 Track7 multi-expiry/group partial-restore validation — No.1697 (2026-11-21)
+## T4 X3 Track7 multi-expiry/group partial-restore validation ??No.1697 (2026-11-21)
 
 - Compared No.1696/1695/1694/1693/1692, No.1652 candidate-scoped child/account aggregate checkpoint separation, No.1546, Current Baseline and No.1534 source/provenance rules.
 - Test-only aggregate validation now checks expiry-state/group-binding collections are lists, expiry/group IDs are non-empty strings, and active expiry is null or a non-empty string.
@@ -347,10 +347,10 @@
 - No.1652 candidate/account checkpoint isolation remains a distinct persistence boundary, not merged with Track7 strategy aggregate. No production persistence/restore API, broker reconciliation precedence/freshness/matching/cancel-retry policy, KIS/REAL_VTS/Live/account API, broker calls, actual orders/cancels/liquidation, collector restart, new collection, Raw/Canonical/accepted data or manifest changes.
 - Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 
-## T4 X3 Track7 restored observation comparison — No.1698 (2026-11-21)
+## T4 X3 Track7 restored observation comparison ??No.1698 (2026-11-21)
 
 - Latest No.1697/1696/1695/1694/1693/1692, No.1546, Current Baseline, No.1652 checkpoint boundary and No.1534 source/provenance rules were checked before work.
-- Added a test-only read-only projection to compare restored group→expiry routing and expiry-scoped PUT/CALL peak marks with synthetic observation fixtures.
+- Added a test-only read-only projection to compare restored group?뭙xpiry routing and expiry-scoped PUT/CALL peak marks with synthetic observation fixtures.
 - Two groups mapped to two distinct expiries and both matched their corresponding synthetic observations after aggregate round-trip. Deliberate expiry mismatch, mark mismatch and unmapped group were reported separately without mutating restored state or invoking side effects. An initial fixture omission of explicit zero-valued opposite-leg marks was corrected after inspecting the existing Track7State defaults; this was a fixture correction, not a production-data blocker.
 - Aggregate contract suite: **26 passed**. Adjacent Track7 lifecycle/cutoff/spec/exit regression: **19 passed**. Separate batches, not integrated acceptance. compileall, scoped Ruff F821/F401 and git diff-check: PASS.
 - No.1652 candidate/account aggregate checkpoint remains a separate boundary. No production persistence/restore API, Runtime wiring, authoritative broker reconciliation precedence/freshness/matching, cancel/retry policy, KIS/REAL_VTS/Live/account API, broker calls, real order/cancel/liquidation, collector restart, new collection or Raw/Canonical/accepted source changes.
@@ -378,6 +378,6 @@
 - Extended the test-only gate-read probe to exercise repeated reads after accessor exceptions and unknown/non-boolean values. Retry reads do not call cancel, repair, retry, flatten, or new-submission callbacks.
 - An unavailable/invalid read sequence remains unavailable unless a later read returns an exact boolean. Exact `True` remains latched; exact `False` is only a candidate open observation and is not itself an action authorization.
 - A separate fresh current-gate recheck is still required immediately before the test-only action callback. A latched recheck preserves restored state and read-only observation while suppressing action.
-- Synthetic results: aggregate snapshot contract **39 passed**; adjacent Track7 lifecycle/cutoff/identity/terminal-close/validation-only regression **15 passed**. Separate batches, not integrated acceptance. compileall, scoped Ruff F821/F401, and git diff-check passed.
+- Synthetic results: aggregate snapshot contract **40 passed**; adjacent Track7 lifecycle/cutoff/identity/terminal-close/validation-only regression **15 passed**. Separate batches, not integrated acceptance. compileall, scoped Ruff F821/F401, and git diff-check passed.
 - Test-only synthetic harness; no production retry policy, retry count/backoff/cache, Runtime wiring, durable persistence, broker reconciliation policy, or X2 auto-unlatch implementation. No.1652 candidate/account aggregate remains separate from Track7 strategy aggregate.
 - No Live/account API, broker calls, actual order/cancel/liquidation, collector restart, new collection, or Raw/Canonical/accepted source/manifest changes. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.\n
