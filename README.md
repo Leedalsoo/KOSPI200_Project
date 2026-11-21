@@ -577,3 +577,15 @@ The test-only restore-order harness now treats X2 gate accessor exceptions and u
 - The test uses empty synthetic strategy signals and no broker action. It does not establish correctness of real broker reconciliation, persisted position/fee updates, cancellation/repair/flatten/retry suppression for every downstream path, or integrated acceptance. No production Runtime/X2 implementation or strategy policy changed.
 - No.1652 separation maintained. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 - No KIS/REAL_VTS/Live/account API, broker call, actual order/cancel/liquidation, collector restart, new collection, or Raw/Canonical/accepted source/manifest change.
+
+
+
+## T4 X3 Track7 full on_tick cancel-side-effect gate under X2 latch (No.1712, 2026-11-21)
+
+- Reconciled No.1711/1710/1709, No.1689, No.1546, Current Baseline and No.1534 before editing. No.1652 candidate/account aggregate checkpoint remains separate from Track7 strategy aggregate. Project200 pre-existing 203 dirty/untracked entries were preserved.
+- Inspected actual AutomatedVirtualTradingLoop.on_tick() after strategy arbitration. Decision cancel_requests are iterated after planning/action and each cancellation is guarded by a fresh _runtime_orders_blocked() check before broker_adapter.cancel().
+- Added a deterministic synthetic full-on_tick test with X2 already TRIPPED and one synthetic decision cancel request. Strategy evaluation, result collection and arbitration continue; the cancellation request is counted as rejected; broker_adapter.cancel is not invoked; X2 remains TRIPPED and order admission remains blocked.
+- Results (separate batches): X2 Virtual admission 14 passed; auto-stop/evidence-supervisor/U19 69 passed; Track7 aggregate snapshot contract 46 passed; adjacent Track7 lifecycle/cutoff/policy regression 19 passed. compileall, scoped Ruff F821/F401 and git diff-check passed.
+- This verifies the decision cancel branch only. It does not establish single-leg or multi-leg submission suppression across every path, broker cancellation behavior, real reconciliation, or integrated acceptance. No production Runtime/X2 implementation or strategy policy changed.
+- No.1652 separation maintained. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+- No KIS/REAL_VTS/Live/account API, broker call, actual order/cancel/liquidation, collector restart, new collection, or Raw/Canonical/accepted source/manifest change.

@@ -586,3 +586,71 @@ def test_t4_x2_latched_on_tick_runs_reconciliation_before_strategy_and_skips_lif
     assert result.filled == 1
     assert stop_switch.snapshot().status == "TRIPPED"
     assert stop_switch.snapshot().order_admission_blocked is True
+
+def test_t4_x2_latched_full_on_tick_skips_decision_cancel_side_effect(tmp_path):
+    inputs = _inputs()
+    stop_switch = _switch(inputs, tmp_path)
+    admission = ValidationOnlyRuntimeStopAdmissionSource(
+        _BaseStatusSource(inputs[4]), stop_switch,
+    )
+    calls = []
+    tick = SimpleNamespace(
+        timestamp="2026-11-21T09:32:00+09:00",
+        seq_id=1712,
+        underlying_price=Decimal("350.25"),
+        volume=1,
+        ask_price=Decimal("350.25"),
+    )
+
+    class _StrategyHub:
+        def run(self, contexts):
+            calls.append(("strategy", tuple(contexts)))
+            return SimpleNamespace(failures=(), signals=())
+
+    class _StrategyResults:
+        def collect(self, *, tick_sequence, context, result):
+            calls.append(("collect", tick_sequence))
+            return ()
+
+    class _StrategyDecision:
+        def arbitrate(self, evaluations, **kwargs):
+            calls.append(("arbitrate", len(evaluations)))
+            return SimpleNamespace(
+                arbitration=SimpleNamespace(approved_signals=(), rejected_signals=()),
+                execution_plans=(),
+                cancel_requests=(
+                    SimpleNamespace(
+                        strategy_id="SYNTHETIC_TRACK7",
+                        client_order_ids=("SYNTHETIC-CANCEL-ORDER-001",),
+                    ),
+                ),
+            )
+
+    loop = _loop(inputs[1], stop_switch, admission)
+    loop.bundle.account = SimpleNamespace(snapshot=lambda: None)
+    loop.strategy_hub = _StrategyHub()
+    loop.context_builder = lambda observed_tick, state: (
+        calls.append(("context", observed_tick.seq_id)) or {}
+    )
+    loop.strategy_results = _StrategyResults()
+    loop.strategy_to_decision = _StrategyDecision()
+    loop.decision_to_command = SimpleNamespace(build_commands=lambda evaluations, approved: ())
+    loop.pending_multi_leg_observer = lambda observed_tick: ()
+    loop.pending_multi_leg_planner = lambda observed_tick: calls.append(("plan", None))
+    loop.pending_multi_leg_processor = lambda observed_tick: calls.append(("action", None)) or ()
+    loop.broker_adapter = SimpleNamespace(
+        cancel=lambda client_order_id: calls.append(("cancel", client_order_id))
+    )
+    stop_switch.trip("T4_SYNTHETIC_X2_CANCEL_GATE")
+
+    result = loop.on_tick(tick)
+
+    assert calls == [
+        ("context", tick.seq_id),
+        ("strategy", ()),
+        ("collect", tick.seq_id),
+        ("arbitrate", 0),
+    ]
+    assert result.rejected == 1
+    assert stop_switch.snapshot().status == "TRIPPED"
+    assert stop_switch.snapshot().order_admission_blocked is True
