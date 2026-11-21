@@ -724,3 +724,12 @@
 - A tick-independent pre-tick Context is unavailable under the current context_builder contract. First-tick Context can technically be built after Observation and before Planning because tick/MarketState already exist, but provider source updates, other strategies' Context-dependent initialization, unavailable payload handling and initialization completion semantics remain unresolved. No production phase/API change is approved.
 - No production code/persistence/policy changed. Preserve No.1689 Observation → Planning → Action and No.1652 aggregate separation. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN. Synthetic-only; no Live/API/broker/order/collector/raw/Canonical/manifest action.
 - Detailed record: https://app.notion.com/p/41f5f4f6eaa1810b942fd6a949ff6d70
+
+## T4 X3 — No.1734 Track7 weekly Provider Context validation (2026-11-21)
+
+- Used Project200's existing manifest-bound `q25_strategy7_8_v2/strategy7_weekly` fixture because it is absent from the T4 worktree. Per No.1534, applied alternate synthetic validation instead of treating missing local fixture as a blocker. Manifest remains runtime_eligible=false and BLOCKED_IDENTITY_OWNER_UNRESOLVED.
+- Actual StandardRuntimeInputProvider.build() with SyntheticReplayAdapter, synthetic Option Master, and ValidationOnlyTradingCalendar generated Track7ExecutionInput for first weekly tick: expiry 20261109, PUT 487.5, CALL 512.5. Calendar flags new-week-start=True, expiry-day=False, week-end=False. Provider-level test-only evidence only; not factory full wiring or production eligibility.
+- Added Project200-only fixture-bound test `test_track7_weekly_fixture_builds_typed_context_through_standard_provider` in `tests/environments/high_speed/test_validation_only_trading_calendar.py`; module 13 passed, compileall, Ruff F821/F401, diff-check PASS.
+- Initialize-only impact: Track7 initialize is reset-only, but Track2 reads MarketState date, Track6 reads analytics/execution input for lifecycle restore, and Track9 restores from runtime input/open lots. Generic blank-context pre-initialization is unsafe. No production API/phase change.
+- Remaining: full factory source-update/provider-build boundary before lifecycle Planning and Track7-only initialization-completion marker. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN. Synthetic-only; no Live/API/broker/order/collector/raw/Canonical/manifest action.
+- Detail: https://app.notion.com/p/41f5f4f6eaa181158b98d3aa376043db
