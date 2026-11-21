@@ -833,3 +833,12 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - 다음 위험은 public Track7 init/restore completion seam, observation-vs-snapshot precedence/merge, failure admission/X2 정책이다. 승인 전 private marker 조작, phase reorder, reset 변경 금지.
 - Fixture runtime_eligible=false, identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED, identity_policy.runtime_use=PROHIBITED 유지. Live/API/broker/order/collector/raw/Canonical/manifest 변경 없음.
 - 상세: https://app.notion.com/p/41f5f4f6eaa181aaade9e63935b72a7f
+
+## T4 X3 — No.1738 Track7 초기화·복원 공개 API 표면 감사 (2026-11-22)
+
+- My_Caddy_TS1로 Project200 실제 코드의 public API 표면 및 구현을 read-only 조사했다. Track7, StrategyOrchestrator, StrategyRegistry, StrategyHub 어디에도 initialize-only/restore-complete 공개 API가 없다.
+- Track7.initialize(context)는 reset()만 호출하며 reset은 legacy/expiry/group/exit-pending state를 모두 비운다. StrategyOrchestrator.run()은 Unavailable payload에서는 initialize를 건너뛰고, 최초 valid Context에서 lazy initialize 후 marker를 기록하고 on_market_state/evaluate를 수행한다.
+- 따라서 현재 public API 조합만으로 No.1737 fill 소거를 안전하게 해결할 수 없다. Registry.prepare()는 orchestrator initialized marker를 갱신하지 않는다. private _initialized 직접 조작은 금지.
+- Read-only audit만 수행. production code/API/phase/persistence/test fixture 변경 없음. 다음 단계는 Track7 init completion ownership, fresh observation vs snapshot merge/commit, unavailable/restore failure admission/X2의 최소 공개 계약 설계. 계약 승인 전 코드 변경 없음.
+- No.1689 phase order 및 No.1652 aggregate 분리 유지. Track7 restart recovery 및 Full T4 X3/integrated acceptance OPEN. Synthetic-only, fixture runtime eligibility false, identity runtime use prohibited.
+- 상세: https://app.notion.com/p/41f5f4f6eaa18124aa42f329bc3480e5
