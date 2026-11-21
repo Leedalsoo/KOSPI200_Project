@@ -123,3 +123,44 @@ def test_track7_first_run_before_fill_observation_discards_pending_fill_callback
     second_tick = hub.run({strategy.strategy_id: context})
     assert second_tick.failures == ()
     assert observed_at_evaluate == ["IDLE", "IDLE"]
+
+def test_track7_test_only_initialize_restore_observe_then_first_evaluate_preserves_fill():
+    strategy, result = _pending_call_strategy()
+    snapshot_state = strategy.state
+    snapshot_expiry = strategy._active_expiry
+    snapshot_group_expiry = dict(strategy._group_expiry)
+    registry = __import__("core.strategy.registry", fromlist=["StrategyRegistry"]).StrategyRegistry()
+    registry.register(strategy)
+    hub = __import__("application.strategy_hub.hub", fromlist=["StrategyHub"]).StrategyHub(
+        registry,
+        ((strategy.strategy_id, strategy.version),),
+    )
+    context = __import__("core.strategy.contracts", fromlist=["StrategyContext"]).StrategyContext(
+        strategy_id=strategy.strategy_id,
+    )
+
+    # Test-only seam: initialize without evaluating, then restore the synthetic
+    # snapshot before delivering the fresh pending-fill observation.
+    strategy.initialize(context)
+    strategy._active_expiry = snapshot_expiry
+    strategy._group_expiry = snapshot_group_expiry
+    strategy._activate_expiry(snapshot_expiry)
+    strategy.state = snapshot_state
+    hub._orchestrator._initialized.add((strategy.strategy_id, strategy.version))
+    hub.on_execution_result(strategy.strategy_id, "WEEKLY_INSURANCE_ENTRY_CALL", result)
+    assert strategy.state.entry_stage == "COMPLETE"
+    assert strategy.state.call_open is True
+
+    observed_at_evaluate = []
+    original_evaluate = strategy.evaluate
+
+    def capture_evaluate(current_context):
+        observed_at_evaluate.append(strategy.state.entry_stage)
+        return original_evaluate(current_context)
+
+    strategy.evaluate = capture_evaluate
+    first_tick = hub.run({strategy.strategy_id: context})
+    assert first_tick.failures == ()
+    assert observed_at_evaluate == ["COMPLETE"]
+    assert strategy.state.entry_stage == "COMPLETE"
+    assert strategy.state.call_open is True
