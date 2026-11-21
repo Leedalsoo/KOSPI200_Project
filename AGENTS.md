@@ -789,3 +789,17 @@
 - Read-only audit만 수행. production code/API/phase/persistence/test fixture 변경 없음. 다음 단계는 Track7 init completion ownership, fresh observation vs snapshot merge/commit, unavailable/restore failure admission/X2의 최소 공개 계약 설계. 계약 승인 전 코드 변경 없음.
 - No.1689 phase order 및 No.1652 aggregate 분리 유지. Track7 restart recovery 및 Full T4 X3/integrated acceptance OPEN. Synthetic-only, fixture runtime eligibility false, identity runtime use prohibited.
 - 상세: https://app.notion.com/p/41f5f4f6eaa18124aa42f329bc3480e5
+
+
+## No.1739 — Track7 init/restore 최소 공개 계약 설계 (2026-11-22)
+
+- No.1738 public API 감사, No.1737 실제 on_tick 재현, No.1735 Factory 호출 순서, No.1728 fresh observation/stale restore, No.1689 phase/X2, No.1652 aggregate 분리 기준을 대조했다.
+- Track7 전용 bootstrap/restore 경계, Context-independent 준비, callback staging/replay/sequence merge, snapshot identity/version/watermark 및 expiry/group scope, merge 완료 후 단일 ready commit, unavailable/restore failure admission/X2의 설계 대안 매트릭스를 작성했다.
+- 현재 initialize()는 reset()을 호출하므로 restore API로 재사용하지 않는다. private _initialized 조작, phase reorder, 임의 retry/rollback/compensation/X2 정책 구현 금지.
+- 소유권(Hub 위임 vs Track7 자체), 이벤트 identity/dedupe/order, snapshot authority/freshness, commit point, failure admission/X2는 미승인. 본 문서는 후보 설계이지 정책 승인 기록이 아니다.
+- 합성 검증 예정 6종: unavailable→available 중 fresh fill 보존, stale snapshot 역행 방지, watermark/중복/역순 이벤트, snapshot 손상·identity/scope 불일치, Context/restore failure, 타 전략 초기화 격리. 이번 단계에서 신규 테스트/fixture/production seam 및 기존 suite 실행 없음.
+- No.1689 Observation → Planning → Action 및 X2 latched 시 fill reconciliation 허용/Planning·Action 생략 유지. No.1652 candidate/account aggregate와 Track7 strategy-state aggregate 분리.
+- Track7 restart recovery 및 Full T4 X3/integrated acceptance OPEN. Synthetic-only; fixture runtime_eligible=false, identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED, identity_policy.runtime_use=PROHIBITED.
+- Live/API/broker/order/cancel/liquidation/collector/raw/Canonical/manifest 변경 없음. Production code/API/phase/persistence/test 변경 없음.
+- Notion: https://app.notion.com/p/41f5f4f6eaa18156b23dea64e66ee347
+
