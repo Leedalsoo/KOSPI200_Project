@@ -982,3 +982,39 @@ def test_track7_strategyhub_first_initialize_resets_preloaded_test_snapshot():
     assert restored._group_expiry == {}
     assert restored._legacy_exit_pending is False
     assert restored._exit_pending_expiries == set()
+
+
+def test_track7_strategyhub_initializes_before_test_only_aggregate_restore():
+    snapshot_source = _multi_expiry_strategy()
+    envelope = _capture_aggregate(snapshot_source)
+    expected_states = snapshot_source._states_by_expiry.copy()
+    expected_groups = snapshot_source._group_expiry.copy()
+
+    target = Track7VolatilitySkewWeeklyInsurance(
+        insurance_qty=2, runtime_config_verified=True, risk_limits_available=True
+    )
+    registry = StrategyRegistry()
+    registry.register(target)
+    hub = StrategyHub(
+        registry,
+        ((target.strategy_id, target.version),),
+    )
+    context = StrategyContext(strategy_id=target.strategy_id)
+
+    initialized = hub.run({target.strategy_id: context})
+    assert initialized.failures == ()
+    assert target._states_by_expiry == {}
+
+    # Validation-only lifecycle seam: restore into the same initialized object.
+    gate = _restore_aggregate_into(target, envelope)
+    assert gate == {"state_restored": True, "side_effect_actions_allowed": True}
+    assert target._states_by_expiry == expected_states
+    assert target._group_expiry == expected_groups
+
+    resumed = hub.run({target.strategy_id: context})
+    assert resumed.failures == ()
+    assert target._states_by_expiry == expected_states
+    assert target._group_expiry == expected_groups
+    assert target._active_expiry == snapshot_source._active_expiry
+    assert target._legacy_exit_pending is True
+    assert target._exit_pending_expiries == snapshot_source._exit_pending_expiries
