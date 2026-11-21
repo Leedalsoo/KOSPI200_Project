@@ -616,3 +616,9 @@
 - X2 admission + phase separation: 25 passed; auto-stop/evidence/U19 selected regression: 69 passed; Track7 aggregate snapshot contract: 46 passed; adjacent Track6-gates/runtime-invariant/account-U19 regression: 93 passed. compileall, scoped Ruff F821/F401, git diff-check passed. Separate batches, not integrated acceptance.
 - Synthetic only. No Production Runtime/X2, observer/factory, strategy policy, Raw/Canonical/accepted source or manifest changes. No.1652 candidate/account checkpoint remains separate from Track7 strategy aggregate. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 - No KIS/REAL_VTS/Live/account API, broker call, actual order/cancel/liquidation, collector restart, or new data collection.
+
+
+## T4 X3 pending reconciliation / strategy failure interpretation (2026-11-21)
+- In validation-only on_tick tests, pending-fill observation/reconciliation precedes lifecycle planning and StrategyHub. A tuple result may be returned before a later StrategyHub exception propagates. This ordering alone does not prove durable persistence, replay safety, or exactly-once recovery of the reconciliation side effects.
+- Keep observer, planner, StrategyHub, result aggregation, and action phases distinct when characterizing failures. Do not infer X2 trip, retry, rollback, compensation, or restart policy from an exception-only test; require an approved decision before changing production behavior.
+- Synthetic results remain validation-only; after authoritative real-account API inputs and acceptance criteria are approved, rematch the complete code against those criteria.
