@@ -745,3 +745,17 @@
 - Required before implementation: approved Track7-specific public initialization/restore boundary, valid first-tick Context preparation, non-duplicating fresh-observation precedence/merge, and restore/reconciliation failure-admission policy. Preserve No.1689 Observation → Planning → Action; do not implement phase reorder or private-marker use before policy approval.
 - No.1652 candidate/account aggregate remains separate from Track7 strategy-state aggregate. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN. Synthetic/validation-only criteria only; fixture runtime_eligible=false and identity runtime use prohibited. No KIS/REAL_VTS/Live/account API, broker/order/cancel/liquidation, collector restart, new collection, Raw/Canonical/accepted source or manifest change.
 - Notion: https://app.notion.com/p/41f5f4f6eaa1812ea730ec8532c10c63
+
+
+## T4 X3 — No.1736 Track7 unavailable-to-available Context / fill / lazy initialize conflict (2026-11-21)
+
+- Actual StrategyOrchestrator.run() skips registry.prepare() and initialize() when the first Track7 Context carries UnavailableStrategyPayload. The Track7 strategy key is not added to the orchestrator's private _initialized set.
+- While the key remains uninitialized, the pending-fill observer can call the actual StrategyHub execution-result callback. Synthetic CALL fill changes Track7 state from CALL_PENDING to COMPLETE with call_open=True.
+- When a valid typed Track7 Context first becomes available, the next StrategyHub.run() lazily invokes Track7.initialize(); initialize() calls reset(), erasing the just-observed COMPLETE/call_open state to IDLE/False.
+- Deterministic validation-only probe against actual StrategyRegistry, StrategyHub, StrategyOrchestrator and Track7: 3/3 assertions PASS (unavailable skip; callback fill transition; first later valid Context resets observed state). Synthetic values only; no broker/API or order action.
+- This narrows the No.1729/1730 startup-reset risk: the first Context may be unavailable while observer callbacks still update state, then a later available Context triggers delayed initialization. registry.prepare() alone does not update the orchestrator initialization marker.
+- No production code/API/phase/persistence or new test file changed. Do not manipulate private _initialized, reorder No.1689 Observation → Planning → Action, change reset semantics, or invent snapshot/observation merge, replay, rollback, or X2 failure policy before approval.
+- Required design decisions: Track7 init/restore completion independent of Context availability; precedence/merge for fills received during unavailable-to-available transition; failure admission/X2 behavior; public Track7-specific seam isolated from other strategies' context-dependent initialization.
+- No.1652 candidate/account aggregate remains separate from Track7 strategy-state aggregate. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+- Synthetic/validation-only only. Fixture runtime_eligible=false and identity runtime use prohibited. No KIS/REAL_VTS/Live/account API, broker/order/cancel/liquidation, collector restart, new collection, Raw/Canonical/accepted source or manifest changes.
+- Notion: https://app.notion.com/p/41f5f4f6eaa1813b84e5d36e9aca554c
