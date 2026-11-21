@@ -64,3 +64,30 @@ def test_track7_fresh_pending_fill_observation_must_not_be_overwritten_by_stale_
     assert observe_first.state.entry_stage == "CALL_PENDING"
     assert observe_first.state.call_open is False
     assert observe_first.state.call_client_order_id == "SYNTHETIC-CALL-ORDER-1"
+
+def test_track7_first_tick_pending_fill_observation_is_erased_by_lazy_initialize():
+    strategy, result = _pending_call_strategy()
+    registry = __import__("core.strategy.registry", fromlist=["StrategyRegistry"]).StrategyRegistry()
+    registry.register(strategy)
+    hub = __import__("application.strategy_hub.hub", fromlist=["StrategyHub"]).StrategyHub(
+        registry,
+        ((strategy.strategy_id, strategy.version),),
+    )
+
+    # Mirrors No.1689/actual on_tick ordering: pending-fill observation
+    # reaches the strategy before the first StrategyHub.run().
+    hub.on_execution_result(strategy.strategy_id, "WEEKLY_INSURANCE_ENTRY_CALL", result)
+    assert strategy.state.entry_stage == "COMPLETE"
+    assert strategy.state.call_open is True
+
+    first_tick = hub.run({
+        strategy.strategy_id: __import__("core.strategy.contracts", fromlist=["StrategyContext"]).StrategyContext(
+            strategy_id=strategy.strategy_id,
+        ),
+    })
+
+    assert first_tick.failures == ()
+    # Actual Track7.initialize() invokes reset(), erasing the fresh fill update.
+    assert strategy.state.entry_stage == "IDLE"
+    assert strategy.state.call_open is False
+    assert strategy._states_by_expiry == {}
