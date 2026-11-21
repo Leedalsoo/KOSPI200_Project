@@ -1,4 +1,4 @@
-from dataclasses import replace
+﻿from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
@@ -91,3 +91,35 @@ def test_track7_first_tick_pending_fill_observation_is_erased_by_lazy_initialize
     assert strategy.state.entry_stage == "IDLE"
     assert strategy.state.call_open is False
     assert strategy._states_by_expiry == {}
+
+def test_track7_first_run_before_fill_observation_discards_pending_fill_callback():
+    strategy, result = _pending_call_strategy()
+    registry = __import__("core.strategy.registry", fromlist=["StrategyRegistry"]).StrategyRegistry()
+    registry.register(strategy)
+    hub = __import__("application.strategy_hub.hub", fromlist=["StrategyHub"]).StrategyHub(
+        registry,
+        ((strategy.strategy_id, strategy.version),),
+    )
+    context = __import__("core.strategy.contracts", fromlist=["StrategyContext"]).StrategyContext(
+        strategy_id=strategy.strategy_id,
+    )
+    observed_at_evaluate = []
+    original_evaluate = strategy.evaluate
+
+    def capture_evaluate(current_context):
+        observed_at_evaluate.append(strategy.state.entry_stage)
+        return original_evaluate(current_context)
+
+    strategy.evaluate = capture_evaluate
+    first_tick = hub.run({strategy.strategy_id: context})
+    assert first_tick.failures == ()
+    assert observed_at_evaluate == ["IDLE"]
+
+    # Initialization first erases pending identity; subsequent fill callback cannot apply.
+    hub.on_execution_result(strategy.strategy_id, "WEEKLY_INSURANCE_ENTRY_CALL", result)
+    assert strategy.state.entry_stage == "IDLE"
+    assert strategy.state.call_client_order_id is None
+
+    second_tick = hub.run({strategy.strategy_id: context})
+    assert second_tick.failures == ()
+    assert observed_at_evaluate == ["IDLE", "IDLE"]
