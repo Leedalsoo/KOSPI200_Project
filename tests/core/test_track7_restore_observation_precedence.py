@@ -164,3 +164,86 @@ def test_track7_test_only_initialize_restore_observe_then_first_evaluate_preserv
     assert observed_at_evaluate == ["COMPLETE"]
     assert strategy.state.entry_stage == "COMPLETE"
     assert strategy.state.call_open is True
+
+def test_track7_test_only_pre_tick_bootstrap_restore_is_visible_to_first_lifecycle_planner():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    strategy, result = _pending_call_strategy()
+    snapshot_state = strategy.state
+    snapshot_expiry = strategy._active_expiry
+    snapshot_group_expiry = dict(strategy._group_expiry)
+    registry = __import__("core.strategy.registry", fromlist=["StrategyRegistry"]).StrategyRegistry()
+    registry.register(strategy)
+    hub = __import__("application.strategy_hub.hub", fromlist=["StrategyHub"]).StrategyHub(
+        registry,
+        ((strategy.strategy_id, strategy.version),),
+    )
+    bootstrap_context = __import__("core.strategy.contracts", fromlist=["StrategyContext"]).StrategyContext(
+        strategy_id=strategy.strategy_id,
+    )
+
+    # Candidate test-only pre-tick bootstrap: initialize without evaluating,
+    # then restore the synthetic pending lifecycle state before on_tick starts.
+    strategy.initialize(bootstrap_context)
+    strategy._active_expiry = snapshot_expiry
+    strategy._group_expiry = snapshot_group_expiry
+    strategy._activate_expiry(snapshot_expiry)
+    strategy.state = snapshot_state
+    hub._orchestrator._initialized.add((strategy.strategy_id, strategy.version))
+
+    # Mirrors No.1689 first-tick ordering after bootstrap:
+    # fill observation first, then lifecycle planning, then StrategyHub evaluation.
+    hub.on_execution_result(strategy.strategy_id, "WEEKLY_INSURANCE_ENTRY_CALL", result)
+    assert strategy.state.entry_stage == "COMPLETE"
+    action = strategy.lifecycle_clock_action(datetime(2026, 11, 21, 15, 0, tzinfo=ZoneInfo("Asia/Seoul")))
+    assert action is None
+    assert strategy.state.entry_stage == "COMPLETE"
+
+    observed_at_evaluate = []
+    original_evaluate = strategy.evaluate
+
+    def capture_evaluate(current_context):
+        observed_at_evaluate.append(strategy.state.entry_stage)
+        return original_evaluate(current_context)
+
+    strategy.evaluate = capture_evaluate
+    first_tick = hub.run({strategy.strategy_id: bootstrap_context})
+    assert first_tick.failures == ()
+    assert observed_at_evaluate == ["COMPLETE"]
+    assert strategy.state.call_open is True
+
+def test_track7_test_only_pre_tick_bootstrap_restore_supplies_first_planner_pending_identity():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    strategy, _result = _pending_call_strategy()
+    snapshot_state = strategy.state
+    snapshot_expiry = strategy._active_expiry
+    snapshot_group_expiry = dict(strategy._group_expiry)
+    registry = __import__("core.strategy.registry", fromlist=["StrategyRegistry"]).StrategyRegistry()
+    registry.register(strategy)
+    hub = __import__("application.strategy_hub.hub", fromlist=["StrategyHub"]).StrategyHub(
+        registry,
+        ((strategy.strategy_id, strategy.version),),
+    )
+    bootstrap_context = __import__("core.strategy.contracts", fromlist=["StrategyContext"]).StrategyContext(
+        strategy_id=strategy.strategy_id,
+    )
+
+    # Candidate pre-tick bootstrap restores the lifecycle before first on_tick.
+    strategy.initialize(bootstrap_context)
+    strategy._active_expiry = snapshot_expiry
+    strategy._group_expiry = snapshot_group_expiry
+    strategy._activate_expiry(snapshot_expiry)
+    strategy.state = snapshot_state
+    hub._orchestrator._initialized.add((strategy.strategy_id, strategy.version))
+
+    # No new fill was observed on this tick; first planner must see restored CALL_PENDING identity.
+    action = strategy.lifecycle_clock_action(
+        datetime(2026, 11, 21, 15, 0, tzinfo=ZoneInfo("Asia/Seoul"))
+    )
+    assert action is not None
+    assert action.kind == "CANCEL_AND_RECONCILE"
+    assert action.client_order_id == "SYNTHETIC-CALL-ORDER-1"
+    assert action.reason == "15:00_CUTOFF"
