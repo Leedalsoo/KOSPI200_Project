@@ -281,3 +281,79 @@ def test_s8_retry_window_requires_explicit_third_trading_day():
             datetime(2026, 11, 2, 10, 0, tzinfo=kst),
             datetime(2026, 11, 3, 10, 0, tzinfo=kst),
         )
+
+
+def test_track7_weekly_fixture_builds_typed_context_through_standard_provider():
+    from datetime import datetime
+    from decimal import Decimal
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    from application.composition.standard_runtime_input_provider import StandardRuntimeInputProvider
+    from application.composition.track7_option_contract_source import Track7OptionContractSource
+    from contracts.types import CanonicalMarketTick, MarketState
+    from core.strategy.track7_volatility_skew_weekly_insurance import Track7ExecutionInput
+    from environments.high_speed.synthetic_replay_adapter import SyntheticReplayAdapter
+    from environments.high_speed.synthetic_runtime_sources import build_synthetic_option_master
+
+    root = Path(__file__).resolve().parents[3]
+    folder = root / "data" / "derived_scenario" / "q25_strategy7_8_v2" / "strategy7_weekly"
+    manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
+    record = json.loads((folder / "20261103.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    adapter = SyntheticReplayAdapter(folder, manifest_path=folder / "manifest.json")
+    tick_data = adapter.adapt_record(record)["tick"]
+    tick = SimpleNamespace(**tick_data)
+
+    # The manifest is deliberately synthetic-only; this test does not authorize runtime use.
+    assert manifest["runtime_eligible"] is False
+    assert manifest["identity_source_status"] == "BLOCKED_IDENTITY_OWNER_UNRESOLVED"
+
+    option_master = build_synthetic_option_master(folder, validation_only_adapter=adapter)
+    calendar = ValidationOnlyTradingCalendar(
+        scenario_id=manifest["scenario_id"],
+        calendar_id=manifest["trading_calendar"]["calendar_id"],
+        trading_days=tuple(date.fromisoformat(item) for item in manifest["trading_calendar"]["trading_days"]),
+        strategy7_entry_dates=(date(2026, 11, 2), date(2026, 11, 5)),
+    )
+    observed_at = datetime.fromisoformat(tick.timestamp)
+    canonical_tick = CanonicalMarketTick(
+        instrument_id=tick.instrument_id,
+        observed_at=observed_at,
+        price=Decimal(str(tick.last_price)),
+        volume=Decimal(str(tick.volume)),
+        seq_id=tick.seq_id,
+        underlying_price=Decimal(str(tick.underlying_price)),
+        underlying_symbol=tick.underlying_symbol,
+        underlying_observed_hour=tick.underlying_observed_hour,
+        underlying_source=tick.underlying_source,
+    )
+    market_state = MarketState(
+        as_of=observed_at,
+        ticks={tick.instrument_id: canonical_tick},
+        quality={},
+    )
+    market = SimpleNamespace(
+        recent_ticks=[tick],
+        underlying_history=[],
+        scenario=SimpleNamespace(
+            active_config=lambda: {"base_volatility": 1.0, "shock_interval_days": 999999}
+        ),
+    )
+    provider = StandardRuntimeInputProvider(
+        market,
+        trading_calendar=calendar,
+        option_master=option_master,
+        track7_option_contract_source=Track7OptionContractSource(option_master),
+        strategy_keys=("track7_volatility_skew_weekly_insurance",),
+    )
+
+    context = provider.build(tick, market_state, None)["track7_volatility_skew_weekly_insurance"]
+    snapshot = provider.data.snapshot(tick)
+
+    assert isinstance(context.input.payload, Track7ExecutionInput)
+    assert context.input.payload.expiry == "20261109"
+    assert context.input.payload.put_strike == Decimal("487.5")
+    assert context.input.payload.call_strike == Decimal("512.5")
+    assert snapshot.is_new_week_start is True
+    assert snapshot.is_expiry_day is False
+    assert snapshot.is_week_end is False
