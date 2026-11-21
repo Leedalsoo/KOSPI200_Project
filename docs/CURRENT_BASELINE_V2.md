@@ -501,3 +501,14 @@
 - This verifies the decision cancel branch only. It does not establish single-leg or multi-leg submission suppression across every path, broker cancellation behavior, real reconciliation, or integrated acceptance. No production Runtime/X2 implementation or strategy policy changed.
 - No.1652 separation maintained. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 - No KIS/REAL_VTS/Live/account API, broker call, actual order/cancel/liquidation, collector restart, new collection, or Raw/Canonical/accepted source/manifest change.
+
+## T4 X3 X2 latched single-leg route gate characterization (No.1713, 2026-11-21)
+
+- Reconciled latest No.1712/1711/1710/1709, No.1689, No.1546, Current Baseline and No.1534 before editing. No.1652 candidate/account aggregate checkpoint remains separate from Track7 strategy aggregate.
+- Inspected AutomatedVirtualTradingLoop.on_tick() single-leg command path: approved signals are converted to commands and routed through route_from_runtime_authoritative_sources() → RiskGate.admit_order(); unlike decision cancellation and multi-leg dispatch, this path does not call _runtime_orders_blocked() directly at the command loop. The existing RiskGate independently checks the latched RiskGuard status before risk evaluation and routing.
+- Added one deterministic full-on_tick synthetic test with an approved single-leg OPTION BUY command and X2 already TRIPPED. Synthetic freshness/identity evidence was supplied; the RiskGate denied admission from the latched RiskGuard; routed=0, filled=0, rejected=1, and the virtual broker adapter produced no report.
+- Separate validation batches: X2 Virtual admission 15 passed; auto-stop/evidence-supervisor/U19 84 passed; Track7 aggregate snapshot contract 46 passed; complete named Track7 regression set 61 passed. py -m compileall -q application tests, changed-test Ruff F821/F401, and git diff --check passed.
+- A broader Ruff check including the unchanged runtime module reports three pre-existing F401 imports (MultiLegDecision, StrategyHub, ControlTowerUIAdapter); the runtime module has no diff and these imports were not altered.
+- This verifies the pre-latched X2 single-leg RiskGate denial path only. It does not establish atomic check-and-submit behavior under concurrent latch transitions, every multi-leg path, broker/Live behavior, or integrated acceptance. No production Runtime/X2 code, synchronization primitive, callback policy, or strategy policy changed.
+- No.1652 separation maintained. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+- No KIS/REAL_VTS/Live/account API, broker call, actual order/cancel/liquidation, collector restart, new collection, or Raw/Canonical/accepted source/manifest change.

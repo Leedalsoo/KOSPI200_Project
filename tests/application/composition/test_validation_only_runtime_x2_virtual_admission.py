@@ -654,3 +654,94 @@ def test_t4_x2_latched_full_on_tick_skips_decision_cancel_side_effect(tmp_path):
     assert result.rejected == 1
     assert stop_switch.snapshot().status == "TRIPPED"
     assert stop_switch.snapshot().order_admission_blocked is True
+
+def test_t4_x2_latched_full_on_tick_denies_synthetic_single_leg_route(tmp_path):
+    from contracts.market_data_freshness import FreshnessStatus, FreshnessVerdict
+    from shared.contracts.canonical import (
+        CanonicalAssetType, CanonicalOrderCommand, CanonicalOrderSide,
+    )
+
+    inputs = _inputs()
+    stop_switch = _switch(inputs, tmp_path)
+    admission = ValidationOnlyRuntimeStopAdmissionSource(
+        _BaseStatusSource(inputs[4]), stop_switch,
+    )
+    loop = _loop(inputs[1], stop_switch, admission)
+    instrument_id = "SYNTHETIC_CONTRACT:T4_X2_SINGLE_LEG"
+    observed_at = NOW
+    freshness = FreshnessVerdict(
+        status=FreshnessStatus.FRESH,
+        reason="T4_SYNTHETIC_SINGLE_LEG_ONLY",
+        policy_version="T4-X2-SYNTHETIC-v1",
+        source="DERIVED_SCENARIO_TEST_FIXTURE",
+        tr_id="SYNTHETIC-TEST",
+        environment="VIRTUAL_VALIDATION_ONLY",
+        instrument_id=instrument_id,
+        symbol=instrument_id,
+        source_instant=observed_at,
+        received_at=observed_at,
+        evidence_sha256="e" * 64,
+    )
+    evaluation = SimpleNamespace(
+        context=SimpleNamespace(strategy_id="SYNTHETIC_TRACK1", freshness_verdict=freshness),
+        runtime_context=SimpleNamespace(
+            client_order_id=lambda _strategy_id: "SYNTHETIC-X2-SINGLE-ORDER-001",
+        ),
+        result=SimpleNamespace(kind="EXECUTION"),
+    )
+    command = CanonicalOrderCommand(
+        client_order_id="SYNTHETIC-X2-SINGLE-ORDER-001",
+        track_id="SYNTHETIC_TRACK1",
+        asset_type=CanonicalAssetType.OPTION,
+        side=CanonicalOrderSide.BUY,
+        qty=1,
+        price=1.25,
+        option_type=None,
+        strike=350.0,
+        symbol=instrument_id,
+        expiry="2026-11-26",
+        tag_id="SYNTHETIC_ENTRY",
+        strategy_id="SYNTHETIC_TRACK1",
+        instrument_id=instrument_id,
+    )
+
+    class _StrategyHub:
+        def run(self, _contexts):
+            return SimpleNamespace(failures=(), signals=(object(),))
+
+    class _Decision:
+        def arbitrate(self, _evaluations, **_kwargs):
+            return SimpleNamespace(
+                arbitration=SimpleNamespace(approved_signals=(
+                    SimpleNamespace(signal_id="SYNTHETIC-SIGNAL-001", track_id="SYNTHETIC_TRACK1"),
+                ), rejected_signals=()),
+                execution_plans=(),
+                cancel_requests=(),
+            )
+
+    loop.bundle.account = SimpleNamespace(snapshot=lambda: SimpleNamespace(
+        total_balance=1_000_000, realized_pnl=0, used_margin=0, free_margin=1_000_000,
+    ))
+    loop.bundle.position = SimpleNamespace(snapshot=lambda: {})
+    loop.strategy_hub = _StrategyHub()
+    loop.context_builder = lambda *_: {"SYNTHETIC_TRACK1": object()}
+    loop.strategy_results = SimpleNamespace(collect=lambda **_kwargs: (evaluation,))
+    loop.strategy_to_decision = _Decision()
+    loop.decision_to_command = SimpleNamespace(build_commands=lambda _evaluations, _approved: (command,))
+    loop.identity_provider = lambda *_args: SimpleNamespace(instrument_id=instrument_id)
+    loop.pending_multi_leg_observer = lambda _tick: ()
+    stop_switch.trip("T4_SYNTHETIC_X2_SINGLE_LEG_ROUTE_GATE")
+
+    tick = SimpleNamespace(
+        timestamp=observed_at.isoformat(), seq_id=1713,
+        underlying_price=350.25, volume=1, ask_price=1.25,
+    )
+    result = loop.on_tick(tick)
+
+    assert result.approved == 1
+    assert result.routed == 0
+    assert result.filled == 0
+    assert result.rejected == 1
+    assert loop.broker_adapter.last_report is None
+    assert stop_switch.snapshot().status == "TRIPPED"
+    assert stop_switch.snapshot().order_admission_blocked is True
