@@ -867,3 +867,13 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - Production code/API/persistence/phase/test/fixture 변경 없음. private Orchestrator _initialized 조작 없음. Synthetic-only; fixture runtime_eligible=false, identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED, identity_policy.runtime_use=PROHIBITED.
 - No.1689 phase/X2 기준 및 No.1652 candidate/account aggregate 분리 유지. Track7 restart recovery 및 Full T4 X3/integrated acceptance OPEN. Live/API/broker/order/collector/raw/Canonical/manifest 변경 없음.
 - 상세 Notion: https://app.notion.com/p/41f5f4f6eaa181caa20dff31aea91737
+## No.1741 — Track7 bootstrap 실패·중복·순서 합성 경계 검증 (2026-11-22)
+
+- No.1740 이후 최신 결정/실행기록과 No.1739/1738/1737/1736/1735/1728, No.1689, No.1652를 대조했다.
+- 실제 Track7/StrategyHub disposable harness 4/4 PASS: pre-tick restore + same-tick fill + unavailable→valid Context 상태 유지, COMPLETE 이후 동일 callback 반복 전달 시 상태 불변, candidate adapter invalid restore partial-state 미commit, synthetic ID/sequence 가정 기반 dedupe/order.
+- 실행: My_Caddy_TS1 원격 PC, py inline harness, 종료 코드 0. tracked source/test/fixture 변경 없음, 기존 PASS suite 재실행 없음.
+- 주의: callback 반복 전달은 durable dedupe 보장이 아니며, ID/sequence는 production API 계약이 아닌 합성 가정이다. no-snapshot cold start 및 durable restore failure는 실행하지 않았다.
+- 미결정: startup/bootstrap 공개 진입점, snapshot schema/key/watermark, event identity/order/dedupe, atomic/concurrent commit, cold-start, restore failure 시 Track7 planner/evaluation/Action admission, Track7-local gate와 global X2 구분.
+- No.1689 Observation → Planning → Action/X2 예외와 No.1652 aggregate 분리 유지. Track7 restart recovery 및 Full T4 X3/integrated acceptance OPEN.
+- Production code/API/persistence/phase/test/fixture 변경 없음. Synthetic-only; fixture runtime_eligible=false, identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED, identity_policy.runtime_use=PROHIBITED. Live/API/broker/order/collector/raw/Canonical/manifest 변경 없음.
+- Notion: https://app.notion.com/p/41f5f4f6eaa1816588a7c70823ce145e
