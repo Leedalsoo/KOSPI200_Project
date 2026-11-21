@@ -6,6 +6,10 @@ from decimal import Decimal
 
 import pytest
 
+from application.strategy_hub.hub import StrategyHub
+from core.strategy.contracts import StrategyContext
+from core.strategy.registry import StrategyRegistry
+
 from core.strategy.track7_volatility_skew_weekly_insurance import (
     Track7State,
     Track7VolatilitySkewWeeklyInsurance,
@@ -953,3 +957,28 @@ def test_track7_x2_final_gate_recheck_still_has_callback_toctou_window():
     assert gate_state["latched"] is True
     assert callback_gate_states == [True]
     assert events == [("cancel", "synthetic_callback_invoked")]
+
+
+def test_track7_strategyhub_first_initialize_resets_preloaded_test_snapshot():
+    source = _multi_expiry_strategy()
+    restored, _gate = _restore_aggregate(_capture_aggregate(source))
+    assert restored._states_by_expiry == source._states_by_expiry
+    assert restored._group_expiry == source._group_expiry
+
+    registry = StrategyRegistry()
+    registry.register(restored)
+    hub = StrategyHub(
+        registry,
+        ((restored.strategy_id, restored.version),),
+    )
+    result = hub.run({
+        restored.strategy_id: StrategyContext(strategy_id=restored.strategy_id),
+    })
+
+    assert result.failures == ()
+    assert restored._legacy_state == Track7State()
+    assert restored._active_expiry is None
+    assert restored._states_by_expiry == {}
+    assert restored._group_expiry == {}
+    assert restored._legacy_exit_pending is False
+    assert restored._exit_pending_expiries == set()
