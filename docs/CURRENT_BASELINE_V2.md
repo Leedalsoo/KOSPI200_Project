@@ -512,3 +512,13 @@
 - This verifies the pre-latched X2 single-leg RiskGate denial path only. It does not establish atomic check-and-submit behavior under concurrent latch transitions, every multi-leg path, broker/Live behavior, or integrated acceptance. No production Runtime/X2 code, synchronization primitive, callback policy, or strategy policy changed.
 - No.1652 separation maintained. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 - No KIS/REAL_VTS/Live/account API, broker call, actual order/cancel/liquidation, collector restart, new collection, or Raw/Canonical/accepted source/manifest change.
+## T4 X3 X2 latched multi-leg full on_tick characterization (No.1714, 2026-11-21)
+
+- Reconciled No.1713/1712/1711, No.1689, No.1657/1658, No.1546, Current Baseline and No.1534 before the test. Preserved No.1652 candidate/account aggregate boundary distinct from Track7 strategy aggregate.
+- Added a full on_tick synthetic test with one approved signal and one MULTI_LEG execution plan while X2 was already TRIPPED. The test supplies an executor spy that would report two routed/two filled legs if invoked.
+- Result: approved=1, routed=0, filled=0, rejected=1; executor callback call list remained empty; X2 remained TRIPPED with order admission blocked. This confirms the pre-latched X2 gate suppresses this on_tick multi-leg executor callback.
+- Separate batches: X2 Virtual admission 16 passed; auto-stop/evidence-supervisor/U19 84 passed; Track7 aggregate 46 passed; named Track7 regression 61 passed. compileall, changed-test Ruff F821/F401, git diff --check PASS.
+- Existing direct multi-leg admission/callback race tests remain in the same suite; this new test covers the complete on_tick decision-to-multi-leg-dispatch path only. It does not prove atomic check-and-submit during concurrent X2 transition, callback interruption once in flight, every strategy/plan variant, or broker/Live behavior.
+- No production Runtime/X2 implementation, lock/atomic policy, exception policy, cancellation protocol, strategy policy, raw/Canonical/accepted source, manifest, or market data changed.
+- No.1652 boundary maintained. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+- No KIS/REAL_VTS/Live/account API, broker call, actual order/cancel/liquidation, collector restart, or new collection.

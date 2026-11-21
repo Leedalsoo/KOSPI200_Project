@@ -745,3 +745,76 @@ def test_t4_x2_latched_full_on_tick_denies_synthetic_single_leg_route(tmp_path):
     assert loop.broker_adapter.last_report is None
     assert stop_switch.snapshot().status == "TRIPPED"
     assert stop_switch.snapshot().order_admission_blocked is True
+
+def test_t4_x2_latched_full_on_tick_skips_multi_leg_executor(tmp_path):
+    from core.strategy.execution_plan import ExecutionPlanKind
+
+    inputs = _inputs()
+    stop_switch = _switch(inputs, tmp_path)
+    admission = ValidationOnlyRuntimeStopAdmissionSource(
+        _BaseStatusSource(inputs[4]), stop_switch,
+    )
+    loop = _loop(inputs[1], stop_switch, admission)
+    calls = []
+    multi_leg_plan = SimpleNamespace(plan_id="SYNTHETIC-T4-X2-MULTILEG-001")
+    execution_plan = SimpleNamespace(
+        kind=ExecutionPlanKind.MULTI_LEG,
+        multi_leg_plan=multi_leg_plan,
+        strategy_id="SYNTHETIC_TRACK1",
+        signal_id="SYNTHETIC-MULTILEG-SIGNAL-001",
+    )
+
+    class _StrategyHub:
+        def run(self, _contexts):
+            return SimpleNamespace(failures=(), signals=(object(),))
+
+    class _Decision:
+        def arbitrate(self, _evaluations, **_kwargs):
+            return SimpleNamespace(
+                arbitration=SimpleNamespace(approved_signals=(
+                    SimpleNamespace(
+                        signal_id="SYNTHETIC-MULTILEG-SIGNAL-001",
+                        track_id="SYNTHETIC_TRACK1",
+                    ),
+                ), rejected_signals=()),
+                execution_plans=(execution_plan,),
+                cancel_requests=(),
+            )
+
+    def execute_multi_leg(plan):
+        calls.append(plan)
+        return SimpleNamespace(routed_legs=2, filled_legs=2, group_complete=True)
+
+    evaluation = SimpleNamespace(
+        context=SimpleNamespace(strategy_id="SYNTHETIC_TRACK1"),
+        runtime_context=SimpleNamespace(client_order_id=lambda _strategy_id: "SYNTHETIC-MULTILEG"),
+        result=SimpleNamespace(kind="EXECUTION"),
+    )
+    loop.bundle.account = SimpleNamespace(snapshot=lambda: SimpleNamespace(
+        total_balance=1_000_000, realized_pnl=0, used_margin=0, free_margin=1_000_000,
+    ))
+    loop.bundle.position = SimpleNamespace(snapshot=lambda: {})
+    loop.strategy_hub = _StrategyHub()
+    loop.context_builder = lambda *_: {"SYNTHETIC_TRACK1": object()}
+    loop.strategy_results = SimpleNamespace(collect=lambda **_kwargs: (evaluation,))
+    loop.strategy_to_decision = _Decision()
+    loop.decision_to_command = SimpleNamespace(build_commands=lambda _evaluations, _approved: ())
+    loop.multi_leg_executor = execute_multi_leg
+    loop.pending_multi_leg_observer = lambda _tick: ()
+    loop.pending_multi_leg_planner = lambda _tick: ()
+    loop.pending_multi_leg_processor = lambda _tick: ()
+    stop_switch.trip("T4_SYNTHETIC_X2_MULTILEG_FULL_ON_TICK")
+
+    tick = SimpleNamespace(
+        timestamp=NOW.isoformat(), seq_id=1714,
+        underlying_price=350.25, volume=1, ask_price=1.25,
+    )
+    result = loop.on_tick(tick)
+
+    assert result.approved == 1
+    assert result.routed == 0
+    assert result.filled == 0
+    assert result.rejected == 1
+    assert calls == []
+    assert stop_switch.snapshot().status == "TRIPPED"
+    assert stop_switch.snapshot().order_admission_blocked is True
