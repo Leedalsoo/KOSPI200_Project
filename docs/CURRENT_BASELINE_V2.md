@@ -579,3 +579,14 @@
 - This characterizes existing exception propagation and ordering only. It does not select whether observer failures should trip X2, be retried, be recorded, or permit a later tick; no production error-handling policy was inferred or implemented. It does not validate actual broker/Live reconciliation, persistence, recovery, cancellation, or atomicity.
 - No production Runtime/X2, strategy policy, Raw/Canonical/accepted source or manifest changed. No.1652 separation maintained. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 - No KIS/REAL_VTS/Live/account API, broker call, actual order/cancel/liquidation, collector restart, or new data collection.
+
+
+## T4 X3 pending observer iterable-result boundary (No.1720, 2026-11-21)
+
+- Reconciled No.1719/1718/1717, No.1710, No.1689, No.1546, Current Baseline and No.1534 against actual T4 local code. No.1689 defines the factory observer as reconciliation-only and its concrete implementation returns tuple(pending_results); it performs no cancel/repair/retry/flatten/new submission.
+- Inspected AutomatedVirtualTradingLoop._reconcile_pending_multi_leg(): it retains tuple/list results only; any other return type is normalized to empty tuple. The callback annotation is broad object, while the concrete factory callback returns tuple.
+- Added synthetic generator-return characterization. The observer returns a generator containing one synthetic fill record; the runtime returns (), and the generator body is not consumed (no yielded record observed). X2 remains ARMED.
+- This is an interface-boundary characterization, not evidence of missing production fills: the current factory's concrete observer returns a tuple. Whether custom observers should support arbitrary iterables/generators remains unspecified; no production contract or code was changed.
+- X2 admission + phase separation: 25 passed; auto-stop/evidence/U19 selected regression: 69 passed; Track7 aggregate snapshot contract: 46 passed; adjacent Track6-gates/runtime-invariant/account-U19 regression: 93 passed. compileall, scoped Ruff F821/F401, git diff-check passed. Separate batches, not integrated acceptance.
+- Synthetic only. No Production Runtime/X2, observer/factory, strategy policy, Raw/Canonical/accepted source or manifest changes. No.1652 candidate/account checkpoint remains separate from Track7 strategy aggregate. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+- No KIS/REAL_VTS/Live/account API, broker call, actual order/cancel/liquidation, collector restart, or new data collection.

@@ -1216,3 +1216,29 @@ def test_t4_x2_full_on_tick_pending_observer_exception_propagates_before_strateg
     assert calls == ["observer"]
     assert stop_switch.snapshot().status == "ARMED"
     assert stop_switch.snapshot().order_admission_blocked is False
+
+
+
+def test_t4_x2_pending_observer_generator_result_is_not_consumed(tmp_path):
+    inputs = _inputs()
+    stop_switch = _switch(inputs, tmp_path)
+    admission = ValidationOnlyRuntimeStopAdmissionSource(
+        _BaseStatusSource(inputs[4]), stop_switch,
+    )
+    loop = _loop(inputs[1], stop_switch, admission)
+    yielded = []
+
+    def observer(_tick):
+        def results():
+            yielded.append("consumed")
+            yield SimpleNamespace(execution_id="SYNTHETIC:GENERATOR-FILL")
+        return results()
+
+    loop.pending_multi_leg_observer = observer
+    tick = SimpleNamespace(timestamp=NOW.isoformat(), seq_id=1720)
+
+    result = loop._reconcile_pending_multi_leg(tick)
+
+    assert result == ()
+    assert yielded == []
+    assert stop_switch.snapshot().status == "ARMED"
