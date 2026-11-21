@@ -567,3 +567,15 @@
 - No production Runtime/X2, exception/recovery/cancellation/synchronization/atomic/lock policy, strategy policy, Raw/Canonical/accepted source or manifest changed. No.1652 separation maintained. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 - No KIS/REAL_VTS/Live/account API, broker call, actual order/cancel/liquidation, collector restart, or new data collection.
 \n
+
+
+## T4 X3 full on_tick pending-observer exception boundary (No.1719, 2026-11-21)
+
+- Reconciled latest No.1718/1717/1716/1715, No.1714/1713, No.1712/1711, No.1689, No.1546, Current Baseline and No.1534. No.1652 candidate/account aggregate checkpoint remains separate from Track7 strategy aggregate.
+- Inspected actual AutomatedVirtualTradingLoop.on_tick(): _reconcile_pending_multi_leg() executes before pending lifecycle planning and StrategyHub; the observer callback is invoked without a local exception handler. X2 trip handling for Track6 lifecycle errors is separate and does not wrap this observer call.
+- Added one deterministic synthetic full-on_tick test whose pending observer raises RuntimeError("SYNTHETIC_PENDING_OBSERVER_FAILURE").
+- Observed: the same RuntimeError propagates unchanged; only the observer callback is invoked; StrategyHub, lifecycle planner and action processor are not called; X2 remains ARMED and order_admission_blocked=False.
+- X2 Virtual admission: 21 passed; auto-stop/evidence-supervisor/U19 selected regression: 69 passed; Track7 aggregate snapshot contract: 46 passed; adjacent Track6-gates/runtime-invariant/account-U19 regression: 93 passed. compileall, scoped Ruff F821/F401, git diff-check passed. Separate batches, not integrated acceptance.
+- This characterizes existing exception propagation and ordering only. It does not select whether observer failures should trip X2, be retried, be recorded, or permit a later tick; no production error-handling policy was inferred or implemented. It does not validate actual broker/Live reconciliation, persistence, recovery, cancellation, or atomicity.
+- No production Runtime/X2, strategy policy, Raw/Canonical/accepted source or manifest changed. No.1652 separation maintained. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+- No KIS/REAL_VTS/Live/account API, broker call, actual order/cancel/liquidation, collector restart, or new data collection.

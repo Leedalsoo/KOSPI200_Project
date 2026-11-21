@@ -1176,3 +1176,43 @@ def test_t4_x2_pending_multi_leg_result_after_latch_preserves_pending_and_blocks
     assert calls == ["SYNTHETIC-T4-X2-PENDING-001"]
     assert stop_switch.snapshot().status == "TRIPPED"
     assert stop_switch.snapshot().order_admission_blocked is True
+
+
+
+def test_t4_x2_full_on_tick_pending_observer_exception_propagates_before_strategy(tmp_path):
+    inputs = _inputs()
+    stop_switch = _switch(inputs, tmp_path)
+    admission = ValidationOnlyRuntimeStopAdmissionSource(
+        _BaseStatusSource(inputs[4]), stop_switch,
+    )
+    loop = _loop(inputs[1], stop_switch, admission)
+    calls = []
+
+    class _StrategyHub:
+        def run(self, _contexts):
+            calls.append("strategy")
+            return SimpleNamespace(failures=(), signals=())
+
+    def broken_observer(_tick):
+        calls.append("observer")
+        raise RuntimeError("SYNTHETIC_PENDING_OBSERVER_FAILURE")
+
+    loop.runtime_evidence_supervisor = None
+    loop.pending_multi_leg_observer = broken_observer
+    loop.pending_multi_leg_planner = lambda _tick: calls.append("planner")
+    loop.pending_multi_leg_processor = lambda _tick: calls.append("processor")
+    loop.strategy_hub = _StrategyHub()
+
+    tick = SimpleNamespace(
+        timestamp=NOW.isoformat(), seq_id=1719,
+        underlying_price=350.25, volume=1, ask_price=1.25,
+    )
+
+    with pytest.raises(
+        RuntimeError, match="SYNTHETIC_PENDING_OBSERVER_FAILURE",
+    ):
+        loop.on_tick(tick)
+
+    assert calls == ["observer"]
+    assert stop_switch.snapshot().status == "ARMED"
+    assert stop_switch.snapshot().order_admission_blocked is False
