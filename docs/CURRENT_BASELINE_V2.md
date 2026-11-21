@@ -522,3 +522,14 @@
 - No production Runtime/X2 implementation, lock/atomic policy, exception policy, cancellation protocol, strategy policy, raw/Canonical/accepted source, manifest, or market data changed.
 - No.1652 boundary maintained. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 - No KIS/REAL_VTS/Live/account API, broker call, actual order/cancel/liquidation, collector restart, or new collection.
+
+## T4 X3 full on_tick multi-leg follow-up after first callback trips X2 (No.1715, 2026-11-21)
+
+- Reconciled latest No.1714/1713/1712/1711, No.1707/1706, No.1689, No.1546, Current Baseline and No.1534 before editing. No.1652 candidate/account aggregate checkpoint remains separate from Track7 strategy aggregate.
+- Inspected the actual AutomatedVirtualTradingLoop.on_tick() multi-leg execution-plan loop. It iterates each MULTI_LEG plan and calls _execute_multi_leg_if_admitted() separately; that helper performs a fresh X2 gate read for each plan.
+- Added a deterministic synthetic full-on_tick test with two approved signals and two MULTI_LEG plans. The first executor callback trips X2 and returns a synthetic completion; the next plan is rejected by its fresh gate read and its callback is not invoked.
+- Result: approved=2, routed=2, filled=2, rejected=1; exactly the first plan callback was called; X2 remained TRIPPED and order admission blocked.
+- Separate test batches: X2 Virtual admission 17 passed; auto-stop/evidence-supervisor/U19 selected regression 69 passed; Track7 aggregate snapshot contract 46 passed; adjacent Track7 selected regression 28 passed. py -m compileall -q application tests, changed-test Ruff F821/F401, and git diff --check passed. These are separate selected batches, not integrated acceptance.
+- The first callback was already in flight when X2 tripped and completed. The test confirms only subsequent sequential plan suppression; it does not prove in-flight interruption, concurrent TOCTOU/atomic check-submit, all plan variants, broker/Live behavior, or production safety.
+- No production Runtime/X2, callback cancellation, exception, synchronization, lock-scope, atomic-gate, persistence/broker, or strategy policy was changed. No.1652 separation maintained. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+- No KIS/REAL_VTS/Live/account API, broker call, actual order/cancel/liquidation, collector restart, new collection, or Raw/Canonical/accepted source/manifest change.
