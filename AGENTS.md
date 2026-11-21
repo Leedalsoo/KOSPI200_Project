@@ -569,3 +569,15 @@
 - This characterizes exception propagation and subsequent-tick admission only. It does not validate broker partial fills, position/fee recovery, broker/Live, callback interruption, rollback/compensation, retry/backoff, atomic check-submit, concurrency, or lock scope.
 - No production Runtime/X2, exception/recovery/cancellation/synchronization/atomic/lock policy, or strategy policy changed. No.1652 separation maintained. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 - No KIS/REAL_VTS/Live/account API, broker call, actual order/cancel/liquidation, collector restart, new collection, or Raw/Canonical/accepted source/manifest change.
+
+
+## T4 X3 full on_tick multi-leg partial-result / X2 latch follow-up (No.1717, 2026-11-21)
+
+- Reconciled latest No.1716/1715/1714, No.1712/1711, No.1708/1709, No.1689, No.1546, Current Baseline and No.1534. No.1652 candidate/account aggregate checkpoint remains separate from Track7 strategy aggregate.
+- Inspected the actual on_tick multi-leg loop and _execute_multi_leg_if_admitted(): each plan receives a fresh X2 gate read; executor result routed_legs/filled_legs are accumulated; an incomplete result with pending_legs=0 is counted rejected by the existing branch.
+- Added one test-only deterministic synthetic full-on_tick scenario with two approved MULTI_LEG plans. The first callback trips X2 and returns a terminal incomplete result (routed_legs=1, filled_legs=0, group_complete=False, pending_legs=0); the second plan is rejected by its fresh gate read and its callback is not invoked.
+- Result: approved=2, routed=1, filled=0, rejected=2; exactly the first callback called; X2 remains TRIPPED and order admission blocked.
+- Separate validation batches: X2 Virtual admission 19 passed; auto-stop/evidence-supervisor/U19 selected regression 69 passed; Track7 aggregate snapshot contract 46 passed; broader adjacent Track6-gates/runtime-invariant/account-U19 regression 93 passed. py -m compileall -q application tests, scoped Ruff F821/F401, and git diff --check passed. These are separate batches, not integrated acceptance.
+- This characterizes existing result accounting and subsequent-plan gate behavior with synthetic outcomes only. It does not validate broker partial-fill recovery, PositionLot/Fee persistence, real broker/Live behavior, callback interruption, rollback/compensation, retry/backoff, atomic check-submit, concurrency, or lock scope.
+- No production Runtime/X2, exception/recovery/cancellation/synchronization/atomic/lock policy, strategy policy, Raw/Canonical/accepted source or manifest changed. No.1652 separation maintained. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+- No KIS/REAL_VTS/Live/account API, broker call, actual order/cancel/liquidation, collector restart, or new data collection.
