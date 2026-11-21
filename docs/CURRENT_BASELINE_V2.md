@@ -792,3 +792,14 @@
 - Live/API/broker/order/cancel/liquidation/collector/raw/Canonical/manifest 변경 없음. Production code/API/phase/persistence/test 변경 없음.
 - Notion: https://app.notion.com/p/41f5f4f6eaa18156b23dea64e66ee347
 
+
+## No.1740 — Track7 pre-tick bootstrap 소유권 후보 합성 검증 (2026-11-22)
+
+- 최신 Notion No.1739/1738/1737/1736/1735/1728, No.1689 phase/X2 및 No.1652 aggregate 분리 기준을 대조했다.
+- 실제 호출 순서: pending fill reconciliation(Observation) → Track7 lifecycle planning(Planning) → context_builder → StrategyHub.run → pending action(Action). No.1689 순서를 유지하려면 정상 bootstrap/restore는 첫 on_tick 및 Planning 전에 완료되어야 하며, 동일 Tick fresh fill은 Planning 전에 반영되어야 한다.
+- Track7 state owner 방식(Context-independent bootstrap/readiness + snapshot/event merge, 이후 idempotent initialize)을 우선 설계 후보로 좁혔다. 아직 승인된 API/정책이 아니며 production 변경 금지.
+- Actual Track7/StrategyHub와 disposable adapter 합성 검증 3/3 PASS: pre-tick restore 후 same-tick fill이 Planning 전에 반영되고 unavailable→available 이후 유지, restored CALL_PENDING identity가 첫 planner에 노출, 다른 전략의 기존 lazy initialize 동작 유지. 종료 코드 0. 기존 PASS suite 재실행 없음.
+- Snapshot store/schema/watermark, event identity/dedupe/order, atomic commit/concurrency, no-snapshot cold-start, restore failure 시 Track7 admission 및 전역 X2 정책은 미결정.
+- Production code/API/persistence/phase/test/fixture 변경 없음. private Orchestrator _initialized 조작 없음. Synthetic-only; fixture runtime_eligible=false, identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED, identity_policy.runtime_use=PROHIBITED.
+- No.1689 phase/X2 기준 및 No.1652 candidate/account aggregate 분리 유지. Track7 restart recovery 및 Full T4 X3/integrated acceptance OPEN. Live/API/broker/order/collector/raw/Canonical/manifest 변경 없음.
+- 상세 Notion: https://app.notion.com/p/41f5f4f6eaa181caa20dff31aea91737
