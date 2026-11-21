@@ -1,166 +1,166 @@
-# KOSPI200 Project200
+﻿# KOSPI200 Project200
 
-KOSPI200 선물·옵션 자동매매 시스템 개발 프로젝트다. 현재 개발·검증의 중심은 **Virtual Trading / KIS VTS / Control Tower / Strategy 1~9 / REAL_VTS 기반 E2E**이며, Live 주문은 실행하지 않는다.
+KOSPI200 ?좊Ъ쨌?듭뀡 ?먮룞留ㅻℓ ?쒖뒪??媛쒕컻 ?꾨줈?앺듃?? ?꾩옱 媛쒕컻쨌寃利앹쓽 以묒떖? **Virtual Trading / KIS VTS / Control Tower / Strategy 1~9 / REAL_VTS 湲곕컲 E2E**?대ŉ, Live 二쇰Ц? ?ㅽ뻾?섏? ?딅뒗??
 
-상세 작업 기준은 [AGENTS.md](AGENTS.md)를 따른다.
+?곸꽭 ?묒뾽 湲곗?? [AGENTS.md](AGENTS.md)瑜??곕Ⅸ??
 
-## 1. 현재 표준 실행 구조
+## 1. ?꾩옱 ?쒖? ?ㅽ뻾 援ъ“
 
-**Market Data Source → Runtime Input → Strategy → Decision → Risk → OMS/Order Router → Broker → Execution → Position/Margin/PnL → Control Tower Read Model**
+**Market Data Source ??Runtime Input ??Strategy ??Decision ??Risk ??OMS/Order Router ??Broker ??Execution ??Position/Margin/PnL ??Control Tower Read Model**
 
-Control Tower는 감독·운영·read-model 계층이며 정상적인 주문 생성이나 전략 로직을 소유하지 않는다.
+Control Tower??媛먮룆쨌?댁쁺쨌read-model 怨꾩링?대ŉ ?뺤긽?곸씤 二쇰Ц ?앹꽦?대굹 ?꾨왂 濡쒖쭅???뚯쑀?섏? ?딅뒗??
 
-| 경로 | 역할 |
+| 寃쎈줈 | ??븷 |
 |---|---|
-| `contracts/` | 표준 계약·DTO·Port |
-| `core/` | 환경 독립 Domain·Strategy·Risk·OMS |
-| `application/` | Orchestration·Composition·Hub |
-| `environments/` | Virtual/Paper/Live/High-Speed 구현 |
-| `infrastructure/` | KIS/KRX 등 외부 Adapter/Source |
+| `contracts/` | ?쒖? 怨꾩빟쨌DTO쨌Port |
+| `core/` | ?섍꼍 ?낅┰ Domain쨌Strategy쨌Risk쨌OMS |
+| `application/` | Orchestration쨌Composition쨌Hub |
+| `environments/` | Virtual/Paper/Live/High-Speed 援ы쁽 |
+| `infrastructure/` | KIS/KRX ???몃? Adapter/Source |
 | `interfaces/` | Control Tower/API/UI |
-| `tests/` | 회귀·통합 검증 |
+| `tests/` | ?뚭?쨌?듯빀 寃利?|
 
-## 2. Strategy 기준
+## 2. Strategy 湲곗?
 
-Strategy 1~9는 독립적인 Strategy Plugin/Registry 경계를 유지한다.
+Strategy 1~9???낅┰?곸씤 Strategy Plugin/Registry 寃쎄퀎瑜??좎??쒕떎.
 
-공통 시장지표와 계산은 Common Analytics가 소유하고 표준 `AnalyticsSnapshot`으로 제공한다. Strategy는 이를 소비하고 전략 고유의 진입·청산·헤지·상태전이·포지션 규칙을 담당한다.
+怨듯넻 ?쒖옣吏?쒖? 怨꾩궛? Common Analytics媛 ?뚯쑀?섍퀬 ?쒖? `AnalyticsSnapshot`?쇰줈 ?쒓났?쒕떎. Strategy???대? ?뚮퉬?섍퀬 ?꾨왂 怨좎쑀??吏꾩엯쨌泥?궛쨌?ㅼ?쨌?곹깭?꾩씠쨌?ъ???洹쒖튃???대떦?쒕떎.
 
-Authoritative source가 없는 값을 고정값, 0/False, 추정값 또는 synthetic 값으로 채워 정상 신호를 만들지 않는다.
+Authoritative source媛 ?녿뒗 媛믪쓣 怨좎젙媛? 0/False, 異붿젙媛??먮뒗 synthetic 媛믪쑝濡?梨꾩썙 ?뺤긽 ?좏샇瑜?留뚮뱾吏 ?딅뒗??
 
-## 3. KIS VTS / REAL_VTS 데이터
+## 3. KIS VTS / REAL_VTS ?곗씠??
 
-KIS VTS 모의계좌에서 수집한 실제 시장데이터는 **REAL_VTS 원본**으로 취급한다. REAL_VTS는 Live 데이터가 아니며 Live E2E PASS를 의미하지 않는다.
+KIS VTS 紐⑥쓽怨꾩쥖?먯꽌 ?섏쭛???ㅼ젣 ?쒖옣?곗씠?곕뒗 **REAL_VTS ?먮낯**?쇰줈 痍④툒?쒕떎. REAL_VTS??Live ?곗씠?곌? ?꾨땲硫?Live E2E PASS瑜??섎??섏? ?딅뒗??
 
-현재 운영 저장 루트:
+?꾩옱 ?댁쁺 ???猷⑦듃:
 
 `data/kis_market_data_restart/YYYYMMDD/`
 
-날짜별 partition은 독립적인 테스트 데이터셋이 아니라 누적되는 실제 시장 데이터 stream의 저장 단위다.
+?좎쭨蹂?partition? ?낅┰?곸씤 ?뚯뒪???곗씠?곗뀑???꾨땲???꾩쟻?섎뒗 ?ㅼ젣 ?쒖옣 ?곗씠??stream??????⑥쐞??
 
-REST와 WebSocket은 독립적인 수집 경계로 유지한다.
+REST? WebSocket? ?낅┰?곸씤 ?섏쭛 寃쎄퀎濡??좎??쒕떎.
 
-- REST: 시장관측/Historical Store 원본
-- WebSocket: raw frame 원본
-- source/provenance와 timestamp를 transport 간 혼용하지 않는다.
-- WebSocket 연결 성공만으로 frame 수신 PASS를 선언하지 않는다.
-- manifest와 실제 raw/canonical evidence가 다르면 collector lifecycle 문제로 별도 조사한다.
+- REST: ?쒖옣愿痢?Historical Store ?먮낯
+- WebSocket: raw frame ?먮낯
+- source/provenance? timestamp瑜?transport 媛??쇱슜?섏? ?딅뒗??
+- WebSocket ?곌껐 ?깃났留뚯쑝濡?frame ?섏떊 PASS瑜??좎뼵?섏? ?딅뒗??
+- manifest? ?ㅼ젣 raw/canonical evidence媛 ?ㅻⅤ硫?collector lifecycle 臾몄젣濡?蹂꾨룄 議곗궗?쒕떎.
 
-## 4. Replay / E2E 검증
+## 4. Replay / E2E 寃利?
 
-Strategy 1~9는 가능한 authoritative input 범위에서 독립적으로 검증한다.
+Strategy 1~9??媛?ν븳 authoritative input 踰붿쐞?먯꽌 ?낅┰?곸쑝濡?寃利앺븳??
 
-**Source → Runtime Input → Strategy Signal → Decision → Risk → OMS/Router → Virtual Execution → Position/PnL → Regression**
+**Source ??Runtime Input ??Strategy Signal ??Decision ??Risk ??OMS/Router ??Virtual Execution ??Position/PnL ??Regression**
 
-실제 signal이 관찰되지 않은 전략은 signal-driven execution lifecycle PASS를 선언하지 않는다.
+?ㅼ젣 signal??愿李곕릺吏 ?딆? ?꾨왂? signal-driven execution lifecycle PASS瑜??좎뼵?섏? ?딅뒗??
 
-REAL_VTS, DERIVED_SCENARIO, SYNTHETIC, VIRTUAL_EXECUTION provenance는 서로 구분한다.
+REAL_VTS, DERIVED_SCENARIO, SYNTHETIC, VIRTUAL_EXECUTION provenance???쒕줈 援щ텇?쒕떎.
 
-각 실행은 독립 Run ID와 독립적인 execution/position/strategy state를 사용한다.
+媛??ㅽ뻾? ?낅┰ Run ID? ?낅┰?곸씤 execution/position/strategy state瑜??ъ슜?쒕떎.
 
-High-Speed Replay은 필요에 따라 가속 실행하되 원본 event timestamp의 순서와 시간관계를 보존한다.
+High-Speed Replay? ?꾩슂???곕씪 媛???ㅽ뻾?섎릺 ?먮낯 event timestamp???쒖꽌? ?쒓컙愿怨꾨? 蹂댁〈?쒕떎.
 
 ## 5. Control Tower
 
-현재 UI는 다음 구조를 유지한다.
+?꾩옱 UI???ㅼ쓬 援ъ“瑜??좎??쒕떎.
 
-- 6개 운영 탭
+- 6媛??댁쁺 ??
 - Strategy 1~9
-- 3×3 동일 크기 Strategy Grid
-- Strategy별 독립 Composition Graph
-- Strategy Control의 USE / ENTRY / EXIT
-- Strategy Trade P/L과 Account P/L 분리
-- Strategy 카드의 월별 Trade P/L: ENTRY → CLOSE/EXPIRY
-- 카드 하단의 Strategy Integrated P/L
-- Graph에서는 BUY/SELL trade value와 계약 구조를 표시하며 P/L을 계산하지 않음
+- 3횞3 ?숈씪 ?ш린 Strategy Grid
+- Strategy蹂??낅┰ Composition Graph
+- Strategy Control??USE / ENTRY / EXIT
+- Strategy Trade P/L怨?Account P/L 遺꾨━
+- Strategy 移대뱶???붾퀎 Trade P/L: ENTRY ??CLOSE/EXPIRY
+- 移대뱶 ?섎떒??Strategy Integrated P/L
+- Graph?먯꽌??BUY/SELL trade value? 怨꾩빟 援ъ“瑜??쒖떆?섎ŉ P/L??怨꾩궛?섏? ?딆쓬
 
-UI 표준 경로:
+UI ?쒖? 寃쎈줈:
 
-**Authoritative Runtime / Execution / Position Read Model → Option Program Read Model → Control Tower API → UI**
+**Authoritative Runtime / Execution / Position Read Model ??Option Program Read Model ??Control Tower API ??UI**
 
-UI가 Strategy/Core를 직접 호출하거나 없는 데이터를 임의 생성하지 않는다.
+UI媛 Strategy/Core瑜?吏곸젒 ?몄텧?섍굅???녿뒗 ?곗씠?곕? ?꾩쓽 ?앹꽦?섏? ?딅뒗??
 
-## 6. Filled → Position → Trade P/L → UI
+## 6. Filled ??Position ??Trade P/L ??UI
 
-**ExecutionReport → Position Group → Strategy Trade P/L → Strategy Card P/L**
+**ExecutionReport ??Position Group ??Strategy Trade P/L ??Strategy Card P/L**
 
-Runtime execution과 Control Tower Read Model은 동일한 authoritative execution/position-group 상태를 바라보아야 한다.
+Runtime execution怨?Control Tower Read Model? ?숈씪??authoritative execution/position-group ?곹깭瑜?諛붾씪蹂댁븘???쒕떎.
 
-Account P/L과 Strategy Trade P/L은 의미가 다를 수 있으므로 임의로 동일하게 맞추지 않는다. Position open/closed와 Trade Ledger 상태가 불일치하면 별도 accounting/read-model 검증 대상으로 취급한다.
+Account P/L怨?Strategy Trade P/L? ?섎?媛 ?ㅻ? ???덉쑝誘濡??꾩쓽濡??숈씪?섍쾶 留욎텛吏 ?딅뒗?? Position open/closed? Trade Ledger ?곹깭媛 遺덉씪移섑븯硫?蹂꾨룄 accounting/read-model 寃利???곸쑝濡?痍④툒?쒕떎.
 
-현재 일부 실제 VTS 연결 증거가 확보되어 있지만 이를 Strategy 1~9 전체 Full E2E PASS로 확대하지 않는다.
+?꾩옱 ?쇰? ?ㅼ젣 VTS ?곌껐 利앷굅媛 ?뺣낫?섏뼱 ?덉?留??대? Strategy 1~9 ?꾩껜 Full E2E PASS濡??뺣??섏? ?딅뒗??
 
-## 7. 3개월 자동 E2E
+## 7. 3媛쒖썡 ?먮룞 E2E
 
-자동 검증 pattern:
+?먮룞 寃利?pattern:
 
-**trend_up → trend_down → mean_revert → high_volatility → low_volatility → shock**
+**trend_up ??trend_down ??mean_revert ??high_volatility ??low_volatility ??shock**
 
-판정 규칙:
+?먯젙 洹쒖튃:
 
-- Replay PASS + UI smoke PASS → PASS
-- Replay FAIL → FAIL
-- UI smoke FAIL → FAIL
-- Replay FAIL이어도 UI smoke는 실행
-- UI smoke FAIL이면 다음 pattern으로 회전
-- Replay만 FAIL이고 UI smoke가 PASS이면 같은 pattern 재시도
+- Replay PASS + UI smoke PASS ??PASS
+- Replay FAIL ??FAIL
+- UI smoke FAIL ??FAIL
+- Replay FAIL?댁뼱??UI smoke???ㅽ뻾
+- UI smoke FAIL?대㈃ ?ㅼ쓬 pattern?쇰줈 ?뚯쟾
+- Replay留?FAIL?닿퀬 UI smoke媛 PASS?대㈃ 媛숈? pattern ?ъ떆??
 
-현재 scheduled UI smoke는 HTTP/API/UI contract를 검증한다. 동일 replay의 실제 브라우저 DOM Playwright 검증과는 구분한다.
+?꾩옱 scheduled UI smoke??HTTP/API/UI contract瑜?寃利앺븳?? ?숈씪 replay???ㅼ젣 釉뚮씪?곗? DOM Playwright 寃利앷낵??援щ텇?쒕떎.
 
-## 8. 검증 원칙
+## 8. 寃利??먯튃
 
-테스트 파일의 PASS만으로 production 기능의 PASS를 선언하지 않는다.
+?뚯뒪???뚯씪??PASS留뚯쑝濡?production 湲곕뒫??PASS瑜??좎뼵?섏? ?딅뒗??
 
-실제 검증은 현재 코드와 실제 실행 evidence를 우선한다.
+?ㅼ젣 寃利앹? ?꾩옱 肄붾뱶? ?ㅼ젣 ?ㅽ뻾 evidence瑜??곗꽑?쒕떎.
 
-기본 참조 순서:
+湲곕낯 李몄“ ?쒖꽌:
 
-**Current Baseline → 최신 활성 Decision Log → AGENTS.md → 현재 코드/실제 데이터/source → 새 검증**
+**Current Baseline ??理쒖떊 ?쒖꽦 Decision Log ??AGENTS.md ???꾩옱 肄붾뱶/?ㅼ젣 ?곗씠??source ????寃利?*
 
-Windows Python 실행은 `py`를 사용한다.
+Windows Python ?ㅽ뻾? `py`瑜??ъ슜?쒕떎.
 
-판정은 실제 실행 명령, 출력, exit code 및 관련 evidence를 기준으로 **PASS / FAIL / BLOCKED**를 구분한다.
+?먯젙? ?ㅼ젣 ?ㅽ뻾 紐낅졊, 異쒕젰, exit code 諛?愿??evidence瑜?湲곗??쇰줈 **PASS / FAIL / BLOCKED**瑜?援щ텇?쒕떎.
 
-## 9. Git / 작업 기준
+## 9. Git / ?묒뾽 湲곗?
 
-- `.env` 및 credential은 commit하지 않는다.
-- 사용자 작업 중인 unrelated 변경은 임의로 수정하거나 함께 commit하지 않는다.
-- 일회성 실행 로그, cache 및 폐기된 Legacy 산출물은 저장소에 남기지 않는다.
-- 변경 후 focused test 및 필요한 E2E를 수행한다.
-- `git diff --check`와 `git status`를 확인한다.
-- commit/push 후 원격 `Project200` HEAD를 확인한다.
+- `.env` 諛?credential? commit?섏? ?딅뒗??
+- ?ъ슜???묒뾽 以묒씤 unrelated 蹂寃쎌? ?꾩쓽濡??섏젙?섍굅???④퍡 commit?섏? ?딅뒗??
+- ?쇳쉶???ㅽ뻾 濡쒓렇, cache 諛??먭린??Legacy ?곗텧臾쇱? ??μ냼???④린吏 ?딅뒗??
+- 蹂寃???focused test 諛??꾩슂??E2E瑜??섑뻾?쒕떎.
+- `git diff --check`? `git status`瑜??뺤씤?쒕떎.
+- commit/push ???먭꺽 `Project200` HEAD瑜??뺤씤?쒕떎.
 
-상세 작업 절차와 현재 세부 기준은 **[AGENTS.md](AGENTS.md)**를 기준으로 한다.
+?곸꽭 ?묒뾽 ?덉감? ?꾩옱 ?몃? 湲곗?? **[AGENTS.md](AGENTS.md)**瑜?湲곗??쇰줈 ?쒕떎.
 
-## 10. 현재 미완료 범주
+## 10. ?꾩옱 誘몄셿猷?踰붿＜
 
-실제 evidence가 확보될 때까지 다음 항목은 전체 PASS로 취급하지 않는다.
+?ㅼ젣 evidence媛 ?뺣낫???뚭퉴吏 ?ㅼ쓬 ??ぉ? ?꾩껜 PASS濡?痍④툒?섏? ?딅뒗??
 
-- Strategy 1~9 전체의 REAL_VTS signal → execution → Position/PnL Full E2E
-- 동일 3개월 replay와 동일 runtime state를 대상으로 한 실제 browser DOM Playwright 자동 검증
-- Strategy Trade P/L / Account P/L / Position open·closed semantics의 완전한 회계 정합성
-- KIS VTS Collector manifest/lifecycle과 실제 evidence의 완전한 정합성
-- KIS Live credential 및 실제 Live E2E
-- 옵션 매수호가·승수·수량·수수료·슬리피지를 반영하는 Runtime 프리미엄 검사
-- 옵션 레그별 만기 payoff/max-loss 및 기존 미청산 포지션·체결 원장 기반 계좌 전체 위험 집계
-- 부분체결·거절·청산·만기 회귀 검증
-- Strategy 1 헤지 구조와 Strategy 3·4·5 선물 레그의 경제적 목적·위험 한도 확정
+- Strategy 1~9 ?꾩껜??REAL_VTS signal ??execution ??Position/PnL Full E2E
+- ?숈씪 3媛쒖썡 replay? ?숈씪 runtime state瑜???곸쑝濡????ㅼ젣 browser DOM Playwright ?먮룞 寃利?
+- Strategy Trade P/L / Account P/L / Position open쨌closed semantics???꾩쟾???뚭퀎 ?뺥빀??
+- KIS VTS Collector manifest/lifecycle怨??ㅼ젣 evidence???꾩쟾???뺥빀??
+- KIS Live credential 諛??ㅼ젣 Live E2E
+- ?듭뀡 留ㅼ닔?멸?쨌?뱀닔쨌?섎웾쨌?섏닔猷뙿룹뒳由ы뵾吏瑜?諛섏쁺?섎뒗 Runtime ?꾨━誘몄뾼 寃??
+- ?듭뀡 ?덇렇蹂?留뚭린 payoff/max-loss 諛?湲곗〈 誘몄껌???ъ??샕룹껜寃??먯옣 湲곕컲 怨꾩쥖 ?꾩껜 ?꾪뿕 吏묎퀎
+- 遺遺꾩껜寃걔룰굅?댟룹껌?걔룸쭔湲??뚭? 寃利?
+- Strategy 1 ?ㅼ? 援ъ“? Strategy 3쨌4쨌5 ?좊Ъ ?덇렇??寃쎌젣??紐⑹쟻쨌?꾪뿕 ?쒕룄 ?뺤젙
 
-## 11. 옵션 헤지 위험 검사 — 현재 계획
+## 11. ?듭뀡 ?ㅼ? ?꾪뿕 寃?????꾩옱 怨꾪쉷
 
-옵션 헤지 설정 초안은 config/risk/option-hedge-risk.v1.json, 검증 모델은 core/risk/option_hedge_risk_config.py에 있다. 현재 DISABLED_UNTIL_RUNTIME_INTEGRATION 상태이므로 실제 주문 경로의 위험 차단 기능으로 간주하지 않는다. 단위 테스트가 통과해도 Runtime enforcement PASS를 의미하지 않는다.
+?듭뀡 ?ㅼ? ?ㅼ젙 珥덉븞? config/risk/option-hedge-risk.v1.json, 寃利?紐⑤뜽? core/risk/option_hedge_risk_config.py???덈떎. ?꾩옱 DISABLED_UNTIL_RUNTIME_INTEGRATION ?곹깭?대?濡??ㅼ젣 二쇰Ц 寃쎈줈???꾪뿕 李⑤떒 湲곕뒫?쇰줈 媛꾩＜?섏? ?딅뒗?? ?⑥쐞 ?뚯뒪?멸? ?듦낵?대룄 Runtime enforcement PASS瑜??섎??섏? ?딅뒗??
 
-구현 순서는 다음과 같다.
+援ы쁽 ?쒖꽌???ㅼ쓬怨?媛숇떎.
 
-1. Strategy 1 보호 구조와 Strategy 3·4·5 선물 레그의 경제적 목적·위험 한도를 별도 검토한다.
-2. authoritative 매수호가, 계약 승수, 수량, 수수료 및 보수적 슬리피지를 포함해 프리미엄을 검사한다.
-3. 각 레그의 정확한 만기·행사가·방향·수량으로 만기 payoff와 최대손실을 계산한다.
-4. 기존 미청산 포지션과 실제 체결 원장을 연결해 중복 없는 계좌 전체 위험을 집계한다.
-5. 부분체결·거절·청산·만기 및 입력 누락/오류 회귀를 검증한다.
+1. Strategy 1 蹂댄샇 援ъ“? Strategy 3쨌4쨌5 ?좊Ъ ?덇렇??寃쎌젣??紐⑹쟻쨌?꾪뿕 ?쒕룄瑜?蹂꾨룄 寃?좏븳??
+2. authoritative 留ㅼ닔?멸?, 怨꾩빟 ?뱀닔, ?섎웾, ?섏닔猷?諛?蹂댁닔???щ━?쇱?瑜??ы븿???꾨━誘몄뾼??寃?ы븳??
+3. 媛??덇렇???뺥솗??留뚭린쨌?됱궗媛쨌諛⑺뼢쨌?섎웾?쇰줈 留뚭린 payoff? 理쒕??먯떎??怨꾩궛?쒕떎.
+4. 湲곗〈 誘몄껌???ъ??섍낵 ?ㅼ젣 泥닿껐 ?먯옣???곌껐??以묐났 ?녿뒗 怨꾩쥖 ?꾩껜 ?꾪뿕??吏묎퀎?쒕떎.
+5. 遺遺꾩껜寃걔룰굅?댟룹껌?걔룸쭔湲?諛??낅젰 ?꾨씫/?ㅻ쪟 ?뚭?瑜?寃利앺븳??
 
-기존 공통 RiskConfig의 일일 손실 한도와 증거금 한도는 그대로 유지하며 옵션 프리미엄/최대손실 한도로 재해석하지 않는다. 임시 설정 금액은 최종 운용 한도로 확정되지 않았다. authoritative 데이터가 누락되거나 계산이 불가능하면 fail-closed한다. 전략 코드·manifest·매매 정책은 전략별 설계 및 회귀 범위 승인을 거친 뒤 변경한다.
+湲곗〈 怨듯넻 RiskConfig???쇱씪 ?먯떎 ?쒕룄? 利앷굅湲??쒕룄??洹몃?濡??좎??섎ŉ ?듭뀡 ?꾨━誘몄뾼/理쒕??먯떎 ?쒕룄濡??ы빐?앺븯吏 ?딅뒗?? ?꾩떆 ?ㅼ젙 湲덉븸? 理쒖쥌 ?댁슜 ?쒕룄濡??뺤젙?섏? ?딆븯?? authoritative ?곗씠?곌? ?꾨씫?섍굅??怨꾩궛??遺덇??ν븯硫?fail-closed?쒕떎. ?꾨왂 肄붾뱶쨌manifest쨌留ㅻℓ ?뺤콉? ?꾨왂蹂??ㅺ퀎 諛??뚭? 踰붿쐞 ?뱀씤??嫄곗튇 ??蹂寃쏀븳??
 
-README는 프로젝트의 현재 구조와 작업 순서를 요약하고, 상세 절차는 AGENTS.md, 실제 결정 상태는 Notion의 최신 Q&A와 확정 Decision Log를 기준으로 한다.
+README???꾨줈?앺듃???꾩옱 援ъ“? ?묒뾽 ?쒖꽌瑜??붿빟?섍퀬, ?곸꽭 ?덉감??AGENTS.md, ?ㅼ젣 寃곗젙 ?곹깭??Notion??理쒖떊 Q&A? ?뺤젙 Decision Log瑜?湲곗??쇰줈 ?쒕떎.
 
 
 ## 12. Current U22 strategy revalidation (2026-11-20)
@@ -241,7 +241,7 @@ The P5 manifest still explicitly marks identity owner unresolved and runtime use
 - S3 spread-leg definition remains blocked pending approved economic legs; no tradable legs were invented. S4 MINI identity/profile checks passed, but this does not close the full cross-strategy acceptance matrix.
 - Therefore the common and strategy-focused regression coverage is substantially expanded, but the full strategy-by-strategy fault-injection matrix and integrated T4 acceptance remain open until S3/S5 prerequisites and natural-signal/runtime evidence are available.
 
-## T4 X3 follow-up — S3 authoritative basis source regression correction (2026-11-20)
+## T4 X3 follow-up ??S3 authoritative basis source regression correction (2026-11-20)
 
 - No.956 and current code were rechecked. `KISTrack3RuntimeInputSource` correctly uses paired authoritative KIS H0IFCNT0/H0IFASP0 Futures and KOSPI200 index 2001 observations, 2-second source-time pairing, common volatility/regime, and basis normalization. The existing source had two defects: `_latest_total` selected the numerically largest fee/premium rather than the latest timestamp; historical basis pairing could select an index observation later than the Runtime `as_of` time.
 - Corrected `_latest_total` to select by timestamp and restricted historical nearest-index candidates to `<= as_of`. No spread formula, 2-second threshold, policy threshold, or strategy entry permission was changed.
@@ -449,7 +449,7 @@ Separate validation batches: Track6 13-file inventory + X2 suites 111 passed; fo
 
 ## T4 X3 Track7 restored observation comparison (No.1698, 2026-11-21)
 
-- Added test-only read-only comparison of restored group→expiry bindings and expiry-scoped PUT/CALL peak marks against synthetic observation fixtures.
+- Added test-only read-only comparison of restored group?뭙xpiry bindings and expiry-scoped PUT/CALL peak marks against synthetic observation fixtures.
 - Two-group/two-expiry routing round-trip matched. Expiry mismatch, mark mismatch and unmapped group were reported distinctly; the comparison left restored state unchanged and did not trigger side effects.
 - Aggregate contract suite: 26 passed. Adjacent Track7 lifecycle/cutoff/spec/exit regression: 19 passed. compileall, scoped Ruff F821/F401 and git diff-check passed.
 - This is synthetic validation evidence, not authoritative broker reconciliation or production restore. No production/runtime/broker/persistence policy, Live/account API, actual order/cancel/liquidation, collector restart, new collection or raw/canonical source changed. Track7 strategy-state restart recovery and full T4 X3/integrated acceptance remain OPEN.
@@ -593,7 +593,7 @@ The test-only restore-order harness now treats X2 gate accessor exceptions and u
 ## T4 X3 X2 latched single-leg route gate characterization (No.1713, 2026-11-21)
 
 - Reconciled latest No.1712/1711/1710/1709, No.1689, No.1546, Current Baseline and No.1534 before editing. No.1652 candidate/account aggregate checkpoint remains separate from Track7 strategy aggregate.
-- Inspected AutomatedVirtualTradingLoop.on_tick() single-leg command path: approved signals are converted to commands and routed through route_from_runtime_authoritative_sources() → RiskGate.admit_order(); unlike decision cancellation and multi-leg dispatch, this path does not call _runtime_orders_blocked() directly at the command loop. The existing RiskGate independently checks the latched RiskGuard status before risk evaluation and routing.
+- Inspected AutomatedVirtualTradingLoop.on_tick() single-leg command path: approved signals are converted to commands and routed through route_from_runtime_authoritative_sources() ??RiskGate.admit_order(); unlike decision cancellation and multi-leg dispatch, this path does not call _runtime_orders_blocked() directly at the command loop. The existing RiskGate independently checks the latched RiskGuard status before risk evaluation and routing.
 - Added one deterministic full-on_tick synthetic test with an approved single-leg OPTION BUY command and X2 already TRIPPED. Synthetic freshness/identity evidence was supplied; the RiskGate denied admission from the latched RiskGuard; routed=0, filled=0, rejected=1, and the virtual broker adapter produced no report.
 - Separate validation batches: X2 Virtual admission 15 passed; auto-stop/evidence-supervisor/U19 84 passed; Track7 aggregate snapshot contract 46 passed; complete named Track7 regression set 61 passed. py -m compileall -q application tests, changed-test Ruff F821/F401, and git diff --check passed.
 - A broader Ruff check including the unchanged runtime module reports three pre-existing F401 imports (MultiLegDecision, StrategyHub, ControlTowerUIAdapter); the runtime module has no diff and these imports were not altered.
@@ -728,68 +728,68 @@ The test-only restore-order harness now treats X2 gate accessor exceptions and u
 The current Virtual factory creates fresh strategy instances, builds the StrategyHub, constructs the trading loop, and subscribes on_tick. The orchestrator lazily initializes a strategy on the first tick and then evaluates it in the same run; Track7 initialization resets its state. Thus the No.1725 test-only restore-after-initialize order is not yet integrated into actual startup. Restoring before the first hub run is erased; restoring after the first tick is evaluated is too late. A production startup barrier and restore-completion point must be designed before implementation. Snapshot storage/atomicity, identity scope, broker-state authority/freshness, partial/late fills, X2 behavior and mismatch/failure policy remain unresolved. No production behavior changed; synthetic validation-only remains the standard.
 ## T4 X3 Track7 startup restore vs. first-tick lifecycle planning (No.1727, 2026-11-21)
 
-The actual first-tick order is pending-fill observation/reconciliation → Track7 lifecycle planning → context construction → StrategyHub initialization/evaluation → pending action processing. The Track7 planner reads lifecycle_clock_action() before the first StrategyHub initialize/reset. A synthetic probe showed a fresh state produces no action, while a restored CALL_PENDING state at the 15:00 KST cutoff produces CANCEL_AND_RECONCILE; initialize() then resets that restored state. Therefore restoring after planning or after the first hub run misses the first-tick lifecycle action, while restoring before the first hub run is erased. Any startup design must reconcile No.1689 phase ordering and ensure fresh fill observations are not overwritten by snapshot restore. No production code changed; synthetic validation-only criteria remain active.
+The actual first-tick order is pending-fill observation/reconciliation ??Track7 lifecycle planning ??context construction ??StrategyHub initialization/evaluation ??pending action processing. The Track7 planner reads lifecycle_clock_action() before the first StrategyHub initialize/reset. A synthetic probe showed a fresh state produces no action, while a restored CALL_PENDING state at the 15:00 KST cutoff produces CANCEL_AND_RECONCILE; initialize() then resets that restored state. Therefore restoring after planning or after the first hub run misses the first-tick lifecycle action, while restoring before the first hub run is erased. Any startup design must reconcile No.1689 phase ordering and ensure fresh fill observations are not overwritten by snapshot restore. No production code changed; synthetic validation-only criteria remain active.
 
-## T4 X3 — Track7 observation/restore precedence (No.1728, 2026-11-21)
+## T4 X3 ??Track7 observation/restore precedence (No.1728, 2026-11-21)
 
-- No.1727 후속으로 실제 pending-fill observation이 Track7 strategy state에 미치는 영향을 추적했다.
-- `AutomatedVirtualTradingLoop.on_tick()`은 pending observer/reconciliation을 lifecycle planner와 StrategyHub보다 먼저 호출한다. Factory observer의 `multi_leg_bridge.process_pending_quotes()`는 pending quote를 조회한 뒤 `execute()`를 통해 execution-result callback을 호출한다. Factory callback은 `strategy_hub.on_execution_result()`로 전달하고, StrategyOrchestrator는 Track7 `on_execution_result()`를 호출해 expiry/group state를 직접 갱신한다.
-- 따라서 fresh observation은 Track7의 CALL_PENDING을 COMPLETE로 전환할 수 있다. 이 관측 이후 오래된 aggregate를 그대로 복원하면 CALL_PENDING으로 되돌아가 방금 관측한 fill 상태를 덮어쓴다. 반대로 restore 후 observation이면 callback이 fresh fill을 반영한다. 이는 실제 callback/state transition source trace와 test-only synthetic probe로 확인했다.
-- 신규 테스트 `tests/core/test_track7_restore_observation_precedence.py`: actual Track7 strategy callback + synthetic CALL fill result로 restore-before-observation과 observation-before-stale-restore 순서를 비교. 결과 1 passed. compileall, scoped Ruff F821/F401, git diff-check PASS.
-- 테스트는 in-memory Track7 state setter로 stale aggregate 적용 순서를 모사한 synthetic characterization이다. 실제 durable store, production restore API, broker reconciliation, transaction/atomic merge 또는 process restart를 검증하지 않는다.
-- 현재 확인된 요구사항: startup restore/initialize seam뿐 아니라 observation으로 갱신된 fresh state와 snapshot 간 merge/precedence가 필요하다. 다만 어느 데이터가 authoritative인지, merge 규칙/commit point/store/key scope/failure admission은 여전히 미결정이다. No.1689 Observation → Planning → Action 순서를 임의 변경하지 않는다.
-- No.1652 candidate/account aggregate와 Track7 strategy-state aggregate 분리 유지. Production persistence/restore, broker authority/freshness, cancellation/retry/rollback/compensation, X2 lock/atomic policy 변경 없음. No KIS/REAL_VTS/Live/account API, broker call, actual order/cancel/liquidation, collector restart, new collection, Raw/Canonical/accepted source/manifest change.
-- Track7 strategy-state restart recovery 및 Full T4 X3/integrated acceptance OPEN. Synthetic validation-only 기준 유지.
-## T4 X3 — Track7 first-tick fill observation vs lazy initialize (No.1729, 2026-11-21)
+- No.1727 ?꾩냽?쇰줈 ?ㅼ젣 pending-fill observation??Track7 strategy state??誘몄튂???곹뼢??異붿쟻?덈떎.
+- `AutomatedVirtualTradingLoop.on_tick()`? pending observer/reconciliation??lifecycle planner? StrategyHub蹂대떎 癒쇱? ?몄텧?쒕떎. Factory observer??`multi_leg_bridge.process_pending_quotes()`??pending quote瑜?議고쉶????`execute()`瑜??듯빐 execution-result callback???몄텧?쒕떎. Factory callback? `strategy_hub.on_execution_result()`濡??꾨떖?섍퀬, StrategyOrchestrator??Track7 `on_execution_result()`瑜??몄텧??expiry/group state瑜?吏곸젒 媛깆떊?쒕떎.
+- ?곕씪??fresh observation? Track7??CALL_PENDING??COMPLETE濡??꾪솚?????덈떎. ??愿痢??댄썑 ?ㅻ옒??aggregate瑜?洹몃?濡?蹂듭썝?섎㈃ CALL_PENDING?쇰줈 ?섎룎?꾧? 諛⑷툑 愿痢≫븳 fill ?곹깭瑜???뼱?대떎. 諛섎?濡?restore ??observation?대㈃ callback??fresh fill??諛섏쁺?쒕떎. ?대뒗 ?ㅼ젣 callback/state transition source trace? test-only synthetic probe濡??뺤씤?덈떎.
+- ?좉퇋 ?뚯뒪??`tests/core/test_track7_restore_observation_precedence.py`: actual Track7 strategy callback + synthetic CALL fill result濡?restore-before-observation怨?observation-before-stale-restore ?쒖꽌瑜?鍮꾧탳. 寃곌낵 1 passed. compileall, scoped Ruff F821/F401, git diff-check PASS.
+- ?뚯뒪?몃뒗 in-memory Track7 state setter濡?stale aggregate ?곸슜 ?쒖꽌瑜?紐⑥궗??synthetic characterization?대떎. ?ㅼ젣 durable store, production restore API, broker reconciliation, transaction/atomic merge ?먮뒗 process restart瑜?寃利앺븯吏 ?딅뒗??
+- ?꾩옱 ?뺤씤???붽뎄?ы빆: startup restore/initialize seam肉??꾨땲??observation?쇰줈 媛깆떊??fresh state? snapshot 媛?merge/precedence媛 ?꾩슂?섎떎. ?ㅻ쭔 ?대뒓 ?곗씠?곌? authoritative?몄?, merge 洹쒖튃/commit point/store/key scope/failure admission? ?ъ쟾??誘멸껐?뺤씠?? No.1689 Observation ??Planning ??Action ?쒖꽌瑜??꾩쓽 蹂寃쏀븯吏 ?딅뒗??
+- No.1652 candidate/account aggregate? Track7 strategy-state aggregate 遺꾨━ ?좎?. Production persistence/restore, broker authority/freshness, cancellation/retry/rollback/compensation, X2 lock/atomic policy 蹂寃??놁쓬. No KIS/REAL_VTS/Live/account API, broker call, actual order/cancel/liquidation, collector restart, new collection, Raw/Canonical/accepted source/manifest change.
+- Track7 strategy-state restart recovery 諛?Full T4 X3/integrated acceptance OPEN. Synthetic validation-only 湲곗? ?좎?.
+## T4 X3 ??Track7 first-tick fill observation vs lazy initialize (No.1729, 2026-11-21)
 
-- Reconciled latest No.1728/1727/1726, No.1689 phase order, No.1652 aggregate separation, No.1546, Current Baseline and No.1534 provenance rules. No.1710–1728 passing paths were not rerun except the directly extended observation/restore test module.
+- Reconciled latest No.1728/1727/1726, No.1689 phase order, No.1652 aggregate separation, No.1546, Current Baseline and No.1534 provenance rules. No.1710??728 passing paths were not rerun except the directly extended observation/restore test module.
 - New actual-path counterexample: the factory pending observer can deliver `strategy_hub.on_execution_result()` before the first `StrategyHub.run()`. StrategyOrchestrator forwards the callback immediately to Track7; the subsequent first run lazily invokes Track7 `initialize()`, which calls `reset()` and erases the freshly observed CALL fill state before lifecycle planning/evaluation continues.
-- Extended `tests/core/test_track7_restore_observation_precedence.py` with `test_track7_first_tick_pending_fill_observation_is_erased_by_lazy_initialize`. It calls the actual StrategyHub execution-result boundary before first run, observes synthetic CALL_PENDING → COMPLETE, then runs first StrategyHub tick and observes reset to IDLE/empty expiry state.
+- Extended `tests/core/test_track7_restore_observation_precedence.py` with `test_track7_first_tick_pending_fill_observation_is_erased_by_lazy_initialize`. It calls the actual StrategyHub execution-result boundary before first run, observes synthetic CALL_PENDING ??COMPLETE, then runs first StrategyHub tick and observes reset to IDLE/empty expiry state.
 - Validation: this module 2 passed; `py -m compileall -q tests/core/test_track7_restore_observation_precedence.py`, scoped Ruff F821/F401 and `git diff --check` PASS. Synthetic callback/result only; no production code changed.
-- This proves a test-level ordering hazard, not actual broker fill loss, durable persistence, recovery or a production restore API. No policy selected for startup initialization, observation merge, snapshot authority/freshness, commit point/store/key scope or failure admission. Preserve No.1689 Observation → Planning → Action and No.1652 aggregate separation.
+- This proves a test-level ordering hazard, not actual broker fill loss, durable persistence, recovery or a production restore API. No policy selected for startup initialization, observation merge, snapshot authority/freshness, commit point/store/key scope or failure admission. Preserve No.1689 Observation ??Planning ??Action and No.1652 aggregate separation.
 - No KIS/REAL_VTS/Live/account API, broker calls, actual orders/cancels/liquidations, collector restart, new collection, or Raw/Canonical/accepted source/manifest changes. Track7 strategy-state restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 
-## T4 X3 — Track7 startup initialization / fill-observation ordering alternatives (No.1730, 2026-11-21)
+## T4 X3 ??Track7 startup initialization / fill-observation ordering alternatives (No.1730, 2026-11-21)
 
 - Reconciled No.1729/1728/1727, No.1689 phase order, No.1652 aggregate separation, No.1546, Current Baseline and No.1534. Existing passing suites outside the directly extended test module were not rerun.
-- Actual source trace: `on_tick()` order is pending-fill observation/reconciliation → lifecycle planning → context construction → `StrategyHub.run()` → pending action processing. StrategyHub exposes `run()` and execution-result callback; StrategyOrchestrator performs lazy `initialize(context)` and `evaluate(context)` together on first run. No public initialize-only/startup-restore seam is exposed by the current StrategyHub contract.
+- Actual source trace: `on_tick()` order is pending-fill observation/reconciliation ??lifecycle planning ??context construction ??`StrategyHub.run()` ??pending action processing. StrategyHub exposes `run()` and execution-result callback; StrategyOrchestrator performs lazy `initialize(context)` and `evaluate(context)` together on first run. No public initialize-only/startup-restore seam is exposed by the current StrategyHub contract.
 - Synthetic alternative-order probe: running StrategyHub first initializes/resets Track7 and evaluates while state is IDLE. A later synthetic CALL fill callback cannot apply because reset erased the pending order identity (`call_client_order_id=None`); second evaluation remains IDLE. This is distinct from No.1729 callback-before-first-run, where the fresh observation is applied and then erased by lazy initialize/reset.
 - Added `test_track7_first_run_before_fill_observation_discards_pending_fill_callback` to `tests/core/test_track7_restore_observation_precedence.py`. Module result: 3 passed. compileall, scoped Ruff F821/F401 and git diff-check PASS.
 - Finding: simply moving initialization before observation is not a safe fix; it can erase the pending identity before the fill callback. Keeping current observation-first ordering allows callback delivery but first lazy initialization erases the updated state. Current public seam cannot demonstrate a safe initialize-only step before observation without introducing a new contract.
-- No production code/policy changed. No.1689 Observation → Planning → Action ordering remains unchanged. Required design seam must separate initialization completion from first evaluation while retaining the observed pending identity and reconcile snapshot freshness/merge. Snapshot authority/freshness, commit/store/key scope and failure admission remain undecided. No.1652 aggregate separation retained.
+- No production code/policy changed. No.1689 Observation ??Planning ??Action ordering remains unchanged. Required design seam must separate initialization completion from first evaluation while retaining the observed pending identity and reconcile snapshot freshness/merge. Snapshot authority/freshness, commit/store/key scope and failure admission remain undecided. No.1652 aggregate separation retained.
 - Synthetic validation only; no broker/Live/API/order/collector/raw/Canonical/manifest actions. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 
-## T4 X3 — Test-only initialize/restore/observation boundary probe (No.1731, 2026-11-21)
+## T4 X3 ??Test-only initialize/restore/observation boundary probe (No.1731, 2026-11-21)
 
 - Reconciled No.1730/1729/1728/1727, No.1689 phase order, No.1652 aggregate separation, No.1546, Current Baseline and No.1534. Existing passing suites outside the directly extended test module were not rerun.
 - Test-only sequence was exercised against the actual Track7 strategy and StrategyHub: call Track7.initialize(context) without evaluation; restore a synthetic pending CALL snapshot and its expiry/group binding; deliver the fresh synthetic CALL fill through StrategyHub.on_execution_result(); then invoke the first StrategyHub.run(). The first evaluation observed COMPLETE and retained call_open=True.
 - Added `test_track7_test_only_initialize_restore_observe_then_first_evaluate_preserves_fill` to `tests/core/test_track7_restore_observation_precedence.py`. Module result 4 passed; compileall, scoped Ruff F821/F401 and git diff-check PASS.
 - This demonstrates a candidate ordering contract for first strategy evaluation only. The test marks StrategyOrchestrator's private `_initialized` set directly and manipulates in-memory Track7 state; it is NOT a public API, production startup seam, durable snapshot restore or broker reconciliation. No production code changed.
-- Critical remaining limitation: actual on_tick lifecycle planning currently runs before context construction and StrategyHub. A seam inserted only after context construction can protect first evaluation but cannot supply restored Track7 state to that same tick's earlier lifecycle planner. No.1727's first-planner gap remains unresolved. Need a separately approved startup/context preparation boundary before planning, while preserving No.1689 Observation → Planning → Action semantics and latest fill precedence. Do not reorder phases or add a public API without approval.
+- Critical remaining limitation: actual on_tick lifecycle planning currently runs before context construction and StrategyHub. A seam inserted only after context construction can protect first evaluation but cannot supply restored Track7 state to that same tick's earlier lifecycle planner. No.1727's first-planner gap remains unresolved. Need a separately approved startup/context preparation boundary before planning, while preserving No.1689 Observation ??Planning ??Action semantics and latest fill precedence. Do not reorder phases or add a public API without approval.
 - Snapshot authority/freshness, merge/commit/store/key scope and restore/reconciliation failure admission remain undecided. No.1652 candidate/account aggregate stays separate from Track7 strategy-state aggregate.
 - Synthetic validation only; no production policy/code, persistence, KIS/REAL_VTS/Live/account API, broker calls, actual orders/cancels/liquidations, collector restart, new collection or Raw/Canonical/accepted source/manifest change. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 
-## T4 X3 — Pre-first-tick Track7 bootstrap and first-planner visibility probe (No.1732, 2026-11-21)
+## T4 X3 ??Pre-first-tick Track7 bootstrap and first-planner visibility probe (No.1732, 2026-11-21)
 
 - Reconciled latest No.1731/1730/1729/1728/1727, No.1689 phase order, No.1652 aggregate separation, No.1546 and No.1534 provenance rules before selecting this unresolved first-planner risk.
 - Test-only candidate bootstrap: call Track7.initialize(bootstrap_context) before first on_tick; restore synthetic pending CALL state plus expiry/group identity; mark the StrategyOrchestrator key initialized; then allow first-tick observation/planning/evaluation to proceed without lazy initialize resetting state.
 - Synthetic checks against the actual Track7 lifecycle_clock_action: (a) with no new fill observation, first planner sees restored CALL_PENDING identity and returns CANCEL_AND_RECONCILE for SYNTHETIC-CALL-ORDER-1 at 15:00_CUTOFF; (b) with a fresh synthetic CALL fill callback before planning, state becomes COMPLETE and planner correctly returns no cancellation; (c) first StrategyHub evaluation after bootstrap observes COMPLETE and preserves call_open=True.
 - Added two tests to tests/core/test_track7_restore_observation_precedence.py: test_track7_test_only_pre_tick_bootstrap_restore_is_visible_to_first_lifecycle_planner and test_track7_test_only_pre_tick_bootstrap_restore_supplies_first_planner_pending_identity. Focused module 6 passed; compileall, scoped Ruff F821/F401, git diff-check PASS.
 - This is a test-only candidate ordering, not a production implementation: it directly manipulates Track7 in-memory state and StrategyOrchestrator private _initialized, and uses a synthetic bootstrap context. It does not prove a supported bootstrap context exists in production, durable snapshot loading, source authority/freshness, multi-strategy startup, actual on_tick wiring or broker reconciliation. No production code/policy changed.
-- The key remaining design question is how to obtain a valid context and initialize/restore before the first tick without violating No.1689's pending-fill Observation → Planning → Action ordering. If initialization needs the first tick's context, current on_tick ordering still has a cycle: planner requires restored state before context_builder/StrategyHub, while StrategyHub lazily initializes only after planner. No public initialize-only API or production phase reorder is approved.
+- The key remaining design question is how to obtain a valid context and initialize/restore before the first tick without violating No.1689's pending-fill Observation ??Planning ??Action ordering. If initialization needs the first tick's context, current on_tick ordering still has a cycle: planner requires restored state before context_builder/StrategyHub, while StrategyHub lazily initializes only after planner. No public initialize-only API or production phase reorder is approved.
 - Snapshot authority/freshness, merge/commit/store/key scope and restore/reconciliation failure admission remain undecided. No.1652 candidate/account aggregate remains separate from Track7 strategy-state aggregate.
 - Synthetic-only. No KIS/REAL_VTS/Live/account API, broker calls, actual orders/cancels/liquidations, collector restart, new collection, or Raw/Canonical/accepted source/manifest changes. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 
-## T4 X3 — No.1733 Track7 first-tick Context/startup boundary (2026-11-21)
+## T4 X3 ??No.1733 Track7 first-tick Context/startup boundary (2026-11-21)
 
-- Actual on_tick order: MarketState construction → pending-fill Observation → lifecycle Planning → context_builder → StrategyHub.run → pending Action. context_builder updates source as-of/tick and materializes provider snapshots/strategy Contexts; it is not a pure constructor.
+- Actual on_tick order: MarketState construction ??pending-fill Observation ??lifecycle Planning ??context_builder ??StrategyHub.run ??pending Action. context_builder updates source as-of/tick and materializes provider snapshots/strategy Contexts; it is not a pure constructor.
 - Track7 usable Context requires expiry calendar and weekly option selection. The current P5 fixture begins with monthly/20261008, so it cannot prove the weekly path. Per No.1534, this was not classified as a blocker; a typed synthetic StrategyContext (MarketState + CommonStrategyInput + Track7ExecutionInput) was constructed and passed to actual Track7.initialize(context).
 - Track7.initialize reads no Context fields and only calls reset(). StrategyOrchestrator skips initialize for UnavailableStrategyPayload; otherwise registry.prepare/initialize/on_market_state/evaluate run together inside run(). StrategyHub has no public initialize-only API.
 - A tick-independent pre-tick Context is unavailable under the current context_builder contract. First-tick Context can technically be built after Observation and before Planning because tick/MarketState already exist, but provider source updates, other strategies' Context-dependent initialization, unavailable payload handling and initialization completion semantics remain unresolved. No production phase/API change is approved.
-- No production code/persistence/policy changed. Preserve No.1689 Observation → Planning → Action and No.1652 aggregate separation. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN. Synthetic-only; no Live/API/broker/order/collector/raw/Canonical/manifest action.
+- No production code/persistence/policy changed. Preserve No.1689 Observation ??Planning ??Action and No.1652 aggregate separation. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN. Synthetic-only; no Live/API/broker/order/collector/raw/Canonical/manifest action.
 - Detailed record: https://app.notion.com/p/41f5f4f6eaa1810b942fd6a949ff6d70
 
-## T4 X3 — No.1734 Track7 weekly Provider Context validation (2026-11-21)
+## T4 X3 ??No.1734 Track7 weekly Provider Context validation (2026-11-21)
 
 - Used Project200's existing manifest-bound `q25_strategy7_8_v2/strategy7_weekly` fixture because it is absent from the T4 worktree. Per No.1534, applied alternate synthetic validation instead of treating missing local fixture as a blocker. Manifest remains runtime_eligible=false and BLOCKED_IDENTITY_OWNER_UNRESOLVED.
 - Actual StandardRuntimeInputProvider.build() with SyntheticReplayAdapter, synthetic Option Master, and ValidationOnlyTradingCalendar generated Track7ExecutionInput for first weekly tick: expiry 20261109, PUT 487.5, CALL 512.5. Calendar flags new-week-start=True, expiry-day=False, week-end=False. Provider-level test-only evidence only; not factory full wiring or production eligibility.
@@ -799,60 +799,59 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - Detail: https://app.notion.com/p/41f5f4f6eaa181158b98d3aa376043db
 
 
-## T4 X3 — No.1735 Factory Context / Track7 initialization boundary (2026-11-21)
+## T4 X3 ??No.1735 Factory Context / Track7 initialization boundary (2026-11-21)
 
 - Actual factory context_builder updates historical source as-of and synthetic source tick, then calls StandardRuntimeInputProvider.build(). Provider build materializes VirtualRuntimeDataProvider.snapshot, common analytics and strategy Context/read-model snapshots; it is not a pure object constructor.
-- Actual AutomatedVirtualTradingLoop.on_tick order remains pending-fill Observation → lifecycle Planning → context_builder → StrategyHub.run() → pending Action. The first planner therefore runs before first-tick Context construction and StrategyHub lazy initialization.
+- Actual AutomatedVirtualTradingLoop.on_tick order remains pending-fill Observation ??lifecycle Planning ??context_builder ??StrategyHub.run() ??pending Action. The first planner therefore runs before first-tick Context construction and StrategyHub lazy initialization.
 - StrategyHub has no public initialize-only API. StrategyOrchestrator checks context/Unavailable payload and registry.prepare(), then lazily calls initialize() and records the key in private _initialized. Directly manipulating that private marker is test-only, not a production seam.
 - Building Context and initializing Track7 after Observation can reset/erase the fresh fill already applied by the observer. Building/updating sources before Observation changes source as-of/tick and provider snapshot timing relative to the observation phase. Neither simple reordering nor private-marker prepopulation is established safe.
 - AST source-boundary characterization: 4/4 PASS (factory source-update-before-provider-build; actual on_tick phase order; no public StrategyHub initialize-only API/private marker ownership; registry.prepare/context validation before initialize). Existing PASS suites were not rerun. No production code/API/phase/persistence changed.
-- Required before implementation: approved Track7-specific public initialization/restore boundary, valid first-tick Context preparation, non-duplicating fresh-observation precedence/merge, and restore/reconciliation failure-admission policy. Preserve No.1689 Observation → Planning → Action; do not implement phase reorder or private-marker use before policy approval.
+- Required before implementation: approved Track7-specific public initialization/restore boundary, valid first-tick Context preparation, non-duplicating fresh-observation precedence/merge, and restore/reconciliation failure-admission policy. Preserve No.1689 Observation ??Planning ??Action; do not implement phase reorder or private-marker use before policy approval.
 - No.1652 candidate/account aggregate remains separate from Track7 strategy-state aggregate. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN. Synthetic/validation-only criteria only; fixture runtime_eligible=false and identity runtime use prohibited. No KIS/REAL_VTS/Live/account API, broker/order/cancel/liquidation, collector restart, new collection, Raw/Canonical/accepted source or manifest change.
 - Notion: https://app.notion.com/p/41f5f4f6eaa1812ea730ec8532c10c63
 
 
-## T4 X3 — No.1736 Track7 unavailable-to-available Context / fill / lazy initialize conflict (2026-11-21)
+## T4 X3 ??No.1736 Track7 unavailable-to-available Context / fill / lazy initialize conflict (2026-11-21)
 
 - Actual StrategyOrchestrator.run() skips registry.prepare() and initialize() when the first Track7 Context carries UnavailableStrategyPayload. The Track7 strategy key is not added to the orchestrator's private _initialized set.
 - While the key remains uninitialized, the pending-fill observer can call the actual StrategyHub execution-result callback. Synthetic CALL fill changes Track7 state from CALL_PENDING to COMPLETE with call_open=True.
 - When a valid typed Track7 Context first becomes available, the next StrategyHub.run() lazily invokes Track7.initialize(); initialize() calls reset(), erasing the just-observed COMPLETE/call_open state to IDLE/False.
 - Deterministic validation-only probe against actual StrategyRegistry, StrategyHub, StrategyOrchestrator and Track7: 3/3 assertions PASS (unavailable skip; callback fill transition; first later valid Context resets observed state). Synthetic values only; no broker/API or order action.
 - This narrows the No.1729/1730 startup-reset risk: the first Context may be unavailable while observer callbacks still update state, then a later available Context triggers delayed initialization. registry.prepare() alone does not update the orchestrator initialization marker.
-- No production code/API/phase/persistence or new test file changed. Do not manipulate private _initialized, reorder No.1689 Observation → Planning → Action, change reset semantics, or invent snapshot/observation merge, replay, rollback, or X2 failure policy before approval.
+- No production code/API/phase/persistence or new test file changed. Do not manipulate private _initialized, reorder No.1689 Observation ??Planning ??Action, change reset semantics, or invent snapshot/observation merge, replay, rollback, or X2 failure policy before approval.
 - Required design decisions: Track7 init/restore completion independent of Context availability; precedence/merge for fills received during unavailable-to-available transition; failure admission/X2 behavior; public Track7-specific seam isolated from other strategies' context-dependent initialization.
 - No.1652 candidate/account aggregate remains separate from Track7 strategy-state aggregate. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 - Synthetic/validation-only only. Fixture runtime_eligible=false and identity runtime use prohibited. No KIS/REAL_VTS/Live/account API, broker/order/cancel/liquidation, collector restart, new collection, Raw/Canonical/accepted source or manifest changes.
 - Notion: https://app.notion.com/p/41f5f4f6eaa1813b84e5d36e9aca554c
 
-## T4 X3 — No.1737 Full on_tick unavailable→available Track7 fill/reset 재현 (2026-11-22)
+## T4 X3 ??No.1737 Full on_tick unavailable?뭓vailable Track7 fill/reset ?ы쁽 (2026-11-22)
 
-- 실제 AutomatedVirtualTradingLoop.on_tick() 두 tick 흐름에서 pending-fill observer → Context builder → StrategyHub 순서를 검증했다. 첫 tick의 UnavailableStrategyPayload 상태에서 observer가 synthetic CALL fill callback을 전달해 Track7이 COMPLETE/call_open=True가 됐다.
-- 두 번째 tick에서 처음 valid Context가 공급되자 lazy initialize → reset()이 fresh observation을 지워 IDLE/call_open=False 및 빈 expiry state로 되돌렸다.
-- Full on_tick synthetic harness 3/3 PASS. 실제 on_tick/StrategyHub/StrategyOrchestrator/Track7 경로 사용, routed=0/filled=0, broker/order executor 미구성. Synthetic callback은 실제 broker fill이나 계좌 손실 증거가 아니다.
-- Production code/API/phase/persistence/test file 변경 없음. No.1689 Observation → Planning → Action 유지. No.1652 candidate/account aggregate와 Track7 strategy-state aggregate 분리. Track7 restart recovery 및 Full T4 X3/integrated acceptance OPEN.
-- 다음 위험은 public Track7 init/restore completion seam, observation-vs-snapshot precedence/merge, failure admission/X2 정책이다. 승인 전 private marker 조작, phase reorder, reset 변경 금지.
-- Fixture runtime_eligible=false, identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED, identity_policy.runtime_use=PROHIBITED 유지. Live/API/broker/order/collector/raw/Canonical/manifest 변경 없음.
-- 상세: https://app.notion.com/p/41f5f4f6eaa181aaade9e63935b72a7f
+- ?ㅼ젣 AutomatedVirtualTradingLoop.on_tick() ??tick ?먮쫫?먯꽌 pending-fill observer ??Context builder ??StrategyHub ?쒖꽌瑜?寃利앺뻽?? 泥?tick??UnavailableStrategyPayload ?곹깭?먯꽌 observer媛 synthetic CALL fill callback???꾨떖??Track7??COMPLETE/call_open=True媛 ?먮떎.
+- ??踰덉㎏ tick?먯꽌 泥섏쓬 valid Context媛 怨듦툒?섏옄 lazy initialize ??reset()??fresh observation??吏??IDLE/call_open=False 諛?鍮?expiry state濡??섎룎?몃떎.
+- Full on_tick synthetic harness 3/3 PASS. ?ㅼ젣 on_tick/StrategyHub/StrategyOrchestrator/Track7 寃쎈줈 ?ъ슜, routed=0/filled=0, broker/order executor 誘멸뎄?? Synthetic callback? ?ㅼ젣 broker fill?대굹 怨꾩쥖 ?먯떎 利앷굅媛 ?꾨땲??
+- Production code/API/phase/persistence/test file 蹂寃??놁쓬. No.1689 Observation ??Planning ??Action ?좎?. No.1652 candidate/account aggregate? Track7 strategy-state aggregate 遺꾨━. Track7 restart recovery 諛?Full T4 X3/integrated acceptance OPEN.
+- ?ㅼ쓬 ?꾪뿕? public Track7 init/restore completion seam, observation-vs-snapshot precedence/merge, failure admission/X2 ?뺤콉?대떎. ?뱀씤 ??private marker 議곗옉, phase reorder, reset 蹂寃?湲덉?.
+- Fixture runtime_eligible=false, identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED, identity_policy.runtime_use=PROHIBITED ?좎?. Live/API/broker/order/collector/raw/Canonical/manifest 蹂寃??놁쓬.
+- ?곸꽭: https://app.notion.com/p/41f5f4f6eaa181aaade9e63935b72a7f
 
-## T4 X3 — No.1738 Track7 초기화·복원 공개 API 표면 감사 (2026-11-22)
+## T4 X3 ??No.1738 Track7 珥덇린?붋룸났??怨듦컻 API ?쒕㈃ 媛먯궗 (2026-11-22)
 
-- My_Caddy_TS1로 Project200 실제 코드의 public API 표면 및 구현을 read-only 조사했다. Track7, StrategyOrchestrator, StrategyRegistry, StrategyHub 어디에도 initialize-only/restore-complete 공개 API가 없다.
-- Track7.initialize(context)는 reset()만 호출하며 reset은 legacy/expiry/group/exit-pending state를 모두 비운다. StrategyOrchestrator.run()은 Unavailable payload에서는 initialize를 건너뛰고, 최초 valid Context에서 lazy initialize 후 marker를 기록하고 on_market_state/evaluate를 수행한다.
-- 따라서 현재 public API 조합만으로 No.1737 fill 소거를 안전하게 해결할 수 없다. Registry.prepare()는 orchestrator initialized marker를 갱신하지 않는다. private _initialized 직접 조작은 금지.
-- Read-only audit만 수행. production code/API/phase/persistence/test fixture 변경 없음. 다음 단계는 Track7 init completion ownership, fresh observation vs snapshot merge/commit, unavailable/restore failure admission/X2의 최소 공개 계약 설계. 계약 승인 전 코드 변경 없음.
-- No.1689 phase order 및 No.1652 aggregate 분리 유지. Track7 restart recovery 및 Full T4 X3/integrated acceptance OPEN. Synthetic-only, fixture runtime eligibility false, identity runtime use prohibited.
-- 상세: https://app.notion.com/p/41f5f4f6eaa18124aa42f329bc3480e5
+- My_Caddy_TS1濡?Project200 ?ㅼ젣 肄붾뱶??public API ?쒕㈃ 諛?援ы쁽??read-only 議곗궗?덈떎. Track7, StrategyOrchestrator, StrategyRegistry, StrategyHub ?대뵒?먮룄 initialize-only/restore-complete 怨듦컻 API媛 ?녿떎.
+- Track7.initialize(context)??reset()留??몄텧?섎ŉ reset? legacy/expiry/group/exit-pending state瑜?紐⑤몢 鍮꾩슫?? StrategyOrchestrator.run()? Unavailable payload?먯꽌??initialize瑜?嫄대꼫?곌퀬, 理쒖큹 valid Context?먯꽌 lazy initialize ??marker瑜?湲곕줉?섍퀬 on_market_state/evaluate瑜??섑뻾?쒕떎.
+- ?곕씪???꾩옱 public API 議고빀留뚯쑝濡?No.1737 fill ?뚭굅瑜??덉쟾?섍쾶 ?닿껐?????녿떎. Registry.prepare()??orchestrator initialized marker瑜?媛깆떊?섏? ?딅뒗?? private _initialized 吏곸젒 議곗옉? 湲덉?.
+- Read-only audit留??섑뻾. production code/API/phase/persistence/test fixture 蹂寃??놁쓬. ?ㅼ쓬 ?④퀎??Track7 init completion ownership, fresh observation vs snapshot merge/commit, unavailable/restore failure admission/X2??理쒖냼 怨듦컻 怨꾩빟 ?ㅺ퀎. 怨꾩빟 ?뱀씤 ??肄붾뱶 蹂寃??놁쓬.
+- No.1689 phase order 諛?No.1652 aggregate 遺꾨━ ?좎?. Track7 restart recovery 諛?Full T4 X3/integrated acceptance OPEN. Synthetic-only, fixture runtime eligibility false, identity runtime use prohibited.
+- ?곸꽭: https://app.notion.com/p/41f5f4f6eaa18124aa42f329bc3480e5
 
 
-## No.1739 — Track7 init/restore 최소 공개 계약 설계 (2026-11-22)
+## No.1739 ??Track7 init/restore 理쒖냼 怨듦컻 怨꾩빟 ?ㅺ퀎 (2026-11-22)
 
-- No.1738 public API 감사, No.1737 실제 on_tick 재현, No.1735 Factory 호출 순서, No.1728 fresh observation/stale restore, No.1689 phase/X2, No.1652 aggregate 분리 기준을 대조했다.
-- Track7 전용 bootstrap/restore 경계, Context-independent 준비, callback staging/replay/sequence merge, snapshot identity/version/watermark 및 expiry/group scope, merge 완료 후 단일 ready commit, unavailable/restore failure admission/X2의 설계 대안 매트릭스를 작성했다.
-- 현재 initialize()는 reset()을 호출하므로 restore API로 재사용하지 않는다. private _initialized 조작, phase reorder, 임의 retry/rollback/compensation/X2 정책 구현 금지.
-- 소유권(Hub 위임 vs Track7 자체), 이벤트 identity/dedupe/order, snapshot authority/freshness, commit point, failure admission/X2는 미승인. 본 문서는 후보 설계이지 정책 승인 기록이 아니다.
-- 합성 검증 예정 6종: unavailable→available 중 fresh fill 보존, stale snapshot 역행 방지, watermark/중복/역순 이벤트, snapshot 손상·identity/scope 불일치, Context/restore failure, 타 전략 초기화 격리. 이번 단계에서 신규 테스트/fixture/production seam 및 기존 suite 실행 없음.
-- No.1689 Observation → Planning → Action 및 X2 latched 시 fill reconciliation 허용/Planning·Action 생략 유지. No.1652 candidate/account aggregate와 Track7 strategy-state aggregate 분리.
-- Track7 restart recovery 및 Full T4 X3/integrated acceptance OPEN. Synthetic-only; fixture runtime_eligible=false, identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED, identity_policy.runtime_use=PROHIBITED.
-- Live/API/broker/order/cancel/liquidation/collector/raw/Canonical/manifest 변경 없음. Production code/API/phase/persistence/test 변경 없음.
+- No.1738 public API 媛먯궗, No.1737 ?ㅼ젣 on_tick ?ы쁽, No.1735 Factory ?몄텧 ?쒖꽌, No.1728 fresh observation/stale restore, No.1689 phase/X2, No.1652 aggregate 遺꾨━ 湲곗????議고뻽??
+- Track7 ?꾩슜 bootstrap/restore 寃쎄퀎, Context-independent 以鍮? callback staging/replay/sequence merge, snapshot identity/version/watermark 諛?expiry/group scope, merge ?꾨즺 ???⑥씪 ready commit, unavailable/restore failure admission/X2???ㅺ퀎 ???留ㅽ듃由?뒪瑜??묒꽦?덈떎.
+- ?꾩옱 initialize()??reset()???몄텧?섎?濡?restore API濡??ъ궗?⑺븯吏 ?딅뒗?? private _initialized 議곗옉, phase reorder, ?꾩쓽 retry/rollback/compensation/X2 ?뺤콉 援ы쁽 湲덉?.
+- ?뚯쑀沅?Hub ?꾩엫 vs Track7 ?먯껜), ?대깽??identity/dedupe/order, snapshot authority/freshness, commit point, failure admission/X2??誘몄듅?? 蹂?臾몄꽌???꾨낫 ?ㅺ퀎?댁? ?뺤콉 ?뱀씤 湲곕줉???꾨땲??
+- ?⑹꽦 寃利??덉젙 6醫? unavailable?뭓vailable 以?fresh fill 蹂댁〈, stale snapshot ??뻾 諛⑹?, watermark/以묐났/??닚 ?대깽?? snapshot ?먯긽쨌identity/scope 遺덉씪移? Context/restore failure, ? ?꾨왂 珥덇린??寃⑸━. ?대쾲 ?④퀎?먯꽌 ?좉퇋 ?뚯뒪??fixture/production seam 諛?湲곗〈 suite ?ㅽ뻾 ?놁쓬.
+- No.1689 Observation ??Planning ??Action 諛?X2 latched ??fill reconciliation ?덉슜/Planning쨌Action ?앸왂 ?좎?. No.1652 candidate/account aggregate? Track7 strategy-state aggregate 遺꾨━.
+- Track7 restart recovery 諛?Full T4 X3/integrated acceptance OPEN. Synthetic-only; fixture runtime_eligible=false, identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED, identity_policy.runtime_use=PROHIBITED.
+- Live/API/broker/order/cancel/liquidation/collector/raw/Canonical/manifest 蹂寃??놁쓬. Production code/API/phase/persistence/test 蹂寃??놁쓬.
 - Notion: https://app.notion.com/p/41f5f4f6eaa18156b23dea64e66ee347
-
