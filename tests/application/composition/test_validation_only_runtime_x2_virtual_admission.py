@@ -1287,3 +1287,52 @@ def test_t4_x2_full_on_tick_tuple_reconciliation_precedes_strategy_exception(tmp
     assert reconciled_fill.reports[0].execution_id == "SYNTHETIC:TUPLE-THEN-STRATEGY-ERROR:001"
     assert stop_switch.snapshot().status == "ARMED"
     assert stop_switch.snapshot().order_admission_blocked is False
+
+
+def test_t4_x2_full_on_tick_pending_processor_exception_after_strategy(tmp_path):
+    inputs = _inputs()
+    stop_switch = _switch(inputs, tmp_path)
+    admission = ValidationOnlyRuntimeStopAdmissionSource(
+        _BaseStatusSource(inputs[4]), stop_switch,
+    )
+    loop = _loop(inputs[1], stop_switch, admission)
+    calls = []
+    reconciled_fill = SimpleNamespace(
+        strategy_id="SYNTHETIC_TRACK7",
+        routed_legs=1,
+        filled_legs=1,
+        reports=(SimpleNamespace(execution_id="SYNTHETIC:TUPLE-THEN-PROCESSOR-ERROR:001"),),
+    )
+
+    class _StrategyHub:
+        def run(self, _contexts):
+            calls.append("strategy")
+            return SimpleNamespace(failures=(), signals=())
+
+    def observer(_tick):
+        calls.append("observer")
+        return (reconciled_fill,)
+
+    def processor(_tick):
+        calls.append("processor")
+        raise RuntimeError("SYNTHETIC_PENDING_PROCESSOR_FAILURE")
+
+    loop.runtime_evidence_supervisor = None
+    loop.pending_multi_leg_observer = observer
+    loop.pending_multi_leg_planner = lambda _tick: calls.append("planner")
+    loop.pending_multi_leg_processor = processor
+    loop.strategy_hub = _StrategyHub()
+    loop.context_builder = lambda _tick, _state: (calls.append("context") or {})
+
+    tick = SimpleNamespace(
+        timestamp=NOW.isoformat(), seq_id=1722,
+        underlying_price=350.25, volume=1, ask_price=1.25,
+    )
+
+    with pytest.raises(RuntimeError, match="SYNTHETIC_PENDING_PROCESSOR_FAILURE"):
+        loop.on_tick(tick)
+
+    assert calls == ["observer", "planner", "context", "strategy", "processor"]
+    assert reconciled_fill.reports[0].execution_id == "SYNTHETIC:TUPLE-THEN-PROCESSOR-ERROR:001"
+    assert stop_switch.snapshot().status == "ARMED"
+    assert stop_switch.snapshot().order_admission_blocked is False

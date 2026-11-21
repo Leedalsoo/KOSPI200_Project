@@ -622,3 +622,9 @@
 - In validation-only on_tick tests, pending-fill observation/reconciliation precedes lifecycle planning and StrategyHub. A tuple result may be returned before a later StrategyHub exception propagates. This ordering alone does not prove durable persistence, replay safety, or exactly-once recovery of the reconciliation side effects.
 - Keep observer, planner, StrategyHub, result aggregation, and action phases distinct when characterizing failures. Do not infer X2 trip, retry, rollback, compensation, or restart policy from an exception-only test; require an approved decision before changing production behavior.
 - Synthetic results remain validation-only; after authoritative real-account API inputs and acceptance criteria are approved, rematch the complete code against those criteria.
+
+
+## T4 X3 pending action processor exception boundary (2026-11-21)
+- In validation-only full on_tick characterization, a non-empty pending reconciliation tuple is produced before StrategyHub; if StrategyHub succeeds and the pending action processor raises a generic RuntimeError, the exception propagates before pending-result aggregation and AutomatedTickResult construction.
+- Existing on_tick catches Track6LifecycleRecoveryError and Track6LifecyclePersistenceError from the action processor and trips X2 for those specific cases. Do not generalize that handling to arbitrary exceptions or change the exception policy without a newer approved Notion decision.
+- Synthetic callback tests do not execute real cancel/repair/retry/flatten/submit actions and do not establish whether actual processor side effects partially completed before failure. Do not infer rollback, compensation, retry, or exactly-once semantics.
