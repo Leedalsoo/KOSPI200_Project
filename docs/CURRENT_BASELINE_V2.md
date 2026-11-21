@@ -759,3 +759,13 @@
 - No.1652 candidate/account aggregate remains separate from Track7 strategy-state aggregate. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 - Synthetic/validation-only only. Fixture runtime_eligible=false and identity runtime use prohibited. No KIS/REAL_VTS/Live/account API, broker/order/cancel/liquidation, collector restart, new collection, Raw/Canonical/accepted source or manifest changes.
 - Notion: https://app.notion.com/p/41f5f4f6eaa1813b84e5d36e9aca554c
+
+## T4 X3 — No.1737 Full on_tick unavailable→available Track7 fill/reset 재현 (2026-11-22)
+
+- 실제 AutomatedVirtualTradingLoop.on_tick() 두 tick 흐름에서 pending-fill observer → Context builder → StrategyHub 순서를 검증했다. 첫 tick의 UnavailableStrategyPayload 상태에서 observer가 synthetic CALL fill callback을 전달해 Track7이 COMPLETE/call_open=True가 됐다.
+- 두 번째 tick에서 처음 valid Context가 공급되자 lazy initialize → reset()이 fresh observation을 지워 IDLE/call_open=False 및 빈 expiry state로 되돌렸다.
+- Full on_tick synthetic harness 3/3 PASS. 실제 on_tick/StrategyHub/StrategyOrchestrator/Track7 경로 사용, routed=0/filled=0, broker/order executor 미구성. Synthetic callback은 실제 broker fill이나 계좌 손실 증거가 아니다.
+- Production code/API/phase/persistence/test file 변경 없음. No.1689 Observation → Planning → Action 유지. No.1652 candidate/account aggregate와 Track7 strategy-state aggregate 분리. Track7 restart recovery 및 Full T4 X3/integrated acceptance OPEN.
+- 다음 위험은 public Track7 init/restore completion seam, observation-vs-snapshot precedence/merge, failure admission/X2 정책이다. 승인 전 private marker 조작, phase reorder, reset 변경 금지.
+- Fixture runtime_eligible=false, identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED, identity_policy.runtime_use=PROHIBITED 유지. Live/API/broker/order/collector/raw/Canonical/manifest 변경 없음.
+- 상세: https://app.notion.com/p/41f5f4f6eaa181aaade9e63935b72a7f
