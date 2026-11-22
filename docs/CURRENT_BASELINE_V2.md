@@ -854,3 +854,14 @@
 - No.1689 Observation fill reconciliation 예외, X2 latched 시 Planning/Action 생략, No.1652 aggregate 분리 유지. UNKNOWN/CONFLICT만으로 global X2 자동 변경 금지.
 - Track7 restart recovery 및 Full T4 X3/integrated acceptance OPEN. Production code/API/persistence/phase/test/fixture 및 Raw/Canonical/accepted-source/manifest 변경 없음. KIS/REAL_VTS/Live/account API, broker/order/cancel/liquidation, collector restart/new collection 없음.
 - 상세: https://app.notion.com/p/4205f4f6eaa18129bd3ddaf7ea6e9d24
+
+## No.1746 — Track7 execution identity / duplicate callback idempotency (2026-11-22)
+
+- 실제 callback 경로: VirtualMultiLegExecutionBridge → factory callback → StrategyHub → StrategyOrchestrator → Track7.on_execution_result.
+- ExecutionReport.execution_id는 optional, ExecutionFill.execution_id는 required. Identity adapter는 execution_id + client_order_id를 보존. Track7 callback은 report-level ID/상태/수량/시간/가격 및 group/leg를 사용하지만 execution_fills 개별 목록은 소비하지 않는다. ExecutionFill/ExecutionReport에는 execution sequence/seq_id/watermark가 없다. tick.seq_id는 market sequence이며 execution sequence 연결은 확인되지 않았다.
+- Bridge의 _merge_group_reports / _applied_execution_fingerprints는 PositionLotStore 중복 적용을 다루지만 Track7 callback 상태 전이의 idempotency는 보장하지 않는다.
+- My_Caddy_TS1 원격 실제 Track7 callback + synthetic report 4/4 PASS: 최초 PUT fill PUT_PENDING→CALL_READY, 동일 event 재전달 CALL_READY→BLOCKED (TRACK7_PUT_FILL_STAGE_MISMATCH). COMPLETE CALL 재전달은 COMPLETE 유지. ID adapter identity 보존 및 sequence 필드 부재 확인.
+- 동일 PUT callback replay가 상태를 BLOCKED로 바꾸는 구체적 비멱등 위험을 재현했다. 실제 운영 duplicate 발생 증거는 아니다. 다음은 same ID/different payload, multi-fill report, process restart replay를 synthetic-only 검증. 정책/identity scope 승인 전 durable dedupe, processed-event store, sequence/watermark, Production API/persistence 구현 금지.
+- No.1689 Observation fill reconciliation 예외, X2 latched 시 Planning/Action 생략, No.1652 aggregate 분리 유지. UNKNOWN/CONFLICT만으로 global X2 자동 변경 금지. Track7 restart recovery 및 Full T4 X3/integrated acceptance OPEN.
+- Production code/test/fixture 변경 없음. Synthetic-only; fixture runtime prohibited. KIS/REAL_VTS/Live/account API, broker/order/cancel/liquidation, collector/Raw/Canonical/manifest 변경 없음.
+- 상세: https://app.notion.com/p/4205f4f6eaa18154ac14f4917811e15b
