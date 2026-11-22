@@ -952,3 +952,11 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - No Production/adapter/schema/test/fixture/phase changes. No KIS/REAL_VTS/Live/account API, broker/order/cancel/liquidation, collector, Raw/Canonical/accepted-source/manifest action. Synthetic-only; fixture runtime-ineligible and identity runtime-prohibited.
 - Preserve No.1689 Observation -> Planning -> Action and X2-latched submitted-fill reconciliation exception; preserve No.1652 aggregate separation and no automatic global X2 change from UNKNOWN/CONFLICT alone. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 - Next target: read-only trace of authoritative H0IFCNI0 field semantics and consumer reconnect/retransmission behavior; no identity/dedupe policy change before approval.
+
+## No.1749 — H0IFCNI0 field and reconnect trace (2026-11-22)
+
+- H0IFCNI0 field list includes ord_grp and ord_grpseq. No.1748's categorical “no broker sequence field” statement is corrected: ord_grpseq is a candidate, but authoritative meaning, scope, per-fill uniqueness, and replay stability remain unverified. Current adapter preserves the value in parsed fields but does not use it as report identity/sequence.
+- Transport hashes decrypted normalized plaintext, not encrypted wire bytes. Envelope indicator and payload whitespace remain hash-significant. Adapter does not construct calendar date from stck_cntg_hour; absolute execution timestamp remains None.
+- Synthetic identity probe 5/5 PASS; consumer regression 3 passed. Consumer has single connect/subscribe and one-frame receive operations, without internal reconnect/resubscribe/retry/backfill. OMS prior fill quantity may alter status/remaining payload on same-frame replay while the hash ID remains the same.
+- No Production/test/fixture/schema/identity/reconnect/SQLite/Track7 changes. Synthetic-only. Next evidence: authoritative ord_grpseq semantics, replay/backfill guarantee, timestamp date provenance, and same-ID changed-payload settlement interaction. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+- Details: https://app.notion.com/p/4205f4f6eaa18168ad29fa760d3ced22.
