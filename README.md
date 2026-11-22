@@ -877,3 +877,12 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - No.1689 Observation → Planning → Action/X2 예외와 No.1652 aggregate 분리 유지. Track7 restart recovery 및 Full T4 X3/integrated acceptance OPEN.
 - Production code/API/persistence/phase/test/fixture 변경 없음. Synthetic-only; fixture runtime_eligible=false, identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED, identity_policy.runtime_use=PROHIBITED. Live/API/broker/order/collector/raw/Canonical/manifest 변경 없음.
 - Notion: https://app.notion.com/p/41f5f4f6eaa1816588a7c70823ce145e
+## No.1742 — Track7 실제 startup·snapshot wiring 및 atomic restore 경계 (2026-11-22)
+
+- 최신 No.1741 및 No.1740/1739/1738/1737/1736/1735/1728/1727/1726/1725/1692, No.1689·No.1652를 대조했다. My_Caddy_TS1에서 Project200/T4 local·origin SHA 일치 및 기존 dirty/untracked 보존을 확인했다.
+- Actual factory는 registry → StrategyHub → loop 구성 → market.subscribe(on_tick) 순서이며 Track7 snapshot store/restore provider 및 pre-subscription bootstrap barrier가 없다. Track7 production initialize()는 reset(); Track7 production export/restore/bootstrap persistence API도 없다. Aggregate codec/restore helper는 test-only 파일에 한정된다.
+- Test-only atomic restore 경계 4개 node IDs 선택 실행: validation/config failure 시 target unchanged, full validation 후 swap, late multi-expiry/group failure atomicity. 7 passed in 0.22s. Durable write/process crash/concurrent callback/actual startup integration 검증은 아니다.
+- 미결정: no-snapshot 신규 시작과 snapshot 누락/restore 실패 restart 구분, bootstrap 전 planner/evaluation/action admission, Track7-local gate와 global X2 정책. 자료 부족만으로 global X2 차단을 새로 선언하지 않는다.
+- No.1689 Observation → Planning → Action/X2 fill reconciliation 예외 및 No.1652 aggregate 분리 유지. Fixture runtime_eligible=false, identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED, identity_policy.runtime_use=PROHIBITED. Track7 restart recovery 및 Full T4 X3/integrated acceptance OPEN.
+- Production code/API/persistence/phase/test/fixture 변경 없음. Live/API/broker/order/collector/raw/Canonical/manifest 변경 없음.
+- Notion: https://app.notion.com/p/4205f4f6eaa1811fa91ff241cb2d9dd6
