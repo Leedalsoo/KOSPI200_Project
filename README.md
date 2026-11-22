@@ -886,3 +886,13 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - No.1689 Observation → Planning → Action/X2 fill reconciliation 예외 및 No.1652 aggregate 분리 유지. Fixture runtime_eligible=false, identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED, identity_policy.runtime_use=PROHIBITED. Track7 restart recovery 및 Full T4 X3/integrated acceptance OPEN.
 - Production code/API/persistence/phase/test/fixture 변경 없음. Live/API/broker/order/collector/raw/Canonical/manifest 변경 없음.
 - Notion: https://app.notion.com/p/4205f4f6eaa1811fa91ff241cb2d9dd6
+## No.1743 — Track7 cold-start / process restart identity 구분 검증 (2026-11-22)
+
+- 최신 No.1742/1741/1740/1739 및 No.1689 phase/X2, No.1652 aggregate 분리 기준을 대조했다. Project200 시작 local/origin SHA 99b47c70b7af6267025019a5c66b90befeabf2fa, T4 시작 local/origin SHA 743eac53f241a7eb58dc9d05cc94b0b28f93b2cc. 기존 Project200 dirty/untracked 203개 및 T4 graphify-out/graph.json 수정 1개 보존.
+- 실제 create_virtual_runtime_bootstrap()은 새 uuid4() run_id를 발급하고, RunScenarioHub.restart()는 active RunContext의 run_id를 재사용한다. 동일 프로세스의 명시적 RunHub restart만 identity를 유지하며 process 재기동 후 새 bootstrap은 이전 run과 연결되지 않는다.
+- RunContext에 durable startup provenance / previous-run link / snapshot-expected marker가 없고 Track7 production snapshot store/restore wiring도 없다. Track7.initialize(context)는 reset()만 수행한다.
+- My_Caddy_TS1 원격 py inline AST + synthetic identity probe 7/7 PASS, 종료 코드 0. 신규 파일/소스 변경 없음. 실제 process crash/durable persistence/동시성/factory restore 통합 검증은 아님.
+- 결론: 새 run_id + snapshot 없음은 cold start와 process restart 복구 누락을 구분하지 못한다. RunHub identity 재사용만으로 Track7 restore가 수행되는 것도 아니다. snapshot key/expected 여부, durable startup provenance, Track7-local readiness/admission은 미결정. 자료 부족만으로 global X2 차단을 새로 선언하지 않는다.
+- No.1689 Observation → Planning → Action 및 X2 latched fill-reconciliation 예외, No.1652 aggregate 분리 유지. Track7 restart recovery 및 Full T4 X3/integrated acceptance OPEN.
+- Production code/API/persistence/phase/test/fixture 변경 없음. 이번 검증으로 코드 수정 필요성이 입증되지 않아 source commit 없음. Synthetic-only; fixture runtime_eligible=false, identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED, identity_policy.runtime_use=PROHIBITED. Live/API/broker/order/collector/raw/Canonical/manifest 변경 없음.
+- 상세 Notion: https://app.notion.com/p/4205f4f6eaa18141a8b8cd38cc1d81eb
