@@ -226,8 +226,7 @@ class KISFuturesExecutionRecoveryAdapter:
 
     @staticmethod
     def _timestamp_or_none(row: Mapping[str, object]) -> datetime | None:
-        order_date = str(row.get("ord_dt", "")).strip()
-        order_time = str(row.get("ord_tmd", "")).strip()
-        if len(order_date) == 8 and order_date.isdigit() and len(order_time) == 6 and order_time.isdigit():
-            return datetime.strptime(order_date + order_time, "%Y%m%d%H%M%S")
+        # ord_dt/ord_tmd are order-date/order-time fields; they are not
+        # authoritative execution-time provenance for this cumulative snapshot.
+        # Keep the execution timestamp unknown until KIS documents a fill-time field.
         return None

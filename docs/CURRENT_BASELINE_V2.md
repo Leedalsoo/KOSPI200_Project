@@ -918,3 +918,13 @@
 - No identity, dedupe, settlement, timestamp, or reconnect policy changed. Synthetic-only; fixture `runtime_eligible=false`, `identity_policy.runtime_use=PROHIBITED`. Preserve No.1689 Observation ? Planning ? Action and X2 latched submitted-fill reconciliation exception; preserve No.1652 aggregate separation. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 - Next No.1752: authoritative semantics for `ord_dt`/`ord_tmd`, row unit of `tot_ccld_qty`/`avg_idx`, and duplicate order rows across page boundaries. Do not infer execution timestamp or individual fill identity from order-level snapshots.
 - Detailed Notion: https://app.notion.com/p/4205f4f6eaa18151bdabff795f2a4cd7
+
+## No.1752 ? KIS inquire-ccnl order-time / cumulative-row validation (2026-11-22)
+
+- The official KIS `chk_order.py` sample maps `ORD_TMD` to `????`. The recovery adapter previously promoted `ord_dt + ord_tmd` to `ExecutionReport.execution_timestamp`; this could mislabel order time as fill time. The adapter now leaves `execution_timestamp=None` until KIS provides authoritative fill-time provenance.
+- The official `inquire_ccnl` sample documents `output1` as an array and up to 100 rows per call, but does not define each output field's row unit, repeated `odno` behavior, or duplicate ordering across page boundaries. Exact `tot_ccld_qty` / `avg_idx` units and correction semantics remain unconfirmed in the available official response schema.
+- Synthetic checks: repeated same-order/same-cumulative/same-average row creates no extra delta; cumulative increase creates only the incremental delta; cumulative regression is rejected rather than becoming a negative fill; same cumulative quantity with changed `avg_idx` currently creates no new report and remains an unresolved correction/inbox-evidence question.
+- Focused recovery transport + adapter/service + SQLite suites: 48 passed. `compileall` and `git diff --check` passed.
+- REST order-level snapshots remain reconciliation-inbox-only; no individual execution journal or Position mutation. Synthetic-only; fixture `runtime_eligible=false`, `identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED`, `identity_policy.runtime_use=PROHIBITED`. Preserve No.1689 Observation ? Planning ? Action and X2 submitted-fill reconciliation exception; preserve No.1652 aggregate separation. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+- Do not change identity, dedupe, inbox conflict, settlement, Position, or reconnect policy until official field/row semantics and correction behavior are established.
+- Notion: https://app.notion.com/p/4205f4f6eaa181708c38d33481c30534

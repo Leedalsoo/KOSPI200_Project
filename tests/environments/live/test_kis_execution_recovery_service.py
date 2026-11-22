@@ -76,7 +76,10 @@ def test_rest_cumulative_snapshots_route_to_inbox_not_execution_or_position(tmp_
                 "cumulative_filled_quantity": cumulative,
                 "remaining_quantity": report.remaining_quantity,
                 "delta_average_price": str(report.execution_price),
-                "source_execution_timestamp": report.execution_timestamp.isoformat(),
+                "source_execution_timestamp": (
+                    report.execution_timestamp.isoformat()
+                    if report.execution_timestamp is not None else None
+                ),
                 "source_execution_timestamp_timezone": "UNSPECIFIED",
                 "source_authority": "KIS_REST_ORDER_LEVEL_SNAPSHOT_NOT_INDIVIDUAL_EXECUTION",
                 "execution_journal_commit": False,
@@ -102,6 +105,7 @@ def test_rest_cumulative_snapshots_route_to_inbox_not_execution_or_position(tmp_
     assert len(events) == 2
     assert all(event["payload"]["execution_journal_commit"] is False for event in events)
     assert all(event["payload"]["position_mutation"] is False for event in events)
+    assert all(event["payload"]["source_execution_timestamp"] is None for event in events)
     assert all(event["payload"]["source_execution_timestamp_timezone"] == "UNSPECIFIED" for event in events)
 
     # Same REST snapshot page is idempotent in the reconciliation inbox.
@@ -487,3 +491,106 @@ def test_kis_recovery_legacy_correlation_without_group_leg_remains_compatible():
     assert len(reports) == 1
     assert reports[0].group_id is None
     assert reports[0].leg_id is None
+
+
+def test_kis_recovery_order_date_and_time_are_not_promoted_to_execution_timestamp():
+    from environments.live.execution.kis_futures_execution_recovery_adapter import (
+        KISExecutionRecoveryContext,
+    )
+
+    report = KISFuturesExecutionRecoveryAdapter().to_execution_report(
+        {
+            "odno": "synthetic-order-time-only",
+            "tot_ccld_qty": "1",
+            "avg_idx": "10.25",
+            "ord_dt": "20261118",
+            "ord_tmd": "093000",
+        },
+        KISExecutionRecoveryContext(
+            client_order_id="synthetic-client-time-only",
+            order_quantity=2,
+        ),
+    )
+
+    assert report is not None
+    assert report.execution_timestamp is None
+
+
+def test_kis_recovery_duplicate_cumulative_rows_across_page_boundary_do_not_double_count():
+    from environments.live.execution.kis_futures_execution_recovery_adapter import (
+        KISExecutionRecoveryContext,
+    )
+
+    context = KISExecutionRecoveryContext(
+        client_order_id="synthetic-page-boundary-client",
+        order_quantity=5,
+        prior_filled_quantity=1,
+        prior_average_price=Decimal("10.00"),
+    )
+    reports = KISFuturesExecutionRecoveryAdapter().normalize(
+        {
+            "output1": [
+                {"odno": "synthetic-page-boundary-order", "tot_ccld_qty": "2", "avg_idx": "10.50"},
+                # Same order snapshot repeated at the synthetic page boundary.
+                {"odno": "synthetic-page-boundary-order", "tot_ccld_qty": "2", "avg_idx": "10.50"},
+                # Later cumulative snapshot: only the additional unit is a delta.
+                {"odno": "synthetic-page-boundary-order", "tot_ccld_qty": "3", "avg_idx": "10.60"},
+            ]
+        },
+        lambda _order_id: context,
+    )
+
+    assert [report.filled_quantity for report in reports] == [1, 1]
+    assert [report.remaining_quantity for report in reports] == [3, 2]
+    assert [report.execution_price for report in reports] == [Decimal("11.00"), Decimal("10.80")]
+    assert all(report.execution_timestamp is None for report in reports)
+
+
+def test_kis_recovery_cumulative_quantity_regression_is_not_converted_to_negative_fill():
+    from environments.live.execution.kis_futures_execution_recovery_adapter import (
+        KISExecutionRecoveryContext,
+        KISExecutionRecoveryInvalid,
+    )
+
+    context = KISExecutionRecoveryContext(
+        client_order_id="synthetic-regression-client",
+        order_quantity=5,
+        prior_filled_quantity=2,
+        prior_average_price=Decimal("10.50"),
+    )
+    with pytest.raises(KISExecutionRecoveryInvalid, match="CUMULATIVE_FILLED_QUANTITY_REGRESSION"):
+        KISFuturesExecutionRecoveryAdapter().normalize(
+            {
+                "output1": [
+                    {"odno": "synthetic-regression-order", "tot_ccld_qty": "1", "avg_idx": "10.25"}
+                ]
+            },
+            lambda _order_id: context,
+        )
+
+
+
+def test_kis_recovery_same_cumulative_quantity_with_changed_average_does_not_create_fill_delta():
+    from environments.live.execution.kis_futures_execution_recovery_adapter import (
+        KISExecutionRecoveryContext,
+    )
+
+    context = KISExecutionRecoveryContext(
+        client_order_id="synthetic-average-revision-client",
+        order_quantity=5,
+        prior_filled_quantity=2,
+        prior_average_price=Decimal("10.50"),
+    )
+    reports = KISFuturesExecutionRecoveryAdapter().normalize(
+        {
+            "output1": [
+                {"odno": "synthetic-average-revision-order", "tot_ccld_qty": "2", "avg_idx": "10.50"},
+                {"odno": "synthetic-average-revision-order", "tot_ccld_qty": "2", "avg_idx": "10.40"},
+            ]
+        },
+        lambda _order_id: context,
+    )
+
+    # Characterizes current quantity-delta behavior only; whether a same-quantity
+    # average-price revision must be retained in the reconciliation inbox is unresolved.
+    assert reports == ()
