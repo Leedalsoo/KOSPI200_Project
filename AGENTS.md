@@ -986,3 +986,14 @@
 - Preserve No.1689 Observation → Planning → Action and X2 submitted-fill reconciliation exception; No.1652 aggregate separation; UNKNOWN/CONFLICT alone must not globally change X2. Fixture runtime remains prohibited. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 - Next: identify the actual deployment host/launcher owner (including external repository/deployment configuration) and verify receive-task creation, supervision, exception, stop and close ownership. Then apply approved synthetic tests; do not infer reconnect/backfill policy before contract approval.
 - Notion: https://app.notion.com/p/4205f4f6eaa18157915ede429a6cde96
+
+## No.1757 - Live execution host/launcher ownership audit (2026-11-23)
+
+- Reconciled No.1755/1756, No.1546 and Current Baseline before tracing. Project200 local branch and origin/Project200 were both `9915ee57f0c168ba3b2f47df4c09c7254dae25b9`; pre-existing Graphify, untracked files and worktrees were preserved.
+- Traced `LiveRuntimeBootstrap`, `LiveExecutionRuntimeComposition`, `KISFuturesExecutionConsumer` and `LiveRuntimeLifecycleCoordinator`: the graph exposes startup, one-shot receive, cancellation and close methods, but no tracked production entrypoint creates a long-running receive task or repeatedly invokes `receive_execution_once()`.
+- Read-only host inventory: no matching Windows service; no Project200/KIS scheduled task other than the disabled market-data collector task; no Live execution process. The collector task's `.cmd` launches `scripts.kis_vts_websocket_collector_v2`, not the Live futures execution consumer. Caddy MCP Node processes are unrelated.
+- Therefore Project200 itself has no identified Live execution receive-loop owner. This does not prove that an external repository, cloud deployment or separate host does not own it; that host was not identified or inspected. Live receive lifecycle remains operationally unverified, not a global system block.
+- No code or test changes. No KIS/REAL_VTS/Live/account API, broker orders/cancels/liquidations, collector restart or new collection. No runtime endpoint was invoked. No.1755's 53 synthetic focused tests remain historical consumer characterization only; no new tests were run.
+- No reconnect/retry/backoff/token-refresh/resubscribe/gap-fill/REST-WS auto-match/inbox-resolution behavior was implemented. No.1689 phase/X2 rules, No.1652 aggregate separation and fixture runtime prohibition remain unchanged. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+- Next evidence needed: identify the external deployment repository/host or confirm none exists, then inspect its exact launcher/task creation, receive loop, exception supervision, shutdown and transport ownership. Do not implement operational retry or backfill until its contracts and ownership are approved.
+- Notion: [No.1757](https://app.notion.com/p/4205f4f6eaa18157915ede429a6cde96)
