@@ -843,3 +843,15 @@
 - No.1689 Observation → Planning → Action 및 X2 latched fill-reconciliation 예외, No.1652 aggregate 분리 유지. Track7 restart recovery 및 Full T4 X3/integrated acceptance OPEN.
 - Production code/API/persistence/phase/test/fixture 변경 없음. 이번 검증으로 코드 수정 필요성이 입증되지 않아 source commit 없음. Synthetic-only; fixture runtime_eligible=false, identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED, identity_policy.runtime_use=PROHIBITED. Live/API/broker/order/collector/raw/Canonical/manifest 변경 없음.
 - 상세 Notion: https://app.notion.com/p/4205f4f6eaa18141a8b8cd38cc1d81eb
+
+## No.1744 — Track7 stable run identity / process identity / snapshot evidence 후보 검증 (2026-11-22)
+
+- 최신 Track7 Notion은 No.1743. No.1739 계약 후보, No.1742 factory wiring, No.1743 run identity 결과 및 No.1689 phase/X2, No.1652 aggregate 분리 기준 유지.
+- RunContext에는 process/session instance ID, previous-run link, durable startup kind, snapshot-expected marker가 없다. create_virtual_runtime_bootstrap()은 새 UUID run_id를 발급하고 same-process RunScenarioHub.restart()는 기존 run_id를 재사용한다. ControlTowerHub.create_run()은 caller-supplied run_id를 받지만 durable registry/재기동 후 lineage 연결은 없다.
+- ValidationOnlyAccountSnapshotStartupAdapter/U19의 persisted baseline evidence + snapshot IDs + SHA-256 lineage manifest는 참고 사례일 뿐 account/U19 aggregate 전용이다. No.1652 분리에 따라 Track7 state에 직접 재사용하지 않는다.
+- My_Caddy_TS1 원격 synthetic candidate classifier matrix 10/10 PASS, 종료 코드 0. 명시 NEW_RUN/RESUME_RUN, snapshot_expected, run/strategy identity, payload digest로 cold start, unknown, missing, mismatch, corrupt, conflict 구분. 모델은 production API/schema/store가 아니다.
+- snapshot 부재만으로 cold start 판정 금지. 명시적 durable NEW_RUN + snapshot_expected=false일 때만 candidate cold start. RESUME_RUN + snapshot_expected=true + snapshot 없음은 missing. 증거 부재/충돌은 UNKNOWN/CONFLICT로 남기며 global X2 자동 변경 금지.
+- Process identity 변경은 프로세스 경계일 뿐 이전 Track7 state 또는 expected snapshot 존재 증거가 아니다. Track7-local readiness/admission 및 restore failure 후 Planning/Action 정책 미승인.
+- No.1689 Observation → Planning → Action 및 X2 latched fill reconciliation 예외, No.1652 candidate/account aggregate와 Track7 strategy-state aggregate 분리 유지. Track7 restart recovery 및 Full T4 X3/integrated acceptance OPEN.
+- Production code/API/persistence/phase/test/fixture 변경 없음. Synthetic-only; fixture runtime_eligible=false, identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED, identity_policy.runtime_use=PROHIBITED. Live/API/broker/order/collector/raw/Canonical/manifest 변경 없음.
+- 상세: https://app.notion.com/p/4205f4f6eaa1815794d4fe8e408712ed
