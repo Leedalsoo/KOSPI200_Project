@@ -896,3 +896,14 @@
 - Synthetic probe 5/5 PASS; KIS consumer regression 3 passed. Consumer has no internal reconnect/resubscribe/retry/backfill. Same-frame replay after OMS fill state advances can change report status/remaining while keeping the hash ID.
 - No Production/test/fixture/schema/identity/reconnect/SQLite/Track7 changes. Synthetic-only. Next: authoritative ord_grpseq contract, reconnect/backfill guarantee, timestamp date provenance, and same-ID changed-payload settlement behavior. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 - Notion: https://app.notion.com/p/4205f4f6eaa18168ad29fa760d3ced22.
+
+## H0IFCNI0 same-frame replay / OMS cumulative quantity / SQLite conflict (No.1750, 2026-11-22)
+
+- Reconciled latest Notion No.1749/1748/1747/1746, No.1689 phase/X2, No.1652 aggregate separation, No.1546 tracker, and the current Project200 source.
+- Synthetic probe: one normalized H0IFCNI0 raw frame yields the same SHA-256 execution_id when converted with prior_filled_quantity 0 and 1, but remaining_quantity changes from 2 to 1. After the first report commits, the changed-payload second report is rejected as `EXECUTION_ID_COLLISION`.
+- Safety result: OMS filled_quantity=1, Position qty=1, and journal row count=1; no duplicate fill was applied. On a restart model, exact replay of the original report remains idempotent, but the previously recorded conflict stays unresolved.
+- Focused regression: `py -m pytest -q tests/environments/live/test_kis_futures_execution_consumer.py tests/environments/live/test_sqlite_settlement_store.py` ? **36 passed in 8.43s**. Temporary synthetic SQLite only.
+- Interpretation: deterministic code-path behavior, not proof of an actual KIS retransmission. Same raw notice can produce changed report payload after OMS state advances; the durable conflict is fail-safe but may require authoritative reconciliation. No Production/test/fixture/schema/adapter/identity/consumer/SQLite/Track7 code changed.
+- Do not alter identity key, dedupe scope, conflict resolution, or reconnect/retry policy until broker-native event identity, `ord_grpseq` semantics, replay/backfill contract, and timestamp provenance are authoritative.
+- Next read-only target: trace H0IFCNI0 WebSocket notices and REST `inquire-ccnl` order-level cumulative execution snapshots through the reconciliation inbox. Never treat cumulative order snapshots as individual fills or invent execution IDs.
+- Synthetic-only; fixture `runtime_eligible=false`, `identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED`, `identity_policy.runtime_use=PROHIBITED`. Preserve No.1689 Observation ? Planning ? Action and X2-latched submitted-fill reconciliation exception; preserve No.1652 aggregate separation. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.

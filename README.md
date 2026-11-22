@@ -960,3 +960,12 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - Synthetic identity probe 5/5 PASS; consumer regression 3 passed. Consumer has single connect/subscribe and one-frame receive operations, without internal reconnect/resubscribe/retry/backfill. OMS prior fill quantity may alter status/remaining payload on same-frame replay while the hash ID remains the same.
 - No Production/test/fixture/schema/identity/reconnect/SQLite/Track7 changes. Synthetic-only. Next evidence: authoritative ord_grpseq semantics, replay/backfill guarantee, timestamp date provenance, and same-ID changed-payload settlement interaction. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 - Details: https://app.notion.com/p/4205f4f6eaa18168ad29fa760d3ced22.
+
+## No.1750 ? H0IFCNI0 replay and SQLite collision boundary (2026-11-22)
+
+- Latest Notion evidence: [No.1750](https://app.notion.com/p/4205f4f6eaa1817fb3f3e4138eba6d5f). Same H0IFCNI0 raw frame + changed OMS prior_filled_quantity produces the same execution_id but a different remaining_quantity/report payload. SQLite rejects it as EXECUTION_ID_COLLISION.
+- Synthetic result: first fill remains applied once (OMS filled=1, Position qty=1, journal rows=1); changed-payload replay is rejected; after restart, exact replay does not double-apply and the prior conflict remains unresolved.
+- Tests: `py -m pytest -q tests/environments/live/test_kis_futures_execution_consumer.py tests/environments/live/test_sqlite_settlement_store.py` ? **36 passed in 8.43s**.
+- No Production/test/fixture/schema/adapter/consumer/SQLite/Track7 change. This is not evidence of an actual KIS duplicate notice. Keep broker identity/sequence/replay semantics unresolved until authoritative evidence exists.
+- Next: read-only trace of H0IFCNI0 WebSocket notices vs REST `inquire-ccnl` order-level cumulative snapshots and reconciliation inbox. Do not synthesize per-fill IDs from cumulative order snapshots.
+- Synthetic-only; fixture `runtime_eligible=false`, `identity_policy.runtime_use=PROHIBITED`. No.1689 phase/X2 exception and No.1652 aggregate separation remain. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.

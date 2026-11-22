@@ -906,3 +906,12 @@
 - Next unresolved evidence: authoritative ord_grpseq semantics and uniqueness/replay rules; reconnect/backfill guarantee; HHMMSS calendar-date provenance; same-ID changed-payload interaction with settlement. Do not change Production identity, dedupe scope, persistence, or reconnect behavior before authoritative contract and approval.
 - Preserve No.1689 Observation → Planning → Action and X2 submitted-fill reconciliation exception; No.1652 aggregate separation; UNKNOWN/CONFLICT alone must not globally change X2. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 - Notion: https://app.notion.com/p/4205f4f6eaa18168ad29fa760d3ced22.
+
+## No.1750 ? H0IFCNI0 replay / OMS cumulative quantity / SQLite collision (2026-11-22)
+
+- Latest Notion record: [No.1750](https://app.notion.com/p/4205f4f6eaa1817fb3f3e4138eba6d5f); tracker No.1546 and Current Baseline were appended.
+- Synthetic same-frame replay after OMS fill advancement retains the same raw-frame execution_id but changes remaining_quantity. SQLite rejects the changed payload as EXECUTION_ID_COLLISION; OMS/Position are not double-applied, and the durable conflict remains unresolved after restart.
+- This is a deterministic code-path probe, not evidence of an actual KIS retransmission. Do not change identity, dedupe, SQLite conflict, or reconnect policy before authoritative broker event identity/sequence/replay semantics are approved.
+- Consumer + SQLite focused regression: 36 passed. No Production/test/fixture/schema/identity/reconnect/Track7 changes.
+- Next read-only target: trace WebSocket notices against REST inquire-ccnl order-level cumulative snapshots and the reconciliation inbox. Never convert an order-level cumulative snapshot into an individual fill event or synthetic execution ID.
+- Keep Synthetic-only, fixture runtime prohibited, No.1689 Observation ? Planning ? Action/X2 fill-reconciliation exception, No.1652 aggregate separation, and Track7 restart recovery / Full T4 X3 integrated acceptance OPEN.
