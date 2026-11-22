@@ -907,3 +907,14 @@
 - Do not alter identity key, dedupe scope, conflict resolution, or reconnect/retry policy until broker-native event identity, `ord_grpseq` semantics, replay/backfill contract, and timestamp provenance are authoritative.
 - Next read-only target: trace H0IFCNI0 WebSocket notices and REST `inquire-ccnl` order-level cumulative execution snapshots through the reconciliation inbox. Never treat cumulative order snapshots as individual fills or invent execution IDs.
 - Synthetic-only; fixture `runtime_eligible=false`, `identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED`, `identity_policy.runtime_use=PROHIBITED`. Preserve No.1689 Observation ? Planning ? Action and X2-latched submitted-fill reconciliation exception; preserve No.1652 aggregate separation. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+
+## KIS inquire-ccnl recovery pagination ? No.1751 (2026-11-22)
+
+- Official KIS domestic futures/options `inquire_ccnl` sample says response `tr_cont` F/M means more data; the next request uses `tr_cont=N` and forwards `CTX_AREA_FK200` / `CTX_AREA_NK200`. D/E is terminal. The endpoint sample documents up to 100 records per call with continuation.
+- Synthetic reproduction found two transport defects: F was treated as terminal (page omission); M was sent as the next request header instead of N.
+- Corrected `environments/live/execution/kis_futures_execution_recovery_transport.py` to continue on F/M, forward cursor tokens, and set request `tr_cont=N`. Added `tests/environments/live/test_kis_futures_execution_recovery_transport.py` with F/M fake-HTTP cases.
+- Regression: recovery transport + service + SQLite settlement suites **44 passed in 8.70s**; compileall and diff-check passed.
+- Recovery reports continue to route REST order-level cumulative snapshots to the reconciliation inbox only; no individual execution journal fill or Position mutation. Fake auth/HTTP only. No live KIS/API/account/token/broker/order/collector/raw/Canonical/manifest activity.
+- No identity, dedupe, settlement, timestamp, or reconnect policy changed. Synthetic-only; fixture `runtime_eligible=false`, `identity_policy.runtime_use=PROHIBITED`. Preserve No.1689 Observation ? Planning ? Action and X2 latched submitted-fill reconciliation exception; preserve No.1652 aggregate separation. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+- Next No.1752: authoritative semantics for `ord_dt`/`ord_tmd`, row unit of `tot_ccld_qty`/`avg_idx`, and duplicate order rows across page boundaries. Do not infer execution timestamp or individual fill identity from order-level snapshots.
+- Detailed Notion: https://app.notion.com/p/4205f4f6eaa18151bdabff795f2a4cd7

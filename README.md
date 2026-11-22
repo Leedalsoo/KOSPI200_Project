@@ -969,3 +969,14 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - No Production/test/fixture/schema/adapter/consumer/SQLite/Track7 change. This is not evidence of an actual KIS duplicate notice. Keep broker identity/sequence/replay semantics unresolved until authoritative evidence exists.
 - Next: read-only trace of H0IFCNI0 WebSocket notices vs REST `inquire-ccnl` order-level cumulative snapshots and reconciliation inbox. Do not synthesize per-fill IDs from cumulative order snapshots.
 - Synthetic-only; fixture `runtime_eligible=false`, `identity_policy.runtime_use=PROHIBITED`. No.1689 phase/X2 exception and No.1652 aggregate separation remain. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+
+## No.1751 ? inquire-ccnl pagination correction (2026-11-22)
+
+- Official KIS domestic futures/options sample confirms response `tr_cont=F` or `M` means more pages; the next request carries `CTX_AREA_FK200` / `CTX_AREA_NK200` and uses request header `tr_cont=N`. `D` / `E` ends pagination.
+- Fixed `KISFuturesExecutionRecoveryTransport.inquire()`: accept both F/M and send N on continuation. Before fix, F stopped after page 1 and M was echoed incorrectly into the next request.
+- Added synthetic fake-HTTP tests for both F and M. The tests assert both pages are returned, the next request header is N, and both cursor values are forwarded.
+- Tests: `py -m pytest -q tests/environments/live/test_kis_futures_execution_recovery_transport.py tests/environments/live/test_kis_execution_recovery_service.py tests/environments/live/test_sqlite_settlement_store.py` ? **44 passed in 8.70s**. `compileall` and `git diff --check` passed.
+- REST cumulative snapshots still go only to reconciliation inbox; no execution journal or Position mutation. No live API/network/account/token/broker/order/collector/raw/Canonical/manifest use. No identity/dedupe/settlement/timestamp/reconnect policy change.
+- Synthetic-only; fixture `runtime_eligible=false`, `identity_policy.runtime_use=PROHIBITED`. No.1689 phase/X2 exception and No.1652 aggregate separation remain. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+- Next No.1752: inspect `ord_dt` / `ord_tmd` field semantics, row-level meaning of `tot_ccld_qty` / `avg_idx`, and repeated order rows at page boundaries.
+- Detailed Notion: https://app.notion.com/p/4205f4f6eaa18151bdabff795f2a4cd7

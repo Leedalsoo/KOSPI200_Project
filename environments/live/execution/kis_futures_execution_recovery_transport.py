@@ -50,7 +50,7 @@ class KISFuturesExecutionRecoveryTransport:
                     raise KISExecutionRecoveryTransportError("KIS output1 must be an array")
                 all_rows.extend(rows)
 
-            if continuation != "M":
+            if continuation not in {"F", "M"}:
                 break
 
             current_query = replace(
@@ -58,6 +58,9 @@ class KISFuturesExecutionRecoveryTransport:
                 ctx_area_fk200=str(data.get("ctx_area_fk200", "") or ""),
                 ctx_area_nk200=str(data.get("ctx_area_nk200", "") or ""),
             )
+            # KIS response F/M means another page exists; the next request
+            # itself must use tr_cont=N, not echo the response continuation.
+            continuation = "N"
         else:
             raise KISExecutionRecoveryTransportError("KIS execution recovery pagination limit exceeded")
 

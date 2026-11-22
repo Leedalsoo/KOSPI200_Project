@@ -915,3 +915,14 @@
 - Consumer + SQLite focused regression: 36 passed. No Production/test/fixture/schema/identity/reconnect/Track7 changes.
 - Next read-only target: trace WebSocket notices against REST inquire-ccnl order-level cumulative snapshots and the reconciliation inbox. Never convert an order-level cumulative snapshot into an individual fill event or synthetic execution ID.
 - Keep Synthetic-only, fixture runtime prohibited, No.1689 Observation ? Planning ? Action/X2 fill-reconciliation exception, No.1652 aggregate separation, and Track7 restart recovery / Full T4 X3 integrated acceptance OPEN.
+
+## No.1751 ? KIS inquire-ccnl recovery pagination correction (2026-11-22)
+
+- KIS official domestic futures/options `inquire_ccnl` sample: response `tr_cont` F/M means another page exists; pass `CTX_AREA_FK200` / `CTX_AREA_NK200` to the next query and set the next request header `tr_cont=N`; D/E ends pagination.
+- The recovery transport previously continued only for M and echoed M into the next request. Synthetic fake-HTTP reproduced page omission for F and incorrect request header for M.
+- Corrected the transport to continue for F/M and send N on the next request, preserving both cursor values. Added two focused parameterized synthetic transport tests.
+- Focused recovery transport + service + SQLite suites: 44 passed in 8.70s. `compileall` and `git diff --check` passed.
+- REST order-level cumulative snapshots remain reconciliation-inbox-only; never route them to individual execution journal fills or Position mutation. Fake auth/HTTP only; no KIS network/API/account/token/broker/order/collector/Raw/Canonical/manifest use.
+- No identity/dedupe/settlement/timestamp/reconnect policy change. Synthetic-only; fixture runtime prohibited. Preserve No.1689 phase/X2 exception and No.1652 aggregate separation. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+- Next No.1752: verify `ord_dt`/`ord_tmd` semantics, `tot_ccld_qty`/`avg_idx` row unit, and duplicate order rows across page boundaries.
+- Detailed Notion: https://app.notion.com/p/4205f4f6eaa18151bdabff795f2a4cd7
