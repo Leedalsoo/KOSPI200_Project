@@ -936,3 +936,15 @@
 - REST order-level snapshots remain reconciliation-inbox-only; no individual execution journal or Position mutation. Synthetic-only; fixture `runtime_eligible=false`, `identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED`, `identity_policy.runtime_use=PROHIBITED`. Preserve No.1689 Observation ? Planning ? Action and X2 submitted-fill reconciliation exception; preserve No.1652 aggregate separation. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 - Do not change identity, dedupe, inbox conflict, settlement, Position, or reconnect policy until official field/row semantics and correction behavior are established.
 - Notion: https://app.notion.com/p/4205f4f6eaa181708c38d33481c30534
+
+## No.1753 ? WebSocket / REST snapshot cross-source inbox verification (2026-11-22)
+
+- Read-only trace confirms separate ingress paths: H0IFCNI0 WebSocket `receive_once()` ? OMS correlation ? `settlement.settle()` ? execution journal / OMS / Position; REST `inquire-ccnl` ? `LiveExecutionRecoveryService` ? `record_reconciliation_event_pending()` only, with no execution journal or Position mutation.
+- No cross-source matcher was found that resolves an earlier REST snapshot inbox event when later WebSocket individual fills arrive.
+- Synthetic REST-first probe: persist cumulative snapshot quantity 3 as PENDING, then settle three individual WebSocket-like fills through `LiveExecutionPositionBridge.settle()`. OMS filled=3, Position qty=3, journal rows=3, while the REST inbox event remains PENDING and unresolved reconciliation remains true.
+- Added a characterization test in `tests/environments/live/test_sqlite_settlement_store.py`; no automatic resolution policy or Production code change.
+- Focused WebSocket consumer + REST recovery service + transport + SQLite suites: 52 passed. `compileall` and `git diff --check` passed.
+- Quantity equality alone cannot prove REST snapshot and WebSocket fills are the same events. REST snapshot identity, H0IFCNI0 raw-frame hash, `ord_grpseq` meaning/uniqueness/replay scope, and fill-time provenance are distinct or unresolved contracts. Do not auto-resolve/delete inbox events based on quantity alone.
+- Next: read-only/synthetic design review of minimum authoritative cross-source matching evidence and resolution ownership. No inbox auto-resolution/deletion, identity/dedupe/settlement/Position/Track7 phase changes without approved contract.
+- Preserve No.1689 Observation ? Planning ? Action and X2 submitted-fill reconciliation exception; No.1652 aggregate separation; UNKNOWN/CONFLICT alone must not globally change X2. Synthetic-only; fixture `runtime_eligible=false`, `identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED`, `identity_policy.runtime_use=PROHIBITED`. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+- Detailed Notion: https://app.notion.com/p/4205f4f6eaa1814eb076ec9279c0d258

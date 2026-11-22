@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -1218,3 +1218,35 @@ def test_safe_retry_policy_rechecks_journal_then_replays_or_preserves_conflict(t
     assert restarted_oms.get("client-1").filled_quantity == 1
     assert restarted_position.qty == 1
     assert reopened.has_unresolved_reconciliation()
+
+
+def test_rest_snapshot_pending_is_not_auto_resolved_by_later_matching_websocket_fills(tmp_path):
+    store, oms, position, _dedup, bridge = _prepared(tmp_path)
+    store.record_reconciliation_event_pending(
+        event_id="REST-CCNL-SNAPSHOT|broker-1|3|14.75",
+        client_order_id="client-1",
+        broker_order_id="broker-1",
+        event_kind="KIS_REST_CUMULATIVE_ORDER_SNAPSHOT",
+        payload={
+            "cumulative_filled_quantity": 3,
+            "source_authority": "SYNTHETIC_REST_ORDER_LEVEL_SNAPSHOT",
+            "execution_journal_commit": False,
+            "position_mutation": False,
+        },
+    )
+
+    bridge.settle(_fill(execution_id="SYNTHETIC:WS-FILL-1", quantity=1, remaining=2))
+    bridge.settle(_fill(execution_id="SYNTHETIC:WS-FILL-2", quantity=1, remaining=1))
+    bridge.settle(_fill(
+        execution_id="SYNTHETIC:WS-FILL-3", quantity=1, remaining=0, status="FILLED"
+    ))
+
+    pending = store.open_reconciliation_events(scope_key="client-1")
+    assert oms.get("client-1").filled_quantity == 3
+    assert position.qty == 3
+    assert len(store.load_execution_journal_records()) == 3
+    assert len(pending) == 1
+    assert pending[0]["status"] == "PENDING"
+    assert store.has_unresolved_reconciliation()
+
+    # Characterization only: automatic cross-source resolution has no approved contract.
