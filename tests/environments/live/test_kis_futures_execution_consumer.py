@@ -86,6 +86,52 @@ def test_kis_h0ifcni0_report_does_not_invent_fee_or_calendar_date():
 
 
 
+class _DisconnectingTransport:
+    def __init__(self) -> None:
+        self.connect_count = 0
+        self.subscribe_count = 0
+        self.recv_count = 0
+        self.close_count = 0
+
+    async def connect(self) -> None:
+        self.connect_count += 1
+
+    async def subscribe(self, _tr_id: str, _hts_id: str) -> None:
+        self.subscribe_count += 1
+
+    async def recv(self) -> str:
+        self.recv_count += 1
+        raise ConnectionError("SYNTHETIC_WS_DISCONNECTED")
+
+    async def close(self) -> None:
+        self.close_count += 1
+
+
+def test_kis_execution_consumer_does_not_reconnect_after_receive_disconnect():
+    transport = _DisconnectingTransport()
+    consumer = KISFuturesExecutionConsumer(
+        transport=transport,
+        adapter=KISFuturesExecutionNoticeAdapter(),
+        correlation_provider=_Correlation(),
+        on_report=lambda _report: None,
+    )
+
+    async def exercise():
+        await consumer.start("TEST-HTS")
+        for _ in range(2):
+            with pytest.raises(ConnectionError, match="SYNTHETIC_WS_DISCONNECTED"):
+                await consumer.receive_once()
+
+    asyncio.run(exercise())
+
+    # Characterization only: receive_once propagates transport failure and does
+    # not own reconnect/resubscribe/close policy. No broker or network is used.
+    assert transport.connect_count == 1
+    assert transport.subscribe_count == 1
+    assert transport.recv_count == 2
+    assert transport.close_count == 0
+
+
 def test_runtime_lifecycle_propagates_settlement_error_and_drains_receive_tracking():
     from application.composition.live_runtime_lifecycle_coordinator import LiveRuntimeLifecycleCoordinator
 

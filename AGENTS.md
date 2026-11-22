@@ -961,3 +961,13 @@
 - No Production/test/fixture/schema/identity/dedupe/inbox/settlement/Position/reconnect changes. Preserve No.1689 Observation -> Planning -> Action and X2 submitted-fill exception; No.1652 aggregate separation; UNKNOWN/CONFLICT alone must not globally change X2. Synthetic-only; fixture `runtime_eligible=false`, `identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED`, `identity_policy.runtime_use=PROHIBITED`. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 - Notion: https://app.notion.com/p/4205f4f6eaa1810db603cf34c2f50ce6
 - Official KIS references: https://github.com/koreainvestment/open-trading-api/blob/main/examples_llm/domestic_futureoption/fuopt_ccnl_notice/chk_fuopt_ccnl_notice.py ; https://github.com/koreainvestment/open-trading-api/blob/main/examples_user/domestic_futureoption/domestic_futureoption_functions_ws.py
+
+## No.1755 - WebSocket disconnect / reconnect and gap-recovery boundary (2026-11-23)
+
+- Source trace: `KISFuturesExecutionConsumer.start()` calls transport connect/subscribe once; `receive_once()` performs one recv/parse/correlation/settlement path and propagates transport exceptions. No consumer-owned reconnect/resubscribe/retry/backfill loop.
+- `LiveRuntimeLifecycleCoordinator.receive_execution_once()` drains active receive tracking in finally and propagates errors; no automatic reconnect or REST recovery invocation on receive failure was found. Startup REST reconciliation is a separate step before WS start.
+- Synthetic fake-transport characterization: two receive attempts raise ConnectionError; connect=1, subscribe=1, recv=2, close=0. This proves only current consumer behavior, not a real KIS disconnect or missed fill. External host/transport-wrapper supervision was outside scope.
+- Focused consumer + REST recovery transport/service + SQLite settlement suites: 53 passed in 8.86s; compileall and diff-check passed.
+- No production reconnect/backfill policy inferred. Trigger/backoff/token refresh/subscription acknowledgement/replay/gap watermark/REST snapshot identity/ownership/X2 interaction contract remains unapproved. No quantity-only REST-to-WS auto-match or inbox resolution.
+- One characterization test added; no Production consumer/lifecycle/recovery/identity/dedupe/settlement/Position/schema/fixture/strategy changes. Preserve No.1689 phase/X2 exception and No.1652 aggregate separation; UNKNOWN/CONFLICT alone must not globally change X2. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+- Notion: https://app.notion.com/p/4205f4f6eaa181cfb65ff4727f27695b
