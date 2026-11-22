@@ -876,3 +876,13 @@
 - No.1689 Observation fill reconciliation 예외, X2 latched 시 Planning/Action 생략, No.1652 aggregate 분리 유지. UNKNOWN/CONFLICT만으로 global X2 자동 변경 금지. Track7 restart recovery 및 Full T4 X3/integrated acceptance OPEN.
 - Production code/test/fixture 변경 없음. Synthetic-only; fixture runtime prohibited. KIS/REAL_VTS/Live/account API, broker/order/cancel/liquidation, collector/Raw/Canonical/manifest 변경 없음.
 - 상세: https://app.notion.com/p/4205f4f6eaa18154ac14f4917811e15b
+
+
+## No.1747 callback identity validation addendum (2026-11-22)
+
+- Track7 synthetic callback replay reproduced same execution_id with changed price payload causing PUT_PENDING ? CALL_READY ? BLOCKED. Track7 consumes report-level aggregate fields and does not iterate ExecutionReport.execution_fills.
+- VirtualMultiLegExecutionBridge._execution_fill_reports expands validated ExecutionFill tuples into per-fill reports for position application; this does not mean Track7 callback consumes those per-fill reports.
+- ExecutionEventIdentityAdapter exposes execution_id + client_order_id, but ExecutionEventDeduplicator currently keys only on execution_id, does not distinguish payload conflicts or group/leg/order scope, and keeps only in-memory state. A new process-local instance accepts a replay again.
+- ExecutionFill/ExecutionReport have no execution sequence/watermark. CanonicalMarketTick.source_sequence/seq_id are market-tick fields, not an established execution-event sequence contract.
+- Synthetic evidence: actual Track7 callback 3/3 PASS; identity/deduplicator/bridge probes 8/8 PASS. No live/real-account or production duplicate incident evidence.
+- Do not implement identity-key changes, durable dedupe, persistence, callback consumer changes, bootstrap/restore API, or phase changes until event unit, uniqueness scope, payload-conflict semantics, sequence provenance, and state ownership are explicitly approved. Preserve No.1689 Observation ? Planning ? Action and X2 fill-reconciliation exception; preserve No.1652 aggregate separation. Synthetic-only and fixture runtime-ineligible/identity runtime-prohibited remain in force.

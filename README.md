@@ -929,3 +929,14 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - No.1689 Observation fill reconciliation 예외, X2 latched 시 Planning/Action 생략, No.1652 aggregate 분리 유지. UNKNOWN/CONFLICT만으로 global X2 자동 변경 금지. Track7 restart recovery 및 Full T4 X3/integrated acceptance OPEN.
 - Production code/test/fixture 변경 없음. Synthetic-only; fixture runtime prohibited. KIS/REAL_VTS/Live/account API, broker/order/cancel/liquidation, collector/Raw/Canonical/manifest 변경 없음.
 - 상세: https://app.notion.com/p/4205f4f6eaa18154ac14f4917811e15b
+
+
+## No.1747 ? Track7 callback replay / multi-fill identity scope (2026-11-22)
+
+- Latest Notion evidence: [No.1747](https://app.notion.com/p/4205f4f6eaa181828562fb61aee416f6). No.1746 replay defect and No.1745 identity/watermark candidates were rechecked; No.1689 phase/X2 and No.1652 aggregate-separation rules remain unchanged.
+- Actual Track7 callback synthetic probe: 3/3 PASS. Same execution_id with changed price replay transitions PUT_PENDING ? CALL_READY ? BLOCKED. A multi-fill aggregate without report-level execution_id is not promoted by Track7. If report-level ID exists, Track7 records aggregate report-level price/time, not individual fill price/time/IDs.
+- Identity/deduplicator/Bridge probe: 8/8 PASS. Adapter identity has execution_id + client_order_id, but deduplicator's actual key is execution_id only; same ID across different orders/groups/legs collides globally; changed payload is silently treated as duplicate rather than conflict; a new in-memory instance accepts replay again. Bridge expands ExecutionFill tuples to per-fill reports for position application, while Track7 consumes original report-level fields.
+- ExecutionFill/ExecutionReport lack execution sequence/watermark. CanonicalMarketTick.source_sequence and seq_id are market-tick fields with no established mapping to execution event order.
+- Synthetic-only code-boundary evidence, not an observed live incident. Production code/API/persistence/phase/test/fixture unchanged. No KIS/REAL_VTS/Live/account API, broker/order/cancel/liquidation, collector, Raw/Canonical/accepted-source/manifest action.
+- Unresolved: authoritative fill-vs-report event unit, execution_id uniqueness scope, payload conflict semantics, sequence/watermark provenance, and durable dedupe state owner. Do not change Production until these contracts are approved. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+- Preserve No.1689 Observation ? Planning ? Action and X2-latched submitted-fill reconciliation exception; Planning/Action remain skipped while latched. Preserve No.1652 candidate/account vs Track7 strategy-state aggregate separation. UNKNOWN/CONFLICT alone must not auto-change global X2.
