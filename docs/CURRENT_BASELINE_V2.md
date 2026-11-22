@@ -888,3 +888,11 @@
 - No Production/adapter/schema/test/fixture/phase changes. No KIS/REAL_VTS/Live/account API, broker/order/cancel/liquidation, collector, Raw/Canonical/accepted-source/manifest action. Synthetic-only; fixture runtime-ineligible and identity runtime-prohibited.
 - Preserve No.1689 Observation -> Planning -> Action and X2-latched submitted-fill reconciliation exception; preserve No.1652 aggregate separation and no automatic global X2 change from UNKNOWN/CONFLICT alone. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 - Next target: read-only trace of authoritative H0IFCNI0 field semantics and consumer reconnect/retransmission behavior; no identity/dedupe policy change before approval.
+
+## No.1749 — KIS H0IFCNI0 identity / reconnect (2026-11-22)
+
+- Correct No.1748's categorical absence-of-sequence statement: H0IFCNI0 includes ord_grpseq, a candidate sequence field. Its authoritative meaning, scope, fill uniqueness and retransmission stability are unverified; current adapter does not use it for ExecutionReport identity.
+- Transport hashes decrypted normalized plaintext; envelope indicator and whitespace affect hash. Adapter has no calendar date field and leaves absolute execution_timestamp=None.
+- Synthetic probe 5/5 PASS; KIS consumer regression 3 passed. Consumer has no internal reconnect/resubscribe/retry/backfill. Same-frame replay after OMS fill state advances can change report status/remaining while keeping the hash ID.
+- No Production/test/fixture/schema/identity/reconnect/SQLite/Track7 changes. Synthetic-only. Next: authoritative ord_grpseq contract, reconnect/backfill guarantee, timestamp date provenance, and same-ID changed-payload settlement behavior. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+- Notion: https://app.notion.com/p/4205f4f6eaa18168ad29fa760d3ced22.
