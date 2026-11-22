@@ -876,3 +876,15 @@
 - Synthetic-only code-boundary evidence, not an observed live incident. Production code/API/persistence/phase/test/fixture unchanged. No KIS/REAL_VTS/Live/account API, broker/order/cancel/liquidation, collector, Raw/Canonical/accepted-source/manifest action.
 - Unresolved: authoritative fill-vs-report event unit, execution_id uniqueness scope, payload conflict semantics, sequence/watermark provenance, and durable dedupe state owner. Do not change Production until these contracts are approved. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
 - Preserve No.1689 Observation ? Planning ? Action and X2-latched submitted-fill reconciliation exception; Planning/Action remain skipped while latched. Preserve No.1652 candidate/account vs Track7 strategy-state aggregate separation. UNKNOWN/CONFLICT alone must not auto-change global X2.
+
+
+## No.1748 ? KIS fill identity hash and Live/Virtual dedupe separation (2026-11-22)
+
+- Latest Notion evidence: https://app.notion.com/p/4205f4f6eaa18179b896cac644ee78a3. No.1747's virtual Track7 callback replay and No.1689/No.1652 policy boundaries were rechecked.
+- Virtual deduplicator is in-memory and is not connected to Track7 callback state transitions. Live SQLite settlement is a separate OMS/Position path: exact execution replay is idempotent, changed payload or cross-order reuse of an execution ID is recorded as durable conflict, and OMS/Position/journal changes commit transactionally. No Track7 strategy/callback link was found in the Live composition.
+- KIS H0IFCNI0 adapter derives execution_id as KIS-H0IFCNI0- + SHA-256(raw_frame), not from a broker-native execution ID/sequence field. Exact raw replay yields the same ID; changing price, quantity, or execution clock yields a new ID. The adapter does not supply an absolute execution_timestamp.
+- Synthetic evidence: adapter identity probe 5/5 PASS; Live SQLite regression 5/5 PASS (restart replay, changed-payload conflict, cross-order collision, WAL hard-crash recovery, concurrent identical commit); KIS execution consumer regression 3/3 PASS. No actual KIS account/API evidence.
+- Unresolved: broker-native fill identity/sequence, raw-frame stability on retransmission, same-order multi-fill uniqueness, and absolute execution-time provenance. A content hash is not yet proven to represent a broker-defined fill identity.
+- No Production/adapter/schema/test/fixture/phase changes. No KIS/REAL_VTS/Live/account API, broker/order/cancel/liquidation, collector, Raw/Canonical/accepted-source/manifest action. Synthetic-only; fixture runtime-ineligible and identity runtime-prohibited.
+- Preserve No.1689 Observation -> Planning -> Action and X2-latched submitted-fill reconciliation exception; preserve No.1652 aggregate separation and no automatic global X2 change from UNKNOWN/CONFLICT alone. Track7 restart recovery and Full T4 X3/integrated acceptance remain OPEN.
+- Next target: read-only trace of authoritative H0IFCNI0 field semantics and consumer reconnect/retransmission behavior; no identity/dedupe policy change before approval.

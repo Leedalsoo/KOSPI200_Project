@@ -886,3 +886,11 @@
 - ExecutionFill/ExecutionReport have no execution sequence/watermark. CanonicalMarketTick.source_sequence/seq_id are market-tick fields, not an established execution-event sequence contract.
 - Synthetic evidence: actual Track7 callback 3/3 PASS; identity/deduplicator/bridge probes 8/8 PASS. No live/real-account or production duplicate incident evidence.
 - Do not implement identity-key changes, durable dedupe, persistence, callback consumer changes, bootstrap/restore API, or phase changes until event unit, uniqueness scope, payload-conflict semantics, sequence provenance, and state ownership are explicitly approved. Preserve No.1689 Observation ? Planning ? Action and X2 fill-reconciliation exception; preserve No.1652 aggregate separation. Synthetic-only and fixture runtime-ineligible/identity runtime-prohibited remain in force.
+
+
+## No.1748 KIS execution identity provenance addendum (2026-11-22)
+
+- Keep Virtual and Live execution dedupe paths distinct. Virtual deduplicator is in-memory and is not connected to Track7 callback state transitions. Live SQLite settlement journal has transaction-backed exact replay handling and durable payload/cross-order collision evidence, but no Track7 callback integration was found.
+- KIS H0IFCNI0 adapter currently derives execution_id as KIS-H0IFCNI0- + SHA-256(raw_frame), not from a broker-native execution ID/sequence field. Same raw frame gives same ID; changing price, quantity, or execution clock changes the ID. The adapter leaves absolute execution_timestamp unset.
+- Synthetic evidence: adapter probe 5/5; existing Live SQLite regression 5/5; KIS execution consumer regression 3/3. These do not establish authoritative KIS broker identity/retransmission semantics.
+- Do not change adapter identity, SQLite key scope/schema, Track7 callback, durable dedupe, or phase/bootstrap/restore APIs before broker-native fill identity, retransmission stability, multi-fill uniqueness, and execution-time provenance are approved. Preserve No.1689 phase/X2 exception and No.1652 aggregate separation. Synthetic-only; fixture runtime-ineligible and identity runtime-prohibited.
