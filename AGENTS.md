@@ -855,3 +855,13 @@
 - No.1689 Observation → Planning → Action 및 X2 latched fill reconciliation 예외, No.1652 candidate/account aggregate와 Track7 strategy-state aggregate 분리 유지. Track7 restart recovery 및 Full T4 X3/integrated acceptance OPEN.
 - Production code/API/persistence/phase/test/fixture 변경 없음. Synthetic-only; fixture runtime_eligible=false, identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED, identity_policy.runtime_use=PROHIBITED. Live/API/broker/order/collector/raw/Canonical/manifest 변경 없음.
 - 상세: https://app.notion.com/p/4205f4f6eaa1815794d4fe8e408712ed
+## No.1745 — Track7 event identity / watermark / snapshot rollback (2026-11-22)
+
+- 최신 No.1744/1743/1742/1739 및 No.1689 phase/X2, No.1652 aggregate 분리 기준 유지.
+- Project200/T4 source 비교: Production source 4개 SHA-256 일치. Track7 관련 테스트 2개 raw SHA 차이는 CRLF/LF만이며 `git diff --no-index --ignore-cr-at-eol` 의미상 차이 0건. 원본 파일 변경 없음.
+- My_Caddy_TS1 원격 inline `py -` synthetic candidate matrix **12/12 PASS**, exit 0: event duplicate/conflicting payload, watermark cutoff, sequence collision, snapshot rollback/digest/scope mismatch, write-before-commit crash, replay idempotency, process lineage, lifecycle record conflict, READY commit boundary.
+- 12/12은 승인 전 synthetic model이며 Production event ID/sequence/watermark 계약, durable I/O, process crash, concurrency, factory restore integration 증거가 아니다.
+- 다음 실제 위험: Track7 callback/fill observation의 authoritative event identity·sequence provenance owner 및 No.1739 snapshot/event merge 연결 계약 부재. 다음은 read-only source trace와 synthetic 교차검증. 실제 계약 승인 전 production dedupe/watermark/persistence 구현 금지.
+- No.1689 Observation fill reconciliation 예외, X2 latched 시 Planning/Action 생략, No.1652 aggregate 분리 유지. UNKNOWN/CONFLICT만으로 global X2 자동 변경 금지.
+- Track7 restart recovery 및 Full T4 X3/integrated acceptance OPEN. Production code/API/persistence/phase/test/fixture 및 Raw/Canonical/accepted-source/manifest 변경 없음. KIS/REAL_VTS/Live/account API, broker/order/cancel/liquidation, collector restart/new collection 없음.
+- 상세: https://app.notion.com/p/4205f4f6eaa18129bd3ddaf7ea6e9d24
