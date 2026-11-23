@@ -300,3 +300,26 @@ Extended the synthetic S4 active-position/U19 test slice:
 - Added a test-only synthetic arithmetic harness scoped to one S4 strategy/group. It FIFO-matches fills, splits realized option/Futures PnL, marks remaining option/Futures lots separately, subtracts per-fill synthetic fees and reference-price slippage, and excludes unrelated strategy/group executions. Missing open-lot marks and multiplier mismatch are rejected.
 - Fixture output: realized option +750,000; realized Futures +250,000; unrealized option -500,000; unrealized Futures +250,000; gross +750,000; fees 400; synthetic slippage 300,000; net after execution costs 449,600 KRW. Theta diagnostic 80,000 KRW is retained separately to avoid double-subtracting an estimate from option MTM.
 - This is validation-only arithmetic, not a production attribution implementation or approved S4 fee/slippage/theta methodology. No.1495 MID/cost decision is S2-specific. D10/I06 remain OPEN pending approved S4 ownership/linkage and valuation/decomposition contract. No Production code changed; status remains DRAFT/UNVERIFIED/UNAPPROVED/DISABLED.
+
+
+## 2026-11-23 validation update — Gamma/Theta decomposition and execution linkage (No.1780)
+
+A validation-only fixture now decomposes synthetic option mark-to-market using an explicitly declared Taylor convention:
+
+- delta: option-price change per underlying point
+- gamma: option-price change per squared underlying point
+- theta: option-price change per elapsed day
+- vega: option-price change per decimal IV unit
+- residual: observed option MTM less the four modeled components
+
+Fixture arithmetic: option MTM +38 = delta +40 + gamma +16 + theta -20 + vega +2 + residual 0. A same-strategy/same-group synthetic short MINI Futures mark contributes +100 unrealized PnL, so combined observed option+Futures MTM is +138. Theta decay cost +20 is a diagnostic representation of theta PnL -20 and is not subtracted again from MTM. A separate mark perturbation leaves residual +10 visible.
+
+Source/execution audit:
+- H0IOCNT0 Greeks are passed through as raw values; the current snapshot does not declare their units, theta time basis, or IV scale.
+- Virtual execution-ledger attribution remains OPTION BUY premium-only; gamma/theta are unavailable. Market projection readiness remains false and runtime materializer still supplies both as None.
+- Current Basecamp emits NON_EXECUTION rather than an option order. Actual option fill → S4-owned option lot → linked Futures hedge → authoritative attribution is not an established end-to-end path.
+- The synthetic unit convention is a test fixture only. It is not an approved KIS conversion, S4 accounting rule, threshold, or Production/Live criterion.
+
+Validation: 8 tests in the new file plus 3 existing attribution tests passed (11 total). The broader selected S4 regression and compile/lint checks are recorded in No.1780 Q&A. No Production Strategy/Provider/Risk/Runtime/OMS/Router or execution semantics changed.
+
+D10/I06, authoritative Greek units and valuation, option lot ownership, linked hedge ownership, authoritative fees/slippage, and end-to-end Runtime attribution remain OPEN. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.

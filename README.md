@@ -1128,3 +1128,11 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - Added `tests/validation_only/test_s4_option_futures_pnl_attribution.py`, a synthetic reference harness for S4-group-scoped FIFO realized PnL, option/Futures open-lot MTM, fees, execution slippage and a separate theta diagnostic. The fixture excludes unrelated strategy fills and checks missing marks/multiplier mismatch.
 - Example fixture arithmetic: realized option +750,000 KRW; realized Futures +250,000; unrealized option -500,000; unrealized Futures +250,000; gross +750,000; fees 400; synthetic slippage 300,000; net after execution costs 449,600. Theta diagnostic 80,000 is shown separately, not deducted a second time from MTM. All amounts are synthetic test inputs, not S4 policy.
 - Current production-facing Track4 attribution still supplies premium spent only; gamma-profit/theta attribution remain unavailable and readiness is incomplete. No Production code changed.
+
+
+## 2026-11-23 S4 Gamma/Theta validation-only update (No.1780)
+
+- Added a test-only Greek decomposition harness with explicit synthetic units and elapsed-time convention; it reconciles option MTM to delta/gamma/theta/vega plus a visible residual and keeps linked MINI Futures MTM separate.
+- Fixture result: option MTM +38 = delta +40 + gamma +16 + theta -20 + vega +2 + residual 0; linked short MINI Futures unrealized PnL +100; combined observed MTM +138. Theta cost is diagnostic only and is not deducted twice.
+- Source audit confirms current H0IOCNT0 Greeks are raw pass-through without unit metadata; Virtual attribution remains premium-only; Runtime materializer still supplies gamma/theta as None; S4 Basecamp remains NON_EXECUTION, not option entry.
+- Synthetic assumptions are validation-only, not KIS/real-account/Production criteria. No Production behavior or market data changed. D10/I06 and full S4 execution/attribution remain OPEN; S4 remains DRAFT/UNVERIFIED/UNAPPROVED/DISABLED.

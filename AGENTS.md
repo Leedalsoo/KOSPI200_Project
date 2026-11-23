@@ -1,4 +1,24 @@
 # AGENTS.md — KOSPI200 Project 작업 기준
+## 2026-11-23 최신 사용자 확정 작업 기준 — 데이터 부족 대체 검증 우선 (No.1780)
+
+- 이 항목은 아래의 과거 데이터 누락 처리 문구보다 우선한다. 자료 불일치·부족을 발견해도 즉시 BLOCKED/UNAVAILABLE로 판정하지 않는다.
+- 먼저 최신 Notion 결정로그/Q&A/Current Baseline/실행결과와 로컬 코드·원본·Canonical·accepted registry·manifest·hash·identity·event-time·provenance를 대조한다. 과거 Notion과 충돌하면 최신 확정 기록을 우선한다.
+- 부족 데이터는 기존 관측 재사용, crosswalk, 독립 replay, schema/contract 검사, provenance-preserving deterministic synthetic/complementary fixture로 대체 검증한다. 합성 입력은 공식 validation-only 검증 입력으로 인정하되 생성 규칙·단위·범위·source anchor·manifest/hash를 표시하고 실제 관측값/KIS authoritative/계좌/Production/Live로 승격하지 않는다.
+- 대체 검증 뒤에도 핵심 계약 identity, event-time, provenance 또는 해당 검증의 필수 증거가 해결되지 않을 때만 해당 범위를 OPEN/UNVERIFIED 또는 BLOCKED/UNAVAILABLE로 구분한다. 가능한 검증은 계속한다.
+- 실계좌 투자 API 연결 시 실제 contract identity, multiplier, account, margin, fee, risk, execution 기준을 확정 근거와 매칭해 전체 코드·데이터·Runtime을 재검증한다.
+- 변경은 검증 결과가 코드/문서 변경을 정당화할 때만 한다. 사용자 작업폴더와 live origin/Project200을 대조하고, 기존 dirty/untracked/Graphify/nested worktree/Raw/Canonical/accepted-source/manifest를 보존한다. AGENTS.md, README.md, docs/CURRENT_BASELINE_V2.md, 관련 전략 명세를 함께 최신화하고 정확한 파일만 stage한다.
+- 실계좌/Live/REAL_VTS API, 실제 주문·취소·청산, collector 재시작·신규 수집, Raw/Canonical/accepted-source/manifest 변경은 별도 승인 전 금지한다.
+
+## 2026-11-23 S4 Gamma/Theta 합성 분해 및 경로 감사 (No.1780)
+
+- H0IOCNT0 adapter는 delta/gama/theta/HTS IV를 원시 Decimal로 전달한다. 현재 snapshot 계약에 Greek 단위·기간·IV 스케일 메타데이터는 없다.
+- VirtualTrack4AttributionSource는 OPTION BUY premium만 제공하며 gamma/theta attribution은 unavailable. Track4MarketProjectionProvider.readiness()는 attribution provider 주입 여부와 무관하게 false, Track4RuntimeInputMaterializer는 gamma/theta를 None으로 전달한다.
+- Track4RuntimeInputProviderFactory의 optional provider graph와 실제 virtual_session_factory → attach_standard_automated_loop의 track4_greeks_provider 전달 경로는 별도다. 현 코드에서 attribution/materializer가 실제 S4 execution path에 end-to-end 연결되었다는 증거는 없다.
+- Track4GammaScalpingStrategy.evaluate_basecamp()는 옵션 주문이 아닌 NON_EXECUTION state event를 발행한다. 현재 S4 strategy path에서 실제 option-entry fill → owned option lot → linked Futures hedge → attribution의 완결된 실행 연결은 확인되지 않았다.
+- 신규 tests/validation_only/test_s4_gamma_theta_decomposition.py는 명시된 fixture-only Taylor convention(delta per underlying point, gamma per point², theta per elapsed day, vega per decimal IV)을 사용한다. Synthetic option MTM 38 = delta 40 + gamma 16 + theta -20 + vega 2 + residual 0; linked short MINI Futures unrealized +100; combined observed option+Futures MTM +138. Theta cost는 별도 진단값이며 PnL에서 중복 차감하지 않는다. Mark perturbation은 residual +10으로 보존한다.
+- 테스트는 Greek/instrument mismatch, option/Futures strategy-group mismatch, 미정의 Greek unit, 음수 elapsed time을 거부하고 실제 Virtual ledger의 premium-only 및 attribution readiness=false 경계를 확인한다.
+- 이 convention은 test-only 산술 모델이며 KIS H0IOCNT0의 실제 단위·S4 공식 손익/운영정책이 아니다. Production provider/Strategy/Risk/Runtime/OMS/Router/execution semantics 변경 없음. S4 D10/I06 및 Full T4 attribution은 OPEN, S4는 DRAFT/UNVERIFIED/UNAPPROVED/DISABLED 유지.
+
 
 ## 1. 최우선 목표
 
