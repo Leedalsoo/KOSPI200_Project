@@ -1092,3 +1092,6 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 ### S4 active-position and pending-order reconciliation (2026-11-23)
 - U19 validation distinguishes matching active position with a still-pending order (restore denied), broker/ledger signed-quantity mismatch (restore denied), and matching post-terminal broker/ledger positions (validation-only restore allowed, new entry/order submission still disabled).
 - Combined S4/U16 regression: 88 passed. Synthetic-only; full S4 fault matrix and durable Track4State recovery remain open.
+### S4 signed position and close-plan quantity (2026-11-23)
+- Synthetic signed-side and pre-close quantity conflicts are distinguished by U19 as `POSITION_LEDGER_MISMATCH`; the existing close-plan builder derives BUY quantity 5 from two open fill lots totaling 5.
+- Automatic account-vs-PositionLot reconciliation before close-plan creation is not wired into the builder and remains OPEN pending an explicit contract decision. No Production semantics changed.

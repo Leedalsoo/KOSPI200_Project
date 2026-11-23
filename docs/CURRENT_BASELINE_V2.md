@@ -1053,3 +1053,8 @@
 - SHA-verified temporary accepted-source fixture: manifest `7657c90f13a81a7f98a8ccd075a259c8ec9795477a2a0541366094cd87e0360f`; 20261012 partition `c360b12e4c55551542490e73693ca59d42c3eb3135496d310cee7ee9fead62b5`. Project200 원본 accepted data 변경 없음.
 - Combined S4/U16 focused batch: 88 passed in 2.05s; compileall/diff-check PASS.
 - 범위는 U19 validation decision과 S4 synthetic active position/pending-order evidence다. 실제 broker truth, automatic Track4State restore, S4 U16 VirtualBridge routing, full F01-F29/G01-G12 matrix 및 Full T4 acceptance는 OPEN. Production reconciliation code/policy 및 Raw/Canonical/accepted source/manifest 변경 없음.
+## 2026-11-23 S4 signed-position / close-quantity characterization (No.1772)
+- S4 synthetic U19 signed-side mismatch (+2 broker vs -2 ledger) 및 pre-close quantity mismatch (-4 vs -5)를 POSITION_LEDGER_MISMATCH / restore false로 확인. conflict 상태에서 추가 VSSF order command 없음.
+- 두 개의 late-fill execution lots 합계 5에 대해 기존 close-plan builder가 BUY 5 수량을 산출하는 것을 확인.
+- 중요 경계: `build_close_plan_from_open_lots`는 PositionLot 수량으로 close plan을 만들지만, 반환 전 account/broker side·quantity와 자동 대사하는 admission guard는 없다. Production semantics 변경 없이 이 경계를 OPEN으로 기록; 자동 pre-close reconciliation wiring은 별도 contract 결정 필요.
+- S4/U16 통합 focused batch 88 passed in 2.09s; compileall/diff-check PASS. Synthetic-only.

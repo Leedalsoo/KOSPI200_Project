@@ -405,6 +405,16 @@ def test_track4_mini_partial_fill_cancel_late_fill_u19_restart_reconciles_exactl
     )
     assert conflict.status is U19RecoveryStatus.POSITION_LEDGER_MISMATCH
     assert conflict.restore_allowed is False
+    side_conflict_broker, side_conflict_ledger = recovery_snapshots(
+        broker_quantity=Decimal("2"), ledger_quantity=Decimal("-2"),
+        pending_ids=(), suffix="POSITION-SIDE-CONFLICT",
+    )
+    side_conflict = recovery.recover(
+        group_id=plan.group_id, broker_snapshot=side_conflict_broker,
+        ledger_snapshot=side_conflict_ledger,
+    )
+    assert side_conflict.status is U19RecoveryStatus.POSITION_LEDGER_MISMATCH
+    assert side_conflict.restore_allowed is False
 
     matched_broker, matched_ledger = recovery_snapshots(
         broker_quantity=Decimal("-2"), ledger_quantity=Decimal("-2"),
@@ -440,6 +450,18 @@ def test_track4_mini_partial_fill_cancel_late_fill_u19_restart_reconciles_exactl
     assert sum(lot.remaining_quantity for lot in lots) == 5
     assert len({lot.execution_id for lot in lots}) == 2
     assert vssf.account.positions[identity.instrument_id]["qty"] == 5
+    # Pre-close quantity disagreement is not reconciled by a position guess.
+    close_conflict_broker, close_conflict_ledger = recovery_snapshots(
+        broker_quantity=Decimal("-4"), ledger_quantity=Decimal("-5"),
+        pending_ids=(), suffix="PRECLOSE-QUANTITY-CONFLICT",
+    )
+    close_conflict = recovery.recover(
+        group_id=plan.group_id, broker_snapshot=close_conflict_broker,
+        ledger_snapshot=close_conflict_ledger,
+    )
+    assert close_conflict.status is U19RecoveryStatus.POSITION_LEDGER_MISMATCH
+    assert close_conflict.restore_allowed is False
+    assert vssf.metrics["order_commands"] == 1
 
     import json
     from collections import defaultdict
@@ -543,11 +565,16 @@ def test_track4_mini_partial_fill_cancel_late_fill_u19_restart_reconciles_exactl
     assert bridge.fee_ledger.snapshot(run_id=bridge.run_id) == before_fees
 
     monkeypatch.setattr(vssf, "_execute", original_execute)
+    assert len(lots) == 2
+    expected_open_quantity = sum(lot.remaining_quantity for lot in lots)
     close_plan = bridge.build_close_plan_from_open_lots(
         strategy_id="track4_gamma_scalping",
         purpose="S4_VALIDATION_LATE_FILL_CLOSE",
         asset_type="FUTURES",
     )
+    assert len(close_plan.legs) == 1
+    assert close_plan.legs[0].quantity == expected_open_quantity == 5
+    assert close_plan.legs[0].side == "BUY"
     closed = bridge.execute(close_plan)
     assert closed.filled_legs == 5
     assert closed.group_complete is True

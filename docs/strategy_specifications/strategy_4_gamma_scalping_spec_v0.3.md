@@ -250,3 +250,12 @@ Extended the existing S4 MINI 2/5 partial-fill → pending/cancel → late-fill 
 - Existing late-fill reconciliation then adds the remaining quantity 3 and retains the exact-once execution/position/fee checks.
 
 This closes a focused S4 active-position/pending-order/U19 quantity reconciliation slice. It does not establish real broker truth, automatic Track4State restore, S4 U16 VirtualBridge routing, or full F01-F29/G01-G12 acceptance. No Production reconciliation implementation or policy was changed; all snapshots and identities are synthetic validation-only.
+## 2026-11-23 S4 signed-position and close-quantity characterization (No.1772)
+
+Extended the synthetic S4 active-position/U19 test slice:
+
+- A signed-side conflict (+2 broker vs -2 execution ledger) is classified as `POSITION_LEDGER_MISMATCH`; no restore is permitted.
+- A pre-close quantity conflict (-4 broker vs -5 PositionLot-derived ledger) is classified as `POSITION_LEDGER_MISMATCH`; the test confirms no additional VSSF order command is submitted while this evidence is unresolved.
+- With two distinct late-fill execution lots totaling five open contracts, the existing close-plan builder derives one BUY close leg for exactly five contracts.
+
+**Important boundary:** this is U19 evidence/close-plan characterization, not an automatic account-vs-PositionLot admission guard. The current `build_close_plan_from_open_lots` derives quantity from PositionLots; it does not itself reconcile broker/account side and quantity before returning a close plan. No Production semantics were changed because that integration requires an explicit contract decision. Keep automatic pre-close reconciliation admission OPEN.

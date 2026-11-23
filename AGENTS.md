@@ -1047,3 +1047,8 @@
 - S4 MINI partial-fill scenario now checks U19 while residual quantity remains pending: broker and PositionLot ledger both -2 still produce `PENDING_ORDER_RECONCILIATION_REQUIRED`; no restore/new entry/order submission.
 - After terminal cancel, broker -2 vs ledger -1 produces `POSITION_LEDGER_MISMATCH` (restore denied); matching -2/-2 permits validation-only `RESTORE_ALLOWED`, with new entry/order submission still disabled. Existing late-fill exact-once checks remain.
 - Combined S4/U16 focused regression: 88 passed. compileall/diff-check PASS. Synthetic only; no Production reconciliation code or policy changed. Full S4 matrix, Track4State durable restore and S4 U16 VirtualBridge routing remain OPEN.
+### S4 signed-position / close-quantity characterization (No.1772, 2026-11-23)
+- Synthetic U19 signed-side mismatch (+2 broker vs -2 ledger) and pre-close quantity mismatch (-4 vs -5) both produce `POSITION_LEDGER_MISMATCH`, restore denied; no additional VSSF order command is submitted during the test conflict.
+- After two unique late-fill lots total 5, current close-plan builder derives one BUY leg quantity 5.
+- Boundary: `build_close_plan_from_open_lots` derives from PositionLots and does not automatically reconcile account/broker side+quantity before returning a plan. No Production behavior changed; automatic pre-close admission/reconciliation contract remains OPEN.
+- Combined S4/U16 regression: 88 passed in 2.09s; compileall/diff-check PASS. Synthetic-only.
