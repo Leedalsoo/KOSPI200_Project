@@ -1245,3 +1245,9 @@
 - This is a synthetic transport/collector unit test only. It does not execute weekday orchestration, KIS credentials/API/network, collector process/scheduler, or market data collection.
 - No ACK/PINGPONG parsing, ACK acceptance, Raw retention, retry/backoff changes, unsubscribe/close ordering, source reset, session freshness or Production semantics were inferred. No Production source, Runtime, strategy, order/risk, Raw/Canonical/accepted data or manifest changed. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. Validation pending.
 - Validation: S4 Track4 source/runtime + Canonical WebSocket focused regression 28 passed. compileall PASS; scoped Ruff F821/F401 PASS; git diff --check PASS.
+
+## 2026-11-24 Raw JSONL append integrity guard (No.1800)
+
+- KISRealtimeRawStore.append() validates the final non-empty JSONL record before appending. If the file ends without a line terminator, or the final record has invalid JSON, schema, or payload SHA-256, raise RAW_STORE_APPEND_BLOCKED_BY_INVALID_TAIL and leave existing Raw bytes unchanged.
+- records(tolerate_truncated_tail=True) and write_manifest(..., tolerate_truncated_tail=True) are read/manifest diagnostic tolerance only. They may preserve the damaged tail in a .truncated_tail sidecar, but do not repair, truncate, or authorize further append to the damaged Raw file.
+- This guard is a final-record append-integrity check, not a full-file audit, fsync/durability guarantee, concurrent-writer lock, recovery policy, or retry/idempotency contract. Recovery must preserve original bytes and use an explicitly versioned derived output when authorized.

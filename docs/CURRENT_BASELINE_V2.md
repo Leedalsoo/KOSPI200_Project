@@ -1247,3 +1247,21 @@
 - Unit test only; no weekday orchestration, KIS API/network, collector process/scheduler or new data collection. No ACK parsing/acceptance, Raw retention, retry/backoff, unsubscribe/session ownership or Production semantics inferred.
 - S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
 - Validation: S4 Track4 source/runtime + Canonical WebSocket focused regression 28 passed; compileall, scoped Ruff F821/F401 and git diff --check PASS.
+
+## Track4 No.1796–1799 — collector lifecycle and failure characterization (2026-11-24)
+
+- No.1796: repeated start on one collector resets sequence; Raw records remain append-only but carry no start/session/connection-generation identity.
+- No.1797: date rollover without close and repeated close were characterized with a fake transport; no lifecycle policy inferred.
+- No.1798: connect/subscribe/close exceptions propagate; Raw append failure increments sequence before failing, creating a possible sequence gap.
+- No.1799: mid-list subscribe failure followed by full resend, partial Raw write, flush exception after a complete row, and observer exception after Raw append were characterized with synthetic fixtures.
+- Existing focused Track4 + Canonical regression remained 28 passed through No.1799. No KIS/Live/API, actual collector, service/scheduler, or source-data mutation was used.
+
+## Track4 No.1800 — damaged Raw tail append guard and observer replay boundary (2026-11-24)
+
+- Synthetic evidence: a truncated JSONL tail without a newline followed by append concatenated the new frame onto the malformed line. records(tolerate_truncated_tail=True) then ignored the entire final line, including the appended frame; manifest generation counted only the valid prefix while hashing the complete damaged file. A malformed newline-terminated tail instead caused tolerant parsing/manifest generation to raise when later records followed it.
+- KISRealtimeRawStore.append() now checks the final non-empty JSONL row and requires a terminating newline. Invalid JSON, unsupported schema, payload hash mismatch, or an unterminated final row raises RAW_STORE_APPEND_BLOCKED_BY_INVALID_TAIL before writing; existing Raw bytes are unchanged. It validates only the tail, not the entire file.
+- Existing tolerant read/manifest behavior is retained: the malformed tail can be copied to .truncated_tail; the raw file remains unchanged; manifest record_count describes valid parsed rows while file_sha256 covers all Raw bytes. For legacy files where a later row was already concatenated onto a malformed tail, the entire combined line is copied to the sidecar and the later row is not parsed; no automatic recovery is attempted. This does not establish crash durability or a repair/recovery policy.
+- Synthetic same-frame retry after observer partial side effect + exception: the next receive returned the identical payload; Raw persisted two rows (sequence 1 and 2, same payload hash), and observer side-effect marker occurred twice. No deduplication/idempotency contract was inferred.
+- New integrity tests: 10 passed. Combined Track4 source/runtime + Canonical regression + new Raw integrity tests: 38 passed. All KIS infrastructure tests: 44 passed, 1 skipped. Compileall, scoped Ruff F821/F401, and git diff --check passed.
+- Code change is limited to infrastructure/kis/realtime_raw_store.py plus tests/infrastructure/kis/test_realtime_raw_store_integrity.py. No Raw/Canonical/accepted-source/manifest data files were modified. No KIS/Live/API, broker action, actual transport, collector service/scheduler, or new collection.
+- Remaining OPEN: explicit damaged-tail recovery/versioning, full-file corruption audit, fsync/durability, concurrent writer serialization, observer retry/idempotency. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.

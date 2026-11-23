@@ -17,6 +17,50 @@ class KISRealtimeRawStore:
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
 
+    def _validate_append_tail(self) -> None:
+        if not self.path.exists():
+            return
+
+        with self.path.open("rb") as handle:
+            handle.seek(0, 2)
+            end = handle.tell()
+            if end == 0:
+                return
+            handle.seek(-1, 2)
+            if handle.read(1) != b"\n":
+                raise ValueError("RAW_STORE_APPEND_BLOCKED_BY_INVALID_TAIL")
+
+            cursor = end - 1
+            tail_buffer = bytearray()
+            while cursor > 0:
+                cursor -= 1
+                handle.seek(cursor)
+                byte = handle.read(1)
+                if byte == b"\n":
+                    if tail_buffer.strip():
+                        break
+                    tail_buffer.clear()
+                else:
+                    tail_buffer[:0] = byte
+            tail = bytes(tail_buffer)
+
+        if not tail.strip():
+            return
+        try:
+            record = json.loads(tail.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError("RAW_STORE_APPEND_BLOCKED_BY_INVALID_TAIL") from exc
+        if (
+            not isinstance(record, dict)
+            or record.get("schema") != "kis-realtime-raw-v1"
+        ):
+            raise ValueError("RAW_STORE_APPEND_BLOCKED_BY_INVALID_TAIL")
+        payload_hash = hashlib.sha256(
+            str(record.get("payload", "")).encode("utf-8")
+        ).hexdigest()
+        if payload_hash != record.get("payload_sha256"):
+            raise ValueError("RAW_STORE_APPEND_BLOCKED_BY_INVALID_TAIL")
+
     def append(
         self,
         *,
@@ -50,6 +94,7 @@ class KISRealtimeRawStore:
         }
         if sequence is not None:
             record["sequence"] = int(sequence)
+        self._validate_append_tail()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("a", encoding="utf-8", newline="\n") as handle:
             handle.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")

@@ -1264,3 +1264,10 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - Unit test only; no weekday orchestration, KIS API/network, collector process/scheduler or new data collection.
 - No ACK parsing/acceptance, Raw retention, retry/backoff, unsubscribe/session ownership or Production semantics inferred. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
 - Validation: S4 Track4 source/runtime + Canonical WebSocket focused regression 28 passed; compileall, scoped Ruff F821/F401 and git diff --check PASS.
+
+## Latest validation — Track4 No.1800 (2026-11-24)
+
+- Synthetic Raw JSONL tail tests exposed that appending after an unterminated damaged tail can concatenate a later record onto the damaged line and make tolerant readers silently omit it.
+- KISRealtimeRawStore.append() now rejects an unterminated or invalid final record without modifying existing Raw bytes. Tolerant reads and manifest generation remain diagnostic-only; no automatic repair or truncation is performed.
+- Same-frame retry after a partially effective Frame Observer exception can produce duplicate Raw payloads and duplicate observer effects; idempotency remains undefined. Validation: 38 focused tests passed; KIS infrastructure 44 passed, 1 skipped. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+- Validation: 10 new Raw integrity tests; 38 combined Track4/Canonical tests; 44 KIS infrastructure tests passed, 1 skipped.
