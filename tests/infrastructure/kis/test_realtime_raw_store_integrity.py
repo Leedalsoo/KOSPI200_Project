@@ -176,3 +176,50 @@ def test_tolerant_read_preserves_legacy_concatenated_tail_as_unparsed_sidecar(
     assert manifest["record_count"] == 1
     assert manifest["file_sha256"] == hashlib.sha256(raw_before).hexdigest()
     assert path.read_bytes() == raw_before
+
+
+@pytest.mark.parametrize(
+    ("invalid_middle", "expected_error"),
+    [
+        (b"{SYNTHETIC_MALFORMED_INTERIOR}\n", "INVALID_KIS_RAW_RECORD_LINE:2"),
+        (
+            b'{"schema":"unsupported","payload":"SYNTHETIC_BAD_SCHEMA","payload_sha256":"x"}\n',
+            "UNSUPPORTED_KIS_RAW_SCHEMA_LINE:2",
+        ),
+        (
+            b'{"schema":"kis-realtime-raw-v1","payload":"SYNTHETIC_BAD_HASH","payload_sha256":"x"}\n',
+            "KIS_RAW_PAYLOAD_HASH_MISMATCH_LINE:2",
+        ),
+    ],
+)
+def test_full_file_reader_and_manifest_detect_interior_corruption_while_append_guard_checks_tail_only(
+    tmp_path: Path, invalid_middle: bytes, expected_error: str
+):
+    path = tmp_path / "interior-corruption.jsonl"
+    store = KISRealtimeRawStore(path)
+    _append_valid_record(store, sequence=1)
+
+    donor = KISRealtimeRawStore(tmp_path / "valid-tail.jsonl")
+    _append_valid_record(donor, sequence=2)
+    with path.open("ab") as handle:
+        handle.write(invalid_middle)
+        handle.write(donor.path.read_bytes())
+
+    before_append = path.read_bytes()
+    appended = _append_valid_record(store, sequence=3)
+
+    assert appended["sequence"] == 3
+    assert path.read_bytes() != before_append
+    assert path.read_bytes().startswith(before_append)
+
+    with pytest.raises(ValueError, match=expected_error):
+        store.records()
+    with pytest.raises(ValueError, match=expected_error):
+        store.records(tolerate_truncated_tail=True)
+    with pytest.raises(ValueError, match=expected_error):
+        store.write_manifest(
+            source="SYNTHETIC:DERIVED_SCENARIO",
+            endpoint="SYNTHETIC:INTERIOR_CORRUPTION",
+            tolerate_truncated_tail=True,
+        )
+    assert not path.with_suffix(path.suffix + ".manifest.json").exists()

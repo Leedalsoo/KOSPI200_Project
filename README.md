@@ -1271,3 +1271,9 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - KISRealtimeRawStore.append() now rejects an unterminated or invalid final record without modifying existing Raw bytes. Tolerant reads and manifest generation remain diagnostic-only; no automatic repair or truncation is performed.
 - Same-frame retry after a partially effective Frame Observer exception can produce duplicate Raw payloads and duplicate observer effects; idempotency remains undefined. Validation: 38 focused tests passed; KIS infrastructure 44 passed, 1 skipped. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
 - Validation: 10 new Raw integrity tests; 38 combined Track4/Canonical tests; 44 KIS infrastructure tests passed, 1 skipped.
+
+## Latest validation — Track4 No.1801 (2026-11-24)
+
+- Synthetic interior-corruption fixtures (malformed JSON, unsupported schema, payload-hash mismatch) with a later valid final row show that append() checks the tail only and can append; records() and write_manifest() detect the earlier corruption and raise. Tolerant-tail mode does not skip interior corruption; no new manifest is written.
+- No production code change: no approved full-file pre-append, recovery, truncation, or manifest-rebuild policy was found. Original Raw bytes and all actual source data remain untouched.
+- Validation: focused Track4/Canonical/Raw tests 41 passed; KIS infrastructure 47 passed, 1 skipped. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.

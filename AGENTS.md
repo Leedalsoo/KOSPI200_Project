@@ -1251,3 +1251,10 @@
 - KISRealtimeRawStore.append() validates the final non-empty JSONL record before appending. If the file ends without a line terminator, or the final record has invalid JSON, schema, or payload SHA-256, raise RAW_STORE_APPEND_BLOCKED_BY_INVALID_TAIL and leave existing Raw bytes unchanged.
 - records(tolerate_truncated_tail=True) and write_manifest(..., tolerate_truncated_tail=True) are read/manifest diagnostic tolerance only. They may preserve the damaged tail in a .truncated_tail sidecar, but do not repair, truncate, or authorize further append to the damaged Raw file.
 - This guard is a final-record append-integrity check, not a full-file audit, fsync/durability guarantee, concurrent-writer lock, recovery policy, or retry/idempotency contract. Recovery must preserve original bytes and use an explicitly versioned derived output when authorized.
+
+## 2026-11-24 Track4 Raw full-file audit boundary (No.1801)
+
+- KISRealtimeRawStore.append() currently validates only the final non-empty JSONL record before appending. A valid final row does not prove earlier rows are valid; append can extend a file that contains malformed JSON, unsupported schema, or an earlier payload-hash mismatch.
+- records() scans from the beginning and raises on interior corruption. tolerate_truncated_tail=True is not a general corruption-recovery mode: if non-whitespace data follows a malformed row, it still raises. write_manifest() also fails during the full scan and does not create a new manifest for that invalid file.
+- Keep the distinction explicit: tail append guard vs full-file read/manifest validation. Do not silently truncate, skip interior rows, rebuild a manifest from a partial prefix, or invent a recovery/repair policy. Preserve original Raw bytes and use synthetic temporary fixtures for these tests.
+- This characterization does not add a full-file pre-append scan, fsync guarantee, concurrent-writer lock, or observer idempotency contract. Those require separate scope/contract validation.
