@@ -1067,3 +1067,7 @@
 ### S4 synthetic configured-utilization boundary (No.1775, 2026-11-23)
 - Characterize the current generic RiskConfig default `max_margin_utilization_ratio=0.85` in the synthetic S4 harness only: (used margin 600,000,000 + derived order margin 250,000,000) / total balance 1,000,000,000 = 0.85; exact equality is admitted. Increasing used margin by 1 KRW yields 0.850000001 and is rejected before VSSF order submission.
 - This documents current generic code behavior, not an approved S4/account risk limit. Do not promote the default to an S4 production criterion without an explicit policy decision.
+
+### S4 synthetic position-cap boundary (No.1776, 2026-11-23)
+- Characterize the existing Virtual risk preflight position-cap behavior with synthetic S4 MINI order quantity 5: configured max position 4 rejects before VSSF submission; configured max position 5 admits the exact boundary. These values are test-only boundary inputs, not approved S4 operating position limits.
+- The bridge may surface its own group-level margin-utilization rejection reason rather than the lower-level RiskEngine string. Assertions must verify the observed public rejection contract and zero order commands, not assume an internal reason code.

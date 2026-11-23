@@ -1108,3 +1108,7 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 ### S4 MINI synthetic utilization-boundary validation (No.1775, 2026-11-23)
 - Added exact 0.85 generic RiskConfig utilization boundary and +1 KRW rejection cases alongside the free-margin boundary. The 0.85 value is the current generic engine default, not an approved S4 operating limit.
 - Combined S4/U16/profile/close-lot suite: 57 passed; compileall, Ruff F821/F401 and diff-check PASS.
+
+### S4 MINI synthetic position-cap boundary (No.1776, 2026-11-23)
+- Added position cap 4 vs requested 5 (reject, no VSSF order command) and exact cap 5 (synthetic fill) to the existing margin/utilization boundary suite. These are test fixture limits, not approved S4 operating limits.
+- Combined S4/U16/profile/close-lot suite: 59 passed; compileall, Ruff F821/F401 and diff-check PASS.

@@ -1075,3 +1075,9 @@
 - Extended S4 margin-preflight characterization using current generic RiskConfig default 0.85. Synthetic arithmetic: (used margin 600,000,000 + required margin 250,000,000) / total balance 1,000,000,000 = 0.85; equality passes. At used margin 600,000,001 the ratio is 0.850000001 and the preflight rejects before VSSF order command.
 - Combined S4/U16/profile/close-lot suite: 57 passed in 1.92s; compileall/Ruff F821+F401/git diff-check PASS.
 - This is generic configured-code characterization only. The 0.85 default is not an approved S4 or real-account risk limit. No Production risk policy/account adapter changed. Full S4 risk matrix and approved max-position/max-loss/stress-loss/fee/slippage criteria remain OPEN.
+
+## 2026-11-23 S4 synthetic position-cap boundary follow-up (No.1776)
+- Extended the existing S4 synthetic risk-preflight parameterization with max_position_per_instrument=4 against requested quantity 5 (reject before VSSF order command; no routed/fill/PositionLot/account position) and exact limit 5 (preflight accepted; 5-unit synthetic fill).
+- During the first rerun, the test expected a lower-level RiskEngine rejection string but the bridge correctly surfaced its group-level `GROUP_MAX_MARGIN_UTILIZATION_EXCEEDED` reason for the existing utilization case. The assertion was reconciled to the observed public bridge contract; no implementation behavior was changed.
+- S4 target file: 17 passed. Combined S4/U16/profile/close-lot suite: 59 passed in 2.09s; compileall/Ruff F821+F401/git diff-check PASS.
+- Position cap 4/5 is only a synthetic boundary test, not an approved S4/real-account operating limit. No Production code/policy changed. Full F01-F29/G01-G12 matrix, S4 U16 VirtualBridge routing, Track4State durable restore and Full T4 acceptance remain OPEN.

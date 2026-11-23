@@ -276,3 +276,8 @@ Extended the synthetic S4 active-position/U19 test slice:
 - Characterized current generic RiskConfig default `max_margin_utilization_ratio=0.85` in synthetic validation: (used margin 600,000,000 + required margin 250,000,000) / total balance 1,000,000,000 = 0.85 and exact equality passes; used margin 600,000,001 gives 0.850000001 and rejects before VSSF order submission.
 - Combined S4/U16/profile/close-lot suite: 57 passed; compileall/Ruff F821+F401/git diff-check PASS.
 - The 0.85 value is a generic code default only, not an approved S4 or real-account limit. No Production policy/adapter changed. S4 remains DRAFT/UNVERIFIED/UNAPPROVED/DISABLED; full F01-F29/G01-G12 risk acceptance remains OPEN.
+
+## 2026-11-23 S4 synthetic position-cap boundary characterization (No.1776)
+- Added an integration-level synthetic S4 MINI risk preflight boundary: requested quantity 5 with configured generic `max_position_per_instrument=4` is rejected before VSSF order command; exact configured limit 5 is accepted and fills 5 in Virtual validation.
+- The test also retains No.1774 free-margin and No.1775 generic margin-utilization boundary cases. S4 target file 17 passed; combined S4/U16/profile/close-lot batch 59 passed; compileall/Ruff F821+F401/git diff-check PASS.
+- Values 4 and 5 are synthetic boundary inputs only, not approved S4 position caps. No Production risk policy/adapter changed. S4 remains DRAFT/UNVERIFIED/UNAPPROVED/DISABLED; full F01-F29/G01-G12 matrix remains OPEN.

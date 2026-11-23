@@ -753,22 +753,26 @@ def test_track4_mini_futures_rejects_missing_freshness_verdict_before_route() ->
     assert identity.instrument_id not in vssf.account.positions
 
 @pytest.mark.parametrize(
-    ("free_margin", "used_margin", "expected_rejection"),
+    ("free_margin", "used_margin", "max_position", "expected_rejection"),
     [
-        (Decimal("249999999"), Decimal("0"), "INSUFFICIENT_FREE_MARGIN"),
-        (Decimal("250000000"), Decimal("0"), None),
-        (Decimal("250000000"), Decimal("600000000"), None),
-        (Decimal("250000000"), Decimal("600000001"), "MAX_MARGIN_UTILIZATION"),
+        (Decimal("249999999"), Decimal("0"), 100, "INSUFFICIENT_FREE_MARGIN"),
+        (Decimal("250000000"), Decimal("0"), 100, None),
+        (Decimal("250000000"), Decimal("600000000"), 100, None),
+        (Decimal("250000000"), Decimal("600000001"), 100, "MAX_MARGIN_UTILIZATION"),
+        (Decimal("250000000"), Decimal("0"), 4, "EXCEEDED_INSTRUMENT_LIMIT"),
+        (Decimal("250000000"), Decimal("0"), 5, None),
     ],
     ids=(
         "one-krw-below-required-margin",
         "exact-required-margin-boundary",
         "exact-configured-utilization-boundary",
         "one-krw-over-configured-utilization-boundary",
+        "one-contract-over-synthetic-position-limit",
+        "exact-synthetic-position-limit-boundary",
     ),
 )
-def test_track4_mini_futures_margin_preflight_boundary(
-    free_margin: Decimal, used_margin: Decimal, expected_rejection: str | None,
+def test_track4_mini_futures_risk_preflight_boundaries(
+    free_margin: Decimal, used_margin: Decimal, max_position: int, expected_rejection: str | None,
 ) -> None:
     loop = _loop(("track4_gamma_scalping", "1.0"), "S4-MINI-MARGIN-PREFLIGHT-FAULT")
     bridge = loop.multi_leg_bridge
@@ -809,6 +813,9 @@ def test_track4_mini_futures_margin_preflight_boundary(
     vssf.order_book.update_bid_ask(1000, 1000, identity.instrument_id)
     vssf.account.free_margin = free_margin
     vssf.account.used_margin = used_margin
+    risk_engine = bridge.risk_gate.engine
+    risk_config = type(risk_engine.config)(max_position_per_instrument=max_position)
+    bridge.risk_gate.engine = type(risk_engine)(risk_config, margin_engine=risk_engine.margin_engine)
     observed_at = datetime.fromisoformat(tick.timestamp)
 
     def fresh_synthetic_evidence(_plan, _leg, _identity, command):
@@ -835,7 +842,13 @@ def test_track4_mini_futures_margin_preflight_boundary(
         assert result.routed_legs == 0
         assert result.filled_legs == 0
         assert result.reports[0].status == "REJECTED"
-        assert expected_rejection in (result.reports[0].rejected_reason or "").upper()
+        rejection_text = (result.reports[0].rejected_reason or "").upper()
+        if expected_rejection == "EXCEEDED_INSTRUMENT_LIMIT":
+            assert "EXCEEDED_INSTRUMENT_LIMIT" in rejection_text
+        elif expected_rejection == "MAX_MARGIN_UTILIZATION":
+            assert "MARGIN_UTILIZATION" in rejection_text
+        else:
+            assert expected_rejection in rejection_text
         assert vssf.metrics["order_commands"] == 0
         assert bridge.position_lot_store.open_lots() == ()
         assert identity.instrument_id not in vssf.account.positions
