@@ -111,3 +111,17 @@ Before any production activation, independently confirm: actual tradable cash pr
 - Read-only source trace: the existing Virtual multi-leg bridge, VSSF command-context provider, and canonical order transport accept only FUTURES and OPTION asset types. They do not currently support an equity/ETF cash-basket leg.
 - Do not mislabel the synthetic cash proxy as a Futures contract to force routing. The current 37-test batch validates the isolated synthetic two-leg economics plus existing S3 source/profile/fail-closed contracts; it is not a full two-asset Virtual Runtime execution.
 - Adding a synthetic equity/cash-basket asset to Virtual OMS/Router/VSSF is a separate architecture/contract task. No such runtime change was made.
+
+## Additional validation-only coverage (No.1766)
+
+The follow-up test batch extends the synthetic-only matrix without connecting the cash proxy to the existing Virtual OMS/Router:
+
+- beta drift changes the notional hedge quantity and residual;
+- nearest-unit rounding residual is bounded by half one cash-unit notional;
+- proxy tracking error can overwhelm a profitable Futures leg and turn net spread P&L negative;
+- asymmetric partial fills remain `PARTIALLY_EXPOSED`;
+- an existing pending/active group prevents duplicate entry;
+- restart snapshots are observation-only and do not authorize new entry or blind retry;
+- close quantity is derived from actual filled quantity minus already-closed quantity, never requested quantity; over-close is rejected.
+
+These are pure validation-harness rules, not Production policy or Runtime execution evidence. Actual broker reconciliation, partial-fill repair, atomic group routing, durable restart persistence, and ETF/equity Virtual asset support remain outside this test scope.

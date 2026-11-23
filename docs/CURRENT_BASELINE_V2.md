@@ -1018,3 +1018,8 @@
 - 검증 범위 제한: 위 37 tests는 합성 2-leg 경제성·헤지 수량·비용/PnL·partial-fill 상태 및 기존 S3 source/profile/fail-closed 계약 검증이다. Full two-asset Virtual Runtime E2E가 아니다. 현재 Virtual multi-leg bridge/VSSF/canonical order transport는 FUTURES/OPTION만 지원하므로 cash-basket/ETF leg를 Futures로 위장해 라우팅하지 않는다. Production adapter의 unresolved 상태는 유지한다.
 - 실투자 전 재승인: 실제 proxy 상품/종목코드·공매도/대차, authoritative master/quote, beta·tracking error, 비용/세금/금융비용/슬리피지/유동성, 증거금·계좌 위험, partial-fill repair, session/expiry/roll 및 out-of-sample/walk-forward 파라미터 검증.
 - 안전: KIS/REAL_VTS/account/Live API·주문·취소·청산·collector 재시작/신규 수집·Raw/Canonical/accepted source/manifest 변경 없음. S3 Production execution plan 미승인.
+
+## S3 합성 검증 추가 결과 (No.1766, 2026-11-23)
+- validation-only 하니스에 beta drift/hedge quantity, rounding residual, cash proxy tracking error, asymmetric partial fill, pending/active duplicate-entry guard, restart observation-only/no-blind-retry, actual-filled-quantity close 및 over-close rejection 테스트를 추가했다.
+- Project200 focused batch: 46 passed (S3 합성 하니스 31 + 기존 S3 source/profile/fail-closed 15). compileall 및 git diff --check PASS.
+- 검증 전용 helper/fixture이며 Virtual OMS/Router 실행, broker repair, durable restart persistence, atomic group routing, Production/Live acceptance를 증명하지 않는다.

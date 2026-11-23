@@ -1024,3 +1024,7 @@
 - 검증 통과로 코드 변경이 필요한 경우 해당 Project200 작업폴더 파일을 갱신하고 focused tests/필요한 회귀, compileall, git diff --check를 실행한다. AGENTS.md, README.md, docs/CURRENT_BASELINE_V2.md도 최신 Notion 결과와 일치시킨다.
 - Project200 커밋/푸시는 사용자의 명시 지시가 있을 때만 수행한다. 이번 2026-11-23 지시에서 Project200 push가 명시 승인됐다. stage는 이번 작업의 정확한 파일만 지정하고 기존 Graphify 수정·untracked·nested worktree·사용자 자료는 보존한다.
 - Live/REAL_VTS/실계좌·주문 API, 실제 주문/취소/청산, collector 재시작/신규 수집, Raw/Canonical/accepted data/manifest 덮어쓰기 금지는 별도 명시 승인 전까지 유지한다.
+
+### S3 추가 합성 검증 경계 (No.1766, 2026-11-23)
+- S3 validation-only 하니스는 beta drift/hedge quantity, rounding residual, cash-proxy tracking error, asymmetric partial fill, duplicate entry guard, restart observation-only, actual-filled-quantity close 및 over-close rejection을 검증한다.
+- 이 규칙은 테스트 전용이다. 실제 Runtime/OMS 라우팅, broker partial-fill repair, durable restart persistence, atomic group routing 또는 Production policy를 구현·승인하지 않는다.

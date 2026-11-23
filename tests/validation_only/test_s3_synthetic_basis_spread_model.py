@@ -314,3 +314,119 @@ def test_cost_stress_can_turn_gross_profit_into_net_loss():
         total_fees=Decimal("50000"), total_slippage=Decimal("25000"),
     )
     assert pnl < 0
+
+# Additional validation-only lifecycle and hedge-sensitivity helpers. These do not
+# call or alter the Production/Virtual OMS, Router, broker, or strategy runtime.
+def entry_group_admissible(*, open_group_count: int) -> bool:
+    if open_group_count < 0:
+        raise ValueError("S3_OPEN_GROUP_COUNT_INVALID")
+    return open_group_count == 0
+
+
+def restart_entry_reconciliation(
+    *, futures_requested: int, cash_requested: int,
+    futures_filled: int, cash_filled: int,
+) -> tuple[str, bool, bool]:
+    state = group_state(
+        futures_filled=futures_filled,
+        cash_filled=cash_filled,
+        futures_requested=futures_requested,
+        cash_requested=cash_requested,
+    )
+    # A restart snapshot is observation-only: it never authorizes a blind retry
+    # or a new entry before authoritative reconciliation.
+    return state, False, False
+
+
+def remaining_close_quantities(
+    *, futures_filled: int, cash_filled: int,
+    futures_closed: int = 0, cash_closed: int = 0,
+) -> tuple[int, int]:
+    values = (futures_filled, cash_filled, futures_closed, cash_closed)
+    if min(values) < 0 or futures_closed > futures_filled or cash_closed > cash_filled:
+        raise ValueError("S3_CLOSE_QUANTITY_EXCEEDS_FILLED")
+    return futures_filled - futures_closed, cash_filled - cash_closed
+
+
+def test_beta_drift_changes_cash_hedge_quantity_and_residual():
+    base = _plan(2.5)
+    lower_beta = _plan(2.5, cash_beta=Decimal("0.90"))
+    higher_beta = _plan(2.5, cash_beta=Decimal("1.10"))
+    assert lower_beta.legs[1].quantity != base.legs[1].quantity
+    assert higher_beta.legs[1].quantity != base.legs[1].quantity
+    assert lower_beta.legs[1].quantity > base.legs[1].quantity
+    assert higher_beta.legs[1].quantity < base.legs[1].quantity
+
+
+def test_rounding_residual_is_bounded_by_half_cash_unit_notional():
+    plan = _plan(2.5, cash_beta=Decimal("1.03"))
+    half_unit = Decimal("50000") * Decimal("1.03") / Decimal("2")
+    assert abs(plan.cash_hedge_notional_residual) <= half_unit
+
+
+def test_tracking_error_can_overwhelm_futures_leg_profit():
+    pnl = spread_net_pnl(
+        direction="SHORT_BASIS",
+        futures_entry=Decimal("1075"), futures_exit=Decimal("1074.8"),
+        futures_multiplier=Decimal("250000"), futures_quantity=1,
+        cash_entry=Decimal("50000"), cash_exit=Decimal("49990"),
+        cash_unit_multiplier=Decimal("1"), cash_quantity=5375,
+        total_fees=Decimal("0"), total_slippage=Decimal("0"),
+    )
+    assert pnl == Decimal("-3750.0")
+
+
+def test_asymmetric_partial_fill_remains_partially_exposed():
+    assert group_state(
+        futures_filled=1, cash_filled=2400,
+        futures_requested=1, cash_requested=5375,
+    ) == "PARTIALLY_EXPOSED"
+    assert group_state(
+        futures_filled=0, cash_filled=5375,
+        futures_requested=1, cash_requested=5375,
+    ) == "PARTIALLY_EXPOSED"
+
+
+def test_pending_or_active_group_prevents_duplicate_entry():
+    assert entry_group_admissible(open_group_count=0) is True
+    assert entry_group_admissible(open_group_count=1) is False
+    assert entry_group_admissible(open_group_count=2) is False
+
+
+def test_restart_partial_fill_is_observation_only_without_blind_retry():
+    state, new_entry_allowed, blind_retry_allowed = restart_entry_reconciliation(
+        futures_requested=1, cash_requested=5375,
+        futures_filled=1, cash_filled=2400,
+    )
+    assert state == "PARTIALLY_EXPOSED"
+    assert new_entry_allowed is False
+    assert blind_retry_allowed is False
+
+
+def test_restart_full_fill_preserves_active_state_but_blocks_new_entry():
+    state, new_entry_allowed, blind_retry_allowed = restart_entry_reconciliation(
+        futures_requested=1, cash_requested=5375,
+        futures_filled=1, cash_filled=5375,
+    )
+    assert state == "ACTIVE"
+    assert new_entry_allowed is False
+    assert blind_retry_allowed is False
+
+
+def test_close_quantity_uses_actual_fills_not_requested_quantity():
+    assert remaining_close_quantities(
+        futures_filled=1, cash_filled=2400,
+        futures_closed=0, cash_closed=0,
+    ) == (1, 2400)
+    assert remaining_close_quantities(
+        futures_filled=1, cash_filled=2400,
+        futures_closed=1, cash_closed=900,
+    ) == (0, 1500)
+
+
+def test_close_quantity_cannot_exceed_actual_fills():
+    with pytest.raises(ValueError, match="S3_CLOSE_QUANTITY_EXCEEDS_FILLED"):
+        remaining_close_quantities(
+            futures_filled=1, cash_filled=2400,
+            futures_closed=1, cash_closed=2401,
+        )

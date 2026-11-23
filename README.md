@@ -1074,3 +1074,7 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - 대체 검증 후에도 핵심 identity/event-time/provenance/evidence가 해결되지 않은 항목만 BLOCKED/UNAVAILABLE로 남기고, 검증 가능한 범위는 계속 진행한다.
 - 실계좌 투자 API 연결 전까지 synthetic/validation-only 기준을 사용한다. 합성 결과는 KIS/계좌/Production/Live 사실로 승격하지 않는다.
 - S3 No.1764 모델은 Futures-Index basis 신호와 별도 cash-basket/ETF proxy 합성 레그를 분리한다. Project200에서 37개 focused tests가 통과했으나 이는 경제성/가드/profile 검증이며 equity/ETF leg의 Virtual OMS/Router 실행이나 Production 승인 증거가 아니다. 현재 Runtime asset contract는 FUTURES/OPTION만 지원한다.
+
+### S3 synthetic regression update (2026-11-23)
+- S3 validation-only matrix now covers beta/hedge drift, rounding residual, proxy tracking error, asymmetric partial fills, duplicate-group admission, restart without blind retry, and close quantities based only on actual fills.
+- These are isolated test-harness checks, not Virtual OMS/Router or Production execution acceptance.
