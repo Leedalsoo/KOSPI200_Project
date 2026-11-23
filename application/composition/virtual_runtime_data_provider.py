@@ -197,13 +197,17 @@ class VirtualRuntimeDataProvider:
             if callable(snapshot):
                 snapshot = snapshot()
             provider_observed_at = getattr(snapshot, "observed_at", None) if snapshot is not None else None
-            if provider_observed_at:
+            provider_instrument_id = str(getattr(snapshot, "instrument_id", "") or "") if snapshot is not None else ""
+            tick_instrument_id = str(getattr(tick, "instrument_id", "") or "")
+            if provider_observed_at and provider_instrument_id and tick_instrument_id == provider_instrument_id:
                 provider_as_of = (
                     provider_observed_at
                     if isinstance(provider_observed_at, datetime)
                     else datetime.fromisoformat(str(provider_observed_at))
                 )
-                if provider_as_of <= observed_at:
+                # Track4 Greeks are per-option observations: never carry a prior tick
+                # forward or apply one contract's Greeks to another option instrument.
+                if provider_as_of == observed_at:
                     if delta is None:
                         delta = self.track4_greeks_provider.current_delta()
                     if gamma is None:
