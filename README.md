@@ -1122,3 +1122,9 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - Added two synthetic S4 cases with realized PnL 0 and unrealized PnL -1,000/-1,001 KRW against a 1,000 KRW test cap. Both were admitted by the current preflight, confirming that the generic realized daily-loss rule does not include unrealized PnL.
 - Source trace: account snapshot contains unrealized PnL, but `RiskAccountInput`/`account_snapshot_to_risk_input` omit it; `RiskEngine.evaluate_order` evaluates accumulated and current realized loss only. No generic stress-loss calculation was found.
 - Combined focused S4/U16/profile/close-lot/spec suite: 39 passed; compileall, Ruff F821/F401 and git diff-check PASS. This is a confirmed coverage gap, not a risk-control PASS. No Production behavior changed; S4 remains DRAFT/UNVERIFIED/UNAPPROVED/DISABLED.
+
+
+### S4 option/Futures attribution ? No.1779 (validation-only)
+- Added `tests/validation_only/test_s4_option_futures_pnl_attribution.py`, a synthetic reference harness for S4-group-scoped FIFO realized PnL, option/Futures open-lot MTM, fees, execution slippage and a separate theta diagnostic. The fixture excludes unrelated strategy fills and checks missing marks/multiplier mismatch.
+- Example fixture arithmetic: realized option +750,000 KRW; realized Futures +250,000; unrealized option -500,000; unrealized Futures +250,000; gross +750,000; fees 400; synthetic slippage 300,000; net after execution costs 449,600. Theta diagnostic 80,000 is shown separately, not deducted a second time from MTM. All amounts are synthetic test inputs, not S4 policy.
+- Current production-facing Track4 attribution still supplies premium spent only; gamma-profit/theta attribution remain unavailable and readiness is incomplete. No Production code changed.
