@@ -240,20 +240,59 @@ def test_track2_group_stop_exit_builds_trap_close_signal_when_test_policy_is_inj
 
 def test_track2_runtime_tick_processor_refreshes_group_pnl_before_strategy_evaluation():
     import ast
-    source = Path("application/composition/automated_virtual_runtime_factory.py").read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    processor = next(
-        node for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef) and node.name == "process_pending_multi_leg"
-    )
-    calls = {
-        node.func.attr
-        for node in ast.walk(processor)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+
+    factory_source = Path("application/composition/automated_virtual_runtime_factory.py").read_text(encoding="utf-8")
+    factory_tree = ast.parse(factory_source)
+    factory_functions = {
+        node.name: node
+        for node in ast.walk(factory_tree)
+        if isinstance(node, ast.FunctionDef)
     }
-    assert "refresh_position_group_marks" in calls
-    assert "update_group_pnl_snapshot" in calls
-    assert "update_group_pnl_status" in calls
+
+    def call_names(node):
+        names = set()
+        for call in ast.walk(node):
+            if not isinstance(call, ast.Call):
+                continue
+            if isinstance(call.func, ast.Attribute):
+                names.add(call.func.attr)
+            elif isinstance(call.func, ast.Name):
+                names.add(call.func.id)
+        return names
+
+    refresh = factory_functions["refresh_track2_position_marks"]
+    observer = factory_functions["observe_pending_multi_leg"]
+    processor = factory_functions["process_pending_multi_leg"]
+
+    assert {
+        "refresh_position_group_marks",
+        "update_group_pnl_snapshot",
+        "update_group_pnl_status",
+    }.issubset(call_names(refresh))
+    assert "refresh_track2_position_marks" in call_names(observer)
+    assert "refresh_track2_position_marks" in call_names(processor)
+
+    loop_source = Path("application/composition/automated_virtual_trading_loop.py").read_text(encoding="utf-8")
+    loop_tree = ast.parse(loop_source)
+    on_tick = next(
+        node for node in ast.walk(loop_tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "on_tick"
+    )
+    ordered_calls = sorted(
+        (
+            call.lineno,
+            call.func.attr,
+            getattr(call.func.value, "attr", None) if isinstance(call.func, ast.Attribute) else None,
+        )
+        for call in ast.walk(on_tick)
+        if isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+    )
+    reconciliation_line = next(line for line, name, _ in ordered_calls if name == "_reconcile_pending_multi_leg")
+    strategy_run_line = next(
+        line for line, name, owner in ordered_calls
+        if name == "run" and owner == "strategy_hub"
+    )
+    assert reconciliation_line < strategy_run_line
 
 
 
