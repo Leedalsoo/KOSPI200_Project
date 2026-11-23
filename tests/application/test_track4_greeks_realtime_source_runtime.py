@@ -357,3 +357,73 @@ def test_synthetic_expiry_session_subscription_plan_is_dry_run_only() -> None:
     assert plan['safety']['websocket_opened'] is False
     assert plan['rotation']['automatic_rotation_enabled'] is False
     assert plan['rotation']['status'] == 'BLOCKED_THRESHOLDS_UNSET'
+
+def test_synthetic_reconnect_resubscribes_without_unsubscribe_or_ack_wait(tmp_path) -> None:
+    import asyncio
+    from infrastructure.kis.kis_realtime_collector import KISRealtimeCollector
+    from infrastructure.kis.realtime_raw_store import KISRealtimeRawStore
+
+    class Transport:
+        def __init__(self):
+            self.connects = 0
+            self.subscriptions = []
+            self.closes = 0
+            self.recv_calls = 0
+        async def connect(self):
+            self.connects += 1
+        async def subscribe(self, tr_id, symbol):
+            self.subscriptions.append((tr_id, symbol))
+        async def recv(self):
+            self.recv_calls += 1
+            if self.recv_calls == 1:
+                raise ConnectionError('synthetic disconnect')
+            return '0|H0IOCNT0|1|SYNTHETIC-CONTRACT-RECONNECT'
+        async def close(self):
+            self.closes += 1
+
+    transport = Transport()
+    collector = KISRealtimeCollector(
+        transport,
+        KISRealtimeRawStore(tmp_path / 'reconnect.jsonl'),
+        max_reconnects=1,
+    )
+    asyncio.run(collector.start('20261123', [('H0IOCNT0', 'SYNTHETIC-CONTRACT-RECONNECT')]))
+    record = asyncio.run(collector.capture_one())
+
+    assert record['instrument'] == 'SYNTHETIC-CONTRACT-RECONNECT'
+    assert transport.connects == 2
+    assert transport.subscriptions == [
+        ('H0IOCNT0', 'SYNTHETIC-CONTRACT-RECONNECT'),
+        ('H0IOCNT0', 'SYNTHETIC-CONTRACT-RECONNECT'),
+    ]
+    assert transport.closes == 0
+    assert transport.recv_calls == 2
+
+
+def test_synthetic_websocket_subscribe_send_returns_without_ack_correlation() -> None:
+    import asyncio
+    import json
+    from infrastructure.kis.futures_market_transport import KISFuturesMarketTransport
+
+    class Approval:
+        def issue(self):
+            return 'SYNTHETIC-APPROVAL-KEY'
+
+    class Socket:
+        def __init__(self):
+            self.sent = []
+        async def send(self, payload):
+            self.sent.append(payload)
+
+    transport = object.__new__(KISFuturesMarketTransport)
+    transport._approval = Approval()
+    transport._socket = Socket()
+    transport._connected = True
+    asyncio.run(transport.subscribe('H0IOCNT0', 'SYNTHETIC-CONTRACT-ACK'))
+
+    assert len(transport._socket.sent) == 1
+    message = json.loads(transport._socket.sent[0])
+    assert message['header']['tr_type'] == '1'
+    assert message['body']['input']['tr_id'] == 'H0IOCNT0'
+    assert message['body']['input']['tr_key'] == 'SYNTHETIC-CONTRACT-ACK'
+    assert not hasattr(transport, 'wait_for_subscription_ack')

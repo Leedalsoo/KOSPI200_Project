@@ -1208,3 +1208,12 @@
 - No Production collector/source/Runtime/bootstrap changes. No KIS API/Live/REAL_VTS, no subscribe/unsubscribe network calls, no collector restart/new collection, and no Raw/Canonical/accepted-source/manifest mutation.
 - Open contract decisions: subscription owner and ACK correlation; old-session unsubscribe/close ordering; source instance lifetime/reset owner; trading-date vs expiry transition; receive-time/event-time authority; session rollover behavior. Do not invent policy or wire Production until approved.
 - S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+## 2026-11-23 No.1791 — Track4 reconnect re-subscribe / ACK boundary (synthetic only)
+
+- Corrective precision for No.1790: `KISRealtimeCollector`'s `RealtimeTransport` Protocol omits `unsubscribe`, but concrete `KISFuturesMarketTransport` does implement `unsubscribe()` by sending `tr_type="2"`. The collector does not invoke it. Do not state that the concrete transport lacks unsubscribe.
+- `KISFuturesMarketTransport.subscribe()` obtains an approval key and sends a JSON subscription request (`tr_type="1"`) to the socket, then returns. No subscription-ACK correlation/wait method exists in this transport. This proves send-call completion only, not broker acceptance.
+- `KISRealtimeCollector.capture_one()` reconnect path calls `_connect_and_subscribe()` again after recv exception, which replays the entire configured subscription list. It does not close the previous transport before reconnect and does not correlate subscription ACKs before accepting subsequent data.
+- Added two synthetic tests: (1) synthetic recv disconnect → reconnect → full subscription replay and raw-frame capture; (2) fake socket/approval provider verifies subscribe sends expected envelope and returns without ACK correlation. No KIS credentials, network, API, or collector process used.
+- Combined S4 + Canonical focused regression: 55 passed. `compileall`, scoped Ruff F821/F401, and `git diff --check` PASS.
+- No Production code changed. Only test characterization and documentation updated. Raw/Canonical/accepted sources/manifests untouched; no collector restart/new collection.
+- Remaining OPEN: ACK response schema/correlation and acceptance criteria; safe old socket close + unsubscribe ACK ordering; reconnect duplicate-subscription semantics; source/session lifecycle owner; expiry rollover; receive-time/event-time authority. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
