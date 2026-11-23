@@ -1087,3 +1087,5 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 ### S4 MINI freshness admission fault slice (2026-11-23)
 - Added five S4 MINI Virtual bridge freshness fault cases: stale, unknown, capability conflict, command identity mismatch, and missing verdict. All reject before VSSF submission and leave position state unchanged.
 - Combined S4/U16 focused batch: 87 passed. Full S4 fault matrix and U16 VirtualBridge/durable Track4State integration remain open.
+### S4 MINI margin preflight boundary (2026-11-23)
+- A synthetic zero-free-margin S4 MINI case confirms bridge risk preflight rejects before VSSF order submission and leaves positions unchanged. It is a focused F12/F14 validation case, not real-account margin calibration or full risk acceptance.

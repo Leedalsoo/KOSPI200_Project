@@ -1041,3 +1041,8 @@
 - S4 MINI identity/runtime/late-fill/U19 + freshness + U16 + profile/bridge/generic U16 batch: 87 passed in 1.96s. compileall/diff-check PASS.
 - 범위는 F04/F27 freshness/provenance admission focused slice다. Full F01-F29/G01-G12 matrix, U16 VirtualBridge routing, Track4State durable snapshot/restore, Full T4 acceptance는 OPEN. S4 spec remains DRAFT/UNVERIFIED/UNAPPROVED/DISABLED.
 - Validation test only; Production Runtime, OMS/Router, policy, Raw/Canonical/accepted data/manifest, Live/API behavior unchanged.
+## 2026-11-23 S4 MINI margin preflight fault slice (No.1770)
+- S4 MINI Virtual bridge에 zero synthetic VSSF free-margin + fresh identity-matched synthetic evidence 조합을 주입했다. Risk preflight에서 margin 관련 REJECTED, VSSF order command 0, routed/fill 0, PositionLot/account position 불변을 확인했다.
+- S4/U16 통합 focused regression 88 passed in 2.03s; compileall/diff-check PASS.
+- F12/F14 margin admission focused slice만 PASS. 실계좌 margin·max-loss·stress-loss 기준 확정이나 전체 risk matrix 통과를 의미하지 않는다. S4 spec remains DRAFT/UNVERIFIED/UNAPPROVED/DISABLED.
+- Production Risk/OMS/Router/Runtime, policy, market source, accepted data 변경 없음.

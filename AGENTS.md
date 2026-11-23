@@ -1040,3 +1040,6 @@
 - Added validation-only S4 MINI Futures bridge cases for STALE, UNKNOWN, CAPABILITY_CONFLICT, FRESH-but-command-symbol-mismatch, and missing freshness verdict.
 - All five cases must be rejected before VSSF order-command submission and leave PositionLot/account position unchanged. This is a focused F04/F27 freshness/provenance admission slice only; it does not complete the full F01-F29/G01-G12 matrix or authorize S4.
 - Combined S4/U16 focused regression: 87 passed; compileall and diff-check PASS. Synthetic validation only; no Production runtime or market data source changed.
+### S4 MINI margin preflight validation (No.1770, 2026-11-23)
+- Added a validation-only S4 MINI bridge test with zero synthetic VSSF free margin and fresh identity-matched synthetic quote evidence. Margin denial must occur before VSSF submission; no routed/fill quantity, PositionLot, or account position is created.
+- This is one focused F12/F14 margin-admission case only. It does not approve real margin values, max-loss/stress-loss policy, or complete the S4 risk matrix. No Production risk or order code changed.

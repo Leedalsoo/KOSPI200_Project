@@ -608,3 +608,72 @@ def test_track4_mini_futures_rejects_missing_freshness_verdict_before_route() ->
     assert vssf.metrics["order_commands"] == 0
     assert bridge.position_lot_store.open_lots() == ()
     assert identity.instrument_id not in vssf.account.positions
+
+def test_track4_mini_futures_insufficient_free_margin_rejects_before_vssf_submission() -> None:
+    loop = _loop(("track4_gamma_scalping", "1.0"), "S4-MINI-MARGIN-PREFLIGHT-FAULT")
+    bridge = loop.multi_leg_bridge
+    tick = SimpleNamespace(
+        underlying_symbol="SYNTHETIC_KOSPI200",
+        symbol="SYNTHETIC_KOSPI200",
+        instrument_id="SYNTHETIC_KOSPI200",
+        timestamp="2026-10-08T09:00:49+09:00",
+    )
+    proposal = StrategyExecutionProposal(
+        proposed_quantity=5,
+        asset_type="FUTURES",
+        requested_price=None,
+        side="SELL",
+        track_id="track4_gamma_scalping",
+        tag_id="GAMMA_REBALANCE",
+        option_type=None,
+        strike=None,
+    )
+    evaluation = SimpleNamespace(
+        context=SimpleNamespace(
+            strategy_id="track4_gamma_scalping",
+            market_state=SimpleNamespace(ticks={"synthetic": tick}),
+        ),
+        result=SimpleNamespace(execution_proposal=proposal),
+    )
+    canonical = SimpleNamespace(
+        side=SimpleNamespace(value="SELL"),
+        qty=5,
+        tag_id="GAMMA_REBALANCE",
+        track_id="track4_gamma_scalping",
+    )
+    plan = loop.multi_leg_plan_resolver(evaluation, canonical)
+    assert plan is not None
+    identity = plan.legs[0].instrument_identity
+    vssf = bridge.bundle.execution._authoritative_execute.__self__.vssf_runtime
+    bridge.bundle.market._futures_price = Decimal("1000")
+    vssf.order_book.update_bid_ask(1000, 1000, identity.instrument_id)
+    vssf.account.free_margin = Decimal("0")
+    observed_at = datetime.fromisoformat(tick.timestamp)
+
+    def fresh_synthetic_evidence(_plan, _leg, _identity, command):
+        return FreshnessVerdict(
+            status=FreshnessStatus.FRESH,
+            reason="S4_SYNTHETIC_FRESHNESS_PASS",
+            policy_version="S4-MINI-MARGIN-FAULT-v1",
+            source="SYNTHETIC:DERIVED_SCENARIO",
+            tr_id="S4-SYNTHETIC-VIRTUAL",
+            environment="VIRTUAL_VALIDATION_ONLY",
+            instrument_id=command.instrument_id,
+            symbol=command.broker_symbol,
+            source_instant=observed_at,
+            received_at=observed_at,
+            evidence_sha256=sha256(
+                f"{observed_at.isoformat()}|{command.instrument_id}|MARGIN".encode()
+            ).hexdigest(),
+        )
+
+    bridge.freshness_verdict_provider = fresh_synthetic_evidence
+    result = bridge.execute(plan)
+
+    assert result.routed_legs == 0
+    assert result.filled_legs == 0
+    assert result.reports[0].status == "REJECTED"
+    assert "MARGIN" in (result.reports[0].rejected_reason or "").upper()
+    assert vssf.metrics["order_commands"] == 0
+    assert bridge.position_lot_store.open_lots() == ()
+    assert identity.instrument_id not in vssf.account.positions

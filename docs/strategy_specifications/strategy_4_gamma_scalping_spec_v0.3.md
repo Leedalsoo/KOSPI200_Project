@@ -235,3 +235,8 @@ A validation-only test uses an S4 MINI synthetic group/leg identity with the exi
 A validation-only S4 MINI Futures bridge test now injects five pre-route freshness faults: STALE, UNKNOWN, CAPABILITY_CONFLICT, FRESH with mismatched command symbol, and missing verdict. Every case must return REJECTED before VSSF order-command submission; no PositionLot or account position may be created. The test uses synthetic S4 identity and derived evidence only.
 
 This closes the focused test slice for F04/F27 freshness/provenance admission. It does not close the broader F04/F27 strategy-input, active-position risk, or full F01-F29/G01-G12 matrix. Existing S4 partial-fill/cancel/late-fill/U19 restart and No.1768 U16 coordinator harness results remain separate evidence. U16 VirtualBridge routing and Track4State durable strategy snapshot/restore remain OPEN. Strategy specification status remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+## 2026-11-23 validation update — MINI Futures margin preflight fault (No.1770)
+
+A validation-only S4 MINI Futures bridge case now sets the synthetic VSSF account free-margin snapshot to zero while supplying a fresh, identity-matched synthetic freshness verdict. The bridge must return a margin-related REJECTED report before VSSF order-command submission, with zero routed/filled quantity and no PositionLot/account position mutation. This covers one focused F12/F14 account-margin admission fault; it does not establish authoritative live margin requirements, strategy max-loss, stress-loss, or the full risk-preflight matrix.
+
+S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. No production risk parameters or order behavior were changed.
