@@ -1173,3 +1173,14 @@
 - Track4 realtime source is a separate path: accept_frame() forwards caller-provided observed_at to adapter and does not derive it from payload BSOP_HOUR; adapter adapt_many() can decode multiple instrument records, but the source facade currently calls adapt() and stores one provider only. Therefore multi-instrument Runtime source lifecycle is not wired/verified. Do not copy canonical behavior into the Track4 source without a separately tested lifecycle/contract decision.
 - Added two validation-only regression tests proving caller timestamp precedence over payload hour and distinguishing adapter multi-record decoding from the single-provider source facade. Combined S4 + canonical focused suite: 46 passed. compileall, scoped Ruff F821/F401, git diff --check PASS.
 - No production Runtime/source/strategy/order semantics changed. No KIS API/subscription/collector, Raw/Canonical/accepted dataset, Production or Live operation performed. Existing user/Graphify files preserved. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+
+## 2026-11-23 No.1788 — H0IOCNT0 중복·역순·지연 프레임 합성 경계 검증
+
+- 최신 No.1787/1786/1785, Current Baseline v2의 No.1534/1535/1554 정책 및 No.1546 A8 진행표를 대조했다. 기존 accepted/synthetic/complementary 입력은 provenance를 유지하는 validation-only 입력으로 사용한다. 자료 부족을 즉시 BLOCKED로 판정하지 않는다.
+- Track4 KISTrack4GreeksRealtimeSource.accept_frame()은 프레임 수신마다 adapter 결과로 단일 provider를 교체한다. 동일 프레임 중복 제거, observed_at 역행 차단, payload BSOP_HOUR 기준 순서 판정은 구현되어 있지 않다. 오래된 caller timestamp 프레임이 최신 provider를 덮어쓸 수 있다.
+- Track4 합성 테스트 3개로 동일 프레임 재처리(중복 억제 없음), 더 오래된 프레임의 최신 snapshot 덮어쓰기, payload 시각 역순을 caller 수신시각으로만 처리하는 동작을 재현했다.
+- Canonical v2 normalizer는 stateless 변환기다. 동일 raw/run/record/time provenance를 replay하면 observation ID가 결정적으로 동일하며, 별도 raw frame anchor는 별도 ID가 된다. 역순 event-time observation도 모두 반환하며 stale/duplicate filtering이나 stream state 관리 역할을 하지 않는다.
+- Canonical 합성 테스트 1개로 동일 입력 replay의 ID 안정성, 별도 raw anchor의 ID 분리, 역순 observed_at 보존을 검증했다.
+- Combined S4 + Canonical focused regression: 50 passed. compileall PASS. Scoped Ruff F821/F401 PASS, git diff --check PASS.
+- 판정: Canonical은 provenance-aware normalization/identity, Track4 source는 caller-timestamp 단일-provider latest-value facade다. 둘의 stale/duplicate/reorder 정책은 동일하지 않으며, 현 단계에서는 이를 Production 결함으로 단정하거나 임의로 차단 정책을 추가하지 않는다.
+- Production source/Runtime/bootstrap, strategy/order/risk semantics 변경 없음. KIS API/구독/collector, Raw/Canonical/accepted-source/manifest 원본 변경 없음. S4는 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED 유지.

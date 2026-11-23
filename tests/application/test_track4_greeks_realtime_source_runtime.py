@@ -162,3 +162,78 @@ def test_greeks_adapter_can_decode_each_synthetic_record_but_source_facade_is_si
     assert current is not None
     assert current.snapshot.instrument_id == "SYNTHETIC_CONTRACT:TRACK4-CALL-350"
     assert source.snapshot.instrument_id != "SYNTHETIC_CONTRACT:TRACK4-PUT-350"
+
+
+def test_duplicate_synthetic_frame_is_reprocessed_without_deduplication() -> None:
+    observed_at = datetime(2026, 11, 23, 10, 15, tzinfo=timezone.utc)
+    frame = _synthetic_h0iocnt0_frame(
+        "SYNTHETIC_CONTRACT:TRACK4-CALL-350",
+        delta="0.31",
+    )
+    source = KISTrack4GreeksRealtimeSource()
+
+    first = source.accept_frame(frame, observed_at=observed_at)
+    second = source.accept_frame(frame, observed_at=observed_at)
+
+    assert first is not None
+    assert second is not None
+    assert first is not second
+    assert first.snapshot == second.snapshot
+    assert source.provider is second
+
+
+def test_older_synthetic_frame_overwrites_newer_track4_snapshot() -> None:
+    newer_at = datetime(2026, 11, 23, 10, 15, 2, tzinfo=timezone.utc)
+    older_at = datetime(2026, 11, 23, 10, 15, 1, tzinfo=timezone.utc)
+    source = KISTrack4GreeksRealtimeSource()
+    instrument_id = "SYNTHETIC_CONTRACT:TRACK4-CALL-350"
+
+    newer = source.accept_frame(
+        _synthetic_h0iocnt0_frame(instrument_id, delta="0.35"),
+        observed_at=newer_at,
+    )
+    older = source.accept_frame(
+        _synthetic_h0iocnt0_frame(instrument_id, delta="0.31"),
+        observed_at=older_at,
+    )
+
+    assert newer is not None
+    assert older is not None
+    assert source.provider is older
+    assert source.snapshot.observed_at == older_at.isoformat()
+    assert source.current_delta() == Decimal("0.31")
+
+
+def test_reordered_payload_clock_is_ignored_in_favor_of_caller_receive_order() -> None:
+    instrument_id = "SYNTHETIC_CONTRACT:TRACK4-CALL-350"
+    source = KISTrack4GreeksRealtimeSource()
+    first_received_at = datetime(2026, 11, 23, 10, 15, 2, tzinfo=timezone.utc)
+    second_received_at = datetime(2026, 11, 23, 10, 15, 3, tzinfo=timezone.utc)
+
+    first_values = [""] * 58
+    second_values = [""] * 58
+    for values, payload_hour, delta in (
+        (first_values, "101502", "0.35"),
+        (second_values, "101501", "0.31"),
+    ):
+        values[0] = instrument_id
+        values[1] = payload_hour
+        values[28] = delta
+        values[29] = "0.017"
+        values[31] = "-0.42"
+        values[33] = "24.5"
+
+    first = source.accept_frame(
+        "0|H0IOCNT0|1|" + "^".join(first_values),
+        observed_at=first_received_at,
+    )
+    second = source.accept_frame(
+        "0|H0IOCNT0|1|" + "^".join(second_values),
+        observed_at=second_received_at,
+    )
+
+    assert first is not None
+    assert second is not None
+    assert second.snapshot.observed_at == second_received_at.isoformat()
+    assert second.snapshot.observed_at > first.snapshot.observed_at
+    assert source.current_delta() == Decimal("0.31")

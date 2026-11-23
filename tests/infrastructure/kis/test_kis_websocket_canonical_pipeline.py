@@ -10,9 +10,6 @@ import infrastructure.kis.kis_websocket_option_identity_resolver as resolver_mod
 from application.composition.vms_market_tick_projection_adapter import (
     VMSMarketTickProjectionAdapter,
 )
-from contracts.kis_index_option_market_ws_adapter import (
-    KISIndexOptionMarketWebSocketAdapter,
-)
 from contracts.types import OptionInstrumentIdentity
 from environments.virtual.market.canonical import ReferenceCanonicalMarketTick
 from environments.virtual.market.replay_engine import HistoricalReplayEngine
@@ -420,3 +417,41 @@ def test_t13_ws_future_source_time_preserves_negative_clock_skew_without_clampin
     assert metadata['candidate_source_to_receipt_lag_ms'] == '-1000.000'
     assert observation.observed_at.isoformat() == '2026-10-12T09:15:03+09:00'
     assert observation.collected_at == received_at
+
+
+def test_h0iocnt0_replay_identity_is_provenance_deterministic_without_order_filtering() -> None:
+    normalizer = KISWebSocketMarketObservationNormalizer(_IdentityLookup())
+
+    def frame_at(hour: str, price: str) -> str:
+        fields = ["0"] * 58
+        fields[0] = "B01611835"
+        fields[1] = hour
+        fields[2] = price
+        fields[10] = "1"
+        fields[33] = "10.0"
+        fields[41] = "12.40"
+        fields[42] = "12.20"
+        return "0|H0IOCNT0|1|" + "^".join(fields)
+
+    received_at = datetime(2026, 10, 12, 0, 15, 3, tzinfo=timezone.utc)
+    first_frame = frame_at("091502", "12.30")
+    older_frame = frame_at("091501", "12.25")
+
+    def normalize(frame: str, raw_id: str):
+        return normalizer.normalize_frame(
+            frame,
+            received_at=received_at,
+            run_id="synthetic-ordering-test",
+            raw_id=raw_id,
+            raw_content_hash="a" * 64,
+            session_date=date(2026, 10, 12),
+        )
+
+    first = normalize(first_frame, "synthetic-frame-1")
+    exact_replay = normalize(first_frame, "synthetic-frame-1")
+    older = normalize(older_frame, "synthetic-frame-2")
+
+    assert first[0].observation_id == exact_replay[0].observation_id
+    assert first[0].observation_id != older[0].observation_id
+    assert first[0].observed_at > older[0].observed_at
+    assert older[0].collected_at == received_at
