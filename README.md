@@ -1241,3 +1241,11 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - Boundary limitation: if a replayed tick carries the exact same old instrument_id and exact old observed_at as the held Greeks snapshot, Runtime accepts the old Greeks. Current gate is exact identity/time equality, not a session-aware freshness or replay-prevention policy.
 - Added two synthetic tests for JSON ACK classification boundary and session/expiry identity-time behavior (including exact old replay). No API, live connection, collector process, Raw input, or Production changes.
 - OPEN: approved ACK envelope/status codes and ACK-vs-market-data routing; session token/sequence/monotonic receive-time freshness and replay prevention; authoritative event-time vs receive-time; source reset/owner. Do not implement session invalidation or ACK parsing without approved contracts.
+## 2026-11-23 No.1793 — control-frame error propagation audit (read-only)
+
+- Reconciled latest No.1790–1792 and searched newer Track4 ACK/session decisions; no newer approval or ACK/session contract found.
+- Static path trace: JSON ACK/PINGPONG-shaped payload does not match pipe-delimited market frame parsing in `KISRealtimeCollector.capture_one()`, so it raises `RAW_FRAME_TR_ID_REQUIRED` before Raw append.
+- Existing weekday collector loop catches any non-timeout exception from `capture_one()`, logs RECEIVE_ERROR, calls collector.close(), sleeps, then calls collector.start() again with the full subscription plan. Therefore a control frame can enter the generic receive-error/restart path; it is not safely classified/consumed as control traffic. This is source inspection only; no collector process or scheduler was run.
+- No ACK/PINGPONG schema or approved routing/retention policy exists in the inspected current Notion baseline. Do not add speculative ACK parser, skip rules, retry policy or Production semantics.
+- No new test or Production source changes. Existing synthetic tests continue to characterize ACK parse failure and no Raw append. No KIS API/network/collector restart/new collection or Raw/Canonical/manifest changes.
+- S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. Next: obtain/define approved control-frame and session ownership contract before implementation; until then continue only synthetic boundary characterization.
