@@ -1100,3 +1100,7 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - Synthetic validation now covers a partial close (2/5), terminal cancel, rebuilding the close plan from the remaining 3 PositionLot units, and final flat confirmation.
 - Close-plan scope test confirms run/strategy isolation, aggregation within one group, and rejection when multiple active groups are ambiguous.
 - Combined S4/U16/profile/close-lot focused suite: 54 passed; compileall and git diff --check PASS. This does not implement account-vs-PositionLot pre-close admission or approve unresolved S4 operating risk/position limits.
+
+### S4 MINI synthetic margin-boundary validation (No.1774, 2026-11-23)
+- Extended the existing margin fault test to cover one KRW below the derived synthetic order-margin requirement (reject, zero order commands) and exact equality (preflight accepted, 5-unit synthetic fill).
+- The 250,000,000 KRW value is calculated from this fixture's price/quantity/MINI multiplier only; it is not a real-account margin criterion. Combined S4/U16/profile/close-lot suite: 55 passed; compileall, Ruff F821/F401 and diff-check PASS.

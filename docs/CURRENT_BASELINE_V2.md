@@ -1064,3 +1064,9 @@
 - Added close-plan group-scope characterization: current run/strategy lots only, aggregate same-group fills, and reject ambiguous multiple open groups rather than combine them.
 - Focused combined S4/U16/profile/close-lot batch: 54 passed in 1.79s; compileall and git diff --check PASS.
 - Scope remains synthetic validation-only. No account/broker pre-close reconciliation guard was added. S4 max-position/max-loss/stress-loss and other operating thresholds remain unapproved/unverified; no values were invented. Full F01-F29/G01-G12 matrix, S4 U16 VirtualBridge routing, Track4State durable restore and Full T4 acceptance remain OPEN.
+
+## 2026-11-23 S4 synthetic margin-boundary follow-up (No.1774)
+- Reused the existing S4 MINI margin-preflight setup and added a two-point boundary test. Fixture arithmetic: price 1,000 ? 5 contracts ? MINI multiplier 50,000 = 250,000,000 KRW derived required margin.
+- Free margin 249,999,999 KRW: REJECTED before VSSF order command; no route/fill/PositionLot/account position. Free margin exactly 250,000,000 KRW: preflight accepted; synthetic 5-unit order filled and PositionLot/account quantity verified.
+- Combined S4/U16/profile/close-lot suite: 55 passed in 1.80s; compileall PASS; Ruff F821/F401 PASS; git diff --check PASS.
+- The calculated amount is only a synthetic fixture boundary, not an approved real-account margin schedule or operating risk limit. No Production risk policy/adapter, account API, or live order path changed. Full S4 risk matrix, approved max-position/max-loss/stress-loss criteria, U16 VirtualBridge routing, Track4State durable restore and Full T4 acceptance remain OPEN.

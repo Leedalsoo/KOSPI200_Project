@@ -752,7 +752,12 @@ def test_track4_mini_futures_rejects_missing_freshness_verdict_before_route() ->
     assert bridge.position_lot_store.open_lots() == ()
     assert identity.instrument_id not in vssf.account.positions
 
-def test_track4_mini_futures_insufficient_free_margin_rejects_before_vssf_submission() -> None:
+@pytest.mark.parametrize(
+    ("free_margin", "should_reject"),
+    [(Decimal("249999999"), True), (Decimal("250000000"), False)],
+    ids=("one-krw-below-required-margin", "exact-required-margin-boundary"),
+)
+def test_track4_mini_futures_margin_preflight_boundary(free_margin: Decimal, should_reject: bool) -> None:
     loop = _loop(("track4_gamma_scalping", "1.0"), "S4-MINI-MARGIN-PREFLIGHT-FAULT")
     bridge = loop.multi_leg_bridge
     tick = SimpleNamespace(
@@ -790,7 +795,7 @@ def test_track4_mini_futures_insufficient_free_margin_rejects_before_vssf_submis
     vssf = bridge.bundle.execution._authoritative_execute.__self__.vssf_runtime
     bridge.bundle.market._futures_price = Decimal("1000")
     vssf.order_book.update_bid_ask(1000, 1000, identity.instrument_id)
-    vssf.account.free_margin = Decimal("0")
+    vssf.account.free_margin = free_margin
     observed_at = datetime.fromisoformat(tick.timestamp)
 
     def fresh_synthetic_evidence(_plan, _leg, _identity, command):
@@ -813,13 +818,22 @@ def test_track4_mini_futures_insufficient_free_margin_rejects_before_vssf_submis
     bridge.freshness_verdict_provider = fresh_synthetic_evidence
     result = bridge.execute(plan)
 
-    assert result.routed_legs == 0
-    assert result.filled_legs == 0
-    assert result.reports[0].status == "REJECTED"
-    assert "MARGIN" in (result.reports[0].rejected_reason or "").upper()
-    assert vssf.metrics["order_commands"] == 0
-    assert bridge.position_lot_store.open_lots() == ()
-    assert identity.instrument_id not in vssf.account.positions
+    if should_reject:
+        assert result.routed_legs == 0
+        assert result.filled_legs == 0
+        assert result.reports[0].status == "REJECTED"
+        assert "MARGIN" in (result.reports[0].rejected_reason or "").upper()
+        assert vssf.metrics["order_commands"] == 0
+        assert bridge.position_lot_store.open_lots() == ()
+        assert identity.instrument_id not in vssf.account.positions
+    else:
+        assert result.routed_legs == 1
+        assert result.filled_legs == 5
+        assert result.reports[0].status == "FILLED"
+        assert result.reports[0].filled_quantity == 5
+        assert vssf.metrics["order_commands"] == 1
+        assert sum(lot.remaining_quantity for lot in bridge.position_lot_store.open_lots()) == 5
+        assert int(vssf.account.positions[identity.instrument_id]["qty"]) == 5
 
 
 def test_track4_close_plan_scopes_open_lots_to_one_group_and_aggregates_actual_quantity() -> None:

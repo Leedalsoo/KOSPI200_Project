@@ -1058,3 +1058,8 @@
 - Preserve partial-close evidence: after a synthetic 2-of-5 close fill and terminal cancel, rebuild the close plan from the remaining 3 PositionLot units; complete only that remainder and verify flat.
 - Do not infer or invent S4 max-position, max-loss, stress-loss, margin-utilization, or operating quantity thresholds while their approved values remain unresolved.
 - This test characterization does not add account/broker pre-close reconciliation. No Production reconciliation semantics, Runtime/OMS/Router, risk policy, market data, or Live/API behavior may be changed without the separate approved contract.
+
+### S4 synthetic margin-boundary characterization (No.1774, 2026-11-23)
+- Keep margin checks validation-only. For the existing synthetic MINI test setup (price 1,000 ? quantity 5 ? multiplier 50,000), the derived order margin is 250,000,000 KRW; this is a test-fixture arithmetic value, not an approved account limit or live margin schedule.
+- Characterize the strict comparison boundary: free margin 249,999,999 KRW rejects before VSSF order submission; free margin exactly 250,000,000 KRW passes the existing preflight and fills the synthetic 5-unit order.
+- Do not infer production capital, max-position, max-loss, stress-loss, or margin-utilization approvals from this fixture. No Production risk policy or account adapter is changed.

@@ -265,3 +265,9 @@ Extended the synthetic S4 active-position/U19 test slice:
 - Added builder characterization for run/strategy scoping, same-group actual-quantity aggregation, and fail-closed rejection of ambiguous multiple open groups.
 - Focused combined S4/U16/profile/close-lot suite: 54 passed; compileall and git diff --check PASS.
 - This is not account/broker position reconciliation before close. No Production code or reconciliation semantics changed. F12/F14 margin admission remains a focused synthetic slice only; max-position, max-loss, stress-loss, delta residual, fee/slippage and other operating risk limits remain unresolved. G06/G08 and complete F01-F29/G01-G12 acceptance remain OPEN; specification remains DRAFT/UNVERIFIED/UNAPPROVED/DISABLED.
+
+## 2026-11-23 S4 synthetic margin-boundary characterization (No.1774)
+- Extended the F12/F14 focused margin admission test to characterize both sides of the existing strict `required_margin > free_margin` comparison. The synthetic test fixture derives 250,000,000 KRW from price 1,000 ? quantity 5 ? MINI multiplier 50,000; this is not a live margin rule or approved account limit.
+- At 249,999,999 KRW free margin the order is rejected before VSSF order-command submission, with no routed/fill quantity or position mutation. At exactly 250,000,000 KRW the current preflight accepts and the 5-unit synthetic order fills.
+- Combined S4/U16/profile/close-lot suite: 55 passed; compileall/Ruff F821+F401/git diff-check PASS.
+- This closes only the synthetic arithmetic boundary characterization for the current code path. It does not approve real-account margin schedules, margin utilization, max-position, max-loss, stress-loss, fees/slippage, or the full risk matrix. No Production code/policy changed; S4 remains DRAFT/UNVERIFIED/UNAPPROVED/DISABLED.
