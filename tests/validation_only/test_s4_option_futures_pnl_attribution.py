@@ -191,3 +191,185 @@ def test_s4_attribution_rejects_multiplier_mismatch_on_fifo_close():
     )
     with pytest.raises(ValueError, match="S4_SYNTHETIC_LOT_IDENTITY_OR_MULTIPLIER_MISMATCH"):
         attribute_s4_synthetic_group(fills, mark_prices={}, theta_decay_cost_diagnostic=D("0"))
+
+
+def _owned_position_lot(
+    *,
+    execution_id: str,
+    run_id: str,
+    strategy_id: str,
+    group_id: str,
+    instrument_id: str,
+    asset_type: str,
+    side: str,
+    quantity: int = 1,
+):
+    from datetime import datetime, timezone
+    from contracts.futures_identity_source_port import FuturesInstrumentIdentity
+    from contracts.futures_contract_spec import FuturesProductType
+    from contracts.position_provenance import PositionLotProvenance, PositionRole
+    from contracts.types import OptionInstrumentIdentity
+
+    source = "SYNTHETIC:DERIVED_SCENARIO"
+    multiplier = D("10") if asset_type == "OPTION" else D("50000")
+    if asset_type == "OPTION":
+        identity = OptionInstrumentIdentity(
+            instrument_id=instrument_id,
+            symbol=instrument_id,
+            expiry="20261210",
+            option_type="CALL",
+            strike=D("500"),
+            contract_multiplier=multiplier,
+            identity_source=source,
+        )
+    else:
+        identity = FuturesInstrumentIdentity(
+            instrument_id=instrument_id,
+            symbol=instrument_id,
+            product_type=FuturesProductType.MINI,
+            contract_multiplier=multiplier,
+            identity_source=source,
+        )
+    return PositionLotProvenance(
+        run_id=run_id,
+        instrument_id=instrument_id,
+        strategy_id=strategy_id,
+        group_id=group_id,
+        leg_id=f"{asset_type}-LEG",
+        client_order_id=f"CO-{execution_id}",
+        execution_id=execution_id,
+        side=side,
+        opened_quantity=quantity,
+        remaining_quantity=quantity,
+        execution_timestamp=datetime(2026, 11, 23, 9, 0, tzinfo=timezone.utc),
+        instrument_identity=identity,
+        contract_multiplier=multiplier,
+        identity_source=source,
+        position_role=PositionRole.NONE,
+    )
+
+
+def test_position_lot_close_is_scoped_to_run_strategy_and_group_owner():
+    from environments.virtual.position.virtual_position_lot_store import VirtualPositionLotStore
+
+    store = VirtualPositionLotStore()
+    store.apply_execution(_owned_position_lot(
+        execution_id="S4-OWNER-A-OPEN",
+        run_id="S4-RUN-A",
+        strategy_id=STRATEGY,
+        group_id="S4-GROUP-COLLISION",
+        instrument_id="SYNTHETIC_CONTRACT:S4-CALL",
+        asset_type="OPTION",
+        side="BUY",
+    ))
+
+    # Same instrument/group but a different run must not close the S4-owned lot.
+    store.apply_execution(_owned_position_lot(
+        execution_id="OTHER-RUN-CLOSE",
+        run_id="OTHER-RUN",
+        strategy_id=STRATEGY,
+        group_id="S4-GROUP-COLLISION",
+        instrument_id="SYNTHETIC_CONTRACT:S4-CALL",
+        asset_type="OPTION",
+        side="SELL",
+    ))
+    assert {lot.execution_id: lot.remaining_quantity for lot in store.open_lots()} == {
+        "S4-OWNER-A-OPEN": 1,
+        "OTHER-RUN-CLOSE": 1,
+    }
+    assert store.close_events() == ()
+
+    # Same run/group but a different strategy must also remain isolated.
+    store.apply_execution(_owned_position_lot(
+        execution_id="OTHER-STRATEGY-CLOSE",
+        run_id="S4-RUN-A",
+        strategy_id="track3_statistical_arbitrage",
+        group_id="S4-GROUP-COLLISION",
+        instrument_id="SYNTHETIC_CONTRACT:S4-CALL",
+        asset_type="OPTION",
+        side="SELL",
+    ))
+    assert {lot.execution_id: lot.remaining_quantity for lot in store.open_lots()} == {
+        "S4-OWNER-A-OPEN": 1,
+        "OTHER-RUN-CLOSE": 1,
+        "OTHER-STRATEGY-CLOSE": 1,
+    }
+    assert store.close_events() == ()
+
+
+def test_s4_synthetic_option_and_mini_hedge_share_group_without_cross_asset_netting():
+    from environments.virtual.position.virtual_position_lot_store import VirtualPositionLotStore
+
+    store = VirtualPositionLotStore()
+    option = _owned_position_lot(
+        execution_id="S4-OPTION-OPEN",
+        run_id="S4-RUN",
+        strategy_id=STRATEGY,
+        group_id="S4-LINKED-GROUP",
+        instrument_id="SYNTHETIC_CONTRACT:S4-CALL",
+        asset_type="OPTION",
+        side="BUY",
+        quantity=2,
+    )
+    futures = _owned_position_lot(
+        execution_id="S4-MINI-HEDGE-OPEN",
+        run_id="S4-RUN",
+        strategy_id=STRATEGY,
+        group_id="S4-LINKED-GROUP",
+        instrument_id="SYNTHETIC_CONTRACT:S4-MINI",
+        asset_type="FUTURES",
+        side="SELL",
+        quantity=1,
+    )
+    store.apply_execution(option)
+    store.apply_execution(futures)
+
+    assert {(lot.instrument_id, lot.group_id, lot.strategy_id, lot.remaining_quantity)
+            for lot in store.open_lots()} == {
+        (option.instrument_id, "S4-LINKED-GROUP", STRATEGY, 2),
+        (futures.instrument_id, "S4-LINKED-GROUP", STRATEGY, 1),
+    }
+
+    store.apply_execution(_owned_position_lot(
+        execution_id="S4-OPTION-PARTIAL-CLOSE",
+        run_id="S4-RUN",
+        strategy_id=STRATEGY,
+        group_id="S4-LINKED-GROUP",
+        instrument_id=option.instrument_id,
+        asset_type="OPTION",
+        side="SELL",
+        quantity=1,
+    ))
+    remaining = {lot.instrument_id: lot.remaining_quantity for lot in store.open_lots()}
+    assert remaining == {option.instrument_id: 1, futures.instrument_id: 1}
+    assert [(event.source_lot_execution_id, event.quantity)
+            for event in store.close_events()] == [("S4-OPTION-OPEN", 1)]
+
+def test_position_lot_execution_id_reuse_across_runs_is_a_provenance_conflict():
+    from environments.virtual.position.virtual_position_lot_store import VirtualPositionLotStore
+
+    store = VirtualPositionLotStore()
+    original = _owned_position_lot(
+        execution_id="REUSED-EXECUTION-ID",
+        run_id="S4-RUN-A",
+        strategy_id=STRATEGY,
+        group_id="S4-GROUP-A",
+        instrument_id="SYNTHETIC_CONTRACT:S4-CALL",
+        asset_type="OPTION",
+        side="BUY",
+    )
+    conflicting = _owned_position_lot(
+        execution_id="REUSED-EXECUTION-ID",
+        run_id="S4-RUN-B",
+        strategy_id=STRATEGY,
+        group_id="S4-GROUP-A",
+        instrument_id="SYNTHETIC_CONTRACT:S4-CALL",
+        asset_type="OPTION",
+        side="BUY",
+    )
+    store.apply_execution(original)
+    with pytest.raises(ValueError, match="POSITION_PROVENANCE_DUPLICATE_CONFLICT"):
+        store.apply_execution(conflicting)
+    assert [(lot.run_id, lot.execution_id, lot.remaining_quantity) for lot in store.open_lots()] == [
+        ("S4-RUN-A", "REUSED-EXECUTION-ID", 1),
+    ]

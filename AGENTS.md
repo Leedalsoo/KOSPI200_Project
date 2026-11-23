@@ -1,4 +1,12 @@
 # AGENTS.md — KOSPI200 Project 작업 기준
+## 2026-11-23 최신 확정 기준 및 S4 lot 소유권 검증 (No.1781)
+
+- No.1781은 No.1780 이후 최신 S4 lot ownership 결과다. 데이터 부족은 즉시 BLOCKED 처리하지 않고 최신 Notion 결정·실행기록과 로컬 코드/manifest/provenance를 먼저 대조한 뒤 synthetic validation-only fixture 및 입력 독립 focused regression으로 검증한다.
+- VirtualPositionLotStore의 체결 상계 후보는 instrument_id + 반대 side + run_id + strategy_id + group_id가 모두 일치해야 한다. execution_id 중복 fingerprint에도 run_id를 포함하여 동일 execution_id의 run 간 재사용/충돌을 감지한다.
+- S4 synthetic option lots와 MINI Futures hedge lots는 같은 run/strategy/group에 연결하되 instrument_id와 identity/multiplier를 독립 보존한다. 한 자산의 부분청산은 다른 자산 lot을 상계하지 않는다.
+- 이 변경은 lot provenance/FIFO ownership 보강이다. S4 option-entry execution path, Greeks authoritative units, account/fee/margin/risk 기준, Production/Live 승격을 의미하지 않는다. S4는 DRAFT/UNVERIFIED/UNAPPROVED/DISABLED 유지.
+- No.1780의 미완료 경계(D01/D02/F17/F24/D10/I06 및 end-to-end option fill → owned lot → linked hedge → attribution)는 계속 OPEN. 실계좌 API 연결 시 실제 identity/multiplier/account/margin/fee/risk/execution 계약으로 전체 코드를 다시 대조한다.
+
 ## 2026-11-23 최신 사용자 확정 작업 기준 — 데이터 부족 대체 검증 우선 (No.1780)
 
 - 이 항목은 아래의 과거 데이터 누락 처리 문구보다 우선한다. 자료 불일치·부족을 발견해도 즉시 BLOCKED/UNAVAILABLE로 판정하지 않는다.

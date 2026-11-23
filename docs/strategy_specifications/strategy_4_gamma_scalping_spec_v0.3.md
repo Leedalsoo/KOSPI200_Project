@@ -323,3 +323,20 @@ Source/execution audit:
 Validation: 8 tests in the new file plus 3 existing attribution tests passed (11 total). The broader selected S4 regression and compile/lint checks are recorded in No.1780 Q&A. No Production Strategy/Provider/Risk/Runtime/OMS/Router or execution semantics changed.
 
 D10/I06, authoritative Greek units and valuation, option lot ownership, linked hedge ownership, authoritative fees/slippage, and end-to-end Runtime attribution remain OPEN. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+
+
+## 2026-11-23 validation update — S4 position-lot ownership and linked asset isolation (No.1781)
+
+The VirtualPositionLotStore previously matched an opposite execution to an open lot using instrument, side and group, without checking run or strategy ownership. Its execution fingerprint also omitted run_id. A synthetic same-group collision reproduced a cross-run close.
+
+The lot store now scopes FIFO close candidates to the exact run_id, strategy_id, group_id and instrument_id plus opposite side. The execution fingerprint includes run_id, so reuse of one execution_id with conflicting run provenance is rejected.
+
+Validation-only fixture:
+- Synthetic OPTION and MINI Futures lots share one S4 run/strategy/group but retain distinct instrument identities and multipliers.
+- A partial OPTION close reduces only the OPTION lot; the linked MINI Futures hedge lot remains open.
+- Same instrument/group collisions across runs and strategies do not cross-close.
+- Reused execution_id with conflicting run provenance raises POSITION_PROVENANCE_DUPLICATE_CONFLICT.
+
+Focused input-independent regression: 62 passed; compileall, Ruff F821/F401 and diff-check PASS. Three tests in the broader batch could not run to completion because the accepted runtime-v2 dataset and FRESH61 JSONL fixture were absent; those cases remain unverified and were excluded from the focused regression.
+
+This is a virtual lot provenance/FIFO fix, not evidence of an actual S4 option-entry path or authoritative KIS/Production hedge linkage. D01/D02/F17/F24/D10/I06 and full option-fill → owned lot → linked Futures → attribution remain OPEN. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.

@@ -1136,3 +1136,12 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - Fixture result: option MTM +38 = delta +40 + gamma +16 + theta -20 + vega +2 + residual 0; linked short MINI Futures unrealized PnL +100; combined observed MTM +138. Theta cost is diagnostic only and is not deducted twice.
 - Source audit confirms current H0IOCNT0 Greeks are raw pass-through without unit metadata; Virtual attribution remains premium-only; Runtime materializer still supplies gamma/theta as None; S4 Basecamp remains NON_EXECUTION, not option entry.
 - Synthetic assumptions are validation-only, not KIS/real-account/Production criteria. No Production behavior or market data changed. D10/I06 and full S4 execution/attribution remain OPEN; S4 remains DRAFT/UNVERIFIED/UNAPPROVED/DISABLED.
+
+
+## 2026-11-23 S4 position-lot ownership validation (No.1781)
+
+- Fixed VirtualPositionLotStore FIFO close matching to require the same instrument, opposite side, run, strategy and group. Added run_id to execution fingerprint so reused execution IDs across runs are provenance conflicts.
+- Validation-only synthetic fixtures cover run/strategy collision isolation, same-group OPTION + MINI Futures ownership, independent asset close behavior and execution-ID provenance collision.
+- S4 option and MINI Futures remain separate instrument lots linked by the same synthetic run/strategy/group. This validates ledger ownership boundaries only; it does not establish an actual S4 option-entry Runtime path or authoritative hedge linkage.
+- Focused input-independent regression: 62 passed; compileall, Ruff F821/F401 and git diff-check PASS. A broader batch also exposed three data-dependent tests whose accepted runtime-v2/FRESH61 fixture files are absent; those cases were not counted as passes and were excluded from the focused rerun.
+- No Raw/Canonical/accepted data, manifest, collector, KIS/Live API or order behavior changed. S4 remains DRAFT/UNVERIFIED/UNAPPROVED/DISABLED; D01/D02/F17/F24/D10/I06 and full option-fill-to-hedge Runtime attribution remain OPEN.

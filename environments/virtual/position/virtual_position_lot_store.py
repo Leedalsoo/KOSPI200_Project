@@ -14,7 +14,7 @@ class VirtualPositionLotStore:
 
     def apply_execution(self, lot: PositionLotProvenance) -> None:
         lot.validate()
-        fingerprint = (lot.instrument_id, lot.side, lot.opened_quantity,
+        fingerprint = (lot.run_id, lot.instrument_id, lot.side, lot.opened_quantity,
                        lot.execution_timestamp, lot.strategy_id, lot.group_id,
                        lot.leg_id, lot.client_order_id, lot.position_role)
         prior = self._executions.get(lot.execution_id)
@@ -25,7 +25,13 @@ class VirtualPositionLotStore:
         self._executions[lot.execution_id] = fingerprint
         opposite = "SELL" if lot.side == "BUY" else "BUY"
         remaining = lot.remaining_quantity
-        for key, current in self._ordered_open_lots(lot.instrument_id, opposite, lot.group_id):
+        for key, current in self._ordered_open_lots(
+            lot.instrument_id,
+            opposite,
+            lot.group_id,
+            lot.run_id,
+            lot.strategy_id,
+        ):
             if remaining <= 0:
                 break
             consumed = min(remaining, current.remaining_quantity)
@@ -43,8 +49,28 @@ class VirtualPositionLotStore:
     def apply_close(self, execution_id: str, instrument_id: str, side: str, quantity: int, execution_timestamp: datetime) -> None:
         raise NotImplementedError("POSITION_LOT_CLOSE_REQUIRES_EXECUTION_PROVENANCE")
 
-    def _ordered_open_lots(self, instrument_id: str, side: str, group_id: str) -> Iterable[tuple[str, PositionLotProvenance]]:
-        return sorted(((k, v) for k, v in self._lots.items() if v.instrument_id == instrument_id and v.side == side and v.group_id == group_id and v.remaining_quantity > 0), key=lambda item: (item[1].execution_timestamp, item[1].execution_id))
+    def _ordered_open_lots(
+        self,
+        instrument_id: str,
+        side: str,
+        group_id: str,
+        run_id: str,
+        strategy_id: str,
+    ) -> Iterable[tuple[str, PositionLotProvenance]]:
+        """Return FIFO candidates owned by the exact run/strategy/group scope."""
+        return sorted(
+            (
+                (key, lot)
+                for key, lot in self._lots.items()
+                if lot.instrument_id == instrument_id
+                and lot.side == side
+                and lot.run_id == run_id
+                and lot.strategy_id == strategy_id
+                and lot.group_id == group_id
+                and lot.remaining_quantity > 0
+            ),
+            key=lambda item: (item[1].execution_timestamp, item[1].execution_id),
+        )
 
     def open_lots(self) -> tuple[PositionLotProvenance, ...]:
         return tuple(sorted((lot for lot in self._lots.values() if lot.remaining_quantity > 0), key=lambda x: (x.instrument_id, x.execution_timestamp, x.execution_id)))
