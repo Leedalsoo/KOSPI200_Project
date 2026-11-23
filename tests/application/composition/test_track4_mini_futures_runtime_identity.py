@@ -753,16 +753,18 @@ def test_track4_mini_futures_rejects_missing_freshness_verdict_before_route() ->
     assert identity.instrument_id not in vssf.account.positions
 
 @pytest.mark.parametrize(
-    ("free_margin", "used_margin", "max_position", "max_daily_loss", "realized_pnl", "expected_rejection"),
+    ("free_margin", "used_margin", "max_position", "max_daily_loss", "realized_pnl", "unrealized_pnl", "expected_rejection"),
     [
-        (Decimal("249999999"), Decimal("0"), 100, Decimal("10000000"), Decimal("0"), "INSUFFICIENT_FREE_MARGIN"),
-        (Decimal("250000000"), Decimal("0"), 100, Decimal("10000000"), Decimal("0"), None),
-        (Decimal("250000000"), Decimal("600000000"), 100, Decimal("10000000"), Decimal("0"), None),
-        (Decimal("250000000"), Decimal("600000001"), 100, Decimal("10000000"), Decimal("0"), "MAX_MARGIN_UTILIZATION"),
-        (Decimal("250000000"), Decimal("0"), 4, Decimal("10000000"), Decimal("0"), "EXCEEDED_INSTRUMENT_LIMIT"),
-        (Decimal("250000000"), Decimal("0"), 5, Decimal("10000000"), Decimal("0"), None),
-        (Decimal("250000000"), Decimal("0"), 100, Decimal("1000"), Decimal("-999"), None),
-        (Decimal("250000000"), Decimal("0"), 100, Decimal("1000"), Decimal("-1000"), "MAX_DAILY_LOSS"),
+        (Decimal("249999999"), Decimal("0"), 100, Decimal("10000000"), Decimal("0"), Decimal("0"), "INSUFFICIENT_FREE_MARGIN"),
+        (Decimal("250000000"), Decimal("0"), 100, Decimal("10000000"), Decimal("0"), Decimal("0"), None),
+        (Decimal("250000000"), Decimal("600000000"), 100, Decimal("10000000"), Decimal("0"), Decimal("0"), None),
+        (Decimal("250000000"), Decimal("600000001"), 100, Decimal("10000000"), Decimal("0"), Decimal("0"), "MAX_MARGIN_UTILIZATION"),
+        (Decimal("250000000"), Decimal("0"), 4, Decimal("10000000"), Decimal("0"), Decimal("0"), "EXCEEDED_INSTRUMENT_LIMIT"),
+        (Decimal("250000000"), Decimal("0"), 5, Decimal("10000000"), Decimal("0"), Decimal("0"), None),
+        (Decimal("250000000"), Decimal("0"), 100, Decimal("1000"), Decimal("-999"), Decimal("0"), None),
+        (Decimal("250000000"), Decimal("0"), 100, Decimal("1000"), Decimal("-1000"), Decimal("0"), "MAX_DAILY_LOSS"),
+        (Decimal("250000000"), Decimal("0"), 100, Decimal("1000"), Decimal("0"), Decimal("-1000"), None),
+        (Decimal("250000000"), Decimal("0"), 100, Decimal("1000"), Decimal("0"), Decimal("-1001"), None),
     ],
     ids=(
         "one-krw-below-required-margin",
@@ -773,11 +775,14 @@ def test_track4_mini_futures_rejects_missing_freshness_verdict_before_route() ->
         "exact-synthetic-position-limit-boundary",
         "one-krw-below-synthetic-daily-loss-cap",
         "exact-synthetic-daily-loss-cap-boundary",
+        "unrealized-loss-at-synthetic-daily-loss-cap-not-in-realized-preflight",
+        "unrealized-loss-over-synthetic-daily-loss-cap-not-in-realized-preflight",
     ),
 )
 def test_track4_mini_futures_risk_preflight_boundaries(
     free_margin: Decimal, used_margin: Decimal, max_position: int,
-    max_daily_loss: Decimal, realized_pnl: Decimal, expected_rejection: str | None,
+    max_daily_loss: Decimal, realized_pnl: Decimal, unrealized_pnl: Decimal,
+    expected_rejection: str | None,
 ) -> None:
     loop = _loop(("track4_gamma_scalping", "1.0"), "S4-MINI-MARGIN-PREFLIGHT-FAULT")
     bridge = loop.multi_leg_bridge
@@ -819,6 +824,7 @@ def test_track4_mini_futures_risk_preflight_boundaries(
     vssf.account.free_margin = free_margin
     vssf.account.used_margin = used_margin
     vssf.account.realized_pnl = realized_pnl
+    vssf.account.unrealized_pnl = unrealized_pnl
     risk_engine = bridge.risk_gate.engine
     risk_config = type(risk_engine.config)(
         max_position_per_instrument=max_position,

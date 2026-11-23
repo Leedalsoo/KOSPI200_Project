@@ -1116,3 +1116,9 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 ### S4 MINI synthetic daily-loss boundary (No.1777, 2026-11-23)
 - Added a generic `max_daily_loss_krw` boundary to the S4 MINI Virtual risk-preflight suite: synthetic realized loss 999/1,000 KRW against a test cap of 1,000 KRW (below-boundary admit; exact-boundary reject before VSSF order command).
 - Combined S4/U16/profile/close-lot suite: 61 passed; compileall, Ruff F821/F401 and diff-check PASS. The test cap is not an approved S4 or real-account loss limit; stress-loss remains unvalidated.
+
+
+### S4 MINI unrealized-loss risk-path characterization (No.1778, 2026-11-23)
+- Added two synthetic S4 cases with realized PnL 0 and unrealized PnL -1,000/-1,001 KRW against a 1,000 KRW test cap. Both were admitted by the current preflight, confirming that the generic realized daily-loss rule does not include unrealized PnL.
+- Source trace: account snapshot contains unrealized PnL, but `RiskAccountInput`/`account_snapshot_to_risk_input` omit it; `RiskEngine.evaluate_order` evaluates accumulated and current realized loss only. No generic stress-loss calculation was found.
+- Combined focused S4/U16/profile/close-lot/spec suite: 39 passed; compileall, Ruff F821/F401 and git diff-check PASS. This is a confirmed coverage gap, not a risk-control PASS. No Production behavior changed; S4 remains DRAFT/UNVERIFIED/UNAPPROVED/DISABLED.

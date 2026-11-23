@@ -1075,3 +1075,10 @@
 ### S4 synthetic daily-loss preflight boundary (No.1777, 2026-11-23)
 - Characterize the existing generic `RiskConfig.max_daily_loss_krw` preflight in the S4 MINI Virtual harness using synthetic realized PnL: with a test cap of 1,000 KRW, realized loss 999 KRW admits the test order, while exactly 1,000 KRW rejects before VSSF order submission.
 - The 1,000 KRW cap is a test-only boundary value, not an approved S4 strategy/account daily-loss limit. This does not validate unrealized/stress loss, option-plus-hedge PnL attribution, fees/slippage, or account-wide risk policy. Do not promote generic code defaults to strategy policy.
+
+
+### S4 synthetic unrealized-loss preflight characterization (No.1778, 2026-11-23)
+- The current `RiskAccountInput` carries total balance, realized PnL, used margin, and free margin only. `VSSFAccountSnapshotAdapter` exposes unrealized PnL in the account snapshot, but `account_snapshot_to_risk_input` does not pass it into `RiskEngine`.
+- `RiskEngine.evaluate_order` computes the existing daily-loss check from accumulated realized loss plus negative `account.realized_pnl`; it does not include unrealized PnL. A synthetic S4 MINI test with realized PnL 0, unrealized PnL -1,000/-1,001 KRW, and test cap 1,000 KRW still admits and fills the 5-unit order. This is characterization of current behavior, not approval or successful validation of unrealized-loss risk handling.
+- No `stress_loss` input/calculation or scenario-risk path was found in the current generic RiskConfig/RiskEngine path. Do not invent a stress formula or operating threshold. Keep unrealized/stress loss, option+hedge attribution, and account-wide risk OPEN.
+- No Production RiskEngine/RiskAccountInput/account adapter/Runtime/OMS/Router behavior was changed. S4 remains DRAFT/UNVERIFIED/UNAPPROVED/DISABLED; use synthetic validation-only evidence and do not promote generic defaults to strategy policy.

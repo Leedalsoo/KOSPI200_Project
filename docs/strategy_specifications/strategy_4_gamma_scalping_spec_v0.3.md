@@ -286,3 +286,10 @@ Extended the synthetic S4 active-position/U19 test slice:
 - Added an integration-level S4 MINI Virtual risk-preflight characterization of the existing generic `RiskConfig.max_daily_loss_krw` rule. With synthetic test cap 1,000 KRW, account realized PnL -999 KRW admits the 5-unit order; exact realized loss -1,000 KRW rejects before VSSF order command.
 - S4 target file 19 passed; combined S4/U16/profile/close-lot batch 61 passed; compileall/Ruff F821+F401/git diff-check PASS.
 - The 1,000 KRW threshold is test-only, not approved S4 or real-account policy. Only the current realized-loss preflight branch was characterized; unrealized/stress loss, option+hedge attribution, costs, and account aggregation remain unverified. No Production risk code/policy changed; S4 remains DRAFT/UNVERIFIED/UNAPPROVED/DISABLED.
+
+
+## 2026-11-23 S4 synthetic unrealized-loss risk-path characterization (No.1778)
+- Extended the existing S4 MINI synthetic risk-preflight parameterization with two unrealized-loss cases: realized PnL 0, unrealized PnL -1,000 and -1,001 KRW, test `max_daily_loss_krw` 1,000 KRW. Both cases were admitted and the 5-unit synthetic order filled.
+- Source trace explains the result: `VSSFAccountSnapshotAdapter` carries `unrealized_pnl`, but `account_snapshot_to_risk_input` projects only cash/realized_pnl/margin_used/available_cash into `RiskAccountInput`; the type itself has no unrealized-PnL field. `RiskEngine.evaluate_order` uses accumulated realized loss and negative current realized PnL only.
+- No stress-loss field, stress scenario valuation, or stress-loss preflight calculation was found in the current generic RiskConfig/RiskEngine path. No formula, threshold, or production behavior was invented or changed.
+- Focused S4/U16/profile/close-lot/spec batch: 39 passed; compileall, Ruff F821/F401 and git diff-check PASS. This is a current-code gap characterization, not a PASS for unrealized/stress loss control. Keep these items, S4 option+hedge attribution, fees/slippage, account-wide aggregation and full F01-F29/G01-G12 acceptance OPEN. S4 remains DRAFT/UNVERIFIED/UNAPPROVED/DISABLED.
