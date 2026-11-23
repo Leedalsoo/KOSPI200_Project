@@ -1071,3 +1071,7 @@
 ### S4 synthetic position-cap boundary (No.1776, 2026-11-23)
 - Characterize the existing Virtual risk preflight position-cap behavior with synthetic S4 MINI order quantity 5: configured max position 4 rejects before VSSF submission; configured max position 5 admits the exact boundary. These values are test-only boundary inputs, not approved S4 operating position limits.
 - The bridge may surface its own group-level margin-utilization rejection reason rather than the lower-level RiskEngine string. Assertions must verify the observed public rejection contract and zero order commands, not assume an internal reason code.
+
+### S4 synthetic daily-loss preflight boundary (No.1777, 2026-11-23)
+- Characterize the existing generic `RiskConfig.max_daily_loss_krw` preflight in the S4 MINI Virtual harness using synthetic realized PnL: with a test cap of 1,000 KRW, realized loss 999 KRW admits the test order, while exactly 1,000 KRW rejects before VSSF order submission.
+- The 1,000 KRW cap is a test-only boundary value, not an approved S4 strategy/account daily-loss limit. This does not validate unrealized/stress loss, option-plus-hedge PnL attribution, fees/slippage, or account-wide risk policy. Do not promote generic code defaults to strategy policy.

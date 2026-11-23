@@ -281,3 +281,8 @@ Extended the synthetic S4 active-position/U19 test slice:
 - Added an integration-level synthetic S4 MINI risk preflight boundary: requested quantity 5 with configured generic `max_position_per_instrument=4` is rejected before VSSF order command; exact configured limit 5 is accepted and fills 5 in Virtual validation.
 - The test also retains No.1774 free-margin and No.1775 generic margin-utilization boundary cases. S4 target file 17 passed; combined S4/U16/profile/close-lot batch 59 passed; compileall/Ruff F821+F401/git diff-check PASS.
 - Values 4 and 5 are synthetic boundary inputs only, not approved S4 position caps. No Production risk policy/adapter changed. S4 remains DRAFT/UNVERIFIED/UNAPPROVED/DISABLED; full F01-F29/G01-G12 matrix remains OPEN.
+
+## 2026-11-23 S4 synthetic realized daily-loss preflight boundary (No.1777)
+- Added an integration-level S4 MINI Virtual risk-preflight characterization of the existing generic `RiskConfig.max_daily_loss_krw` rule. With synthetic test cap 1,000 KRW, account realized PnL -999 KRW admits the 5-unit order; exact realized loss -1,000 KRW rejects before VSSF order command.
+- S4 target file 19 passed; combined S4/U16/profile/close-lot batch 61 passed; compileall/Ruff F821+F401/git diff-check PASS.
+- The 1,000 KRW threshold is test-only, not approved S4 or real-account policy. Only the current realized-loss preflight branch was characterized; unrealized/stress loss, option+hedge attribution, costs, and account aggregation remain unverified. No Production risk code/policy changed; S4 remains DRAFT/UNVERIFIED/UNAPPROVED/DISABLED.

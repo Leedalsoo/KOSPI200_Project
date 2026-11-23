@@ -1112,3 +1112,7 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 ### S4 MINI synthetic position-cap boundary (No.1776, 2026-11-23)
 - Added position cap 4 vs requested 5 (reject, no VSSF order command) and exact cap 5 (synthetic fill) to the existing margin/utilization boundary suite. These are test fixture limits, not approved S4 operating limits.
 - Combined S4/U16/profile/close-lot suite: 59 passed; compileall, Ruff F821/F401 and diff-check PASS.
+
+### S4 MINI synthetic daily-loss boundary (No.1777, 2026-11-23)
+- Added a generic `max_daily_loss_krw` boundary to the S4 MINI Virtual risk-preflight suite: synthetic realized loss 999/1,000 KRW against a test cap of 1,000 KRW (below-boundary admit; exact-boundary reject before VSSF order command).
+- Combined S4/U16/profile/close-lot suite: 61 passed; compileall, Ruff F821/F401 and diff-check PASS. The test cap is not an approved S4 or real-account loss limit; stress-loss remains unvalidated.

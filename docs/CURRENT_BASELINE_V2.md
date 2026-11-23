@@ -1081,3 +1081,8 @@
 - During the first rerun, the test expected a lower-level RiskEngine rejection string but the bridge correctly surfaced its group-level `GROUP_MAX_MARGIN_UTILIZATION_EXCEEDED` reason for the existing utilization case. The assertion was reconciled to the observed public bridge contract; no implementation behavior was changed.
 - S4 target file: 17 passed. Combined S4/U16/profile/close-lot suite: 59 passed in 2.09s; compileall/Ruff F821+F401/git diff-check PASS.
 - Position cap 4/5 is only a synthetic boundary test, not an approved S4/real-account operating limit. No Production code/policy changed. Full F01-F29/G01-G12 matrix, S4 U16 VirtualBridge routing, Track4State durable restore and Full T4 acceptance remain OPEN.
+
+## 2026-11-23 S4 synthetic daily-loss boundary follow-up (No.1777)
+- Extended the existing S4 synthetic risk-preflight parameterization with generic `RiskConfig.max_daily_loss_krw`: test cap 1,000 KRW; synthetic account realized PnL -999 KRW admits the order; -1,000 KRW is rejected at the exact `>=` boundary before VSSF order command, with no route/fill/PositionLot/account position mutation.
+- S4 target file: 19 passed. Combined S4/U16/profile/close-lot suite: 61 passed in 2.22s; compileall/Ruff F821+F401/git diff-check PASS.
+- The 1,000 KRW cap is a synthetic test input only, not an approved S4/account daily-loss limit. This does not validate unrealized loss, stress loss, S4 option+hedge attribution, fees/slippage, or account-wide risk. No Production code/policy changed. Full F01-F29/G01-G12 matrix, S4 U16 VirtualBridge routing, Track4State durable restore and Full T4 acceptance remain OPEN.

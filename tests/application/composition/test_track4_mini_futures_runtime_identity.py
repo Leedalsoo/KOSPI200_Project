@@ -753,14 +753,16 @@ def test_track4_mini_futures_rejects_missing_freshness_verdict_before_route() ->
     assert identity.instrument_id not in vssf.account.positions
 
 @pytest.mark.parametrize(
-    ("free_margin", "used_margin", "max_position", "expected_rejection"),
+    ("free_margin", "used_margin", "max_position", "max_daily_loss", "realized_pnl", "expected_rejection"),
     [
-        (Decimal("249999999"), Decimal("0"), 100, "INSUFFICIENT_FREE_MARGIN"),
-        (Decimal("250000000"), Decimal("0"), 100, None),
-        (Decimal("250000000"), Decimal("600000000"), 100, None),
-        (Decimal("250000000"), Decimal("600000001"), 100, "MAX_MARGIN_UTILIZATION"),
-        (Decimal("250000000"), Decimal("0"), 4, "EXCEEDED_INSTRUMENT_LIMIT"),
-        (Decimal("250000000"), Decimal("0"), 5, None),
+        (Decimal("249999999"), Decimal("0"), 100, Decimal("10000000"), Decimal("0"), "INSUFFICIENT_FREE_MARGIN"),
+        (Decimal("250000000"), Decimal("0"), 100, Decimal("10000000"), Decimal("0"), None),
+        (Decimal("250000000"), Decimal("600000000"), 100, Decimal("10000000"), Decimal("0"), None),
+        (Decimal("250000000"), Decimal("600000001"), 100, Decimal("10000000"), Decimal("0"), "MAX_MARGIN_UTILIZATION"),
+        (Decimal("250000000"), Decimal("0"), 4, Decimal("10000000"), Decimal("0"), "EXCEEDED_INSTRUMENT_LIMIT"),
+        (Decimal("250000000"), Decimal("0"), 5, Decimal("10000000"), Decimal("0"), None),
+        (Decimal("250000000"), Decimal("0"), 100, Decimal("1000"), Decimal("-999"), None),
+        (Decimal("250000000"), Decimal("0"), 100, Decimal("1000"), Decimal("-1000"), "MAX_DAILY_LOSS"),
     ],
     ids=(
         "one-krw-below-required-margin",
@@ -769,10 +771,13 @@ def test_track4_mini_futures_rejects_missing_freshness_verdict_before_route() ->
         "one-krw-over-configured-utilization-boundary",
         "one-contract-over-synthetic-position-limit",
         "exact-synthetic-position-limit-boundary",
+        "one-krw-below-synthetic-daily-loss-cap",
+        "exact-synthetic-daily-loss-cap-boundary",
     ),
 )
 def test_track4_mini_futures_risk_preflight_boundaries(
-    free_margin: Decimal, used_margin: Decimal, max_position: int, expected_rejection: str | None,
+    free_margin: Decimal, used_margin: Decimal, max_position: int,
+    max_daily_loss: Decimal, realized_pnl: Decimal, expected_rejection: str | None,
 ) -> None:
     loop = _loop(("track4_gamma_scalping", "1.0"), "S4-MINI-MARGIN-PREFLIGHT-FAULT")
     bridge = loop.multi_leg_bridge
@@ -813,8 +818,12 @@ def test_track4_mini_futures_risk_preflight_boundaries(
     vssf.order_book.update_bid_ask(1000, 1000, identity.instrument_id)
     vssf.account.free_margin = free_margin
     vssf.account.used_margin = used_margin
+    vssf.account.realized_pnl = realized_pnl
     risk_engine = bridge.risk_gate.engine
-    risk_config = type(risk_engine.config)(max_position_per_instrument=max_position)
+    risk_config = type(risk_engine.config)(
+        max_position_per_instrument=max_position,
+        max_daily_loss_krw=max_daily_loss,
+    )
     bridge.risk_gate.engine = type(risk_engine)(risk_config, margin_engine=risk_engine.margin_engine)
     observed_at = datetime.fromisoformat(tick.timestamp)
 
@@ -847,6 +856,8 @@ def test_track4_mini_futures_risk_preflight_boundaries(
             assert "EXCEEDED_INSTRUMENT_LIMIT" in rejection_text
         elif expected_rejection == "MAX_MARGIN_UTILIZATION":
             assert "MARGIN_UTILIZATION" in rejection_text
+        elif expected_rejection == "MAX_DAILY_LOSS":
+            assert "MAX_DAILY_LOSS" in rejection_text
         else:
             assert expected_rejection in rejection_text
         assert vssf.metrics["order_commands"] == 0
