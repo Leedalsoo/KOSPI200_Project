@@ -953,3 +953,4 @@
 - All synthetic identities remain SYNTHETIC_CONTRACT; runtime_eligible=false; identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED; identity_policy.runtime_use=PROHIBITED. One-leg fill remains PARTIALLY_EXPOSED, not ACTIVE.
 - Before real investment, separately approve actual cash proxy/tradability/short-sale, master identity, beta/hedge ratio, quote freshness, tracking error, fees/taxes/financing/slippage/liquidity, margin/account risk, partial-fill repair and calibrated parameters. Full S3 Runtime and Full T4 integrated acceptance remain OPEN.
 - Notion: https://app.notion.com/p/4215f4f6eaa1814081aee3314a354df6
+- T4 commit/push: 4762d87e6d9d3491d1b1ab212a32e6f9b0d8e0e4; local/origin SHA equal. Existing graphify-out/graph.json modification preserved and not committed. Project200 remains b955a02b4ceaaf7fcab1ea6de4d8862637225868.
