@@ -995,3 +995,15 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - No production Runtime/X2 code, strategy policy, persistence schema, callback cancellation, synchronization, lock scope, or broker policy changed. No.1652 candidate/account aggregate remains separate from Track7 strategy aggregate.
 - Remaining OPEN boundaries: Track7 strategy-state durable restart recovery; X2 admission-read-to-callback-entry race and already-entered callback completion semantics; full T4 common/strategy fault matrix and integrated acceptance. These require separate approved contracts and are not global blocks for other Virtual strategy validation.
 - compileall and git diff --check PASS. T4 branch/origin at start 43821b2810f85fd5ec39fb91328bfd7fd12c0fb0; Project200 local/origin b955a02b4ceaaf7fcab1ea6de4d8862637225868 unchanged. Existing Graphify changes preserved.
+
+## No.1764 - S3 synthetic basis-arbitrage two-leg validation (2026-11-23)
+
+- Preserve No.956: signal basis remains same-time KOSPI200 Futures minus KOSPI200 Index with authoritative source pairing <=2 seconds. Do not replace it with the unapproved v0.3 near/far Futures calendar-spread proposal.
+- For synthetic economics only, use two distinct test-only legs: positive Z = short Futures + long cash-basket/ETF proxy; negative Z = long Futures + short cash-basket/ETF proxy. Index is reference-only. Cash proxy is not an approved KIS instrument or authoritative source.
+- Cash units = Futures notional / (cash-proxy price x beta x unit multiplier), rounded to integer. Provisional test defaults: 60-point warmup, entry |z|>=2.0, convergence |z|<=0.5, stop |z|>=3.5, max hold 60 elapsed minutes, Futures qty 1, no scale-in, one group, NORMAL/stable/normalizing only. Not approved live parameters.
+- Added docs/strategy_specifications/strategy_3_synthetic_basis_validation_profile_v0.1.md and tests/validation_only/test_s3_synthetic_basis_spread_model.py.
+- Combined focused S3 batch: 37 passed (22 new synthetic economics tests plus existing S3 adapter fail-closed, spec alignment, basis-source, and S3/S4 validation-profile tests). compileall and git diff --check PASS.
+- Existing Track3MultiLegExecutionPlanAdapter remains fail-closed with TRACK3_SPREAD_LEG_DEFINITION_UNRESOLVED. No Production strategy/Runtime/Risk/OMS/registry/capital gate/order-routing code changed. No KIS/REAL_VTS/account/Live API, broker order/cancel/liquidation, collector, Raw/Canonical/accepted source/manifest/Master change.
+- All synthetic identities remain SYNTHETIC_CONTRACT; runtime_eligible=false; identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED; identity_policy.runtime_use=PROHIBITED. One-leg fill remains PARTIALLY_EXPOSED, not ACTIVE.
+- Before real investment, separately approve actual cash proxy/tradability/short-sale, master identity, beta/hedge ratio, quote freshness, tracking error, fees/taxes/financing/slippage/liquidity, margin/account risk, partial-fill repair and calibrated parameters. Full S3 Runtime and Full T4 integrated acceptance remain OPEN.
+- Notion: https://app.notion.com/p/4215f4f6eaa1814081aee3314a354df6
