@@ -1277,3 +1277,9 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - Synthetic interior-corruption fixtures (malformed JSON, unsupported schema, payload-hash mismatch) with a later valid final row show that append() checks the tail only and can append; records() and write_manifest() detect the earlier corruption and raise. Tolerant-tail mode does not skip interior corruption; no new manifest is written.
 - No production code change: no approved full-file pre-append, recovery, truncation, or manifest-rebuild policy was found. Original Raw bytes and all actual source data remain untouched.
 - Validation: focused Track4/Canonical/Raw tests 41 passed; KIS infrastructure 47 passed, 1 skipped. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+
+## Latest validation — Track4 No.1802 (2026-11-24)
+
+- Synthetic writer interleaving between Raw tail validation and append open: a competing partial JSONL write made after validation was concatenated with the next append; full read rejected line 2. This exposes a validation-to-append race in the current no-lock implementation.
+- Characterization only; no Track4 Raw lock, fsync, rollback, repair or retry policy was added. Track6ValidationStateStore lock evidence is not a Track4 Raw contract.
+- Validation: focused Track4/Canonical/Raw tests 42 passed; KIS infrastructure 48 passed, 1 skipped. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.

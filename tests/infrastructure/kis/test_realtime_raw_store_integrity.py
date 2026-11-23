@@ -223,3 +223,35 @@ def test_full_file_reader_and_manifest_detect_interior_corruption_while_append_g
             tolerate_truncated_tail=True,
         )
     assert not path.with_suffix(path.suffix + ".manifest.json").exists()
+
+
+def test_concurrent_writer_interleaving_between_tail_validation_and_append_can_damage_raw(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    path = tmp_path / "writer-interleaving.jsonl"
+    store = KISRealtimeRawStore(path)
+    _append_valid_record(store, sequence=1)
+    original_validate = store._validate_append_tail
+    interleaved = False
+
+    def validate_then_interleave() -> None:
+        nonlocal interleaved
+        original_validate()
+        if not interleaved:
+            interleaved = True
+            # Deterministic stand-in for another writer leaving a partial row
+            # after this writer validates the tail but before it opens append.
+            with path.open("ab") as competing_writer:
+                competing_writer.write(
+                    b'{"schema":"kis-realtime-raw-v1","payload":"SYNTHETIC_CONCURRENT_PARTIAL'
+                )
+
+    monkeypatch.setattr(store, "_validate_append_tail", validate_then_interleave)
+    appended = _append_valid_record(store, sequence=2)
+
+    assert appended["sequence"] == 2
+    raw = path.read_bytes()
+    assert b"SYNTHETIC_CONCURRENT_PARTIAL" in raw
+    assert b"SYNTHETIC:DERIVED_SCENARIO:TRACK4-VALID" in raw
+    with pytest.raises(ValueError, match="INVALID_KIS_RAW_RECORD_LINE:2"):
+        store.records()

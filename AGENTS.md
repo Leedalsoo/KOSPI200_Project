@@ -1258,3 +1258,10 @@
 - records() scans from the beginning and raises on interior corruption. tolerate_truncated_tail=True is not a general corruption-recovery mode: if non-whitespace data follows a malformed row, it still raises. write_manifest() also fails during the full scan and does not create a new manifest for that invalid file.
 - Keep the distinction explicit: tail append guard vs full-file read/manifest validation. Do not silently truncate, skip interior rows, rebuild a manifest from a partial prefix, or invent a recovery/repair policy. Preserve original Raw bytes and use synthetic temporary fixtures for these tests.
 - This characterization does not add a full-file pre-append scan, fsync guarantee, concurrent-writer lock, or observer idempotency contract. Those require separate scope/contract validation.
+
+## 2026-11-24 Track4 Raw writer interleaving boundary (No.1802)
+
+- KISRealtimeRawStore.append() performs tail validation and opens the file for append as separate operations; the inspected implementation has no per-path/process writer serialization around that interval.
+- A deterministic synthetic interleaving placed a competing partial JSONL write after the first writer's tail validation and before its append open. The first writer then appended to the unterminated competing bytes, leaving a malformed combined tail; records() rejected line 2.
+- This characterizes a validation-to-append race, not an observed production concurrency event or proof of every OS/filesystem interleaving. No lock, fsync, rollback, repair, or retry semantics are inferred. Keep fixtures in temporary directories and preserve all original Raw bytes.
+- Track6ValidationStateStore per-run locking is a separate store/contract and is not a Track4 Raw writer lock approval.
