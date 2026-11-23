@@ -1058,3 +1058,9 @@
 - 두 개의 late-fill execution lots 합계 5에 대해 기존 close-plan builder가 BUY 5 수량을 산출하는 것을 확인.
 - 중요 경계: `build_close_plan_from_open_lots`는 PositionLot 수량으로 close plan을 만들지만, 반환 전 account/broker side·quantity와 자동 대사하는 admission guard는 없다. Production semantics 변경 없이 이 경계를 OPEN으로 기록; 자동 pre-close reconciliation wiring은 별도 contract 결정 필요.
 - S4/U16 통합 focused batch 88 passed in 2.09s; compileall/diff-check PASS. Synthetic-only.
+
+## 2026-11-23 S4 synthetic close-lifecycle / group-scope follow-up (No.1773)
+- Extended S4 MINI Virtual validation: partial close 2/5, terminal cancel, PositionLot remaining quantity 3, rebuilt BUY close plan quantity 3, and final flat state.
+- Added close-plan group-scope characterization: current run/strategy lots only, aggregate same-group fills, and reject ambiguous multiple open groups rather than combine them.
+- Focused combined S4/U16/profile/close-lot batch: 54 passed in 1.79s; compileall and git diff --check PASS.
+- Scope remains synthetic validation-only. No account/broker pre-close reconciliation guard was added. S4 max-position/max-loss/stress-loss and other operating thresholds remain unapproved/unverified; no values were invented. Full F01-F29/G01-G12 matrix, S4 U16 VirtualBridge routing, Track4State durable restore and Full T4 acceptance remain OPEN.

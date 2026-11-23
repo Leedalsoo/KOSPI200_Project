@@ -1052,3 +1052,9 @@
 - After two unique late-fill lots total 5, current close-plan builder derives one BUY leg quantity 5.
 - Boundary: `build_close_plan_from_open_lots` derives from PositionLots and does not automatically reconcile account/broker side+quantity before returning a plan. No Production behavior changed; automatic pre-close admission/reconciliation contract remains OPEN.
 - Combined S4/U16 regression: 88 passed in 2.09s; compileall/diff-check PASS. Synthetic-only.
+
+### S4 synthetic close-lifecycle boundary (No.1773, 2026-11-23)
+- Keep S4 close-plan verification validation-only. The close builder scopes open lots by run and strategy, requires one unambiguous group, aggregates remaining quantities by instrument/identity/side, and reverses the side for close legs.
+- Preserve partial-close evidence: after a synthetic 2-of-5 close fill and terminal cancel, rebuild the close plan from the remaining 3 PositionLot units; complete only that remainder and verify flat.
+- Do not infer or invent S4 max-position, max-loss, stress-loss, margin-utilization, or operating quantity thresholds while their approved values remain unresolved.
+- This test characterization does not add account/broker pre-close reconciliation. No Production reconciliation semantics, Runtime/OMS/Router, risk policy, market data, or Live/API behavior may be changed without the separate approved contract.

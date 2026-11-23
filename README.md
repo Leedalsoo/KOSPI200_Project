@@ -1095,3 +1095,8 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 ### S4 signed position and close-plan quantity (2026-11-23)
 - Synthetic signed-side and pre-close quantity conflicts are distinguished by U19 as `POSITION_LEDGER_MISMATCH`; the existing close-plan builder derives BUY quantity 5 from two open fill lots totaling 5.
 - Automatic account-vs-PositionLot reconciliation before close-plan creation is not wired into the builder and remains OPEN pending an explicit contract decision. No Production semantics changed.
+
+### S4 MINI close-lifecycle validation update (No.1773, 2026-11-23)
+- Synthetic validation now covers a partial close (2/5), terminal cancel, rebuilding the close plan from the remaining 3 PositionLot units, and final flat confirmation.
+- Close-plan scope test confirms run/strategy isolation, aggregation within one group, and rejection when multiple active groups are ambiguous.
+- Combined S4/U16/profile/close-lot focused suite: 54 passed; compileall and git diff --check PASS. This does not implement account-vs-PositionLot pre-close admission or approve unresolved S4 operating risk/position limits.

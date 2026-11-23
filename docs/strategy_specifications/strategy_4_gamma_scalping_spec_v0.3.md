@@ -259,3 +259,9 @@ Extended the synthetic S4 active-position/U19 test slice:
 - With two distinct late-fill execution lots totaling five open contracts, the existing close-plan builder derives one BUY close leg for exactly five contracts.
 
 **Important boundary:** this is U19 evidence/close-plan characterization, not an automatic account-vs-PositionLot admission guard. The current `build_close_plan_from_open_lots` derives quantity from PositionLots; it does not itself reconcile broker/account side and quantity before returning a close plan. No Production semantics were changed because that integration requires an explicit contract decision. Keep automatic pre-close reconciliation admission OPEN.
+
+## 2026-11-23 S4 synthetic close-lifecycle / group-scope validation (No.1773)
+- Extended the existing MINI Futures Virtual Runtime scenario with a 2/5 partial close, terminal cancellation of the residual close order, reconstruction from the remaining 3 PositionLot units, and final 3-unit BUY close to flat.
+- Added builder characterization for run/strategy scoping, same-group actual-quantity aggregation, and fail-closed rejection of ambiguous multiple open groups.
+- Focused combined S4/U16/profile/close-lot suite: 54 passed; compileall and git diff --check PASS.
+- This is not account/broker position reconciliation before close. No Production code or reconciliation semantics changed. F12/F14 margin admission remains a focused synthetic slice only; max-position, max-loss, stress-loss, delta residual, fee/slippage and other operating risk limits remain unresolved. G06/G08 and complete F01-F29/G01-G12 acceptance remain OPEN; specification remains DRAFT/UNVERIFIED/UNAPPROVED/DISABLED.

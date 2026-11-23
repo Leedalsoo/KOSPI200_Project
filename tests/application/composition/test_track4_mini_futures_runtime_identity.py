@@ -12,6 +12,8 @@ from application.composition.automated_virtual_runtime_factory import (
     attach_standard_automated_loop,
 )
 from contracts.futures_contract_spec import FuturesProductType
+from contracts.futures_identity_source_port import FuturesInstrumentIdentity
+from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
 from contracts.market_data_freshness import FreshnessStatus, FreshnessVerdict
 from core.option.option_master import InMemoryOptionContractMaster
 from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
@@ -111,7 +113,7 @@ def test_other_synthetic_futures_routes_keep_standard_contract_spec() -> None:
     assert identity.contract_multiplier == Decimal(250000)
 
 
-def test_track4_mini_futures_runtime_routes_fills_and_closes_flat() -> None:
+def test_track4_mini_futures_runtime_routes_fills_and_closes_flat(monkeypatch) -> None:
     loop = _loop(("track4_gamma_scalping", "1.0"), "S4-MINI-FUTURES-RUNTIME-E2E")
     bridge = loop.multi_leg_bridge
     tick = SimpleNamespace(
@@ -188,15 +190,51 @@ def test_track4_mini_futures_runtime_routes_fills_and_closes_flat() -> None:
 
     close_plan = bridge.build_close_plan_from_open_lots(
         strategy_id="track4_gamma_scalping",
-        purpose="S4_VALIDATION_CLOSE",
+        purpose="S4_VALIDATION_CLOSE_PARTIAL",
         asset_type="FUTURES",
     )
-    close = bridge.execute(close_plan)
+    assert close_plan.legs[0].side == "BUY"
+    assert close_plan.legs[0].quantity == 5
+    original_execute = vssf._execute
+    partial_close_state = {"done": False}
+
+    def partial_close_first(command, price, now, *, quantity=None):
+        if not partial_close_state["done"]:
+            partial_close_state["done"] = True
+            return original_execute(command, price, now, quantity=2)
+        return original_execute(command, price, now, quantity=quantity)
+
+    monkeypatch.setattr(vssf, "_execute", partial_close_first)
+    partial_close = bridge.execute(close_plan)
+    assert partial_close.routed_legs == 1
+    assert partial_close.filled_legs == 2
+    assert partial_close.reports[0].status == "PARTIALLY_FILLED"
+    assert partial_close.reports[0].filled_quantity == 2
+    assert partial_close.reports[0].remaining_quantity == 3
+
+    cancelled_close = bridge.cancel_pending_order(
+        partial_close.reports[0].client_order_id,
+        reason="S4_VALIDATION_PARTIAL_CLOSE_CANCEL",
+    )
+    assert cancelled_close.reports[0].status == "CANCELLED"
+    assert cancelled_close.reports[0].filled_quantity == 2
+    remaining_lots = bridge.position_lot_store.open_lots()
+    assert sum(lot.remaining_quantity for lot in remaining_lots) == 3
+
+    remaining_close_plan = bridge.build_close_plan_from_open_lots(
+        strategy_id="track4_gamma_scalping",
+        purpose="S4_VALIDATION_CLOSE_REMAINDER",
+        asset_type="FUTURES",
+    )
+    assert len(remaining_close_plan.legs) == 1
+    assert remaining_close_plan.legs[0].side == "BUY"
+    assert remaining_close_plan.legs[0].quantity == 3
+    close = bridge.execute(remaining_close_plan)
     assert close.approved_legs == close.routed_legs == 1
-    assert close.filled_legs == 5
+    assert close.filled_legs == 3
     assert close.group_complete is True
     assert close.reports[0].status == "FILLED"
-    assert close.reports[0].filled_quantity == 5
+    assert close.reports[0].filled_quantity == 3
     assert bridge.position_lot_store.open_lots() == ()
     remaining_position = vssf.account.positions.get(identity.instrument_id)
     assert remaining_position is None or int(remaining_position.get("qty", 0)) == 0
@@ -782,3 +820,55 @@ def test_track4_mini_futures_insufficient_free_margin_rejects_before_vssf_submis
     assert vssf.metrics["order_commands"] == 0
     assert bridge.position_lot_store.open_lots() == ()
     assert identity.instrument_id not in vssf.account.positions
+
+
+def test_track4_close_plan_scopes_open_lots_to_one_group_and_aggregates_actual_quantity() -> None:
+    identity = FuturesInstrumentIdentity(
+        instrument_id="SYNTHETIC_CONTRACT:S4-MINI-CLOSE",
+        symbol="SYNTHETIC_KOSPI200",
+        product_type=FuturesProductType.MINI,
+        contract_multiplier=Decimal("50000"),
+        identity_source="SYNTHETIC:DERIVED_SCENARIO",
+    )
+
+    def lot(*, run_id, strategy_id, group_id, quantity, side="SELL"):
+        return SimpleNamespace(
+            run_id=run_id, strategy_id=strategy_id, group_id=group_id,
+            remaining_quantity=quantity, instrument_identity=identity,
+            instrument_id=identity.instrument_id, position_role="NONE", side=side,
+        )
+
+    lots = [
+        lot(run_id="S4-CLOSE-GROUP-SCOPE", strategy_id="track4_gamma_scalping",
+            group_id="S4-GROUP-A", quantity=2),
+        lot(run_id="S4-CLOSE-GROUP-SCOPE", strategy_id="track4_gamma_scalping",
+            group_id="S4-GROUP-A", quantity=3),
+        lot(run_id="OTHER-RUN", strategy_id="track4_gamma_scalping",
+            group_id="OTHER-RUN-GROUP", quantity=100),
+        lot(run_id="S4-CLOSE-GROUP-SCOPE", strategy_id="other_strategy",
+            group_id="OTHER-STRATEGY-GROUP", quantity=100),
+    ]
+    bridge = object.__new__(VirtualMultiLegExecutionBridge)
+    bridge.run_id = "S4-CLOSE-GROUP-SCOPE"
+    bridge.position_lot_store = SimpleNamespace(open_lots=lambda: tuple(lots))
+
+    plan = bridge.build_close_plan_from_open_lots(
+        strategy_id="track4_gamma_scalping",
+        purpose="S4_VALIDATION_CLOSE_GROUP_SCOPE",
+        asset_type="FUTURES",
+    )
+    assert plan.group_id == "S4-GROUP-A"
+    assert len(plan.legs) == 1
+    assert plan.legs[0].side == "BUY"
+    assert plan.legs[0].quantity == 5
+
+    lots.append(lot(
+        run_id="S4-CLOSE-GROUP-SCOPE", strategy_id="track4_gamma_scalping",
+        group_id="S4-GROUP-B", quantity=1,
+    ))
+    with pytest.raises(ValueError, match="AMBIGUOUS_OPEN_POSITION_GROUPS"):
+        bridge.build_close_plan_from_open_lots(
+            strategy_id="track4_gamma_scalping",
+            purpose="S4_VALIDATION_CLOSE_AMBIGUOUS_GROUPS",
+            asset_type="FUTURES",
+        )
