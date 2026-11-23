@@ -340,3 +340,11 @@ Validation-only fixture:
 Focused input-independent regression: 62 passed; compileall, Ruff F821/F401 and diff-check PASS. Three tests in the broader batch could not run to completion because the accepted runtime-v2 dataset and FRESH61 JSONL fixture were absent; those cases remain unverified and were excluded from the focused regression.
 
 This is a virtual lot provenance/FIFO fix, not evidence of an actual S4 option-entry path or authoritative KIS/Production hedge linkage. D01/D02/F17/F24/D10/I06 and full option-fill → owned lot → linked Futures → attribution remain OPEN. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+
+## 2026-11-23 S4 synthetic fill-to-owned-lot materialization (No.1782)
+
+The existing `VirtualMultiLegExecutionBridge._apply_reconciled_execution()` method is the current Virtual execution-fill materialization seam. It checks client-order/group/leg lineage, expands canonical fill reports, creates a provenance-owned lot with bridge run ID and plan strategy/group/leg identity, records the fill fee, and updates an instrument-specific Virtual position aggregate.
+
+A validation-only test invokes that method directly with synthetic OPTION and linked MINI Futures fills. Both legs use the same synthetic S4 run/strategy/group but distinct instrument IDs and multipliers. The test verifies the resulting owned lots and fee records, replay of the exact same execution without duplicate mutation, and a partial OPTION close that does not change the MINI Futures hedge lot.
+
+All identity source labels are `SYNTHETIC:DERIVED_SCENARIO`. Fixture multipliers (OPTION 10, MINI Futures 50,000), prices and fees are test inputs, not KIS or approved S4 criteria. This method-level test is not a complete S4 Runtime dispatch, OMS/VSSF, broker, hedge-sizing/atomicity, or restart test. Actual strategy-to-bridge dispatch, linked hedge integration, authoritative Greek units/valuation, fees/slippage, D01/D02/F17/F24/D10/I06 and full end-to-end attribution remain OPEN. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.

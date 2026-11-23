@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -373,3 +373,105 @@ def test_position_lot_execution_id_reuse_across_runs_is_a_provenance_conflict():
     assert [(lot.run_id, lot.execution_id, lot.remaining_quantity) for lot in store.open_lots()] == [
         ("S4-RUN-A", "REUSED-EXECUTION-ID", 1),
     ]
+
+def test_s4_synthetic_execution_fill_materializes_owned_option_and_linked_mini_lots():
+    """Exercise the real Virtual multi-leg fill-to-lot materializer with synthetic inputs only."""
+    from datetime import datetime, timezone
+
+    from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
+    from contracts.futures_contract_spec import FuturesProductType
+    from contracts.futures_identity_source_port import FuturesInstrumentIdentity
+    from contracts.types import (
+        BrokerOrderCommand, ExecutionLeg, ExecutionReport, MultiLegExecutionPlan,
+        OptionInstrumentIdentity,
+    )
+    from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
+    from environments.virtual.position.virtual_position_lot_store import VirtualPositionLotStore
+
+    source = "SYNTHETIC:DERIVED_SCENARIO"
+    run_id = "S4-SYNTHETIC-RUN-1782"
+    strategy_id = STRATEGY
+    group_id = "S4-SYNTHETIC-LINKED-GROUP-1782"
+    timestamp = datetime(2026, 11, 23, 9, 30, tzinfo=timezone.utc)
+    option_identity = OptionInstrumentIdentity(
+        instrument_id="SYNTHETIC_CONTRACT:S4-OPTION-CALL-1782",
+        symbol="SYNTHETIC-S4-CALL", expiry="20261210", option_type="CALL",
+        strike=D("500"), contract_multiplier=D("10"), identity_source=source,
+    )
+    mini_identity = FuturesInstrumentIdentity(
+        instrument_id="SYNTHETIC_CONTRACT:S4-MINI-1782", symbol="SYNTHETIC-S4-MINI",
+        product_type=FuturesProductType.MINI, contract_multiplier=D("50000"),
+        identity_source=source,
+    )
+
+    # Isolate the existing production materialization method; no broker, router,
+    # Runtime strategy, KIS API, or live order path is invoked by this fixture.
+    bridge = VirtualMultiLegExecutionBridge.__new__(VirtualMultiLegExecutionBridge)
+    bridge.run_id = run_id
+    bridge.position_lot_store = VirtualPositionLotStore()
+    bridge.fee_ledger = VirtualTrack9FeeLedger()
+    bridge.leg_positions = {}
+    bridge.execution_legs = {}
+    bridge.provenance = {}
+    bridge._applied_execution_fingerprints = {}
+
+    def apply_fill(*, leg_id, side, identity, execution_id, quantity, price):
+        leg = ExecutionLeg(leg_id=leg_id, side=side, quantity=quantity)
+        plan = MultiLegExecutionPlan(group_id=group_id, strategy_id=strategy_id, legs=(leg,))
+        client_order_id = f"SYNTHETIC-CO-{execution_id}"
+        command = BrokerOrderCommand(
+            client_order_id=client_order_id, instrument_id=identity.instrument_id,
+            side=side, quantity=quantity, order_type="LIMIT", instrument_identity=identity,
+            asset_type="OPTION" if isinstance(identity, OptionInstrumentIdentity) else "FUTURES",
+            strategy_id=strategy_id, group_id=group_id, leg_id=leg_id,
+        )
+        report = ExecutionReport(
+            client_order_id=client_order_id, broker_order_id=f"SYNTHETIC-BO-{execution_id}",
+            execution_id=execution_id, status="FILLED", filled_quantity=quantity,
+            remaining_quantity=0, execution_price=D(price), execution_timestamp=timestamp,
+            fee=D("1"), group_id=group_id, leg_id=leg_id,
+        )
+        bridge._apply_reconciled_execution(
+            plan=plan, leg=leg, identity=identity, broker_command=command, report=report,
+        )
+        return plan, leg, command, report
+
+    option_plan, option_leg, option_command, option_report = apply_fill(
+        leg_id="S4-OPTION-LEG", side="BUY", identity=option_identity,
+        execution_id="SYNTHETIC-OPTION-OPEN-1782", quantity=2, price="100",
+    )
+    apply_fill(
+        leg_id="S4-MINI-HEDGE-LEG", side="SELL", identity=mini_identity,
+        execution_id="SYNTHETIC-MINI-HEDGE-OPEN-1782", quantity=1, price="350",
+    )
+
+    # Replaying the same fill is idempotent; a distinct partial close affects
+    # only the option instrument while preserving the linked MINI hedge lot.
+    bridge._apply_reconciled_execution(
+        plan=option_plan, leg=option_leg, identity=option_identity,
+        broker_command=option_command, report=option_report,
+    )
+    apply_fill(
+        leg_id="S4-OPTION-CLOSE-LEG", side="SELL", identity=option_identity,
+        execution_id="SYNTHETIC-OPTION-PARTIAL-CLOSE-1782", quantity=1, price="105",
+    )
+
+    lots = {lot.instrument_id: lot for lot in bridge.position_lot_store.open_lots()}
+    assert set(lots) == {option_identity.instrument_id, mini_identity.instrument_id}
+    assert (lots[option_identity.instrument_id].remaining_quantity,
+            lots[option_identity.instrument_id].run_id,
+            lots[option_identity.instrument_id].strategy_id,
+            lots[option_identity.instrument_id].group_id,
+            lots[option_identity.instrument_id].identity_source) == (1, run_id, strategy_id, group_id, source)
+    assert (lots[mini_identity.instrument_id].remaining_quantity,
+            lots[mini_identity.instrument_id].side,
+            lots[mini_identity.instrument_id].contract_multiplier) == (1, "SELL", D("50000"))
+    assert bridge.leg_positions[option_identity.instrument_id].qty == 1
+    assert bridge.leg_positions[mini_identity.instrument_id].qty == 1
+    assert len(bridge.fee_ledger.query(run_id=run_id)) == 3
+    assert [(event.source_lot_execution_id, event.quantity)
+            for event in bridge.position_lot_store.close_events()] == [
+                ("SYNTHETIC-OPTION-OPEN-1782", 1),
+            ]
+    assert bridge.provenance["SYNTHETIC-OPTION-OPEN-1782"]["group_id"] == group_id
+    assert bridge.provenance["SYNTHETIC-MINI-HEDGE-OPEN-1782"]["instrument_id"] == mini_identity.instrument_id

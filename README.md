@@ -1145,3 +1145,9 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - S4 option and MINI Futures remain separate instrument lots linked by the same synthetic run/strategy/group. This validates ledger ownership boundaries only; it does not establish an actual S4 option-entry Runtime path or authoritative hedge linkage.
 - Focused input-independent regression: 62 passed; compileall, Ruff F821/F401 and git diff-check PASS. A broader batch also exposed three data-dependent tests whose accepted runtime-v2/FRESH61 fixture files are absent; those cases were not counted as passes and were excluded from the focused rerun.
 - No Raw/Canonical/accepted data, manifest, collector, KIS/Live API or order behavior changed. S4 remains DRAFT/UNVERIFIED/UNAPPROVED/DISABLED; D01/D02/F17/F24/D10/I06 and full option-fill-to-hedge Runtime attribution remain OPEN.
+
+### S4 synthetic fill-to-owned-lot bridge validation (No.1782, 2026-11-23)
+- Reuse the existing `VirtualMultiLegExecutionBridge._apply_reconciled_execution()` as the validation seam for synthetic fill -> `PositionLotProvenance` materialization; do not claim that this wires S4 strategy dispatch or proves full Runtime/OMS/VSSF execution.
+- The synthetic OPTION and linked MINI Futures fills must share exact run/strategy/group ownership while preserving distinct instrument identity and multiplier. Validate fee provenance, duplicate fill replay, and independent partial close by instrument.
+- Keep `SYNTHETIC:DERIVED_SCENARIO` explicit. Test multipliers and all prices/fees are fixture assumptions, not KIS/real-account/Production policy. Do not activate broker, KIS/REAL_VTS, Live, collectors, or mutate Raw/Canonical/accepted data/manifests.
+- S4 actual strategy-to-bridge dispatch, linked hedge sizing/atomicity, durable restart, authoritative Greeks/costs and full end-to-end attribution remain OPEN; S4 stays DRAFT/UNVERIFIED/UNAPPROVED/DISABLED.
