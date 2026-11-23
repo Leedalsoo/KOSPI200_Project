@@ -237,3 +237,46 @@ def test_reordered_payload_clock_is_ignored_in_favor_of_caller_receive_order() -
     assert second.snapshot.observed_at == second_received_at.isoformat()
     assert second.snapshot.observed_at > first.snapshot.observed_at
     assert source.current_delta() == Decimal("0.31")
+
+
+def test_sequential_multi_instrument_frames_expose_only_last_instrument_to_runtime() -> None:
+    call_id = "SYNTHETIC_CONTRACT:TRACK4-CALL-350"
+    put_id = "SYNTHETIC_CONTRACT:TRACK4-PUT-350"
+    call_at = datetime(2026, 11, 23, 10, 15, tzinfo=timezone.utc)
+    put_at = datetime(2026, 11, 23, 10, 15, 1, tzinfo=timezone.utc)
+    source = KISTrack4GreeksRealtimeSource()
+
+    call_provider = source.accept_frame(
+        _synthetic_h0iocnt0_frame(call_id, delta="0.42", gamma="0.021"),
+        observed_at=call_at,
+    )
+    assert call_provider is not None
+    source.accept_frame(
+        _synthetic_h0iocnt0_frame(put_id, delta="-0.38", gamma="0.019"),
+        observed_at=put_at,
+    )
+
+    call_market = type("CallMarket", (), {
+        "recent_ticks": [_tick(call_id, call_at)],
+        "underlying_history": [],
+        "scenario": _Scenario(),
+    })()
+    put_market = type("PutMarket", (), {
+        "recent_ticks": [_tick(put_id, put_at)],
+        "underlying_history": [],
+        "scenario": _Scenario(),
+    })()
+    call_runtime = VirtualRuntimeDataProvider(
+        call_market,
+        track4_greeks_provider=source,
+    ).snapshot(call_market.recent_ticks[0])
+    put_runtime = VirtualRuntimeDataProvider(
+        put_market,
+        track4_greeks_provider=source,
+    ).snapshot(put_market.recent_ticks[0])
+
+    assert call_runtime.option_delta is None
+    assert call_runtime.option_gamma is None
+    assert put_runtime.option_delta == Decimal("-0.38")
+    assert put_runtime.option_gamma == Decimal("0.019")
+    assert source.snapshot.instrument_id == put_id

@@ -405,3 +405,11 @@ Focused S4 Runtime identity + spec alignment + attribution + Greek decomposition
 - Combined S4 + Canonical focused regression: 50 passed. compileall PASS. Scoped Ruff F821/F401 PASS, git diff --check PASS.
 - 판정: Canonical은 provenance-aware normalization/identity, Track4 source는 caller-timestamp 단일-provider latest-value facade다. 둘의 stale/duplicate/reorder 정책은 동일하지 않으며, 현 단계에서는 이를 Production 결함으로 단정하거나 임의로 차단 정책을 추가하지 않는다.
 - Production source/Runtime/bootstrap, strategy/order/risk semantics 변경 없음. KIS API/구독/collector, Raw/Canonical/accepted-source/manifest 원본 변경 없음. S4는 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED 유지.
+## 2026-11-23 No.1789 — Track4 multi-instrument provider lifecycle 합성 검증
+
+- No.1788 및 Current Baseline의 No.1535/1554 synthetic validation-only 인정 정책을 우선 적용했다. 데이터 부족을 BLOCKED로 처리하지 않고 synthetic CALL/PUT 두 instrument와 서로 다른 관측시각으로 source→VirtualRuntime 경계를 재현했다.
+- Adapter adapt_many()는 multi-record frame의 각 58-field record를 개별 provider로 decode한다. 단, adapt()는 첫 record만 반환한다.
+- KISTrack4GreeksRealtimeSource는 instrument-keyed provider registry가 없고 단일 provider만 유지한다. 서로 다른 instrument frame이 순차 수신되면 마지막 provider가 이전 provider를 대체한다.
+- VirtualRuntimeDataProvider는 tick.instrument_id와 Greeks snapshot.instrument_id가 정확히 일치하고 timestamp도 정확히 일치할 때만 delta/gamma를 적용한다. 따라서 두 번째 PUT frame 수신 뒤 첫 CALL tick에는 Greeks가 적용되지 않고, 두 번째 PUT tick에만 적용되는 것을 합성 테스트로 확인했다.
+- 이 결과는 source facade의 multi-instrument lifecycle 미지원 경계 확인이며, Production 차단 판정이나 임의의 provider registry 설계 승인이 아니다. Subscription ownership, instrument lifecycle, timestamp authority, expiry/session reset, stale/duplicate policy는 별도 계약이 필요하다.
+- Synthetic lifecycle test 1개 추가. Combined S4 + Canonical focused regression: 51 passed; compileall, scoped Ruff F821/F401, git diff --check PASS.\r\n- Production source/Runtime/bootstrap 변경 없음. KIS API/collector, Raw/Canonical/accepted-source/manifest 변경 없음. S4 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED 유지.
