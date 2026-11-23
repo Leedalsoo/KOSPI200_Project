@@ -280,3 +280,80 @@ def test_sequential_multi_instrument_frames_expose_only_last_instrument_to_runti
     assert put_runtime.option_delta == Decimal("-0.38")
     assert put_runtime.option_gamma == Decimal("0.019")
     assert source.snapshot.instrument_id == put_id
+def test_new_collector_session_does_not_reset_existing_greeks_source(tmp_path) -> None:
+    import asyncio
+    from infrastructure.kis.kis_realtime_collector import KISRealtimeCollector
+    from infrastructure.kis.realtime_raw_store import KISRealtimeRawStore
+
+    class Transport:
+        def __init__(self):
+            self.connects = 0
+            self.subscriptions = []
+            self.closes = 0
+        async def connect(self):
+            self.connects += 1
+        async def subscribe(self, tr_id, symbol):
+            self.subscriptions.append((tr_id, symbol))
+        async def recv(self):
+            raise AssertionError('recv is outside this boundary test')
+        async def close(self):
+            self.closes += 1
+
+    old_at = datetime(2026, 11, 23, 6, 0, tzinfo=timezone.utc)
+    source = KISTrack4GreeksRealtimeSource()
+    old_provider = source.accept_frame(
+        _synthetic_h0iocnt0_frame('SYNTHETIC_CONTRACT:TRACK4-CALL-350'),
+        observed_at=old_at,
+    )
+    transport = Transport()
+    collector = KISRealtimeCollector(
+        transport,
+        KISRealtimeRawStore(tmp_path / 'raw.jsonl'),
+        frame_observer=lambda frame, received_at: source.accept_frame(frame, observed_at=received_at),
+    )
+
+    asyncio.run(collector.start('20261123', [('H0IOCNT0', 'SYNTHETIC-CALL-OLD')]))
+    asyncio.run(collector.start('20261124', [('H0IOCNT0', 'SYNTHETIC-PUT-NEW')]))
+
+    assert old_provider is not None
+    assert transport.connects == 2
+    assert transport.subscriptions == [('H0IOCNT0', 'SYNTHETIC-CALL-OLD'), ('H0IOCNT0', 'SYNTHETIC-PUT-NEW')]
+    assert transport.closes == 0
+    assert not hasattr(transport, 'unsubscribe')
+    assert source.provider is old_provider
+    assert source.snapshot.instrument_id == 'SYNTHETIC_CONTRACT:TRACK4-CALL-350'
+    assert source.snapshot.observed_at == old_at.isoformat()
+
+def test_synthetic_expiry_session_subscription_plan_is_dry_run_only() -> None:
+    from infrastructure.kis.kis_subscription_planner import build_subscription_plan
+
+    plan = build_subscription_plan(
+        now=datetime(2026, 11, 24, 1, 0, tzinfo=timezone.utc),
+        trading_day_approved=True,
+        active_strategies=['S4'],
+        strategy_required_symbols={
+            'S4': ['SYNTHETIC_CONTRACT:TRACK4-CALL-350-20261210'],
+        },
+        contracts={
+            'SYNTHETIC_CONTRACT:TRACK4-CALL-350-20261210': {
+                'instrument_type': 'OPTION',
+                'product_series': 'MONTHLY',
+                'option_type': 'CALL',
+                'strike': '350',
+                'expiry_yyyymmdd': '20261210',
+                'identity_valid': True,
+                'expiry_provenance_valid': True,
+                'master_age_hours': 0,
+            },
+        },
+    )
+
+    assert plan['mode'] == 'DRY_RUN_PLAN_ONLY'
+    assert plan['strategy_status']['S4']['status'] == 'PLANNED'
+    assert ('H0IOCNT0', 'SYNTHETIC_CONTRACT:TRACK4-CALL-350-20261210') in {
+        (item['tr_id'], item['symbol']) for item in plan['subscriptions']
+    }
+    assert plan['safety']['collector_touched'] is False
+    assert plan['safety']['websocket_opened'] is False
+    assert plan['rotation']['automatic_rotation_enabled'] is False
+    assert plan['rotation']['status'] == 'BLOCKED_THRESHOLDS_UNSET'
