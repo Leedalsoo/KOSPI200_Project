@@ -17,6 +17,7 @@ from application.composition.virtual_multi_leg_execution import VirtualMultiLegE
 from contracts.market_data_freshness import FreshnessStatus, FreshnessVerdict
 from core.option.option_master import InMemoryOptionContractMaster
 from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
+from core.strategy.track4_gamma_scalping import Track4GammaScalping, Track4MarketInput
 from environments.high_speed.synthetic_runtime_sources import SyntheticRuntimeSources
 
 
@@ -966,3 +967,43 @@ def test_track4_option_proposal_has_no_runtime_plan_resolver_route():
 
     assert loop.multi_leg_plan_resolver(evaluation, canonical) is None
     assert loop.multi_leg_bridge.position_lot_store.open_lots() == ()
+
+
+def test_track4_strategy_emits_futures_hedge_without_owned_option_lot_evidence() -> None:
+    strategy = Track4GammaScalping(enabled=True, capital_gate_min=Decimal("1"), risk_limits_available=True)
+    data = Track4MarketInput(
+        observed_at=datetime(2026, 11, 23, 9, 0, tzinfo=timezone(timedelta(hours=9))),
+        current_price=Decimal("350"),
+        active_vol=Decimal("0.20"),
+        base_vol=Decimal("0.20"),
+        time_str="09:00",
+        current_delta=Decimal("0.8"),
+        current_gamma=Decimal("0.1"),
+        current_pnl=Decimal("0"),
+        current_equity=Decimal("1000000"),
+        price_history=(Decimal("350"), Decimal("351")),
+        max_hedge_qty=5,
+    )
+
+    basecamp = strategy.evaluate_basecamp(
+        data, active_vol=Decimal("0.10"), base_vol=Decimal("0.20")
+    )
+    assert len(basecamp) == 1
+    assert basecamp[0].kind == "NON_EXECUTION"
+    assert basecamp[0].execution_proposal is None
+    assert basecamp[0].non_execution_event is not None
+
+    # Track4MarketInput carries aggregate Greek values but no owned option lots,
+    # Option Master identity, or fill lineage. This helper still emits a Futures
+    # proposal; this is a validation finding, not an approved operating contract.
+    hedge = strategy.evaluate_delta_hedge(
+        data,
+        delta=Decimal("0.8"),
+        deadband=Decimal("0.1"),
+        equity=Decimal("1000000"),
+        max_hedge_qty=5,
+    )
+    assert len(hedge) == 1
+    assert hedge[0].execution_proposal is not None
+    assert hedge[0].execution_proposal.asset_type == "FUTURES"
+    assert hedge[0].execution_proposal.proposed_quantity > 0

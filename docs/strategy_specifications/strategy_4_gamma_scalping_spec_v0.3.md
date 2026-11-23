@@ -356,3 +356,11 @@ The Strategy 1-9 Option Hedge Specification v0.1 remains DRAFT and is not an app
 Source inspection confirms `Track4GammaScalping.evaluate_basecamp()` emits a `NON_EXECUTION` state event without an execution proposal, while `evaluate_delta_hedge()` emits a FUTURES proposal. The standard Runtime `resolve_track4()` accepts only FUTURES proposals and returns no execution plan for an OPTION proposal. A validation-only synthetic test now calls the actual loop resolver with an OPTION proposal and verifies that it returns no plan and creates no PositionLot.
 
 Focused S4 Runtime identity + spec alignment + attribution + Greek decomposition regression: 40 passed. This characterizes the current route boundary only; it does not implement an option-entry route, approve an option contract, or establish Production/Live readiness. No Production Strategy/Runtime/OMS/Router/order semantics changed. Actual option-entry source and approved leg contract, authoritative identity/quote/multiplier, capital/margin/fee/risk gates, linked hedge sizing/atomicity, D01/D02/F17/F24/D10/I06 and full end-to-end attribution remain OPEN. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+
+## S4 option ownership input boundary follow-up (No.1784)
+
+- A validation-only strategy-method test now exercises the actual `Track4GammaScalping.evaluate_basecamp()` and `evaluate_delta_hedge()` helpers with explicit synthetic values.
+- Basecamp emits a `NON_EXECUTION` state event with strike hints only; it does not create an OPTION proposal or bind a contract identity through Option Master.
+- `Track4MarketInput` contains aggregate Greek values but no S4-owned option lots, Option Master contract identity, or fill lineage. `evaluate_delta_hedge()` can nevertheless emit a MINI Futures proposal from the supplied aggregate delta. The helper has no ownership evidence parameter/gate.
+- This is a reproducible source/contract gap characterization, not approval to add an option-entry contract or change Production hedge semantics. S4 v0.3 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. The future authoritative contract must define owned filled option-lot scope and prove the delta source maps to those lots before any activation.
+- Focused target test file: 23 passed. compileall, Ruff F821/F401, and git diff-check PASS.

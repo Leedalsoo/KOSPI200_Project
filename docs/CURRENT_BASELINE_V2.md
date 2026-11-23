@@ -1139,3 +1139,11 @@
 - Added validation-only synthetic test `test_track4_option_proposal_has_no_runtime_plan_resolver_route` in `tests/application/composition/test_track4_mini_futures_runtime_identity.py`. It invokes the actual loop resolver with a synthetic OPTION proposal and verifies `None` plan and no new PositionLot.
 - Focused S4 Runtime identity + spec alignment + attribution + Greek decomposition regression: 40 passed. This confirms the existing no-option-route boundary; it does not create or approve an option-entry path.
 - No Production/runtime/order semantics, KIS/Live API, Raw/Canonical/accepted source, manifest or collector changes. S4 option-entry source/contract, authoritative identity/quote/multiplier, risk/cost gates, linked hedge integration and full attribution remain OPEN; S4 DRAFT/UNVERIFIED/UNAPPROVED/DISABLED.
+
+## S4 option ownership input boundary follow-up (No.1784)
+
+- A validation-only strategy-method test now exercises the actual `Track4GammaScalping.evaluate_basecamp()` and `evaluate_delta_hedge()` helpers with explicit synthetic values.
+- Basecamp emits a `NON_EXECUTION` state event with strike hints only; it does not create an OPTION proposal or bind a contract identity through Option Master.
+- `Track4MarketInput` contains aggregate Greek values but no S4-owned option lots, Option Master contract identity, or fill lineage. `evaluate_delta_hedge()` can nevertheless emit a MINI Futures proposal from the supplied aggregate delta. The helper has no ownership evidence parameter/gate.
+- This is a reproducible source/contract gap characterization, not approval to add an option-entry contract or change Production hedge semantics. S4 v0.3 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. The future authoritative contract must define owned filled option-lot scope and prove the delta source maps to those lots before any activation.
+- Focused target test file: 23 passed. compileall, Ruff F821/F401, and git diff-check PASS.

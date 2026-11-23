@@ -1156,3 +1156,11 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - The current S4 Basecamp emits a NON_EXECUTION state event; executable S4 proposals are Futures hedge/unwind only. The standard `resolve_track4()` route accepts FUTURES proposals and returns no plan for OPTION proposals.
 - Keep this boundary explicit in validation. Do not add option-entry routing, infer option contracts, or promote a test proposal to an executable S4 order without a newer approved S4 contract and authoritative option identity/quote/multiplier plus risk/cost gates.
 - Synthetic route-boundary regression only characterizes the current resolver. It is not option-entry functionality or Production/Live acceptance. S4 remains DRAFT/UNVERIFIED/UNAPPROVED/DISABLED.
+
+## S4 option ownership input boundary follow-up (No.1784)
+
+- A validation-only strategy-method test now exercises the actual `Track4GammaScalping.evaluate_basecamp()` and `evaluate_delta_hedge()` helpers with explicit synthetic values.
+- Basecamp emits a `NON_EXECUTION` state event with strike hints only; it does not create an OPTION proposal or bind a contract identity through Option Master.
+- `Track4MarketInput` contains aggregate Greek values but no S4-owned option lots, Option Master contract identity, or fill lineage. `evaluate_delta_hedge()` can nevertheless emit a MINI Futures proposal from the supplied aggregate delta. The helper has no ownership evidence parameter/gate.
+- This is a reproducible source/contract gap characterization, not approval to add an option-entry contract or change Production hedge semantics. S4 v0.3 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. The future authoritative contract must define owned filled option-lot scope and prove the delta source maps to those lots before any activation.
+- Focused target test file: 23 passed. compileall, Ruff F821/F401, and git diff-check PASS.
