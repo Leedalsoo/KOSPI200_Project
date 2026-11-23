@@ -753,11 +753,23 @@ def test_track4_mini_futures_rejects_missing_freshness_verdict_before_route() ->
     assert identity.instrument_id not in vssf.account.positions
 
 @pytest.mark.parametrize(
-    ("free_margin", "should_reject"),
-    [(Decimal("249999999"), True), (Decimal("250000000"), False)],
-    ids=("one-krw-below-required-margin", "exact-required-margin-boundary"),
+    ("free_margin", "used_margin", "expected_rejection"),
+    [
+        (Decimal("249999999"), Decimal("0"), "INSUFFICIENT_FREE_MARGIN"),
+        (Decimal("250000000"), Decimal("0"), None),
+        (Decimal("250000000"), Decimal("600000000"), None),
+        (Decimal("250000000"), Decimal("600000001"), "MAX_MARGIN_UTILIZATION"),
+    ],
+    ids=(
+        "one-krw-below-required-margin",
+        "exact-required-margin-boundary",
+        "exact-configured-utilization-boundary",
+        "one-krw-over-configured-utilization-boundary",
+    ),
 )
-def test_track4_mini_futures_margin_preflight_boundary(free_margin: Decimal, should_reject: bool) -> None:
+def test_track4_mini_futures_margin_preflight_boundary(
+    free_margin: Decimal, used_margin: Decimal, expected_rejection: str | None,
+) -> None:
     loop = _loop(("track4_gamma_scalping", "1.0"), "S4-MINI-MARGIN-PREFLIGHT-FAULT")
     bridge = loop.multi_leg_bridge
     tick = SimpleNamespace(
@@ -796,6 +808,7 @@ def test_track4_mini_futures_margin_preflight_boundary(free_margin: Decimal, sho
     bridge.bundle.market._futures_price = Decimal("1000")
     vssf.order_book.update_bid_ask(1000, 1000, identity.instrument_id)
     vssf.account.free_margin = free_margin
+    vssf.account.used_margin = used_margin
     observed_at = datetime.fromisoformat(tick.timestamp)
 
     def fresh_synthetic_evidence(_plan, _leg, _identity, command):
@@ -818,11 +831,11 @@ def test_track4_mini_futures_margin_preflight_boundary(free_margin: Decimal, sho
     bridge.freshness_verdict_provider = fresh_synthetic_evidence
     result = bridge.execute(plan)
 
-    if should_reject:
+    if expected_rejection is not None:
         assert result.routed_legs == 0
         assert result.filled_legs == 0
         assert result.reports[0].status == "REJECTED"
-        assert "MARGIN" in (result.reports[0].rejected_reason or "").upper()
+        assert expected_rejection in (result.reports[0].rejected_reason or "").upper()
         assert vssf.metrics["order_commands"] == 0
         assert bridge.position_lot_store.open_lots() == ()
         assert identity.instrument_id not in vssf.account.positions

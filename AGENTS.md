@@ -1063,3 +1063,7 @@
 - Keep margin checks validation-only. For the existing synthetic MINI test setup (price 1,000 ? quantity 5 ? multiplier 50,000), the derived order margin is 250,000,000 KRW; this is a test-fixture arithmetic value, not an approved account limit or live margin schedule.
 - Characterize the strict comparison boundary: free margin 249,999,999 KRW rejects before VSSF order submission; free margin exactly 250,000,000 KRW passes the existing preflight and fills the synthetic 5-unit order.
 - Do not infer production capital, max-position, max-loss, stress-loss, or margin-utilization approvals from this fixture. No Production risk policy or account adapter is changed.
+
+### S4 synthetic configured-utilization boundary (No.1775, 2026-11-23)
+- Characterize the current generic RiskConfig default `max_margin_utilization_ratio=0.85` in the synthetic S4 harness only: (used margin 600,000,000 + derived order margin 250,000,000) / total balance 1,000,000,000 = 0.85; exact equality is admitted. Increasing used margin by 1 KRW yields 0.850000001 and is rejected before VSSF order submission.
+- This documents current generic code behavior, not an approved S4/account risk limit. Do not promote the default to an S4 production criterion without an explicit policy decision.

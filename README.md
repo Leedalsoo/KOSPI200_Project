@@ -1104,3 +1104,7 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 ### S4 MINI synthetic margin-boundary validation (No.1774, 2026-11-23)
 - Extended the existing margin fault test to cover one KRW below the derived synthetic order-margin requirement (reject, zero order commands) and exact equality (preflight accepted, 5-unit synthetic fill).
 - The 250,000,000 KRW value is calculated from this fixture's price/quantity/MINI multiplier only; it is not a real-account margin criterion. Combined S4/U16/profile/close-lot suite: 55 passed; compileall, Ruff F821/F401 and diff-check PASS.
+
+### S4 MINI synthetic utilization-boundary validation (No.1775, 2026-11-23)
+- Added exact 0.85 generic RiskConfig utilization boundary and +1 KRW rejection cases alongside the free-margin boundary. The 0.85 value is the current generic engine default, not an approved S4 operating limit.
+- Combined S4/U16/profile/close-lot suite: 57 passed; compileall, Ruff F821/F401 and diff-check PASS.

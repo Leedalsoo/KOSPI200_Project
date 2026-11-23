@@ -271,3 +271,8 @@ Extended the synthetic S4 active-position/U19 test slice:
 - At 249,999,999 KRW free margin the order is rejected before VSSF order-command submission, with no routed/fill quantity or position mutation. At exactly 250,000,000 KRW the current preflight accepts and the 5-unit synthetic order fills.
 - Combined S4/U16/profile/close-lot suite: 55 passed; compileall/Ruff F821+F401/git diff-check PASS.
 - This closes only the synthetic arithmetic boundary characterization for the current code path. It does not approve real-account margin schedules, margin utilization, max-position, max-loss, stress-loss, fees/slippage, or the full risk matrix. No Production code/policy changed; S4 remains DRAFT/UNVERIFIED/UNAPPROVED/DISABLED.
+
+## 2026-11-23 S4 generic configured margin-utilization boundary (No.1775)
+- Characterized current generic RiskConfig default `max_margin_utilization_ratio=0.85` in synthetic validation: (used margin 600,000,000 + required margin 250,000,000) / total balance 1,000,000,000 = 0.85 and exact equality passes; used margin 600,000,001 gives 0.850000001 and rejects before VSSF order submission.
+- Combined S4/U16/profile/close-lot suite: 57 passed; compileall/Ruff F821+F401/git diff-check PASS.
+- The 0.85 value is a generic code default only, not an approved S4 or real-account limit. No Production policy/adapter changed. S4 remains DRAFT/UNVERIFIED/UNAPPROVED/DISABLED; full F01-F29/G01-G12 risk acceptance remains OPEN.

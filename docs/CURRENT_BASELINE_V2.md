@@ -1070,3 +1070,8 @@
 - Free margin 249,999,999 KRW: REJECTED before VSSF order command; no route/fill/PositionLot/account position. Free margin exactly 250,000,000 KRW: preflight accepted; synthetic 5-unit order filled and PositionLot/account quantity verified.
 - Combined S4/U16/profile/close-lot suite: 55 passed in 1.80s; compileall PASS; Ruff F821/F401 PASS; git diff --check PASS.
 - The calculated amount is only a synthetic fixture boundary, not an approved real-account margin schedule or operating risk limit. No Production risk policy/adapter, account API, or live order path changed. Full S4 risk matrix, approved max-position/max-loss/stress-loss criteria, U16 VirtualBridge routing, Track4State durable restore and Full T4 acceptance remain OPEN.
+
+## 2026-11-23 S4 synthetic configured-utilization boundary follow-up (No.1775)
+- Extended S4 margin-preflight characterization using current generic RiskConfig default 0.85. Synthetic arithmetic: (used margin 600,000,000 + required margin 250,000,000) / total balance 1,000,000,000 = 0.85; equality passes. At used margin 600,000,001 the ratio is 0.850000001 and the preflight rejects before VSSF order command.
+- Combined S4/U16/profile/close-lot suite: 57 passed in 1.92s; compileall/Ruff F821+F401/git diff-check PASS.
+- This is generic configured-code characterization only. The 0.85 default is not an approved S4 or real-account risk limit. No Production risk policy/account adapter changed. Full S4 risk matrix and approved max-position/max-loss/stress-loss/fee/slippage criteria remain OPEN.
