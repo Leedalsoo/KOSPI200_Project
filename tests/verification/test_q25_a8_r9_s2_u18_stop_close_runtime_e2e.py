@@ -12,7 +12,7 @@ from verification.track2_quote_profile_binding import bind_validation_only_track
 
 ROOT = Path(__file__).resolve().parents[2]
 DATASET = ROOT / "data/accepted_market_data/runtime_v2"
-SIDECAR = ROOT / "data/derived_scenario/q25_a8_p2_recovered_track2_four_leg_quotes_v3_market_calibrated_r3_20261115"
+SIDECAR = ROOT / "data/derived_scenario/q25_a8_p2_recovered_track2_four_leg_quotes_v3_market_calibrated_r3_20261115_stop_series_v1/scenario"
 SOURCE_PROFILE = ROOT / "config/validation_only/track2/synthetic_scenario_profile.market_calibrated.v2.json"
 STOP_PROFILE = ROOT / "config/validation_only/track2/synthetic_scenario_profile.exit_path_test.v3.json"
 
@@ -54,7 +54,7 @@ def test_s2_u18_stop_close_uses_shared_virtual_runtime_and_finishes_group_flat(t
     trace_path = tmp_path / "s2-u18-stop-runtime.jsonl"
     runner = replay.HighSpeedVirtualRuntimeReplayRunner(
         DATASET,
-        run_id="Q25-A8-R9-S2-U18-STOP-86-20261117",
+        run_id="Q25-A8-R9-S2-U18-STOP-87-20261117",
         strategy_keys=(("track2_asymmetric_trap", "1.0"),),
         validation_only_synthetic=True,
         validation_only_track2_manifest=DATASET / "manifest.json",
@@ -63,7 +63,7 @@ def test_s2_u18_stop_close_uses_shared_virtual_runtime_and_finishes_group_flat(t
         log_mode="detailed",
         trace_output=trace_path,
     )
-    report = runner.run(max_events=86)
+    report = runner.run(max_events=87)
 
     loop = captured["loop"]
     bridge = loop.multi_leg_bridge
@@ -78,7 +78,7 @@ def test_s2_u18_stop_close_uses_shared_virtual_runtime_and_finishes_group_flat(t
     purposes = Counter(item["payload"]["command"]["order_purpose"] for item in order_commands)
     fills = [item for item in trace if item.get("event_type") == "fill"]
 
-    assert report.events == 86
+    assert report.events == 87
     assert report.exhausted is False  # Deliberately stop after the first completed group-close scenario.
     assert report.signals == 2  # One four-leg entry and one U18 stop-close signal.
     assert report.approved == 2

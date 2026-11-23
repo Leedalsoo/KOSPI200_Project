@@ -23,7 +23,7 @@ from verification.track2_quote_profile_binding import bind_validation_only_track
 
 ROOT = Path(__file__).resolve().parents[2]
 DATASET = ROOT / "data/accepted_market_data/runtime_v2"
-SIDECAR = ROOT / "data/derived_scenario/q25_a8_p2_recovered_track2_four_leg_quotes_v3_market_calibrated_r3_20261115"
+SIDECAR = ROOT / "data/derived_scenario/q25_a8_p2_recovered_track2_four_leg_quotes_v3_market_calibrated_r3_20261115_stop_series_v1/scenario"
 SOURCE_PROFILE = ROOT / "config/validation_only/track2/synthetic_scenario_profile.market_calibrated.v2.json"
 VALIDATION_PROFILE = ROOT / "config/validation_only/track2/synthetic_scenario_profile.exit_path_test.v3.json"
 
@@ -213,7 +213,7 @@ def test_s2_four_leg_runtime_state_is_captured_and_reconciled_after_u19_restart(
     trace_path = tmp_path / "s2-u19-four-leg-runtime-trace.jsonl"
     report = replay.HighSpeedVirtualRuntimeReplayRunner(
         DATASET,
-        run_id="Q25-A8-R9-S2-U19-FOUR-LEG-RESTART-86-20261118",
+        run_id="Q25-A8-R9-S2-U19-FOUR-LEG-RESTART-87-20261118",
         strategy_keys=(("track2_asymmetric_trap", "1.0"),),
         validation_only_synthetic=True,
         validation_only_track2_manifest=DATASET / "manifest.json",
@@ -221,9 +221,9 @@ def test_s2_four_leg_runtime_state_is_captured_and_reconciled_after_u19_restart(
         validation_only_track2_quote_scenario_manifest=binding.manifest_path,
         log_mode="detailed",
         trace_output=trace_path,
-    ).run(max_events=86)
+    ).run(max_events=87)
 
-    assert report.events == 86
+    assert report.events == 87
     assert report.signals == 2
     assert report.filled == 8
     assert report.rejected == 0
