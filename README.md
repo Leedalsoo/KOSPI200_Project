@@ -1066,3 +1066,11 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - No Production or test changes; no new pytest. No KIS/REAL_VTS/Live/account API, broker order/cancel/liquidation, runtime endpoint, collector restart/new collection, or Raw/Canonical/accepted-source/manifest mutation. No reconnect/backoff/token-refresh/resubscribe/gap-fill/REST-WS auto-match/inbox-resolution implementation.
 - Next evidence: user-provided external host hostname/Tailscale device or deployment repository URL. Then inspect launcher, lifecycle construction, receive-task loop, exception supervision, stop/close, and transport ownership. If no external host exists, separate receive-loop ownership decision for approval.
 - Notion: https://app.notion.com/p/4205f4f6eaa18123a485ecd7008aade9
+
+## 12. 최신 검증 데이터·불일치 처리 기준 (2026-11-23)
+
+- 최신 Notion 결정/실행 결과와 실제 Project200 작업폴더·코드·데이터 계보를 먼저 대조한다. 과거 기록과 충돌하면 최신 확정 결정을 우선한다.
+- 데이터 부족/불일치는 즉시 BLOCKED로 끝내지 않고 crosswalk, independent replay, schema/contract 검사, provenance-preserving synthetic fixture 등으로 대체 검증한다. 합성 데이터는 공식 validation-only 입력이며 생성 규칙·source anchor·manifest·SHA-256을 보존한다.
+- 대체 검증 후에도 핵심 identity/event-time/provenance/evidence가 해결되지 않은 항목만 BLOCKED/UNAVAILABLE로 남기고, 검증 가능한 범위는 계속 진행한다.
+- 실계좌 투자 API 연결 전까지 synthetic/validation-only 기준을 사용한다. 합성 결과는 KIS/계좌/Production/Live 사실로 승격하지 않는다.
+- S3 No.1764 모델은 Futures-Index basis 신호와 별도 cash-basket/ETF proxy 합성 레그를 분리한다. Project200에서 37개 focused tests가 통과했으나 이는 경제성/가드/profile 검증이며 equity/ETF leg의 Virtual OMS/Router 실행이나 Production 승인 증거가 아니다. 현재 Runtime asset contract는 FUTURES/OPTION만 지원한다.

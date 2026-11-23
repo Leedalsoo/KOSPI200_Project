@@ -1004,3 +1004,17 @@
 - No Production or test changes; no new pytest. No KIS/REAL_VTS/Live/account API, broker order/cancel/liquidation, runtime endpoint, collector restart/new collection, or Raw/Canonical/accepted-source/manifest mutation. No reconnect/backoff/token-refresh/resubscribe/gap-fill/REST-WS auto-match/inbox-resolution implementation.
 - Next evidence: user-provided external host hostname/Tailscale device or deployment repository URL. Then inspect launcher, lifecycle construction, receive-task loop, exception supervision, stop/close, and transport ownership. If no external host exists, separate receive-loop ownership decision for approval.
 - Notion: https://app.notion.com/p/4205f4f6eaa18123a485ecd7008aade9
+
+---
+
+## 2026-11-23 최신 검증 기준 및 S3 합성 모델 반영 (No.1764 + 사용자 지시)
+
+- 최신 기준: No.1534/1535/1554 및 Current Baseline의 reuse-first/provenance-preserving synthetic 정책을 적용한다. 과거 문서의 즉시 BLOCKED 표현과 충돌하면 최신 확정 결정과 2026-11-23 사용자 지시를 우선한다.
+- 데이터 불일치·부족 시 최신 Notion 결정/실행결과, 실제 로컬 코드·Raw/Canonical/Master/manifest lineage를 먼저 대조하고 crosswalk, independent replay, schema/contract validation, deterministic synthetic fixture 등 대체 검증을 수행한다. 대체 검증 후에도 핵심 identity/event-time/provenance/evidence가 해결되지 않은 경우에만 BLOCKED/UNAVAILABLE로 판정한다.
+- 합성·보완 데이터는 provenance와 생성 규칙·source anchor·manifest·SHA-256을 보존하는 validation-only 입력으로 인정한다. 실제 KIS identity, 계좌/브로커 사실, Production/Live 입력으로 승격하지 않는다. 실계좌 투자 API 연결 후 전체 코드와 실제 authoritative 기준을 재매칭한다.
+- S3(No.1764): No.956의 Futures-Index basis 신호 정의를 유지한다. Index는 reference-only이며 합성 경제성 모델의 별도 두 번째 레그는 cash-basket/ETF proxy다. Positive Z는 Futures SELL + proxy BUY, Negative Z는 Futures BUY + proxy SELL. Hedge quantity는 notional/beta/unit multiplier 기반이며 동일 identity 반대 주문은 금지한다.
+- S3 provisional validation profile: rolling/warmup 60, entry |z|>=2.0, convergence exit |z|<=0.5, stop |z|>=3.5, max hold 60 elapsed minutes, base Futures qty 1, no scale-in, one active group, NORMAL/stable/normalizing only. 전부 합성 검증 기본값이며 실투자 운영값으로 승인되지 않았다.
+- Project200 반영 파일: `docs/strategy_specifications/strategy_3_synthetic_basis_validation_profile_v0.1.md`, `tests/validation_only/test_s3_synthetic_basis_spread_model.py`. Project200 focused batch: 37 passed; compileall 및 git diff --check PASS.
+- 검증 범위 제한: 위 37 tests는 합성 2-leg 경제성·헤지 수량·비용/PnL·partial-fill 상태 및 기존 S3 source/profile/fail-closed 계약 검증이다. Full two-asset Virtual Runtime E2E가 아니다. 현재 Virtual multi-leg bridge/VSSF/canonical order transport는 FUTURES/OPTION만 지원하므로 cash-basket/ETF leg를 Futures로 위장해 라우팅하지 않는다. Production adapter의 unresolved 상태는 유지한다.
+- 실투자 전 재승인: 실제 proxy 상품/종목코드·공매도/대차, authoritative master/quote, beta·tracking error, 비용/세금/금융비용/슬리피지/유동성, 증거금·계좌 위험, partial-fill repair, session/expiry/roll 및 out-of-sample/walk-forward 파라미터 검증.
+- 안전: KIS/REAL_VTS/account/Live API·주문·취소·청산·collector 재시작/신규 수집·Raw/Canonical/accepted source/manifest 변경 없음. S3 Production execution plan 미승인.

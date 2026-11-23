@@ -1012,3 +1012,15 @@
 - No Production or test changes; no new pytest. No KIS/REAL_VTS/Live/account API, broker order/cancel/liquidation, runtime endpoint, collector restart/new collection, or Raw/Canonical/accepted-source/manifest mutation. No reconnect/backoff/token-refresh/resubscribe/gap-fill/REST-WS auto-match/inbox-resolution implementation.
 - Next evidence: user-provided external host hostname/Tailscale device or deployment repository URL. Then inspect launcher, lifecycle construction, receive-task loop, exception supervision, stop/close, and transport ownership. If no external host exists, separate receive-loop ownership decision for approval.
 - Notion: https://app.notion.com/p/4205f4f6eaa18123a485ecd7008aade9
+
+## 8. 2026-11-23 최신 사용자 지시: 불일치·부족 데이터의 대체 검증 우선
+
+- 작업 시작 시 My_Caddy_TS1을 우선 사용하고, 최신 Notion 결정로그·질문과답변 실행결과·Current Baseline과 실제 로컬 작업폴더/현재 코드/Git 상태를 먼저 대조한다.
+- 자료 불일치나 데이터 부족을 발견해도 즉시 BLOCKED로 종결하지 않는다. 최신 결정과 실행 증거, 원본·Canonical·Master·manifest lineage, 코드 계약을 비교한 뒤 crosswalk, 독립 replay, schema/contract 검사, provenance-preserving deterministic synthetic fixture 등 대체 검증을 적용한다.
+- 합성·보완 데이터는 No.1535/No.1554 및 Current Baseline의 기준에 따라 정식 validation-only 입력으로 인정한다. 생성 근거·source anchor·변환 규칙·버전·manifest·SHA-256을 보존하고 실제 관측값/KIS identity/계좌 사실/Production·Live 값으로 승격하지 않는다.
+- BLOCKED/UNAVAILABLE은 대체 검증 후에도 핵심 identity, event-time, provenance 또는 요구된 검증 증거가 해결되지 않은 경우에 한해 적용한다. 검증 가능한 부분은 범위를 분리해 계속 수행하고, 미검증 경계는 OPEN/UNVERIFIED로 기록한다.
+- 과거 Notion 기록과 충돌하면 최신 확정 Notion 결정을 우선한다. 초안·미승인 제안은 확정 결정으로 취급하지 않는다.
+- 실계좌 투자 API가 별도로 연결되고 사용자가 실투자 검토를 시작하면 합성 기준을 실제 authoritative contract/master/quote/order/fill/fee/tax/margin/risk 데이터와 전 코드 경로에 재대조한다. 그 전까지는 synthetic/validation-only 기준으로 개발·검증한다.
+- 검증 통과로 코드 변경이 필요한 경우 해당 Project200 작업폴더 파일을 갱신하고 focused tests/필요한 회귀, compileall, git diff --check를 실행한다. AGENTS.md, README.md, docs/CURRENT_BASELINE_V2.md도 최신 Notion 결과와 일치시킨다.
+- Project200 커밋/푸시는 사용자의 명시 지시가 있을 때만 수행한다. 이번 2026-11-23 지시에서 Project200 push가 명시 승인됐다. stage는 이번 작업의 정확한 파일만 지정하고 기존 Graphify 수정·untracked·nested worktree·사용자 자료는 보존한다.
+- Live/REAL_VTS/실계좌·주문 API, 실제 주문/취소/청산, collector 재시작/신규 수집, Raw/Canonical/accepted data/manifest 덮어쓰기 금지는 별도 명시 승인 전까지 유지한다.
