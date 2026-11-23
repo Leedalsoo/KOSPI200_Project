@@ -105,3 +105,9 @@ Expected edge and realized P&L must remain separate. Do not use portfolio-wide P
 ## 8. Re-approval before real investment
 
 Before any production activation, independently confirm: actual tradable cash proxy/product and short-sale availability; authoritative identity and multiplier; beta/hedge ratio; synchronized quotes and liquidity; fees, taxes, borrow/financing and slippage; margin and account-level stress loss; execution sequencing/partial-fill repair; session/expiry/roll; and all thresholds against out-of-sample and walk-forward evidence. The user will review and revise these items again before real investment.
+
+## Virtual Runtime capability boundary
+
+- Read-only source trace: the existing Virtual multi-leg bridge, VSSF command-context provider, and canonical order transport accept only FUTURES and OPTION asset types. They do not currently support an equity/ETF cash-basket leg.
+- Do not mislabel the synthetic cash proxy as a Futures contract to force routing. The current 37-test batch validates the isolated synthetic two-leg economics plus existing S3 source/profile/fail-closed contracts; it is not a full two-asset Virtual Runtime execution.
+- Adding a synthetic equity/cash-basket asset to Virtual OMS/Router/VSSF is a separate architecture/contract task. No such runtime change was made.
