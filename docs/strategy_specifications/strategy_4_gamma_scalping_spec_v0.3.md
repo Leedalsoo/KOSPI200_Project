@@ -375,3 +375,14 @@ Focused S4 Runtime identity + spec alignment + attribution + Greek decomposition
 - Focused S4 suite: 31 passed. compileall PASS. Ruff F821 for changed runtime module and Ruff F821/F401 for new test PASS. git diff --check PASS. Existing unrelated F401 findings in the runtime module (math.exp and CanonicalOptionExpiryError) were pre-existing and not modified.
 - Default bootstrap still does not supply a KIS realtime Greeks source; actual WebSocket → source.accept_frame → StandardRuntimeInputProvider path remains unverified/unwired. Option Master composition is already authoritative; do not add a duplicate seam. premium/gamma/theta attribution, Greek unit/period metadata, owned option lot linkage and end-to-end S4 remain OPEN.
 - S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. All test inputs are SYNTHETIC validation-only and do not establish KIS/Live acceptance.
+
+
+## No.1786 — S4 synthetic H0IOCNT0 source → Virtual Runtime input 검증 (2026-11-23)
+
+- 최신 Notion No.1785, Current Baseline v2, No.1546 A8 진행표 및 기존 No.838/918/969 source 결정과 로컬 코드를 대조한다. 충돌 시 최신 No.1785/Current Baseline을 우선하며, No.969의 실제 Raw/Canonical replay 증거는 당시 검증 범위로 보존한다.
+- KISTrack4GreeksRealtimeSource.accept_frame() → KISIndexOptionGreeksWebSocketAdapter → dynamic provider facade → VirtualRuntimeDataProvider 경로를 synthetic H0IOCNT0 frame으로 검증했다. 종목 ID, caller-supplied event timestamp, delta/gamma/theta/IV 투영 및 동일 Runtime provider facade의 snapshot 갱신을 확인했다.
+- 신규 테스트 tests/application/test_track4_greeks_realtime_source_runtime.py 2개 추가. 기존 No.1785 Greeks identity/time 회귀 및 S4 focused suite와 함께 33 passed. compileall, scoped Ruff F821/F401, git diff --check PASS.
+- 이번 검증의 timestamp는 accept_frame(..., observed_at=...) 호출자가 제공한 값이다. 현재 source는 H0IOCNT0 payload의 BSOP_HOUR를 직접 해석하거나 received_at을 별도 보존하지 않는다. frame 날짜·timezone·source-time/receive-time reconciliation, stale/reordered/duplicate policy, multi-record frame의 per-instrument provider lifecycle은 미확정이므로 합성 PASS 범위에 포함하지 않는다.
+- create_virtual_run_session()의 선택적 source injection은 존재하지만 기본 application/bootstrap.py의 두 session 생성 경로는 source를 전달하지 않는다. Production bootstrap wiring은 추가 lifecycle 계약 및 검증 전까지 변경하지 않는다.
+- 실제 KIS 구독·인증·collector/API 호출, Raw/Canonical/accepted data 변경, 주문·취소·청산, Production/Live 활성화는 수행하지 않았다.
+- 코드 변경은 validation-only 테스트 1개뿐이다. Runtime/전략/주문 의미는 변경하지 않았다. S4는 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED 유지.
