@@ -1028,3 +1028,8 @@
 ### S3 추가 합성 검증 경계 (No.1766, 2026-11-23)
 - S3 validation-only 하니스는 beta drift/hedge quantity, rounding residual, cash-proxy tracking error, asymmetric partial fill, duplicate entry guard, restart observation-only, actual-filled-quantity close 및 over-close rejection을 검증한다.
 - 이 규칙은 테스트 전용이다. 실제 Runtime/OMS 라우팅, broker partial-fill repair, durable restart persistence, atomic group routing 또는 Production policy를 구현·승인하지 않는다.
+### S4 source-reuse alternative validation (No.1767, 2026-11-23)
+- Project200 root lacked `data/accepted_market_data/runtime_v2`; do not immediately classify the dependent bridge/U19 tests as blocked.
+- Compared the accepted source in Q25_A8_P2, Q25_A8_R7 and Q25_T4_S4_Runtime_20261120. `manifest.json` SHA-256 matched `7657c90f13a81a7f98a8ccd075a259c8ec9795477a2a0541366094cd87e0360f`; `20261012.jsonl` SHA-256 matched `c360b12e4c55551542490e73693ca59d42c3eb3135496d310cee7ee9fead62b5`; registry SHA matched `9e31f8a63b8df515b2c491934617e88f4c3d7f72f6feda545054ae498c3768f6`.
+- Copied only the two required accepted-source anchor files into an isolated temporary test directory and ran the Project200 tests with Project200 code on `sys.path`. Project200 `data/` and accepted source were not changed.
+- S4 identity/configured hedge-cap/spec/profile plus shared bridge/VSSF/U19 cross-validation: 19 passed. compileall and git diff --check PASS. This is a focused regression, not full S4 fault-matrix or integrated T4 acceptance.

@@ -1023,3 +1023,9 @@
 - validation-only 하니스에 beta drift/hedge quantity, rounding residual, cash proxy tracking error, asymmetric partial fill, pending/active duplicate-entry guard, restart observation-only/no-blind-retry, actual-filled-quantity close 및 over-close rejection 테스트를 추가했다.
 - Project200 focused batch: 46 passed (S3 합성 하니스 31 + 기존 S3 source/profile/fail-closed 15). compileall 및 git diff --check PASS.
 - 검증 전용 helper/fixture이며 Virtual OMS/Router 실행, broker repair, durable restart persistence, atomic group routing, Production/Live acceptance를 증명하지 않는다.
+## 2026-11-23 S4 synthetic/Virtual focused 재검증 (No.1767)
+- Project200에 `data/accepted_market_data/runtime_v2` 경로가 없어 최초 실행에서 shared bridge/U19 테스트 2건이 source path assertion으로 실패했다. 즉시 BLOCKED로 판정하지 않고 No.1534/1535 reuse-first 기준에 따라 Q25_A8_P2, Q25_A8_R7, Q25_T4 source를 교차 대조했다.
+- 세 source의 `manifest.json` SHA-256은 `7657c90f13a81a7f98a8ccd075a259c8ec9795477a2a0541366094cd87e0360f`, `20261012.jsonl` SHA-256은 `c360b12e4c55551542490e73693ca59d42c3eb3135496d310cee7ee9fead62b5`로 일치했다. registry SHA-256은 `9e31f8a63b8df515b2c491934617e88f4c3d7f72f6feda545054ae498c3768f6`로 확인했다.
+- 필요한 manifest/partition 2개만 별도 temporary test directory에 복사하고 Project200 코드로 테스트를 실행했다. Project200 data/accepted_market_data는 생성·변경하지 않았다.
+- S4 MINI identity/configured hedge cap/spec/profile 및 shared bridge/VSSF/U19 cross-validation: 19 passed (1.48s). compileall 및 git diff --check PASS.
+- 판정 범위는 focused regression이다. S4 전체 partial/cancel/late-fill/U19/U16 fault matrix, natural-signal integrated E2E, Full T4 acceptance는 완료로 승격하지 않는다.
