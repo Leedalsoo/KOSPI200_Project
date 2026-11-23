@@ -1081,3 +1081,6 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 ### S4 validation update (2026-11-23)
 - When the Project200 root did not contain the accepted runtime-v2 path, reused the existing P2/R7/T4 source only after verifying manifest/partition/registry SHA-256. Only manifest.json and 20261012.jsonl were copied into a temporary test fixture; Project200 data was untouched.
 - Project200 S4 identity/hedge-cap/spec/profile and shared bridge/VSSF/U19 focused batch: 19 passed; compileall and diff-check PASS. Not full S4 fault-matrix acceptance.
+### S4 U16 restart boundary (2026-11-23)
+- Validation-only S4 MINI group U16 retry-state test covers SQLite restore after matching U19 broker/ledger evidence, mismatch denial, and no blind retry before terminal/reconciled proof.
+- Actual S4 VirtualBridge U16 repair wiring and Track4State durable snapshot/restore remain OPEN; current U16 bridge adapter is Track2-scoped.

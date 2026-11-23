@@ -220,3 +220,13 @@ No questions are asked in this work. The following are recorded as user-confirma
 - v0.2 is retained unchanged as historical evidence, not current implementation authorization.
 - No Decision Log status was changed. Any future No. entry must label this as a proposal, not confirmation.
 - This task makes no code/test/Git/Live changes.
+## 2026-11-23 U16 recovery validation follow-up (No.1768)
+
+A validation-only test uses an S4 MINI synthetic group/leg identity with the existing U16 coordinator and SQLite state store:
+
+- A cancelled original hedge order with 2/5 filled creates a validation repair intent for the missing quantity 3.
+- After restart, the actual U19 recovery coordinator is run against matching synthetic broker-position and execution-ledger snapshots. Only `RESTORE_ALLOWED` authorizes U16 state restoration; `new_entry_enabled` and `order_submission_enabled` remain false.
+- Before the previous repair is terminal and position-reconciled, the restarted U16 coordinator waits and does not invoke the repair callback. After explicit terminal/reconciled evidence, the next retry slot may request only the missing quantity 3.
+- A broker/ledger position mismatch denies U16 restore.
+
+**Scope limitation:** this is a pure validation-coordinator/state-store harness with test callbacks, not a routed S4 Runtime repair. `ValidationOnlyU16VirtualBridgePorts` currently scopes its authoritative entry-plan provider to `track2_asymmetric_trap`, and `Track4State` remains in-memory without an S4 snapshot/restore contract. S4-specific U16-to-VirtualBridge wiring and durable strategy-state rehydration remain OPEN. No Production code or policy is changed by this evidence.

@@ -1029,3 +1029,8 @@
 - 필요한 manifest/partition 2개만 별도 temporary test directory에 복사하고 Project200 코드로 테스트를 실행했다. Project200 data/accepted_market_data는 생성·변경하지 않았다.
 - S4 MINI identity/configured hedge cap/spec/profile 및 shared bridge/VSSF/U19 cross-validation: 19 passed (1.48s). compileall 및 git diff --check PASS.
 - 판정 범위는 focused regression이다. S4 전체 partial/cancel/late-fill/U19/U16 fault matrix, natural-signal integrated E2E, Full T4 acceptance는 완료로 승격하지 않는다.
+## 2026-11-23 S4 U16 recovery validation boundary (No.1768)
+- Added two validation-only S4 MINI group U16 restart tests. A 2/5 filled cancelled hedge produces missing quantity 3; matching U19 broker/ledger evidence authorizes SQLite U16 state restore, restart waits without blind retry, and explicit terminal+reconciled evidence enables the next 3-unit repair intent. Broker/ledger mismatch denies restore.
+- Combined S4/U16 focused batch: 82 passed in 1.81s (S4/bridge/profile 19 + S4 U16 harness 2 + existing generic U16 coordinator/lifecycle 61). compileall and git diff --check PASS.
+- Scope: pure validation-coordinator test callbacks, not S4 VirtualBridge routed repair. `ValidationOnlyU16VirtualBridgePorts` remains scoped to `track2_asymmetric_trap`; `Track4State` has no durable snapshot/restore contract. S4-specific U16 bridge wiring and strategy-state rehydration remain OPEN.
+- No Production Runtime/OMS/Router/U16 adapter code, policy, Raw/Canonical/accepted data, manifest, or Live/API behavior changed.
