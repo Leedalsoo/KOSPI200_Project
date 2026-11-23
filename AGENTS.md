@@ -925,3 +925,11 @@
 - Manifest explicitly sets runtime_eligible=false, identity_source_status=BLOCKED_IDENTITY_OWNER_UNRESOLVED, identity_policy.runtime_use=PROHIBITED, validation_only_use=SYNTHETIC_SCENARIO_ONLY. execution/order/live/REAL_VTS flags remain false.
 - Updated U18 stop-close and U19 restart E2E tests to use the new sidecar and include event 87. U18 stop ratio -0.40 and U21 max quote age 5 seconds were not changed or bypassed. Both E2E tests: 3 passed. S2 batch A 173 passed; batch B 289 passed.
 - No Production Runtime change, no actual KIS quote substitution, no Raw/Canonical/accepted source mutation, no collector/API/broker operation. Original sidecar preserved. New sidecar remains a separate derived validation artifact.
+
+## 2026-11-23 shared StrategyHub Runtime cross-strategy regression
+
+- Ran tests/application/composition/test_q25_a8_r9_strategyhub_shared_runtime_e2e.py: 13 passed in 6.33s. The fixture verified its existing P5 derived dataset and declared Option Master anchor hash before replay.
+- The test parameterizes STANDARD_STRATEGY_KEYS and routes each case through the shared Virtual Runtime. Its _ScenarioLifecycleStrategy is a test-only signal driver; this proves shared StrategyHub/RiskGate/OMS/Router/VSSF lifecycle wiring, not natural signal generation or each strategy's economic policy.
+- It does not certify shared-capital allocation, real order conflict behavior, full natural-signal S1-S9 E2E, or Production/Live. No Production code, source data, Raw/Canonical, accepted manifest, or strategy policy changed.
+- compileall for the test module and git diff --check PASS. T4 branch/origin remain 026f96439584fcfa0a8a3b69a898ba0ba6507939; Project200 local/origin remain b955a02b4ceaaf7fcab1ea6de4d8862637225868 and unchanged. Existing Graphify changes preserved.
+- Full T4 integrated acceptance remains OPEN. S3 economic spread legs and S5 D2-D8 remain unapproved; Live actual execution receive-loop verification remains deferred until real-investment readiness.
