@@ -1034,3 +1034,10 @@
 - Combined S4/U16 focused batch: 82 passed in 1.81s (S4/bridge/profile 19 + S4 U16 harness 2 + existing generic U16 coordinator/lifecycle 61). compileall and git diff --check PASS.
 - Scope: pure validation-coordinator test callbacks, not S4 VirtualBridge routed repair. `ValidationOnlyU16VirtualBridgePorts` remains scoped to `track2_asymmetric_trap`; `Track4State` has no durable snapshot/restore contract. S4-specific U16 bridge wiring and strategy-state rehydration remain OPEN.
 - No Production Runtime/OMS/Router/U16 adapter code, policy, Raw/Canonical/accepted data, manifest, or Live/API behavior changed.
+## 2026-11-23 S4 MINI freshness fault slice (No.1769)
+- 최신 No.1665/1666/1674/1675/1767/1768와 Project200 실제 테스트를 대조한 뒤, F04/F27의 미검증 freshness/provenance admission 조합을 보완했다.
+- 신규 S4 MINI Virtual bridge validation cases 5개: STALE, UNKNOWN, CAPABILITY_CONFLICT, FRESH-but-command-symbol mismatch, missing freshness verdict. 모두 VSSF order command 이전 REJECTED, PositionLot/account position 변화 없음.
+- SHA-verified temporary accepted-source fixture를 재사용했다. Manifest SHA `7657c90f13a81a7f98a8ccd075a259c8ec9795477a2a0541366094cd87e0360f`; 20261012 partition SHA `c360b12e4c55551542490e73693ca59d42c3eb3135496d310cee7ee9fead62b5`. Project200 원본 accepted data는 수정하지 않았다.
+- S4 MINI identity/runtime/late-fill/U19 + freshness + U16 + profile/bridge/generic U16 batch: 87 passed in 1.96s. compileall/diff-check PASS.
+- 범위는 F04/F27 freshness/provenance admission focused slice다. Full F01-F29/G01-G12 matrix, U16 VirtualBridge routing, Track4State durable snapshot/restore, Full T4 acceptance는 OPEN. S4 spec remains DRAFT/UNVERIFIED/UNAPPROVED/DISABLED.
+- Validation test only; Production Runtime, OMS/Router, policy, Raw/Canonical/accepted data/manifest, Live/API behavior unchanged.

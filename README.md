@@ -1084,3 +1084,6 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 ### S4 U16 restart boundary (2026-11-23)
 - Validation-only S4 MINI group U16 retry-state test covers SQLite restore after matching U19 broker/ledger evidence, mismatch denial, and no blind retry before terminal/reconciled proof.
 - Actual S4 VirtualBridge U16 repair wiring and Track4State durable snapshot/restore remain OPEN; current U16 bridge adapter is Track2-scoped.
+### S4 MINI freshness admission fault slice (2026-11-23)
+- Added five S4 MINI Virtual bridge freshness fault cases: stale, unknown, capability conflict, command identity mismatch, and missing verdict. All reject before VSSF submission and leave position state unchanged.
+- Combined S4/U16 focused batch: 87 passed. Full S4 fault matrix and U16 VirtualBridge/durable Track4State integration remain open.

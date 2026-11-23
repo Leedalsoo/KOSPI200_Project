@@ -230,3 +230,8 @@ A validation-only test uses an S4 MINI synthetic group/leg identity with the exi
 - A broker/ledger position mismatch denies U16 restore.
 
 **Scope limitation:** this is a pure validation-coordinator/state-store harness with test callbacks, not a routed S4 Runtime repair. `ValidationOnlyU16VirtualBridgePorts` currently scopes its authoritative entry-plan provider to `track2_asymmetric_trap`, and `Track4State` remains in-memory without an S4 snapshot/restore contract. S4-specific U16-to-VirtualBridge wiring and durable strategy-state rehydration remain OPEN. No Production code or policy is changed by this evidence.
+## 2026-11-23 validation update — MINI Futures freshness fault slice (No.1769)
+
+A validation-only S4 MINI Futures bridge test now injects five pre-route freshness faults: STALE, UNKNOWN, CAPABILITY_CONFLICT, FRESH with mismatched command symbol, and missing verdict. Every case must return REJECTED before VSSF order-command submission; no PositionLot or account position may be created. The test uses synthetic S4 identity and derived evidence only.
+
+This closes the focused test slice for F04/F27 freshness/provenance admission. It does not close the broader F04/F27 strategy-input, active-position risk, or full F01-F29/G01-G12 matrix. Existing S4 partial-fill/cancel/late-fill/U19 restart and No.1768 U16 coordinator harness results remain separate evidence. U16 VirtualBridge routing and Track4State durable strategy snapshot/restore remain OPEN. Strategy specification status remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.

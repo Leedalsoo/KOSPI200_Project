@@ -1036,3 +1036,7 @@
 ### S4 U16 restart validation boundary (No.1768, 2026-11-23)
 - Added a pure validation-only test for an S4 MINI synthetic group/leg using the existing U16 coordinator/SQLite store and actual U19 recovery decision. Matching broker/ledger evidence permits U16 state restore; mismatch denies it; no blind retry occurs before prior repair terminal+reconciled evidence.
 - This does not prove S4 VirtualBridge routing. The current U16 VirtualBridge adapter is scoped to `track2_asymmetric_trap`, while `Track4State` has no durable snapshot/restore contract. Keep S4 U16-to-bridge wiring and strategy-state rehydration OPEN; do not modify Production to force compatibility.
+### S4 MINI freshness fault validation (No.1769, 2026-11-23)
+- Added validation-only S4 MINI Futures bridge cases for STALE, UNKNOWN, CAPABILITY_CONFLICT, FRESH-but-command-symbol-mismatch, and missing freshness verdict.
+- All five cases must be rejected before VSSF order-command submission and leave PositionLot/account position unchanged. This is a focused F04/F27 freshness/provenance admission slice only; it does not complete the full F01-F29/G01-G12 matrix or authorize S4.
+- Combined S4/U16 focused regression: 87 passed; compileall and diff-check PASS. Synthetic validation only; no Production runtime or market data source changed.
