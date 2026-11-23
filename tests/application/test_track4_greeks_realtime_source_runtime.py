@@ -1,10 +1,11 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal
 
 from application.composition.virtual_runtime_data_provider import VirtualRuntimeDataProvider
 from environments.virtual.market.canonical import ReferenceCanonicalMarketTick
+from contracts.track4_kis_greeks_ws_adapter import KISIndexOptionGreeksWebSocketAdapter
 from infrastructure.kis.track4_kis_greeks_source import KISTrack4GreeksRealtimeSource
 
 
@@ -108,3 +109,56 @@ def test_synthetic_source_refresh_is_visible_to_existing_runtime_provider_facade
 
     assert after.option_delta == Decimal("0.33")
     assert after.option_gamma == Decimal("0.019")
+
+
+def test_realtime_source_uses_caller_timestamp_not_payload_bsop_hour() -> None:
+    received_at = datetime(2026, 11, 23, 10, 15, 2, tzinfo=timezone.utc)
+    payload_hour = "091501"
+    instrument_id = "SYNTHETIC_CONTRACT:TRACK4-CALL-350"
+    values = [""] * 58
+    values[0] = instrument_id
+    values[1] = payload_hour
+    values[28] = "0.31"
+    values[29] = "0.017"
+    values[31] = "-0.42"
+    values[33] = "24.5"
+    frame = "0|H0IOCNT0|1|" + "^".join(values)
+
+    provider = KISTrack4GreeksRealtimeSource().accept_frame(
+        frame,
+        observed_at=received_at,
+    )
+
+    assert provider is not None
+    assert provider.snapshot.observed_at == received_at.isoformat()
+    assert provider.snapshot.observed_at != "2026-11-23T09:15:01+09:00"
+
+
+def test_greeks_adapter_can_decode_each_synthetic_record_but_source_facade_is_single_provider() -> None:
+    first = [""] * 58
+    second = [""] * 58
+    first[0] = "SYNTHETIC_CONTRACT:TRACK4-CALL-350"
+    second[0] = "SYNTHETIC_CONTRACT:TRACK4-PUT-350"
+    for values in (first, second):
+        values[1] = "091501"
+        values[28] = "0.31"
+        values[29] = "0.017"
+        values[31] = "-0.42"
+        values[33] = "24.5"
+    frame = "0|H0IOCNT0|2|" + "^".join(first + second)
+    observed_at = datetime(2026, 11, 23, 10, 15, tzinfo=timezone.utc)
+
+    decoded = KISIndexOptionGreeksWebSocketAdapter().adapt_many(
+        frame,
+        observed_at=observed_at.isoformat(),
+    )
+    source = KISTrack4GreeksRealtimeSource()
+    current = source.accept_frame(frame, observed_at=observed_at)
+
+    assert [item.snapshot.instrument_id for item in decoded] == [
+        "SYNTHETIC_CONTRACT:TRACK4-CALL-350",
+        "SYNTHETIC_CONTRACT:TRACK4-PUT-350",
+    ]
+    assert current is not None
+    assert current.snapshot.instrument_id == "SYNTHETIC_CONTRACT:TRACK4-CALL-350"
+    assert source.snapshot.instrument_id != "SYNTHETIC_CONTRACT:TRACK4-PUT-350"
