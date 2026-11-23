@@ -427,3 +427,72 @@ def test_synthetic_websocket_subscribe_send_returns_without_ack_correlation() ->
     assert message['body']['input']['tr_id'] == 'H0IOCNT0'
     assert message['body']['input']['tr_key'] == 'SYNTHETIC-CONTRACT-ACK'
     assert not hasattr(transport, 'wait_for_subscription_ack')
+
+def test_synthetic_subscription_ack_json_is_not_accepted_as_market_data_frame(tmp_path) -> None:
+    import asyncio
+    from infrastructure.kis.kis_realtime_collector import KISRealtimeCollector
+    from infrastructure.kis.realtime_raw_store import KISRealtimeRawStore
+
+    class Transport:
+        async def connect(self):
+            return None
+        async def subscribe(self, tr_id, symbol):
+            return None
+        async def recv(self):
+            return '{"header":{"tr_id":"H0IOCNT0"},"body":{"msg_cd":"SUBSCRIBE_OK","msg1":"synthetic ack"}}'
+        async def close(self):
+            return None
+
+    store = KISRealtimeRawStore(tmp_path / 'ack.jsonl')
+    collector = KISRealtimeCollector(Transport(), store)
+    asyncio.run(collector.start('20261123', [('H0IOCNT0', 'SYNTHETIC-CONTRACT-ACK')]))
+
+    try:
+        asyncio.run(collector.capture_one())
+    except ValueError as exc:
+        assert str(exc) == 'RAW_FRAME_TR_ID_REQUIRED'
+    else:
+        raise AssertionError('JSON subscription ACK must not be treated as an H0IOCNT0 market frame')
+    assert store.count() == 0
+
+
+def test_synthetic_session_rollover_stale_greeks_are_excluded_by_runtime_identity_and_time() -> None:
+    old_at = datetime(2026, 11, 23, 6, 0, tzinfo=timezone.utc)
+    new_session_at = datetime(2026, 11, 24, 0, 0, tzinfo=timezone.utc)
+    old_id = 'SYNTHETIC_CONTRACT:TRACK4-CALL-350-20261210'
+    new_id = 'SYNTHETIC_CONTRACT:TRACK4-CALL-350-20261217'
+    source = KISTrack4GreeksRealtimeSource()
+    source.accept_frame(_synthetic_h0iocnt0_frame(old_id), observed_at=old_at)
+
+    same_contract_market = type('Market', (), {
+        'recent_ticks': [_tick(old_id, new_session_at)],
+        'underlying_history': [],
+        'scenario': _Scenario(),
+    })()
+    same_contract = VirtualRuntimeDataProvider(
+        same_contract_market, track4_greeks_provider=source,
+    ).snapshot(same_contract_market.recent_ticks[0])
+
+    next_expiry_market = type('Market', (), {
+        'recent_ticks': [_tick(new_id, old_at)],
+        'underlying_history': [],
+        'scenario': _Scenario(),
+    })()
+    next_expiry = VirtualRuntimeDataProvider(
+        next_expiry_market, track4_greeks_provider=source,
+    ).snapshot(next_expiry_market.recent_ticks[0])
+
+    assert same_contract.option_delta is None
+    assert same_contract.option_gamma is None
+    assert next_expiry.option_delta is None
+    assert next_expiry.option_gamma is None
+    replay_market = type('Market', (), {
+        'recent_ticks': [_tick(old_id, old_at)],
+        'underlying_history': [],
+        'scenario': _Scenario(),
+    })()
+    exact_replay = VirtualRuntimeDataProvider(
+        replay_market, track4_greeks_provider=source,
+    ).snapshot(replay_market.recent_ticks[0])
+    assert exact_replay.option_delta == Decimal('0.31')
+    assert exact_replay.option_gamma == Decimal('0.017')

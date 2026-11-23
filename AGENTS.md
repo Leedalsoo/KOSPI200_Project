@@ -1213,3 +1213,10 @@
 - Combined S4 + Canonical focused regression: 55 passed. `compileall`, scoped Ruff F821/F401, and `git diff --check` PASS.
 - No Production code changed. Only test characterization and documentation updated. Raw/Canonical/accepted sources/manifests untouched; no collector restart/new collection.
 - Remaining OPEN: ACK response schema/correlation and acceptance criteria; safe old socket close + unsubscribe ACK ordering; reconnect duplicate-subscription semantics; source/session lifecycle owner; expiry rollover; receive-time/event-time authority. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+## 2026-11-23 No.1792 — ACK frame classification and stale Greeks session gate (synthetic only)
+
+- JSON subscription ACK-shaped response (`header.tr_id=H0IOCNT0`, `body.msg_cd=SUBSCRIBE_OK`) returned by synthetic transport is not recognized by `KISRealtimeCollector.capture_one()` as a market frame. It raises `RAW_FRAME_TR_ID_REQUIRED` and appends no Raw record. No ACK classifier/side-channel exists in this collector path. No change made because accepted ACK schema/retention contract is not approved.
+- VirtualRuntimeDataProvider excludes a held Greeks snapshot when tick instrument identity differs or exact observed_at differs. Synthetic next-session timestamp and next-expiry instrument both produced no Greeks.
+- Boundary limitation: if a replayed tick carries the exact same old instrument_id and exact old observed_at as the held Greeks snapshot, Runtime accepts the old Greeks. Current gate is exact identity/time equality, not a session-aware freshness or replay-prevention policy.
+- Added two synthetic tests for JSON ACK classification boundary and session/expiry identity-time behavior (including exact old replay). No API, live connection, collector process, Raw input, or Production changes.
+- OPEN: approved ACK envelope/status codes and ACK-vs-market-data routing; session token/sequence/monotonic receive-time freshness and replay prevention; authoritative event-time vs receive-time; source reset/owner. Do not implement session invalidation or ACK parsing without approved contracts.
