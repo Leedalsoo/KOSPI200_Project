@@ -1089,3 +1089,6 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - Combined S4/U16 focused batch: 87 passed. Full S4 fault matrix and U16 VirtualBridge/durable Track4State integration remain open.
 ### S4 MINI margin preflight boundary (2026-11-23)
 - A synthetic zero-free-margin S4 MINI case confirms bridge risk preflight rejects before VSSF order submission and leaves positions unchanged. It is a focused F12/F14 validation case, not real-account margin calibration or full risk acceptance.
+### S4 active-position and pending-order reconciliation (2026-11-23)
+- U19 validation distinguishes matching active position with a still-pending order (restore denied), broker/ledger signed-quantity mismatch (restore denied), and matching post-terminal broker/ledger positions (validation-only restore allowed, new entry/order submission still disabled).
+- Combined S4/U16 regression: 88 passed. Synthetic-only; full S4 fault matrix and durable Track4State recovery remain open.

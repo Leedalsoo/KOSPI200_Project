@@ -240,3 +240,13 @@ This closes the focused test slice for F04/F27 freshness/provenance admission. I
 A validation-only S4 MINI Futures bridge case now sets the synthetic VSSF account free-margin snapshot to zero while supplying a fresh, identity-matched synthetic freshness verdict. The bridge must return a margin-related REJECTED report before VSSF order-command submission, with zero routed/filled quantity and no PositionLot/account position mutation. This covers one focused F12/F14 account-margin admission fault; it does not establish authoritative live margin requirements, strategy max-loss, stress-loss, or the full risk-preflight matrix.
 
 S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. No production risk parameters or order behavior were changed.
+## 2026-11-23 S4 active-position / pending-order reconciliation slice (No.1771)
+
+Extended the existing S4 MINI 2/5 partial-fill → pending/cancel → late-fill scenario with U19 evidence-gated reconciliation:
+
+- While the residual quantity 3 order is pending, broker position and PositionLot-derived signed ledger both equal -2. U19 still returns `PENDING_ORDER_RECONCILIATION_REQUIRED`; restore, new entry and order submission remain disabled because a late fill is possible.
+- After terminal cancel removes the pending-order uncertainty, a synthetic broker quantity -2 versus ledger quantity -1 returns `POSITION_LEDGER_MISMATCH` and denies restore.
+- Matching broker/ledger signed quantity -2 returns `RESTORE_ALLOWED` only as a validation recovery decision; new entry and order submission remain disabled.
+- Existing late-fill reconciliation then adds the remaining quantity 3 and retains the exact-once execution/position/fee checks.
+
+This closes a focused S4 active-position/pending-order/U19 quantity reconciliation slice. It does not establish real broker truth, automatic Track4State restore, S4 U16 VirtualBridge routing, or full F01-F29/G01-G12 acceptance. No Production reconciliation implementation or policy was changed; all snapshots and identities are synthetic validation-only.

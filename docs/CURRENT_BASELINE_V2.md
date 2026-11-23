@@ -1046,3 +1046,10 @@
 - S4/U16 통합 focused regression 88 passed in 2.03s; compileall/diff-check PASS.
 - F12/F14 margin admission focused slice만 PASS. 실계좌 margin·max-loss·stress-loss 기준 확정이나 전체 risk matrix 통과를 의미하지 않는다. S4 spec remains DRAFT/UNVERIFIED/UNAPPROVED/DISABLED.
 - Production Risk/OMS/Router/Runtime, policy, market source, accepted data 변경 없음.
+## 2026-11-23 S4 active-position / pending-order reconciliation (No.1771)
+- No.1770 최신 지시에 따라 F01-F29/G01-G12 중 active-position·pending/actual quantity reconciliation slice를 보완했다. No.1658 pending-order 경계와 No.1665/1666 S4 partial/cancel/late-fill/U19 결과를 재사용하고 중복 실행하지 않았다.
+- S4 MINI 2/5 partial-fill 후 residual 3 pending 상태에서 broker signed position=-2, PositionLot-derived ledger=-2가 일치해도 U19는 PENDING_ORDER_RECONCILIATION_REQUIRED. late fill 가능성 때문에 restore/new entry/order submission 모두 false.
+- terminal cancel 후 broker=-2, ledger=-1은 POSITION_LEDGER_MISMATCH / restore false. broker=-2, ledger=-2 일치는 validation-only RESTORE_ALLOWED; new entry/order submission false 유지. 이어지는 기존 late-fill 3개 exact-once PositionLot/Fee/VSSF 및 U19 restart replay assertions 통과.
+- SHA-verified temporary accepted-source fixture: manifest `7657c90f13a81a7f98a8ccd075a259c8ec9795477a2a0541366094cd87e0360f`; 20261012 partition `c360b12e4c55551542490e73693ca59d42c3eb3135496d310cee7ee9fead62b5`. Project200 원본 accepted data 변경 없음.
+- Combined S4/U16 focused batch: 88 passed in 2.05s; compileall/diff-check PASS.
+- 범위는 U19 validation decision과 S4 synthetic active position/pending-order evidence다. 실제 broker truth, automatic Track4State restore, S4 U16 VirtualBridge routing, full F01-F29/G01-G12 matrix 및 Full T4 acceptance는 OPEN. Production reconciliation code/policy 및 Raw/Canonical/accepted source/manifest 변경 없음.

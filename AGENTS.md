@@ -1043,3 +1043,7 @@
 ### S4 MINI margin preflight validation (No.1770, 2026-11-23)
 - Added a validation-only S4 MINI bridge test with zero synthetic VSSF free margin and fresh identity-matched synthetic quote evidence. Margin denial must occur before VSSF submission; no routed/fill quantity, PositionLot, or account position is created.
 - This is one focused F12/F14 margin-admission case only. It does not approve real margin values, max-loss/stress-loss policy, or complete the S4 risk matrix. No Production risk or order code changed.
+### S4 active-position / pending-order reconciliation (No.1771, 2026-11-23)
+- S4 MINI partial-fill scenario now checks U19 while residual quantity remains pending: broker and PositionLot ledger both -2 still produce `PENDING_ORDER_RECONCILIATION_REQUIRED`; no restore/new entry/order submission.
+- After terminal cancel, broker -2 vs ledger -1 produces `POSITION_LEDGER_MISMATCH` (restore denied); matching -2/-2 permits validation-only `RESTORE_ALLOWED`, with new entry/order submission still disabled. Existing late-fill exact-once checks remain.
+- Combined S4/U16 focused regression: 88 passed. compileall/diff-check PASS. Synthetic only; no Production reconciliation code or policy changed. Full S4 matrix, Track4State durable restore and S4 U16 VirtualBridge routing remain OPEN.

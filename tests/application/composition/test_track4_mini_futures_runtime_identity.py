@@ -332,6 +332,61 @@ def test_track4_mini_partial_fill_cancel_late_fill_u19_restart_reconciles_exactl
     assert initial.reports[0].remaining_quantity == 3
     client_order_id = initial.reports[0].client_order_id
     pending_group_plan, pending_leg, broker_command = bridge.pending_legs[client_order_id]
+    # Reconcile the active partial-fill position while the residual order is pending.
+    from application.composition.track2_u19_recovery import ValidationOnlyTrack2U19RecoveryCoordinator
+    from core.oms.track2_u19_recovery import (
+        U19BrokerPositionSnapshot, U19ExecutionLedgerSnapshot, U19Position,
+        U19RecoveryStatus,
+    )
+    from environments.virtual.position.track2_u19_recovery_store import SqliteTrack2U19RecoveryStore
+
+    recovery = ValidationOnlyTrack2U19RecoveryCoordinator(
+        SqliteTrack2U19RecoveryStore(tmp_path / "s4-mini-active-position-u19.sqlite3")
+    )
+    as_of = datetime.fromisoformat(tick.timestamp).replace(tzinfo=timezone(timedelta(hours=9)))
+    account_position = vssf.account.positions[identity.instrument_id]
+    account_signed = Decimal(str(account_position["qty"])) * (
+        Decimal("1") if str(account_position["side"]).upper() == "BUY" else Decimal("-1")
+    )
+    open_lots = bridge.position_lot_store.open_lots()
+    ledger_signed = sum((
+        Decimal(lot.remaining_quantity) * (
+            Decimal("1") if str(lot.side).upper() == "BUY" else Decimal("-1")
+        ) for lot in open_lots if lot.instrument_id == identity.instrument_id
+    ), Decimal("0"))
+    assert account_signed == ledger_signed == Decimal("-2")
+
+    def recovery_snapshots(*, broker_quantity, ledger_quantity, pending_ids, suffix):
+        broker_positions = (U19Position(identity.instrument_id, broker_quantity),)
+        ledger_positions = (U19Position(identity.instrument_id, ledger_quantity),)
+        broker_payload = f"S4|{suffix}|BROKER|{broker_quantity}|{as_of.isoformat()}".encode()
+        ledger_payload = f"S4|{suffix}|LEDGER|{ledger_quantity}|{pending_ids}|{as_of.isoformat()}".encode()
+        return (
+            U19BrokerPositionSnapshot(
+                group_id=plan.group_id, snapshot_id=f"S4-{suffix}-BROKER", as_of=as_of,
+                source="VALIDATION_ONLY:BROKER_EXCHANGE", positions=broker_positions,
+                complete=True, capability_verified=True,
+                payload_sha256=sha256(broker_payload).hexdigest(),
+            ),
+            U19ExecutionLedgerSnapshot(
+                group_id=plan.group_id, snapshot_id=f"S4-{suffix}-LEDGER", as_of=as_of,
+                source="VALIDATION_ONLY:EXECUTION_LEDGER", positions=ledger_positions,
+                complete=True, payload_sha256=sha256(ledger_payload).hexdigest(),
+                pending_order_ids=tuple(pending_ids),
+            ),
+        )
+
+    pending_broker, pending_ledger = recovery_snapshots(
+        broker_quantity=Decimal("-2"), ledger_quantity=Decimal("-2"),
+        pending_ids=(client_order_id,), suffix="PENDING",
+    )
+    pending_decision = recovery.recover(
+        group_id=plan.group_id, broker_snapshot=pending_broker, ledger_snapshot=pending_ledger,
+    )
+    assert pending_decision.status is U19RecoveryStatus.PENDING_ORDER_RECONCILIATION_REQUIRED
+    assert pending_decision.restore_allowed is False
+    assert pending_decision.new_entry_enabled is False
+    assert pending_decision.order_submission_enabled is False
 
     cancelled = bridge.cancel_pending_order(client_order_id, reason="S4_VALIDATION_CANCEL")
     assert cancelled.reports[0].status == "CANCELLED"
@@ -339,6 +394,29 @@ def test_track4_mini_partial_fill_cancel_late_fill_u19_restart_reconciles_exactl
     assert cancelled.reports[0].remaining_quantity == 3
     assert bridge.position_lot_store.open_lots()
     assert sum(lot.remaining_quantity for lot in bridge.position_lot_store.open_lots()) == 2
+    # Terminal cancel removes pending-order uncertainty; a broker/ledger
+    # quantity conflict remains a distinct, non-restorable reconciliation result.
+    conflict_broker, conflict_ledger = recovery_snapshots(
+        broker_quantity=Decimal("-2"), ledger_quantity=Decimal("-1"),
+        pending_ids=(), suffix="POSITION-CONFLICT",
+    )
+    conflict = recovery.recover(
+        group_id=plan.group_id, broker_snapshot=conflict_broker, ledger_snapshot=conflict_ledger,
+    )
+    assert conflict.status is U19RecoveryStatus.POSITION_LEDGER_MISMATCH
+    assert conflict.restore_allowed is False
+
+    matched_broker, matched_ledger = recovery_snapshots(
+        broker_quantity=Decimal("-2"), ledger_quantity=Decimal("-2"),
+        pending_ids=(), suffix="POSITION-MATCHED",
+    )
+    matched = recovery.recover(
+        group_id=plan.group_id, broker_snapshot=matched_broker, ledger_snapshot=matched_ledger,
+    )
+    assert matched.status is U19RecoveryStatus.RESTORE_ALLOWED
+    assert matched.positions == matched_broker.positions
+    assert matched.new_entry_enabled is False
+    assert matched.order_submission_enabled is False
 
     canonical_command = bridge.command_context.build_command(broker_command)
     original_execute(canonical_command, Decimal("1000"), vssf._now(), quantity=3)
