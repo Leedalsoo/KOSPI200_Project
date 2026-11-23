@@ -496,3 +496,41 @@ def test_synthetic_session_rollover_stale_greeks_are_excluded_by_runtime_identit
     ).snapshot(replay_market.recent_ticks[0])
     assert exact_replay.option_delta == Decimal('0.31')
     assert exact_replay.option_gamma == Decimal('0.017')
+
+def test_synthetic_json_control_frame_parse_error_bubbles_without_collector_reconnect(tmp_path) -> None:
+    import asyncio
+    from infrastructure.kis.kis_realtime_collector import KISRealtimeCollector
+    from infrastructure.kis.realtime_raw_store import KISRealtimeRawStore
+
+    class Transport:
+        def __init__(self):
+            self.connects = 0
+            self.closes = 0
+
+        async def connect(self):
+            self.connects += 1
+
+        async def subscribe(self, tr_id, symbol):
+            return None
+
+        async def recv(self):
+            return '{"header":{"tr_id":"H0IOCNT0"},"body":{"msg_cd":"SUBSCRIBE_OK"}}'
+
+        async def close(self):
+            self.closes += 1
+
+    transport = Transport()
+    store = KISRealtimeRawStore(tmp_path / 'control-frame.jsonl')
+    collector = KISRealtimeCollector(transport, store, max_reconnects=2)
+    asyncio.run(collector.start('20261123', [('H0IOCNT0', 'SYNTHETIC-CONTROL-FRAME')]))
+
+    try:
+        asyncio.run(collector.capture_one())
+    except ValueError as exc:
+        assert str(exc) == 'RAW_FRAME_TR_ID_REQUIRED'
+    else:
+        raise AssertionError('synthetic JSON control frame must remain outside market-frame parsing')
+
+    assert transport.connects == 1
+    assert transport.closes == 0
+    assert store.count() == 0

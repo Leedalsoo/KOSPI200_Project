@@ -1249,3 +1249,10 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - No ACK/PINGPONG schema or approved routing/retention policy exists in the inspected current Notion baseline. Do not add speculative ACK parser, skip rules, retry policy or Production semantics.
 - No new test or Production source changes. Existing synthetic tests continue to characterize ACK parse failure and no Raw append. No KIS API/network/collector restart/new collection or Raw/Canonical/manifest changes.
 - S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. Next: obtain/define approved control-frame and session ownership contract before implementation; until then continue only synthetic boundary characterization.
+## 2026-11-23 No.1794 - Track4 control-frame parse/reconnect boundary (synthetic only)
+
+- A synthetic JSON ACK-shaped payload is returned successfully by recv() and then fails KISRealtimeCollector.capture_one() market-frame parsing with RAW_FRAME_TR_ID_REQUIRED.
+- The failure occurs after the collector internal recv/reconnect loop; it bubbles to the caller without an internal reconnect. Synthetic assertions: connect count 1, close count 0, Raw count 0.
+- The weekday orchestration caller close/sleep/start handling remains static source-traced behavior from No.1793; no collector process or scheduler was executed.
+- No ACK/PINGPONG schema, routing/retention, retry, subscription deduplication, or session-owner policy was approved or inferred. No Production/API/Raw/Canonical/accepted-data changes. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+- Validation: S4 Track4 source/runtime + Canonical WebSocket focused regression 27 passed; compileall, scoped Ruff F821/F401, and git diff --check PASS. Broader Ruff scan of untouched weekday collector reports three pre-existing F401 imports; no cleanup was made.
