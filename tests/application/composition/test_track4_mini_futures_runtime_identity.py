@@ -929,3 +929,40 @@ def test_track4_close_plan_scopes_open_lots_to_one_group_and_aggregates_actual_q
             purpose="S4_VALIDATION_CLOSE_AMBIGUOUS_GROUPS",
             asset_type="FUTURES",
         )
+
+
+def test_track4_option_proposal_has_no_runtime_plan_resolver_route():
+    """Characterize the current S4 boundary: option-entry proposals are not routed."""
+    loop = _loop(("track4_gamma_scalping", "1.0"), "S4-SYNTHETIC-OPTION-ROUTE-BOUNDARY")
+    tick = SimpleNamespace(
+        underlying_symbol="SYNTHETIC_KOSPI200",
+        symbol="SYNTHETIC_KOSPI200",
+        instrument_id="SYNTHETIC_KOSPI200",
+        timestamp="2026-10-08T09:00:49+09:00",
+    )
+    proposal = StrategyExecutionProposal(
+        proposed_quantity=1,
+        asset_type="OPTION",
+        requested_price=Decimal("100"),
+        side="BUY",
+        track_id="track4_gamma_scalping",
+        tag_id="S4_SYNTHETIC_OPTION_ENTRY_PROBE",
+        option_type="CALL",
+        strike=Decimal("500"),
+    )
+    evaluation = SimpleNamespace(
+        context=SimpleNamespace(
+            strategy_id="track4_gamma_scalping",
+            market_state=SimpleNamespace(ticks={"synthetic": tick}),
+        ),
+        result=SimpleNamespace(execution_proposal=proposal),
+    )
+    canonical = SimpleNamespace(
+        side=SimpleNamespace(value="BUY"),
+        qty=1,
+        tag_id=proposal.tag_id,
+        track_id="track4_gamma_scalping",
+    )
+
+    assert loop.multi_leg_plan_resolver(evaluation, canonical) is None
+    assert loop.multi_leg_bridge.position_lot_store.open_lots() == ()

@@ -1151,3 +1151,8 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - The synthetic OPTION and linked MINI Futures fills must share exact run/strategy/group ownership while preserving distinct instrument identity and multiplier. Validate fee provenance, duplicate fill replay, and independent partial close by instrument.
 - Keep `SYNTHETIC:DERIVED_SCENARIO` explicit. Test multipliers and all prices/fees are fixture assumptions, not KIS/real-account/Production policy. Do not activate broker, KIS/REAL_VTS, Live, collectors, or mutate Raw/Canonical/accepted data/manifests.
 - S4 actual strategy-to-bridge dispatch, linked hedge sizing/atomicity, durable restart, authoritative Greeks/costs and full end-to-end attribution remain OPEN; S4 stays DRAFT/UNVERIFIED/UNAPPROVED/DISABLED.
+
+### S4 Runtime option-proposal route boundary (No.1783, 2026-11-23)
+- The current S4 Basecamp emits a NON_EXECUTION state event; executable S4 proposals are Futures hedge/unwind only. The standard `resolve_track4()` route accepts FUTURES proposals and returns no plan for OPTION proposals.
+- Keep this boundary explicit in validation. Do not add option-entry routing, infer option contracts, or promote a test proposal to an executable S4 order without a newer approved S4 contract and authoritative option identity/quote/multiplier plus risk/cost gates.
+- Synthetic route-boundary regression only characterizes the current resolver. It is not option-entry functionality or Production/Live acceptance. S4 remains DRAFT/UNVERIFIED/UNAPPROVED/DISABLED.
