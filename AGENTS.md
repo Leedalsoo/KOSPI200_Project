@@ -933,3 +933,11 @@
 - It does not certify shared-capital allocation, real order conflict behavior, full natural-signal S1-S9 E2E, or Production/Live. No Production code, source data, Raw/Canonical, accepted manifest, or strategy policy changed.
 - compileall for the test module and git diff --check PASS. T4 branch/origin remain 026f96439584fcfa0a8a3b69a898ba0ba6507939; Project200 local/origin remain b955a02b4ceaaf7fcab1ea6de4d8862637225868 and unchanged. Existing Graphify changes preserved.
 - Full T4 integrated acceptance remains OPEN. S3 economic spread legs and S5 D2-D8 remain unapproved; Live actual execution receive-loop verification remains deferred until real-investment readiness.
+
+## 2026-11-23 X2 / Track7 Virtual fault regression
+
+- Ran nine focused suites: validation-only X2 virtual admission, auto-stop switch, evidence supervisor, X2 latch persistence, Track7 aggregate snapshot, entry cutoff, restore/observation precedence, and Track7/Track8 sequential entry lifecycle. Result: 117 passed in 2.56s.
+- This covers Virtual/validation-only admission and lifecycle boundaries. It does not validate Live actual execution receive loops, broker callback behavior, real order cancellation, or Production side effects.
+- No production Runtime/X2 code, strategy policy, persistence schema, callback cancellation, synchronization, lock scope, or broker policy changed. No.1652 candidate/account aggregate remains separate from Track7 strategy aggregate.
+- Remaining OPEN boundaries: Track7 strategy-state durable restart recovery; X2 admission-read-to-callback-entry race and already-entered callback completion semantics; full T4 common/strategy fault matrix and integrated acceptance. These require separate approved contracts and are not global blocks for other Virtual strategy validation.
+- compileall and git diff --check PASS. T4 branch/origin at start 43821b2810f85fd5ec39fb91328bfd7fd12c0fb0; Project200 local/origin b955a02b4ceaaf7fcab1ea6de4d8862637225868 unchanged. Existing Graphify changes preserved.
