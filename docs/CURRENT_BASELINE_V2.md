@@ -1239,3 +1239,11 @@
 - The weekday caller generic exception close/sleep/start path remains static source evidence only (No.1793); no process/scheduler execution.
 - No ACK/PINGPONG parsing or routing/retention/retry/session policy was inferred. No Production semantics or market data changed. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
 - Validation: S4 Track4 source/runtime + Canonical WebSocket focused regression 27 passed; compileall, scoped Ruff F821/F401, and git diff --check PASS. Broader Ruff scan of untouched weekday collector reports three pre-existing F401 imports; no unrelated cleanup was made.
+
+## 2026-11-24 No.1795 - Track4 recv-reconnect then control-frame boundary (synthetic only)
+
+- Synthetic interaction: first recv raises ConnectionError; collector performs one configured reconnect and replays the subscription; second recv returns JSON ACK-shaped content; parser raises RAW_FRAME_TR_ID_REQUIRED outside the recv retry loop.
+- Assertions: connect=2, subscription replayed twice, recv=2, close=0, Raw records=0. Receive errors are handled inside the retry loop; parser errors propagate outside it.
+- Unit test only; no weekday orchestration, KIS API/network, collector process/scheduler or new data collection. No ACK parsing/acceptance, Raw retention, retry/backoff, unsubscribe/session ownership or Production semantics inferred.
+- S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+- Validation: S4 Track4 source/runtime + Canonical WebSocket focused regression 28 passed; compileall, scoped Ruff F821/F401 and git diff --check PASS.

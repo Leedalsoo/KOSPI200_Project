@@ -1256,3 +1256,11 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - The weekday orchestration caller close/sleep/start handling remains static source-traced behavior from No.1793; no collector process or scheduler was executed.
 - No ACK/PINGPONG schema, routing/retention, retry, subscription deduplication, or session-owner policy was approved or inferred. No Production/API/Raw/Canonical/accepted-data changes. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
 - Validation: S4 Track4 source/runtime + Canonical WebSocket focused regression 27 passed; compileall, scoped Ruff F821/F401, and git diff --check PASS. Broader Ruff scan of untouched weekday collector reports three pre-existing F401 imports; no cleanup was made.
+
+## 2026-11-24 No.1795 - Track4 recv-reconnect then control-frame boundary (synthetic only)
+
+- Synthetic interaction: first recv raises ConnectionError; collector performs one configured reconnect and replays the subscription; second recv returns JSON ACK-shaped content; parser raises RAW_FRAME_TR_ID_REQUIRED outside the recv retry loop.
+- Assertions: connect=2, subscription replayed twice, recv=2, close=0, Raw records=0. This distinguishes recv failures handled by reconnect from parser failures propagated to caller.
+- Unit test only; no weekday orchestration, KIS API/network, collector process/scheduler or new data collection.
+- No ACK parsing/acceptance, Raw retention, retry/backoff, unsubscribe/session ownership or Production semantics inferred. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+- Validation: S4 Track4 source/runtime + Canonical WebSocket focused regression 28 passed; compileall, scoped Ruff F821/F401 and git diff --check PASS.

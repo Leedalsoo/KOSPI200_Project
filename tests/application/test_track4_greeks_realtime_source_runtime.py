@@ -534,3 +534,49 @@ def test_synthetic_json_control_frame_parse_error_bubbles_without_collector_reco
     assert transport.connects == 1
     assert transport.closes == 0
     assert store.count() == 0
+
+def test_synthetic_recv_reconnect_then_control_frame_parse_error_stays_outside_retry_loop(tmp_path) -> None:
+    import asyncio
+    from infrastructure.kis.kis_realtime_collector import KISRealtimeCollector
+    from infrastructure.kis.realtime_raw_store import KISRealtimeRawStore
+
+    class Transport:
+        def __init__(self):
+            self.connects = 0
+            self.subscriptions = []
+            self.closes = 0
+            self.recv_calls = 0
+
+        async def connect(self):
+            self.connects += 1
+
+        async def subscribe(self, tr_id, symbol):
+            self.subscriptions.append((tr_id, symbol))
+
+        async def recv(self):
+            self.recv_calls += 1
+            if self.recv_calls == 1:
+                raise ConnectionError('synthetic disconnect before control frame')
+            return '{"header":{"tr_id":"H0IOCNT0"},"body":{"msg_cd":"SUBSCRIBE_OK"}}'
+
+        async def close(self):
+            self.closes += 1
+
+    transport = Transport()
+    store = KISRealtimeRawStore(tmp_path / 'reconnect-control-frame.jsonl')
+    collector = KISRealtimeCollector(transport, store, max_reconnects=1)
+    subscription = ('H0IOCNT0', 'SYNTHETIC-CONTROL-BOUNDARY')
+    asyncio.run(collector.start('20261124', [subscription]))
+
+    try:
+        asyncio.run(collector.capture_one())
+    except ValueError as exc:
+        assert str(exc) == 'RAW_FRAME_TR_ID_REQUIRED'
+    else:
+        raise AssertionError('JSON control frame must fail after the recv retry loop')
+
+    assert transport.connects == 2
+    assert transport.subscriptions == [subscription, subscription]
+    assert transport.recv_calls == 2
+    assert transport.closes == 0
+    assert store.count() == 0
