@@ -1325,3 +1325,12 @@ Synthetic temporary-file test confirms that when the synchronous Frame Observer 
 - Track7 test-only SQLite snapshot을 별도 Python 프로세스에서 복원하고 checksum/2개 만기 상태/X2 side-effect gate를 확인했다. Production Track7 snapshot/restore API는 없으므로 durable restart는 OPEN.
 - Production source 변경 없음. Raw/Canonical/accepted-source/manifest 원본 변경 없음. Full T4 X3 matrix 및 전략 1~9 자연 신호 E2E OPEN, T5 미착수, S4 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED 유지.
 - Notion: https://app.notion.com/p/4225f4f6eaa18154962bcbbd1f57a380
+
+
+## 2026-11-24 No.1809 - Track7 state owner and event identity boundary
+
+- Read-only inspection confirms Track7 strategy state and group-to-expiry bindings live on the strategy instance; `initialize()` resets them. There is no production Track7 snapshot/restore API or injected durable state store. Bootstrap `run_id` is a fresh UUID and does not establish process-restart lineage.
+- `ExecutionFill`/`ExecutionReport` carry no execution sequence or watermark. Virtual execution identity contains `execution_id` + `client_order_id`; its deduplicator is instance-local and a new instance accepts a previously seen synthetic ID. This deduplicator does not protect Track7 callback state transitions.
+- Nine inline synthetic/read-only checks passed. This is implementation characterization, not proof of broker event behavior or durable recovery. No production source or test file changed.
+- No snapshot owner/schema, fill-vs-report event unit, ID uniqueness scope, payload-conflict, sequence/watermark, callback synchronization, or readiness policy is approved. Track7 durable restart and Full T4 X3 remain OPEN; T5 not started. No Live/API/order/collector/service/scheduler or source-data mutation. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+- Notion: [No.1809](https://app.notion.com/p/4225f4f6eaa18128af91e615d5c93915).
