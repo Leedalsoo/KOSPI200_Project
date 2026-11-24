@@ -921,23 +921,6 @@ class VirtualMultiLegExecutionBridge:
 
         for fill_report in fill_reports:
             execution_id = fill_report.execution_id
-            self.execution_legs[execution_id] = {
-                "strategy_id": plan.strategy_id, "side": leg.side,
-                "position_role": leg.position_role,
-                "asset_type": "OPTION" if isinstance(identity, OptionInstrumentIdentity) else "FUTURES",
-                "option_type": getattr(identity, "option_type", None),
-                "contract_multiplier": identity.contract_multiplier,
-            }
-            self.provenance[execution_id] = {
-                "strategy_id": plan.strategy_id, "group_id": plan.group_id,
-                "leg_id": leg.leg_id, "client_order_id": fill_report.client_order_id,
-                "execution_id": execution_id, "instrument_id": identity.instrument_id,
-                "symbol": identity.symbol, "expiry": getattr(identity, "expiry", "") or "",
-                "option_type": getattr(identity, "option_type", "") or "",
-                "strike": str(getattr(identity, "strike", "") or ""),
-                "contract_multiplier": str(identity.contract_multiplier),
-                "identity_source": identity.identity_source or "",
-            }
             fingerprint = (
                 fill_report.client_order_id, identity.instrument_id, leg.side,
                 fill_report.filled_quantity, fill_report.execution_price,
@@ -979,6 +962,25 @@ class VirtualMultiLegExecutionBridge:
             )
             VirtualPositionFillAdapter(leg_position).apply(broker_command, fill_report)
             self._applied_execution_fingerprints[execution_id] = fingerprint
+            # Publish execution metadata only after the fill has passed duplicate/conflict
+            # checks and its lot, fee, and aggregate mutations have completed.
+            self.execution_legs[execution_id] = {
+                "strategy_id": plan.strategy_id, "side": leg.side,
+                "position_role": leg.position_role,
+                "asset_type": "OPTION" if isinstance(identity, OptionInstrumentIdentity) else "FUTURES",
+                "option_type": getattr(identity, "option_type", None),
+                "contract_multiplier": identity.contract_multiplier,
+            }
+            self.provenance[execution_id] = {
+                "strategy_id": plan.strategy_id, "group_id": plan.group_id,
+                "leg_id": leg.leg_id, "client_order_id": fill_report.client_order_id,
+                "execution_id": execution_id, "instrument_id": identity.instrument_id,
+                "symbol": identity.symbol, "expiry": getattr(identity, "expiry", "") or "",
+                "option_type": getattr(identity, "option_type", "") or "",
+                "strike": str(getattr(identity, "strike", "") or ""),
+                "contract_multiplier": str(identity.contract_multiplier),
+                "identity_source": identity.identity_source or "",
+            }
 
     def execute(
         self,

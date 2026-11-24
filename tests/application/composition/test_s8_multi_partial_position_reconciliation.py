@@ -149,6 +149,76 @@ def test_conflicting_reused_execution_id_fails_closed_without_new_lot():
 
 
 
+def test_duplicate_execution_does_not_overwrite_applied_provenance_metadata():
+    bridge = _bridge()
+    plan, leg, identity, command, report = _inputs()
+    bridge._apply_reconciled_execution(
+        plan=plan, leg=leg, identity=identity,
+        broker_command=command, report=report,
+    )
+    before_provenance = dict(bridge.provenance["S8-FILL-001"])
+    before_execution_leg = dict(bridge.execution_legs["S8-FILL-001"])
+
+    replay_plan = replace(plan, strategy_id="SYNTHETIC_REPLAY_STRATEGY")
+    replay_leg = SimpleNamespace(
+        leg_id=leg.leg_id, side=leg.side,
+        position_role=PositionRole.EVENT_INSURANCE.value,
+    )
+    bridge._apply_reconciled_execution(
+        plan=replay_plan, leg=replay_leg, identity=identity,
+        broker_command=command, report=report,
+    )
+
+    assert bridge.provenance["S8-FILL-001"] == before_provenance
+    assert bridge.execution_legs["S8-FILL-001"] == before_execution_leg
+    assert len(bridge.position_lot_store.history()) == 2
+    assert len(bridge.fee_ledger.query(run_id=bridge.run_id)) == 2
+    assert bridge.leg_positions[identity.instrument_id].qty == 3
+
+
+def test_conflicting_execution_does_not_overwrite_applied_provenance_metadata():
+    bridge = _bridge()
+    plan, leg, identity, command, report = _inputs()
+    bridge._apply_reconciled_execution(
+        plan=plan, leg=leg, identity=identity,
+        broker_command=command, report=report,
+    )
+    before_provenance = dict(bridge.provenance["S8-FILL-001"])
+    before_execution_leg = dict(bridge.execution_legs["S8-FILL-001"])
+    before_fingerprint = bridge._applied_execution_fingerprints["S8-FILL-001"]
+
+    conflicting_fill = ExecutionFill(
+        "S8-FILL-001", 1, Decimal("10.25"),
+        report.execution_fills[0].execution_timestamp, Decimal("0.10"),
+    )
+    conflicting_report = replace(
+        report, execution_fills=(conflicting_fill, report.execution_fills[1]),
+    )
+    conflicting_plan = replace(plan, strategy_id="SYNTHETIC_CONFLICT_STRATEGY")
+    conflicting_leg = SimpleNamespace(
+        leg_id=leg.leg_id, side=leg.side,
+        position_role=PositionRole.EVENT_INSURANCE.value,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="MULTI_LEG_EXECUTION_ID_CONFLICT_RECONCILIATION_REQUIRED",
+    ):
+        bridge._apply_reconciled_execution(
+            plan=conflicting_plan, leg=conflicting_leg, identity=identity,
+            broker_command=command, report=conflicting_report,
+        )
+
+    assert bridge.provenance["S8-FILL-001"] == before_provenance
+    assert bridge.execution_legs["S8-FILL-001"] == before_execution_leg
+    assert bridge._applied_execution_fingerprints["S8-FILL-001"] == before_fingerprint
+    assert len(bridge.position_lot_store.history()) == 2
+    assert len(bridge.fee_ledger.query(run_id=bridge.run_id)) == 2
+    assert bridge.fee_ledger.total(run_id=bridge.run_id) == Decimal("0.30")
+    assert bridge.leg_positions[identity.instrument_id].qty == 3
+
+
+
 def test_partial_fill_order_execution_position_lots_reconcile_through_u19_checkpoint(tmp_path):
     bridge = _bridge()
     plan, leg, identity, command, report = _inputs()
