@@ -1412,3 +1412,7 @@ A synthetic fault injected after each of PositionLot, Fee Ledger, and Position A
 - Replaying the same two-fill report applies only the second fill. Final state for all four cases: PositionLot 2, Fee Ledger 2 / total 0.30, aggregate quantity 3, fingerprints 2, execution metadata 2, provenance 2.
 - Expanded S8/S4/Fresh31 data-independent selection: 41 passed, 2 deselected. The two Fresh31 tests require absent `data/accepted_market_data/runtime_v2`; not counted as PASS or code failures. Compileall, scoped Ruff F821/F401/F841, and diff check PASS.
 - Test-only change; No.1817 production implementation remains unchanged. This does not establish cross-store atomicity, durable restart recovery, concurrency/locking, or authoritative KIS identity policy.
+
+## Track7 callback replay failure boundary (No.1819)
+- Synthetic callback acknowledgement-loss probe: the real StrategyHub -> Track7 callback commits `PUT_PENDING -> CALL_READY`; a simulated caller-side exception after that mutation followed by identical replay changes state to `BLOCKED` (`TRACK7_PUT_FILL_STAGE_MISMATCH`). Focused callback/restore/lifecycle tests: 13 passed.
+- Characterization only. No Production callback, identity, persistence, dedupe, sequence/watermark, locking, or retry policy is approved or changed. Track7 durable restart and Full T4 X3 remain OPEN; preserve No.1689 phase/X2 and No.1652 aggregate boundaries.
