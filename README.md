@@ -1287,3 +1287,7 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 ## 2026-11-24 Track4 No.1803 — shared Raw path sequence ownership
 
 Two independent synthetic collectors with separate local counters and separate RawStore objects wrote distinct frames to one temporary JSONL path. Both persisted sequence=1; the shared Raw file retained both valid rows and distinct payload hashes. Sequence allocation is collector-local, not file-global. This is a characterization only: it does not prove production shares a path or authorize a global counter, deduplication, lock, or ownership policy. Sequence/session identity and shared-path ownership remain OPEN. No Production source or actual market data changed.
+
+## Track4 No.1804 — Frame Observer read-visibility ordering
+
+Synthetic temporary-file test confirms that when the synchronous Frame Observer is invoked, the just-captured Raw row is already readable from the Raw store, with the same received_at timestamp. Two callbacks observed persisted row counts 1 then 2, and collector sequences 1 then 2. This is append-before-observer process visibility only; it is not fsync/crash durability, exactly-once delivery, atomic side effects, or retry/idempotency. No production policy or source behavior changed.

@@ -1272,3 +1272,10 @@
 - Both collectors returned sequence=1; the shared append-only file retained both valid rows, also with sequence values [1, 1] and distinct payload hashes. The Raw store validates row shape/hash but does not allocate or enforce a file-global sequence.
 - This is a controlled same-process unit characterization. It does not establish that production composition intentionally shares a Raw path, nor does it define a global sequence/session identity contract. No duplicate suppression, shared counter, lock, or ownership policy was added.
 - Keep sequence scope/owner OPEN alongside No.1796/1797 repeated-start evidence and No.1802 writer interleaving. Track6ValidationStateStore locking is not a Track4 Raw contract. Synthetic temporary files only; no actual Raw/Canonical/accepted-source/manifest mutation, KIS/API, service/scheduler, or new collection.
+
+## 2026-11-24 Track4 Frame Observer visibility boundary (No.1804)
+
+- A deterministic synthetic collector test uses a temporary Raw JSONL path and two distinct synthetic frames. At each synchronous Frame Observer invocation, the callback re-reads the Raw store and verifies that the just-captured frame and its exact received_at timestamp are already readable.
+- The callback observed one persisted row on its first invocation and two on its second; returned sequences were 1 and 2. This confirms the current call order: Raw append completes and is readable before the synchronous observer is invoked.
+- This is process-level read visibility only. It does not prove fsync/OS-crash durability, observer side-effect atomicity, retry/idempotency, exactly-once delivery, or a production runtime guarantee. No callback retry, deduplication key, transactional outbox, lock, or durability policy was added.
+- Prior No.1799/1800 partial-effect retry evidence remains applicable: observer exceptions occur after Raw append, and replay can duplicate Raw rows/effects. Keep the policy OPEN until a governing contract is approved. Synthetic temporary files only; no actual Raw/Canonical/accepted-source/manifest mutation or KIS/API/service/scheduler execution.

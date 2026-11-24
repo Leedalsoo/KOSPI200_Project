@@ -307,3 +307,55 @@ def test_independent_collectors_sharing_raw_path_can_persist_duplicate_local_seq
         assert len({record["payload_sha256"] for record in persisted}) == 2
 
     asyncio.run(run())
+
+
+def test_frame_observer_runs_after_raw_record_is_readable(tmp_path: Path):
+    async def run() -> None:
+        path = tmp_path / "observer-order.jsonl"
+        store = KISRealtimeRawStore(path)
+        payloads = [
+            "0|H0IOCNT0|1|SYNTHETIC:DERIVED_SCENARIO:OBSERVER-ORDER-A",
+            "0|H0IOCNT0|2|SYNTHETIC:DERIVED_SCENARIO:OBSERVER-ORDER-B",
+        ]
+        observed: list[tuple[str, datetime, int]] = []
+
+        class QueueTransport:
+            def __init__(self) -> None:
+                self.index = 0
+
+            async def connect(self) -> None:
+                return None
+
+            async def subscribe(self, tr_id: str, symbol: str) -> None:
+                return None
+
+            async def recv(self) -> str:
+                payload = payloads[self.index]
+                self.index += 1
+                return payload
+
+            async def close(self) -> None:
+                return None
+
+        def observer(payload: str, received_at: datetime) -> None:
+            records_visible_at_callback = store.records()
+            assert records_visible_at_callback[-1]["payload"] == payload
+            assert (
+                records_visible_at_callback[-1]["received_at"]
+                == received_at.isoformat()
+            )
+            observed.append((payload, received_at, len(records_visible_at_callback)))
+
+        collector = KISRealtimeCollector(
+            QueueTransport(), store, clock=lambda: NOW, frame_observer=observer
+        )
+        await collector.start("20261124", SUBSCRIPTIONS)
+        first = await collector.capture_one()
+        second = await collector.capture_one()
+
+        assert [item[2] for item in observed] == [1, 2]
+        assert [item[0] for item in observed] == payloads
+        assert [first["sequence"], second["sequence"]] == [1, 2]
+        assert len(store.records()) == 2
+
+    asyncio.run(run())
