@@ -255,3 +255,55 @@ def test_concurrent_writer_interleaving_between_tail_validation_and_append_can_d
     assert b"SYNTHETIC:DERIVED_SCENARIO:TRACK4-VALID" in raw
     with pytest.raises(ValueError, match="INVALID_KIS_RAW_RECORD_LINE:2"):
         store.records()
+
+
+@pytest.mark.parametrize("collector_count", [2])
+def test_independent_collectors_sharing_raw_path_can_persist_duplicate_local_sequences(
+    tmp_path: Path, collector_count: int
+):
+    async def run() -> None:
+        path = tmp_path / "shared-raw.jsonl"
+        store_a = KISRealtimeRawStore(path)
+        store_b = KISRealtimeRawStore(path)
+
+        class FrameTransport:
+            def __init__(self, payload: str) -> None:
+                self.payload = payload
+
+            async def connect(self) -> None:
+                return None
+
+            async def subscribe(self, tr_id: str, symbol: str) -> None:
+                return None
+
+            async def recv(self) -> str:
+                return self.payload
+
+            async def close(self) -> None:
+                return None
+
+        payloads = [
+            "0|H0IOCNT0|1|SYNTHETIC:DERIVED_SCENARIO:COLLECTOR-A",
+            "0|H0IOCNT0|1|SYNTHETIC:DERIVED_SCENARIO:COLLECTOR-B",
+        ]
+        collectors = [
+            KISRealtimeCollector(
+                FrameTransport(payloads[0]), store_a, clock=lambda: NOW
+            ),
+            KISRealtimeCollector(
+                FrameTransport(payloads[1]), store_b, clock=lambda: NOW
+            ),
+        ]
+        assert len(collectors) == collector_count
+
+        for collector in collectors:
+            await collector.start("20261124", SUBSCRIPTIONS)
+        returned = [await collector.capture_one() for collector in collectors]
+        persisted = KISRealtimeRawStore(path).records()
+
+        assert [record["sequence"] for record in returned] == [1, 1]
+        assert [record["sequence"] for record in persisted] == [1, 1]
+        assert [record["payload"] for record in persisted] == payloads
+        assert len({record["payload_sha256"] for record in persisted}) == 2
+
+    asyncio.run(run())

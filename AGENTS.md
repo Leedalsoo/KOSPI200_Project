@@ -1265,3 +1265,10 @@
 - A deterministic synthetic interleaving placed a competing partial JSONL write after the first writer's tail validation and before its append open. The first writer then appended to the unterminated competing bytes, leaving a malformed combined tail; records() rejected line 2.
 - This characterizes a validation-to-append race, not an observed production concurrency event or proof of every OS/filesystem interleaving. No lock, fsync, rollback, repair, or retry semantics are inferred. Keep fixtures in temporary directories and preserve all original Raw bytes.
 - Track6ValidationStateStore per-run locking is a separate store/contract and is not a Track4 Raw writer lock approval.
+
+## 2026-11-24 Track4 shared Raw path / independent collector sequence boundary (No.1803)
+
+- Two independent synthetic KISRealtimeCollector instances, each with its own RawStore object and local sequence counter, were pointed at the same temporary JSONL path. Each started the same synthetic trading date and captured a distinct synthetic frame.
+- Both collectors returned sequence=1; the shared append-only file retained both valid rows, also with sequence values [1, 1] and distinct payload hashes. The Raw store validates row shape/hash but does not allocate or enforce a file-global sequence.
+- This is a controlled same-process unit characterization. It does not establish that production composition intentionally shares a Raw path, nor does it define a global sequence/session identity contract. No duplicate suppression, shared counter, lock, or ownership policy was added.
+- Keep sequence scope/owner OPEN alongside No.1796/1797 repeated-start evidence and No.1802 writer interleaving. Track6ValidationStateStore locking is not a Track4 Raw contract. Synthetic temporary files only; no actual Raw/Canonical/accepted-source/manifest mutation, KIS/API, service/scheduler, or new collection.

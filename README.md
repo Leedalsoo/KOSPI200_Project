@@ -1283,3 +1283,7 @@ The actual first-tick order is pending-fill observation/reconciliation → Track
 - Synthetic writer interleaving between Raw tail validation and append open: a competing partial JSONL write made after validation was concatenated with the next append; full read rejected line 2. This exposes a validation-to-append race in the current no-lock implementation.
 - Characterization only; no Track4 Raw lock, fsync, rollback, repair or retry policy was added. Track6ValidationStateStore lock evidence is not a Track4 Raw contract.
 - Validation: focused Track4/Canonical/Raw tests 42 passed; KIS infrastructure 48 passed, 1 skipped. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+
+## 2026-11-24 Track4 No.1803 — shared Raw path sequence ownership
+
+Two independent synthetic collectors with separate local counters and separate RawStore objects wrote distinct frames to one temporary JSONL path. Both persisted sequence=1; the shared Raw file retained both valid rows and distinct payload hashes. Sequence allocation is collector-local, not file-global. This is a characterization only: it does not prove production shares a path or authorize a global counter, deduplication, lock, or ownership policy. Sequence/session identity and shared-path ownership remain OPEN. No Production source or actual market data changed.
