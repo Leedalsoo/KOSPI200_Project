@@ -5,7 +5,7 @@ import subprocess
 import sys
 import textwrap
 from pathlib import Path
-from dataclasses import fields
+from dataclasses import fields, replace
 from datetime import datetime
 from decimal import Decimal
 
@@ -1126,4 +1126,173 @@ def test_track7_test_only_snapshot_candidate_survives_new_process_sqlite_reopen(
     assert restored["gate"] == {
         "state_restored": True,
         "side_effect_actions_allowed": False,
+    }
+
+
+def test_track7_test_only_new_process_restore_callback_and_first_hub_run_preserve_fill(
+    tmp_path,
+):
+    """Synthetic integration only; this is not a Production restore contract."""
+    source = _multi_expiry_strategy()
+    expiry = "20261203"
+    source._states_by_expiry[expiry] = replace(
+        source._states_by_expiry[expiry],
+        put_open=True,
+        put_entry_fill_price=Decimal("1.25"),
+        put_entry_filled_at=datetime.fromisoformat("2026-11-20T09:10:00+09:00"),
+        entry_pending=True,
+        entry_stage="CALL_PENDING",
+        entry_group_id="synthetic-group-b",
+        call_client_order_id="synthetic-call-2",
+        call_submitted_at=datetime.fromisoformat("2026-11-20T09:11:00+09:00"),
+    )
+    envelope = _capture_aggregate(source)
+    payload_json = json.dumps(
+        envelope["payload"], sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    )
+    config_json = json.dumps(
+        envelope["payload"]["config"], sort_keys=True, separators=(",", ":")
+    )
+    database_path = tmp_path / "track7-restart-callback-candidate.sqlite3"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE test_only_track7_snapshot_candidate (
+                snapshot_id TEXT PRIMARY KEY,
+                strategy_id TEXT NOT NULL,
+                strategy_version TEXT NOT NULL,
+                config_json TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                payload_sha256 TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO test_only_track7_snapshot_candidate
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "SYNTHETIC-TRACK7-RESTART-CALLBACK-001",
+                source.strategy_id,
+                source.version,
+                config_json,
+                payload_json,
+                envelope["sha256"],
+            ),
+        )
+        connection.commit()
+
+    child_code = textwrap.dedent(
+        """\
+        import json
+        import runpy
+        import sqlite3
+        import sys
+        from datetime import datetime
+        from decimal import Decimal
+        from types import SimpleNamespace
+
+        module = runpy.run_path(sys.argv[1])
+        with sqlite3.connect(sys.argv[2]) as connection:
+            row = connection.execute(
+                "SELECT strategy_id, strategy_version, config_json, payload_json, payload_sha256 "
+                "FROM test_only_track7_snapshot_candidate WHERE snapshot_id = ?",
+                ("SYNTHETIC-TRACK7-RESTART-CALLBACK-001",),
+            ).fetchone()
+        if row is None:
+            raise RuntimeError("TRACK7_TEST_SNAPSHOT_NOT_FOUND")
+        strategy_id, strategy_version, config_json, payload_json, payload_sha256 = row
+        payload = json.loads(payload_json)
+        config = json.loads(config_json)
+        if strategy_id != payload["strategy_id"] or strategy_version != payload["strategy_version"]:
+            raise RuntimeError("TRACK7_TEST_SNAPSHOT_IDENTITY_MISMATCH")
+
+        # New process: construct a fresh strategy and complete the Hub's first initialization.
+        target = module["Track7VolatilitySkewWeeklyInsurance"](**config)
+        registry = module["StrategyRegistry"]()
+        registry.register(target)
+        hub = module["StrategyHub"](registry, ((target.strategy_id, target.version),))
+        context = module["StrategyContext"](strategy_id=target.strategy_id)
+        initialized = hub.run({target.strategy_id: context})
+        if initialized.failures or target._states_by_expiry:
+            raise RuntimeError("TRACK7_NEW_PROCESS_INITIALIZATION_FAILED")
+
+        gate = module["_restore_aggregate_into"](
+            target,
+            {"payload": payload, "sha256": payload_sha256},
+            expected_config=config,
+        )
+        if gate != {"state_restored": True, "side_effect_actions_allowed": True}:
+            raise RuntimeError("TRACK7_TEST_RESTORE_GATE_UNEXPECTED")
+
+        result = SimpleNamespace(
+            group_id="synthetic-group-b",
+            reports=(SimpleNamespace(
+                leg_id="call",
+                status="FILLED",
+                filled_quantity=2,
+                remaining_quantity=0,
+                execution_id="SYNTHETIC-RESTART-CALL-EXEC-001",
+                execution_timestamp=datetime.fromisoformat("2026-11-20T09:12:00+09:00"),
+                execution_price=Decimal("1.75"),
+            ),),
+            group_complete=True,
+            position_flat=False,
+        )
+        hub.on_execution_result(target.strategy_id, "WEEKLY_INSURANCE_ENTRY_CALL", result)
+        if target.state.entry_stage != "COMPLETE" or not target.state.call_open:
+            raise RuntimeError("TRACK7_RESTORED_CALLBACK_NOT_APPLIED")
+
+        observed_at_evaluate = []
+        original_evaluate = target.evaluate
+        def capture_evaluate(current_context):
+            observed_at_evaluate.append(target.state.entry_stage)
+            return original_evaluate(current_context)
+        target.evaluate = capture_evaluate
+        resumed = hub.run({target.strategy_id: context})
+        if resumed.failures:
+            raise RuntimeError("TRACK7_FIRST_POST_RESTORE_HUB_RUN_FAILED")
+        if target.state.entry_stage != "COMPLETE" or not target.state.call_open:
+            raise RuntimeError("TRACK7_FIRST_HUB_RUN_ERASED_RESTORED_FILL")
+        print(json.dumps({
+            "strategy_id": target.strategy_id,
+            "strategy_version": target.version,
+            "restored_expiry": target._active_expiry,
+            "entry_stage": target.state.entry_stage,
+            "put_open": target.state.put_open,
+            "call_open": target.state.call_open,
+            "call_entry_fill_price": str(target.state.call_entry_fill_price),
+            "observed_at_evaluate": observed_at_evaluate,
+            "gate": gate,
+        }, sort_keys=True))
+        """
+    )
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            child_code,
+            str(Path(__file__).resolve()),
+            str(database_path),
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    resumed = json.loads(completed.stdout.strip().splitlines()[-1])
+
+    assert resumed["strategy_id"] == source.strategy_id
+    assert resumed["strategy_version"] == source.version
+    assert resumed["restored_expiry"] == expiry
+    assert resumed["entry_stage"] == "COMPLETE"
+    assert resumed["put_open"] is True
+    assert resumed["call_open"] is True
+    assert resumed["call_entry_fill_price"] == "1.75"
+    assert resumed["observed_at_evaluate"] == ["COMPLETE"]
+    assert resumed["gate"] == {
+        "state_restored": True,
+        "side_effect_actions_allowed": True,
     }

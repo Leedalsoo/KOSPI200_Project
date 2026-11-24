@@ -1416,3 +1416,7 @@ A synthetic fault injected after each of PositionLot, Fee Ledger, and Position A
 ## Track7 callback replay failure boundary (No.1819)
 - Synthetic callback acknowledgement-loss probe: the real StrategyHub -> Track7 callback commits `PUT_PENDING -> CALL_READY`; a simulated caller-side exception after that mutation followed by identical replay changes state to `BLOCKED` (`TRACK7_PUT_FILL_STAGE_MISMATCH`). Focused callback/restore/lifecycle tests: 13 passed.
 - Characterization only. No Production callback, identity, persistence, dedupe, sequence/watermark, locking, or retry policy is approved or changed. Track7 durable restart and Full T4 X3 remain OPEN; preserve No.1689 phase/X2 and No.1652 aggregate boundaries.
+
+## Track7 new-process restore → callback → first Hub run (No.1820)
+- Test-only SQLite/subprocess integration regression restores a synthetic CALL_PENDING snapshot into a freshly initialized Track7 StrategyHub process, delivers a synthetic CALL fill callback, and verifies the first post-restore Hub evaluation observes/preserves COMPLETE with both legs open. Focused Track7 snapshot/restore/callback/lifecycle selection: 63 passed.
+- This is not Production durable recovery or crash-consistency proof. No Production persistence/bootstrap/restore API, startup provenance, event identity/dedupe/watermark, callback retry/acknowledgement, locking, or phase policy changed. Track7 durable restart and Full T4 X3 remain OPEN.
