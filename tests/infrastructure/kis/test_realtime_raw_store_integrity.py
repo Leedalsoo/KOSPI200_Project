@@ -359,3 +359,68 @@ def test_frame_observer_runs_after_raw_record_is_readable(tmp_path: Path):
         assert len(store.records()) == 2
 
     asyncio.run(run())
+
+
+def test_observer_failure_does_not_automatically_replay_before_next_capture(
+    tmp_path: Path,
+):
+    async def run() -> None:
+        store = KISRealtimeRawStore(tmp_path / "observer-continuation.jsonl")
+        payloads = [
+            "0|H0IOCNT0|1|SYNTHETIC:DERIVED_SCENARIO:OBSERVER-FAIL-FIRST",
+            "0|H0IOCNT0|2|SYNTHETIC:DERIVED_SCENARIO:OBSERVER-NEXT-FRAME",
+        ]
+        observer_calls: list[str] = []
+        partial_effects: list[str] = []
+
+        class QueueTransport:
+            def __init__(self) -> None:
+                self.index = 0
+
+            async def connect(self) -> None:
+                return None
+
+            async def subscribe(self, tr_id: str, symbol: str) -> None:
+                return None
+
+            async def recv(self) -> str:
+                payload = payloads[self.index]
+                self.index += 1
+                return payload
+
+            async def close(self) -> None:
+                return None
+
+        def observer(payload: str, received_at: datetime) -> None:
+            observer_calls.append(payload)
+            partial_effects.append(payload)
+            if payload == payloads[0]:
+                raise RuntimeError("SYNTHETIC_OBSERVER_FAILURE_AFTER_PARTIAL_EFFECT")
+
+        collector = KISRealtimeCollector(
+            QueueTransport(), store, clock=lambda: NOW, frame_observer=observer
+        )
+        await collector.start("20261124", SUBSCRIPTIONS)
+
+        try:
+            await collector.capture_one()
+        except RuntimeError as exc:
+            assert str(exc) == "SYNTHETIC_OBSERVER_FAILURE_AFTER_PARTIAL_EFFECT"
+        else:
+            raise AssertionError("observer exception must propagate")
+
+        after_failure = store.records()
+        assert [record["payload"] for record in after_failure] == [payloads[0]]
+        assert [record["sequence"] for record in after_failure] == [1]
+        assert observer_calls == [payloads[0]]
+        assert partial_effects == [payloads[0]]
+
+        second = await collector.capture_one()
+        final_records = store.records()
+        assert second["payload"] == payloads[1]
+        assert [record["payload"] for record in final_records] == payloads
+        assert [record["sequence"] for record in final_records] == [1, 2]
+        assert observer_calls == payloads
+        assert partial_effects == payloads
+
+    asyncio.run(run())

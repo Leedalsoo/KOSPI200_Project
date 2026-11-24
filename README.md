@@ -1291,3 +1291,12 @@ Two independent synthetic collectors with separate local counters and separate R
 ## Track4 No.1804 — Frame Observer read-visibility ordering
 
 Synthetic temporary-file test confirms that when the synchronous Frame Observer is invoked, the just-captured Raw row is already readable from the Raw store, with the same received_at timestamp. Two callbacks observed persisted row counts 1 then 2, and collector sequences 1 then 2. This is append-before-observer process visibility only; it is not fsync/crash durability, exactly-once delivery, atomic side effects, or retry/idempotency. No production policy or source behavior changed.
+
+## Track4 No.1805 — Observer failure 후 다음 capture continuation 합성 검증 (2026-11-24)
+
+- Temporary synthetic transport에서 첫 프레임 observer가 부분 side effect를 남긴 직후 예외를 발생시키도록 구성했다.
+- 첫 capture는 observer 예외를 호출자에게 전파했고, Raw에는 sequence=1 프레임이 보존됐다. 이 시점 observer 호출/부분 effect는 첫 프레임 1회였다.
+- 같은 collector에서 다음 capture를 수행하자 두 번째 프레임(sequence=2)이 정상 저장·반환되고 observer도 두 번째 프레임에 대해 1회 실행됐다. 첫 프레임 observer의 자동 재호출/자동 replay는 발생하지 않았다.
+- 이는 observer 예외 뒤 호출자가 다음 capture를 계속 실행한 합성 경로의 동작만 확인한다. 프로세스 재시작, 외부 재시도, exactly-once, effect durability, 자동 복구 정책을 증명하지 않으며 어떤 retry/idempotency 정책도 추가하지 않았다.
+- Raw integrity 17 passed; KIS infrastructure 51 passed, 1 skipped; compileall, scoped Ruff F821/F401, format check, git diff --check PASS.
+- Test/docs-only. Production source 및 Raw/Canonical/accepted-source/manifest 원본 변경 없음. KIS/Live/API, 주문, 실제 collector/service/scheduler, 신규 수집 없음. S4 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
