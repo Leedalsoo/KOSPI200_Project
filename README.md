@@ -1300,3 +1300,10 @@ Synthetic temporary-file test confirms that when the synchronous Frame Observer 
 - 이는 observer 예외 뒤 호출자가 다음 capture를 계속 실행한 합성 경로의 동작만 확인한다. 프로세스 재시작, 외부 재시도, exactly-once, effect durability, 자동 복구 정책을 증명하지 않으며 어떤 retry/idempotency 정책도 추가하지 않았다.
 - Raw integrity 17 passed; KIS infrastructure 51 passed, 1 skipped; compileall, scoped Ruff F821/F401, format check, git diff --check PASS.
 - Test/docs-only. Production source 및 Raw/Canonical/accepted-source/manifest 원본 변경 없음. KIS/Live/API, 주문, 실제 collector/service/scheduler, 신규 수집 없음. S4 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+
+## Track4 No.1806 — simultaneous Raw writer append characterization (2026-11-24)
+
+- Reconciled latest No.1805, No.1804/1803/1802/1801/1800/1799, Current Baseline v2, No.1546 A8 and local Raw store/tests. No approved shared-path ownership, file-global sequence, or multi-writer serialization contract exists. Existing Raw source performs tail validation and append-open/write without a per-path/process lock.
+- Added a deterministic same-process two-thread fixture with two independent RawStore instances sharing one empty temporary JSONL path. A barrier forces both writers to complete empty-tail validation before either append proceeds. Both append calls return their own sequence=1 record. Persisted records remain valid JSONL, but may contain only one or both submitted payloads; five exploratory repetitions observed one persisted row in four runs and two rows in one run.
+- This is a Windows same-process synthetic interleaving, not proof of all process/filesystem behaviors or production occurrence. It demonstrates that simultaneous shared-path writes can lose a returned append under this tested schedule. It does not define a lock scope, file-global sequence, retry, recovery, or durability policy. No production code changed.
+- Raw integrity 18 passed; KIS infrastructure regression and static checks recorded with this change. Synthetic temporary path only; no original Raw/Canonical/accepted-source/manifest mutation, no KIS/API/Live/orders/services/scheduler/new collection. S4 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.

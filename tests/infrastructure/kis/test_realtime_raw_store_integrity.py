@@ -424,3 +424,50 @@ def test_observer_failure_does_not_automatically_replay_before_next_capture(
         assert partial_effects == payloads
 
     asyncio.run(run())
+
+
+def test_two_same_process_writers_append_after_shared_empty_tail_validation(
+    tmp_path: Path,
+):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    path = tmp_path / "simultaneous-writers.jsonl"
+    stores = [KISRealtimeRawStore(path), KISRealtimeRawStore(path)]
+    validation_barrier = Barrier(2)
+    payloads = [
+        "0|H0IOCNT0|1|SYNTHETIC:DERIVED_SCENARIO:WRITER-A",
+        "0|H0IOCNT0|1|SYNTHETIC:DERIVED_SCENARIO:WRITER-B",
+    ]
+
+    def append_after_validation(store: KISRealtimeRawStore, payload: str) -> dict:
+        original_validate = store._validate_append_tail
+
+        def validate_then_wait() -> None:
+            original_validate()
+            validation_barrier.wait(timeout=5)
+
+        store._validate_append_tail = validate_then_wait  # type: ignore[method-assign]
+        return store.append(
+            received_at=NOW,
+            trading_date="20261124",
+            instrument="SYNTHETIC:DERIVED_SCENARIO:SHARED-RAW",
+            tr_id="H0IOCNT0",
+            payload=payload,
+            sequence=1,
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        returned = list(
+            executor.map(
+                lambda item: append_after_validation(*item),
+                zip(stores, payloads),
+            )
+        )
+
+    persisted = KISRealtimeRawStore(path).records()
+    assert {record["payload"] for record in returned} == set(payloads)
+    persisted_payloads = {record["payload"] for record in persisted}
+    assert persisted_payloads <= set(payloads)
+    assert 1 <= len(persisted) <= 2
+    assert [record["sequence"] for record in persisted] == [1] * len(persisted)
