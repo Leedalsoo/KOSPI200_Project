@@ -1449,3 +1449,11 @@
 - Scope: per-fill in-memory publication rollback/replay only; not cross-store atomicity, durable restart recovery, concurrency/locking, or authoritative KIS identity policy. No.1689 phase/X2 and No.1652 aggregate boundaries retained. Track7 durable restart and Full T4 X3 OPEN; T5 not started; S4 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
 - No Live/account API, broker actions, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original changes.
 - Detail: https://app.notion.com/p/4225f4f6eaa18185ac0ae77a0983200e
+
+### No.1818 follow-up ? second-fill faults across all publication maps
+
+- Expanded the second-fill write-after-mutation regression to all four publication maps: `leg_positions`, `_applied_execution_fingerprints`, `execution_legs`, and `provenance`.
+- Each injected fault occurs on the second fill's mapping write after mutation. Rollback preserves the first fill's aggregate/fingerprint/metadata/provenance and removes the incomplete second-fill publication.
+- Replaying the same two-fill report applies only the second fill. Final state for all four cases: PositionLot 2, Fee Ledger 2 / total 0.30, aggregate quantity 3, fingerprints 2, execution metadata 2, provenance 2.
+- Expanded S8/S4/Fresh31 data-independent selection: 41 passed, 2 deselected. The two Fresh31 tests require absent `data/accepted_market_data/runtime_v2`; not counted as PASS or code failures. Compileall, scoped Ruff F821/F401/F841, and diff check PASS.
+- Test-only change; No.1817 production implementation remains unchanged. This does not establish cross-store atomicity, durable restart recovery, concurrency/locking, or authoritative KIS identity policy.

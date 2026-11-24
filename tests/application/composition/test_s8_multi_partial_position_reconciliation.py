@@ -636,7 +636,8 @@ def test_bridge_publish_mapping_failure_rolls_back_indexes_and_replays_cleanly(f
     assert len(bridge.provenance) == 2
 
 
-def test_second_fill_publication_failure_preserves_first_fill_and_replays_only_second(monkeypatch):
+@pytest.mark.parametrize("fault_mapping", ["leg_positions", "_applied_execution_fingerprints", "execution_legs", "provenance"])
+def test_second_fill_publication_failure_preserves_first_fill_and_replays_only_second(fault_mapping):
     bridge = _bridge()
     plan, leg, identity, command, report = _inputs()
 
@@ -649,10 +650,10 @@ def test_second_fill_publication_failure_preserves_first_fill_and_replays_only_s
             super().__setitem__(key, value)
             self.set_count += 1
             if self.set_count == 2:
-                raise RuntimeError("SYNTHETIC_FAULT_AFTER_SECOND_FILL_AGGREGATE_PUBLISH")
+                raise RuntimeError(f"SYNTHETIC_FAULT_AFTER_SECOND_FILL_{fault_mapping.upper()}_PUBLISH")
 
-    bridge.leg_positions = FailAfterSecondSetDict()
-    with pytest.raises(RuntimeError, match="SYNTHETIC_FAULT_AFTER_SECOND_FILL_AGGREGATE_PUBLISH"):
+    setattr(bridge, fault_mapping, FailAfterSecondSetDict())
+    with pytest.raises(RuntimeError, match=f"SYNTHETIC_FAULT_AFTER_SECOND_FILL_{fault_mapping.upper()}_PUBLISH"):
         bridge._apply_reconciled_execution(
             plan=plan, leg=leg, identity=identity,
             broker_command=command, report=report,
@@ -666,7 +667,8 @@ def test_second_fill_publication_failure_preserves_first_fill_and_replays_only_s
     assert set(bridge.execution_legs) == {"S8-FILL-001"}
     assert set(bridge.provenance) == {"S8-FILL-001"}
 
-    bridge.leg_positions = dict(bridge.leg_positions)
+    for mapping_name in ("leg_positions", "_applied_execution_fingerprints", "execution_legs", "provenance"):
+        setattr(bridge, mapping_name, dict(getattr(bridge, mapping_name)))
     bridge._apply_reconciled_execution(
         plan=plan, leg=leg, identity=identity,
         broker_command=command, report=report,
