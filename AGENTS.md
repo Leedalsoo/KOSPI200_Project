@@ -1382,3 +1382,11 @@
 - Use provenance-labelled synthetic fixtures until an approved real-account API and authoritative execution contract are available. Preserve Raw/Canonical/accepted-source/manifest originals. Do not call Live/account APIs, submit broker actions, or start collectors/services/schedulers.
 - Track7 durable restart and Full T4 X3 integrated acceptance remain OPEN; T5 not started; S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
 - Evidence: No.1815 multi-fill report with an already-applied later fill whose payload conflicts; preflight rejects the whole incoming report before the earlier new fill changes PositionLot, fee ledger, aggregate, fingerprint, execution metadata, or provenance. Corrected replay then applies only the missing fill and retains the previously applied fill once.
+
+
+## 2026-11-24 No.1816 ? Virtual bridge staged aggregate publication
+
+- The No.1815 all-fill fingerprint preflight does not by itself make the multi-store application sequence transactional. Keep PositionLot and fee writes idempotent, and apply each `VirtualPositionAggregate` fill to a dataclass copy. Publish the copy into `leg_positions` only after `apply_fill` returns successfully; a mutation-then-raise fault must not expose a partially mutated aggregate.
+- Validate fault/replay behavior with synthetic fault injection at PositionLot, Fee Ledger, and Position Aggregate boundaries. Do not describe this narrow in-memory exception-safety measure as process-durable transactionality, cross-store atomic commit, concurrency safety, or an approved Live/KIS contract.
+- Preserve Raw/Canonical/accepted-source/manifest originals and all No.1689/No.1652 boundaries. No Live/account API, broker order/cancel/liquidation, collector/service/scheduler, or new collection.
+- Track7 durable restart and Full T4 X3 remain OPEN; T5 not started; S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.

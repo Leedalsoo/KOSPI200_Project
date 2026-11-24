@@ -932,7 +932,6 @@ class VirtualMultiLegExecutionBridge:
         leg_position = self.leg_positions.get(identity.instrument_id)
         if leg_position is None:
             leg_position = VirtualPositionAggregate(instrument_id=identity.instrument_id)
-            self.leg_positions[identity.instrument_id] = leg_position
 
         for fill_report in fill_reports:
             execution_id = fill_report.execution_id
@@ -975,7 +974,13 @@ class VirtualMultiLegExecutionBridge:
                     source="VSSF:CanonicalExecutionReport.fee",
                 )
             )
-            VirtualPositionFillAdapter(leg_position).apply(broker_command, fill_report)
+            # Apply to a candidate copy and publish only after the aggregate
+            # operation returns. If it raises after mutating its receiver, the
+            # bridge's previously published aggregate remains replay-safe.
+            candidate_position = replace(leg_position)
+            VirtualPositionFillAdapter(candidate_position).apply(broker_command, fill_report)
+            self.leg_positions[identity.instrument_id] = candidate_position
+            leg_position = candidate_position
             self._applied_execution_fingerprints[execution_id] = fingerprint
             # Publish execution metadata only after the fill has passed duplicate/conflict
             # checks and its lot, fee, and aggregate mutations have completed.

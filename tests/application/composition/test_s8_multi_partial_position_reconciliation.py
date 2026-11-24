@@ -536,3 +536,55 @@ def test_multi_fill_conflict_is_preflighted_before_any_new_fill_mutation():
     ]
     assert bridge.leg_positions[identity.instrument_id].qty == 3
     assert bridge.fee_ledger.total(run_id=bridge.run_id) == Decimal("0.30")
+
+
+
+@pytest.mark.parametrize("fault_stage", ["position_lot", "fee_ledger", "position_aggregate"])
+def test_bridge_mutation_failure_can_replay_without_cross_ledger_double_count(
+    monkeypatch, fault_stage,
+):
+    bridge = _bridge()
+    plan, leg, identity, command, report = _inputs()
+    from environments.virtual.position.virtual_position_aggregate import VirtualPositionAggregate
+
+    targets = {
+        "position_lot": (type(bridge.position_lot_store), "apply_execution"),
+        "fee_ledger": (type(bridge.fee_ledger), "record"),
+        "position_aggregate": (VirtualPositionAggregate, "apply_fill"),
+    }
+    target_class, method_name = targets[fault_stage]
+    original_apply = getattr(target_class, method_name)
+    injected = {"raised": False}
+
+    def apply_then_raise_once(self, *args, **kwargs):
+        original_apply(self, *args, **kwargs)
+        if not injected["raised"]:
+            injected["raised"] = True
+            raise RuntimeError(f"SYNTHETIC_FAULT_AFTER_{fault_stage.upper()}_MUTATION")
+
+    monkeypatch.setattr(target_class, method_name, apply_then_raise_once)
+    with pytest.raises(RuntimeError, match=f"SYNTHETIC_FAULT_AFTER_{fault_stage.upper()}_MUTATION"):
+        bridge._apply_reconciled_execution(
+            plan=plan, leg=leg, identity=identity,
+            broker_command=command, report=report,
+        )
+
+    assert len(bridge.position_lot_store.history()) == 1
+    expected_fee_rows = 1 if fault_stage in {"fee_ledger", "position_aggregate"} else 0
+    assert len(bridge.fee_ledger.query(run_id=bridge.run_id)) == expected_fee_rows
+    assert bridge.leg_positions == {}
+    assert bridge._applied_execution_fingerprints == {}
+    assert bridge.execution_legs == {}
+    assert bridge.provenance == {}
+
+    monkeypatch.setattr(target_class, method_name, original_apply)
+    bridge._apply_reconciled_execution(
+        plan=plan, leg=leg, identity=identity,
+        broker_command=command, report=report,
+    )
+
+    assert len(bridge.position_lot_store.history()) == 2
+    assert len(bridge.fee_ledger.query(run_id=bridge.run_id)) == 2
+    assert bridge.fee_ledger.total(run_id=bridge.run_id) == Decimal("0.30")
+    assert bridge.leg_positions[identity.instrument_id].qty == 3
+    assert len(bridge._applied_execution_fingerprints) == 2
