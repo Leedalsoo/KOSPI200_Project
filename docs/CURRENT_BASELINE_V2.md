@@ -1319,3 +1319,12 @@
 - Added a deterministic same-process two-thread fixture with two independent RawStore instances sharing one empty temporary JSONL path. A barrier forces both writers to complete empty-tail validation before either append proceeds. Both append calls return their own sequence=1 record. Persisted records remain valid JSONL, but may contain only one or both submitted payloads; five exploratory repetitions observed one persisted row in four runs and two rows in one run.
 - This is a Windows same-process synthetic interleaving, not proof of all process/filesystem behaviors or production occurrence. It demonstrates that simultaneous shared-path writes can lose a returned append under this tested schedule. It does not define a lock scope, file-global sequence, retry, recovery, or durability policy. No production code changed.
 - Raw integrity 18 passed; KIS infrastructure regression and static checks recorded with this change. Synthetic temporary path only; no original Raw/Canonical/accepted-source/manifest mutation, no KIS/API/Live/orders/services/scheduler/new collection. S4 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+
+## 2026-11-24 No.1807 — shared Virtual Runtime 통합 검증
+
+- tests/application/composition/test_q25_a8_r9_strategyhub_shared_runtime_e2e.py를 기존 DERIVED_SCENARIO 입력 및 선언된 KRX source-anchor SHA-256 e770a22a882e71e500260203276a067fc27940587d1d7edcbd670548b36e20d9로 검증했다. 격리 worktree에서는 원본 데이터 복사 없이 해당 입력 경로를 읽기 전용 junction으로 연결했다.
+- 공통 StrategyHub/Virtual Runtime 경로에서 표준 전략 키 전체를 deterministic test-only signal driver로 통과시키고, 2개 전략의 동일 계좌 공유 시 포지션 상계 격리 및 risk-denied/stale-quote/identity-mismatch fault 주입을 검증했다: 13 passed.
+- Candidate/VSSF 통합 3개 모듈에서 multi-leg partial fill, cancel/late-fill 경합, close/reopen, U19 SQLite restart/replay, candidate/account 격리, PositionLot/Fee Ledger/PnL reconciliation 및 deterministic replay를 검증했다: 10 passed.
+- 총 4개 통합 테스트 모듈 23 passed. 실행은 격리 worktree, py -m pytest -q -p no:cacheprovider 기준이며 종료 코드 0.
+- 제한: 전략별 자연 신호 생성 검증이 아니라 공통 Runtime 연결을 위한 test-only deterministic driver다. 이 결과는 전체 전략 1~9 자연 신호 E2E, Full T4 X3 fault matrix, Production/Live/실계좌 readiness를 의미하지 않는다. T4는 계속 진행 중이며 T5는 미착수다.
+- Production 코드 변경 없음. 테스트 입력 원본과 Raw/Canonical/accepted-source/manifest는 변경하지 않았다. KIS/REAL_VTS/Live/account API, 실제 주문·취소·청산, collector/service/scheduler 실행 및 신규 수집 없음. S4는 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED 유지.

@@ -1,4 +1,13 @@
 # AGENTS.md — KOSPI200 Project 작업 기준
+
+## 2026-11-24 No.1807 — shared Virtual Runtime 통합 검증
+
+- tests/application/composition/test_q25_a8_r9_strategyhub_shared_runtime_e2e.py를 기존 DERIVED_SCENARIO 입력 및 선언된 KRX source-anchor SHA-256 e770a22a882e71e500260203276a067fc27940587d1d7edcbd670548b36e20d9로 검증했다. 격리 worktree에서는 원본 데이터 복사 없이 해당 입력 경로를 읽기 전용 junction으로 연결했다.
+- 공통 StrategyHub/Virtual Runtime 경로에서 표준 전략 키 전체를 deterministic test-only signal driver로 통과시키고, 2개 전략의 동일 계좌 공유 시 포지션 상계 격리 및 risk-denied/stale-quote/identity-mismatch fault 주입을 검증했다: 13 passed.
+- Candidate/VSSF 통합 3개 모듈에서 multi-leg partial fill, cancel/late-fill 경합, close/reopen, U19 SQLite restart/replay, candidate/account 격리, PositionLot/Fee Ledger/PnL reconciliation 및 deterministic replay를 검증했다: 10 passed.
+- 총 4개 통합 테스트 모듈 23 passed. 실행은 격리 worktree, py -m pytest -q -p no:cacheprovider 기준이며 종료 코드 0.
+- 제한: 전략별 자연 신호 생성 검증이 아니라 공통 Runtime 연결을 위한 test-only deterministic driver다. 이 결과는 전체 전략 1~9 자연 신호 E2E, Full T4 X3 fault matrix, Production/Live/실계좌 readiness를 의미하지 않는다. T4는 계속 진행 중이며 T5는 미착수다.
+- Production 코드 변경 없음. 테스트 입력 원본과 Raw/Canonical/accepted-source/manifest는 변경하지 않았다. KIS/REAL_VTS/Live/account API, 실제 주문·취소·청산, collector/service/scheduler 실행 및 신규 수집 없음. S4는 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED 유지.
 ## 2026-11-23 최신 확정 기준 및 S4 lot 소유권 검증 (No.1781)
 
 - No.1781은 No.1780 이후 최신 S4 lot ownership 결과다. 데이터 부족은 즉시 BLOCKED 처리하지 않고 최신 Notion 결정·실행기록과 로컬 코드/manifest/provenance를 먼저 대조한 뒤 synthetic validation-only fixture 및 입력 독립 focused regression으로 검증한다.
