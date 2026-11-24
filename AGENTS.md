@@ -1,3 +1,14 @@
+## 2026-11-24 No.1817 ? Virtual Bridge publication rollback/replay consistency
+
+- Reconciled No.1816/1815/1814/1813/1812, No.1763, Current Baseline v2, No.1546 A8, remote Project200 AGENTS.md and local source before modification. Continued with provenance-labelled synthetic fixtures because accepted runtime-v2 inputs are absent; no original source data was altered.
+- A synthetic write-after-mutation fault immediately after publishing the candidate aggregate into `leg_positions` and before publishing `_applied_execution_fingerprints` left PositionLot=1, Fee Ledger=1, aggregate quantity=1, fingerprint=0. Replaying the same two-fill report produced aggregate quantity 4 instead of expected 3, although PositionLot/Fee were deduplicated.
+- Added parameterized fault regression for all four in-memory publication maps: `leg_positions`, `_applied_execution_fingerprints`, `execution_legs`, and `provenance`. Test-first: all four cases failed because earlier map writes remained published after a later map write raised.
+- Updated `VirtualMultiLegExecutionBridge._apply_reconciled_execution()` to snapshot the prior values, publish the four projection indexes as a guarded unit, and restore/remove keys in reverse order if any publication write raises. Existing PositionLot/Fee idempotency remains the replay mechanism for already-applied store rows.
+- S8/S4 validation-only/Fresh31 data-independent selection: 37 passed, 2 deselected. The two excluded Fresh31 tests require absent `data/accepted_market_data/runtime_v2`; they were not counted as PASS or code failures. `py -m compileall -q application tests`, scoped Ruff F821/F401/F841, and `git diff --check` passed.
+- Scope is synchronous in-memory projection-map rollback only. This is not a cross-store atomic transaction, process-durable recovery, concurrency/locking guarantee, or authoritative KIS event identity contract. No.1689 phase/X2 exception and No.1652 aggregate separation remain unchanged. Track7 durable restart and Full T4 X3 remain OPEN; T5 not started; S4 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+- No KIS/REAL_VTS/Live/account API, broker order/cancel/liquidation, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original mutation.
+- Detail: https://app.notion.com/p/4225f4f6eaa18110aed3cc9d8ea53d1e
+
 # AGENTS.md — KOSPI200 Project 작업 기준
 
 ## 2026-11-24 No.1808 — T4 Virtual 통합 검증 보강

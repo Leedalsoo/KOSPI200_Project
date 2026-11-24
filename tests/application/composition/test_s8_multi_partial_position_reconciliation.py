@@ -588,3 +588,49 @@ def test_bridge_mutation_failure_can_replay_without_cross_ledger_double_count(
     assert bridge.fee_ledger.total(run_id=bridge.run_id) == Decimal("0.30")
     assert bridge.leg_positions[identity.instrument_id].qty == 3
     assert len(bridge._applied_execution_fingerprints) == 2
+
+
+@pytest.mark.parametrize("fault_mapping", ["leg_positions", "_applied_execution_fingerprints", "execution_legs", "provenance"])
+def test_bridge_publish_mapping_failure_rolls_back_indexes_and_replays_cleanly(fault_mapping):
+    bridge = _bridge()
+    plan, leg, identity, command, report = _inputs()
+
+    class FailAfterSetDict(dict):
+        def __init__(self):
+            super().__init__()
+            self.armed = True
+
+        def __setitem__(self, key, value):
+            super().__setitem__(key, value)
+            if self.armed:
+                self.armed = False
+                raise RuntimeError(f"SYNTHETIC_FAULT_AFTER_{fault_mapping.upper()}_PUBLISH")
+
+    setattr(bridge, fault_mapping, FailAfterSetDict())
+    with pytest.raises(RuntimeError, match=f"SYNTHETIC_FAULT_AFTER_{fault_mapping.upper()}_PUBLISH"):
+        bridge._apply_reconciled_execution(
+            plan=plan, leg=leg, identity=identity,
+            broker_command=command, report=report,
+        )
+
+    assert len(bridge.position_lot_store.history()) == 1
+    assert len(bridge.fee_ledger.query(run_id=bridge.run_id)) == 1
+    assert bridge.leg_positions == {}
+    assert bridge._applied_execution_fingerprints == {}
+    assert bridge.execution_legs == {}
+    assert bridge.provenance == {}
+
+    for mapping_name in ("leg_positions", "_applied_execution_fingerprints", "execution_legs", "provenance"):
+        setattr(bridge, mapping_name, dict(getattr(bridge, mapping_name)))
+    bridge._apply_reconciled_execution(
+        plan=plan, leg=leg, identity=identity,
+        broker_command=command, report=report,
+    )
+
+    assert len(bridge.position_lot_store.history()) == 2
+    assert len(bridge.fee_ledger.query(run_id=bridge.run_id)) == 2
+    assert bridge.fee_ledger.total(run_id=bridge.run_id) == Decimal("0.30")
+    assert bridge.leg_positions[identity.instrument_id].qty == 3
+    assert len(bridge._applied_execution_fingerprints) == 2
+    assert len(bridge.execution_legs) == 2
+    assert len(bridge.provenance) == 2

@@ -979,19 +979,17 @@ class VirtualMultiLegExecutionBridge:
             # bridge's previously published aggregate remains replay-safe.
             candidate_position = replace(leg_position)
             VirtualPositionFillAdapter(candidate_position).apply(broker_command, fill_report)
-            self.leg_positions[identity.instrument_id] = candidate_position
-            leg_position = candidate_position
-            self._applied_execution_fingerprints[execution_id] = fingerprint
-            # Publish execution metadata only after the fill has passed duplicate/conflict
-            # checks and its lot, fee, and aggregate mutations have completed.
-            self.execution_legs[execution_id] = {
+            # Publish the in-memory projection indexes as one guarded unit. If a
+            # mapping write fails after an earlier write succeeded, restore the
+            # prior published values so replay cannot double-apply the aggregate.
+            execution_metadata = {
                 "strategy_id": plan.strategy_id, "side": leg.side,
                 "position_role": leg.position_role,
                 "asset_type": "OPTION" if isinstance(identity, OptionInstrumentIdentity) else "FUTURES",
                 "option_type": getattr(identity, "option_type", None),
                 "contract_multiplier": identity.contract_multiplier,
             }
-            self.provenance[execution_id] = {
+            provenance_metadata = {
                 "strategy_id": plan.strategy_id, "group_id": plan.group_id,
                 "leg_id": leg.leg_id, "client_order_id": fill_report.client_order_id,
                 "execution_id": execution_id, "instrument_id": identity.instrument_id,
@@ -1001,6 +999,24 @@ class VirtualMultiLegExecutionBridge:
                 "contract_multiplier": str(identity.contract_multiplier),
                 "identity_source": identity.identity_source or "",
             }
+            missing = object()
+            publication = (
+                (self.leg_positions, identity.instrument_id, self.leg_positions.get(identity.instrument_id, missing), candidate_position),
+                (self._applied_execution_fingerprints, execution_id, self._applied_execution_fingerprints.get(execution_id, missing), fingerprint),
+                (self.execution_legs, execution_id, self.execution_legs.get(execution_id, missing), execution_metadata),
+                (self.provenance, execution_id, self.provenance.get(execution_id, missing), provenance_metadata),
+            )
+            try:
+                for mapping, key, _previous, value in publication:
+                    mapping[key] = value
+            except Exception:
+                for mapping, key, previous, _value in reversed(publication):
+                    if previous is missing:
+                        mapping.pop(key, None)
+                    else:
+                        mapping[key] = previous
+                raise
+            leg_position = candidate_position
 
     def execute(
         self,
