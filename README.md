@@ -1342,3 +1342,8 @@ Synthetic temporary-file test confirms that when the synchronous Frame Observer 
 - Multi-fill VSSF reports retain fill IDs but expose no report-level ID when multiple fills exist. No.1747 already covered the Track7 callback consequence; no duplicate tests were run.
 - Production identity/dedupe/persistence/watermark changes remain unapproved. KIS authoritative ID scope is UNKNOWN until API evidence exists. No production source/test or source dataset changed. Track7 durable restart and Full T4 X3 remain OPEN; T5 not started; S4 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
 - Notion: [No.1810](https://app.notion.com/p/4225f4f6eaa1810dbc5ac69e0c609edb).
+
+
+## Latest validation ? No.1811 (2026-11-24)
+
+The standard Virtual VSSF composition does not wire the standalone `ExecutionEventDeduplicator` / `VirtualExecutionPositionBridge` into the VSSF execution path, and Track7 callback does not consume that deduplicator. The standalone Virtual deduplicator keys only on `execution_id`: changed order/group/leg/quantity/price under the same ID is suppressed as a duplicate, while a fresh deduplicator instance accepts the ID again. Synthetic/read-only checks: 8/8 PASS. This is a code-path characterization, not an approved KIS execution identity or conflict policy. No production source/test changes; see [Current Baseline v2](docs/CURRENT_BASELINE_V2.md).
