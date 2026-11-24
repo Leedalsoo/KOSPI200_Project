@@ -1334,3 +1334,11 @@ Synthetic temporary-file test confirms that when the synchronous Frame Observer 
 - Nine inline synthetic/read-only checks passed. This is implementation characterization, not proof of broker event behavior or durable recovery. No production source or test file changed.
 - No snapshot owner/schema, fill-vs-report event unit, ID uniqueness scope, payload-conflict, sequence/watermark, callback synchronization, or readiness policy is approved. Track7 durable restart and Full T4 X3 remain OPEN; T5 not started. No Live/API/order/collector/service/scheduler or source-data mutation. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
 - Notion: [No.1809](https://app.notion.com/p/4225f4f6eaa18128af91e615d5c93915).
+
+## 2026-11-24 No.1810 - VSSF synthetic execution ID scope
+
+- Each `VirtualSecuritiesFirmRuntime` constructs its own `ExecutionEngine`; the engine resets `_seq` to 0 and emits `EXEC-000001`, `EXEC-000002`, etc. The ID does not include run/process/candidate scope.
+- Synthetic validation confirmed two different candidate runtimes and a recreated same-run runtime all issue `EXEC-000001` as their first ID (5/5 PASS); supporting engine/adapter probe 6/6 PASS. This is only a Virtual synthetic ID scope finding, not a KIS broker ID claim.
+- Multi-fill VSSF reports retain fill IDs but expose no report-level ID when multiple fills exist. No.1747 already covered the Track7 callback consequence; no duplicate tests were run.
+- Production identity/dedupe/persistence/watermark changes remain unapproved. KIS authoritative ID scope is UNKNOWN until API evidence exists. No production source/test or source dataset changed. Track7 durable restart and Full T4 X3 remain OPEN; T5 not started; S4 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+- Notion: [No.1810](https://app.notion.com/p/4225f4f6eaa1810dbc5ac69e0c609edb).
