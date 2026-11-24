@@ -1393,3 +1393,14 @@ A synthetic fault injected after each of PositionLot, Fee Ledger, and Position A
 - Scope is synchronous in-memory projection-map rollback only. This is not a cross-store atomic transaction, process-durable recovery, concurrency/locking guarantee, or authoritative KIS event identity contract. No.1689 phase/X2 exception and No.1652 aggregate separation remain unchanged. Track7 durable restart and Full T4 X3 remain OPEN; T5 not started; S4 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
 - No KIS/REAL_VTS/Live/account API, broker order/cancel/liquidation, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original mutation.
 - Detail: https://app.notion.com/p/4225f4f6eaa18110aed3cc9d8ea53d1e
+
+## 2026-11-25 No.1818 ? multi-fill intermediate publication failure/replay
+
+- Reconciled latest No.1817/1816, Current Baseline v2, No.1546 A8, No.1763 and local Project200 source before testing. Continued with validation-only synthetic two-fill report; original datasets untouched.
+- Injected a write-after-mutation fault on the second `leg_positions` aggregate publication. After the fault, first fill aggregate quantity 1 and its fingerprint/execution metadata/provenance remained published; both PositionLot and Fee Ledger rows were already present (2 rows, fee total 0.30).
+- Replayed the same report. First fill was not applied twice; second fill was applied once. Final state: PositionLot 2, Fee Ledger 2 / total 0.30, aggregate quantity 3, fingerprints 2, execution metadata 2, provenance 2.
+- Added regression `test_second_fill_publication_failure_preserves_first_fill_and_replays_only_second`. Existing No.1817 implementation passed; no production source change was needed.
+- S8/S4/Fresh31 data-independent selection: 38 passed, 2 deselected. The two Fresh31 tests require absent `data/accepted_market_data/runtime_v2`; not counted as PASS or code failures. `py -m compileall -q application tests`, scoped Ruff F821/F401/F841, and `git diff --check` passed.
+- Scope: per-fill in-memory publication rollback/replay only; not cross-store atomicity, durable restart recovery, concurrency/locking, or authoritative KIS identity policy. No.1689 phase/X2 and No.1652 aggregate boundaries retained. Track7 durable restart and Full T4 X3 OPEN; T5 not started; S4 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+- No Live/account API, broker actions, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original changes.
+- Detail: https://app.notion.com/p/4225f4f6eaa18185ac0ae77a0983200e

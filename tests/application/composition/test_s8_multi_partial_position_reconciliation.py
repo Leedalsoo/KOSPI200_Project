@@ -634,3 +634,48 @@ def test_bridge_publish_mapping_failure_rolls_back_indexes_and_replays_cleanly(f
     assert len(bridge._applied_execution_fingerprints) == 2
     assert len(bridge.execution_legs) == 2
     assert len(bridge.provenance) == 2
+
+
+def test_second_fill_publication_failure_preserves_first_fill_and_replays_only_second(monkeypatch):
+    bridge = _bridge()
+    plan, leg, identity, command, report = _inputs()
+
+    class FailAfterSecondSetDict(dict):
+        def __init__(self):
+            super().__init__()
+            self.set_count = 0
+
+        def __setitem__(self, key, value):
+            super().__setitem__(key, value)
+            self.set_count += 1
+            if self.set_count == 2:
+                raise RuntimeError("SYNTHETIC_FAULT_AFTER_SECOND_FILL_AGGREGATE_PUBLISH")
+
+    bridge.leg_positions = FailAfterSecondSetDict()
+    with pytest.raises(RuntimeError, match="SYNTHETIC_FAULT_AFTER_SECOND_FILL_AGGREGATE_PUBLISH"):
+        bridge._apply_reconciled_execution(
+            plan=plan, leg=leg, identity=identity,
+            broker_command=command, report=report,
+        )
+
+    assert len(bridge.position_lot_store.history()) == 2
+    assert len(bridge.fee_ledger.query(run_id=bridge.run_id)) == 2
+    assert bridge.fee_ledger.total(run_id=bridge.run_id) == Decimal("0.30")
+    assert bridge.leg_positions[identity.instrument_id].qty == 1
+    assert set(bridge._applied_execution_fingerprints) == {"S8-FILL-001"}
+    assert set(bridge.execution_legs) == {"S8-FILL-001"}
+    assert set(bridge.provenance) == {"S8-FILL-001"}
+
+    bridge.leg_positions = dict(bridge.leg_positions)
+    bridge._apply_reconciled_execution(
+        plan=plan, leg=leg, identity=identity,
+        broker_command=command, report=report,
+    )
+
+    assert len(bridge.position_lot_store.history()) == 2
+    assert len(bridge.fee_ledger.query(run_id=bridge.run_id)) == 2
+    assert bridge.fee_ledger.total(run_id=bridge.run_id) == Decimal("0.30")
+    assert bridge.leg_positions[identity.instrument_id].qty == 3
+    assert set(bridge._applied_execution_fingerprints) == {"S8-FILL-001", "S8-FILL-002"}
+    assert set(bridge.execution_legs) == {"S8-FILL-001", "S8-FILL-002"}
+    assert set(bridge.provenance) == {"S8-FILL-001", "S8-FILL-002"}
