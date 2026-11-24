@@ -1,5 +1,15 @@
 # AGENTS.md — KOSPI200 Project 작업 기준
 
+## 2026-11-24 No.1808 — T4 Virtual 통합 검증 보강
+
+- S2 U18 stop-close/trailing, U19 four-leg restart, shared StrategyHub/Virtual Runtime, Candidate/VSSF, X2 latch 및 Track7/Track8 lifecycle을 16개 모듈로 통합 검증: 145 passed, 0 skipped.
+- U18 stop-close는 09:26:21 synthetic position-aware stress quote 4-leg supplement를 사용했다. Original sidecar 84 rows/21 candidates는 보존했고 별도 산출물은 88 rows/22 candidates다. Source anchor age 21초, 최대 854초. 실제 옵션 호가나 Black-Scholes 재평가가 아니다.
+- Original KIS WS raw SHA-256 17940636bdf18c0b5ab8d128c524fd8c7593fb3db66dc9d5c6a696873a98145f와 accepted runtime source_raw_sha256 일치 확인. Timing file은 부재하므로 source timing capability는 UNVERIFIED로 유지하고 synthetic alternative 경로로 X2 검증.
+- Track7 test-only SQLite snapshot을 별도 Python 프로세스에서 복원하고 checksum/2개 만기 상태/X2 side-effect gate를 확인했다. Production Track7 snapshot/restore API는 없으므로 durable restart는 OPEN.
+- Production source 변경 없음. Raw/Canonical/accepted-source/manifest 원본 변경 없음. Full T4 X3 matrix 및 전략 1~9 자연 신호 E2E OPEN, T5 미착수, S4 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED 유지.
+- Notion: https://app.notion.com/p/4225f4f6eaa18154962bcbbd1f57a380
+
+
 ## 2026-11-24 No.1807 — shared Virtual Runtime 통합 검증
 
 - tests/application/composition/test_q25_a8_r9_strategyhub_shared_runtime_e2e.py를 기존 DERIVED_SCENARIO 입력 및 선언된 KRX source-anchor SHA-256 e770a22a882e71e500260203276a067fc27940587d1d7edcbd670548b36e20d9로 검증했다. 격리 worktree에서는 원본 데이터 복사 없이 해당 입력 경로를 읽기 전용 junction으로 연결했다.

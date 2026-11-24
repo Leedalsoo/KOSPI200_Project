@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -19,6 +19,7 @@ from core.oms.track2_u19_recovery import (
 )
 from environments.virtual.position.track2_u19_recovery_store import SqliteTrack2U19RecoveryStore
 from verification.track2_quote_profile_binding import bind_validation_only_track2_quote_scenario_profile
+from verification.track2_u18_stop_scenario import build_validation_only_track2_u18_stop_scenario
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -203,8 +204,16 @@ def test_s2_four_leg_runtime_state_is_captured_and_reconciled_after_u19_restart(
     monkeypatch.setattr(replay, "attach_standard_automated_loop", capture_attach)
     monkeypatch.setattr(VirtualPositionLotStore, "apply_execution", capture_four_open_lots)
 
-    binding = bind_validation_only_track2_quote_scenario_profile(
+    scenario = build_validation_only_track2_u18_stop_scenario(
         source_manifest_path=SIDECAR / "manifest.json",
+        source_profile_path=SOURCE_PROFILE,
+        accepted_dataset_path=DATASET,
+        output_dir=tmp_path / "u19-four-leg-stop-scenario",
+    )
+    assert scenario["candidate_count"] == 22
+    assert scenario["quote_rows"] == 88
+    binding = bind_validation_only_track2_quote_scenario_profile(
+        source_manifest_path=scenario["manifest_path"],
         source_profile_path=SOURCE_PROFILE,
         target_profile_path=VALIDATION_PROFILE,
         output_dir=tmp_path / "u19-four-leg-bound-sidecar",
@@ -213,7 +222,7 @@ def test_s2_four_leg_runtime_state_is_captured_and_reconciled_after_u19_restart(
     trace_path = tmp_path / "s2-u19-four-leg-runtime-trace.jsonl"
     report = replay.HighSpeedVirtualRuntimeReplayRunner(
         DATASET,
-        run_id="Q25-A8-R9-S2-U19-FOUR-LEG-RESTART-86-20261118",
+        run_id="Q25-A8-R9-S2-U19-FOUR-LEG-RESTART-87-20261124",
         strategy_keys=(("track2_asymmetric_trap", "1.0"),),
         validation_only_synthetic=True,
         validation_only_track2_manifest=DATASET / "manifest.json",
@@ -221,9 +230,9 @@ def test_s2_four_leg_runtime_state_is_captured_and_reconciled_after_u19_restart(
         validation_only_track2_quote_scenario_manifest=binding.manifest_path,
         log_mode="detailed",
         trace_output=trace_path,
-    ).run(max_events=86)
+    ).run(max_events=87)
 
-    assert report.events == 86
+    assert report.events == 87
     assert report.signals == 2
     assert report.filled == 8
     assert report.rejected == 0

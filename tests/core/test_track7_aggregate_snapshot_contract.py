@@ -1,5 +1,10 @@
 import hashlib
 import json
+import sqlite3
+import subprocess
+import sys
+import textwrap
+from pathlib import Path
 from dataclasses import fields
 from datetime import datetime
 from decimal import Decimal
@@ -1018,3 +1023,107 @@ def test_track7_strategyhub_initializes_before_test_only_aggregate_restore():
     assert target._active_expiry == snapshot_source._active_expiry
     assert target._legacy_exit_pending is True
     assert target._exit_pending_expiries == snapshot_source._exit_pending_expiries
+
+def test_track7_test_only_snapshot_candidate_survives_new_process_sqlite_reopen(
+    tmp_path,
+):
+    """Test-only persistence candidate; not a Production Track7 store or recovery contract."""
+    source = _multi_expiry_strategy()
+    envelope = _capture_aggregate(source)
+    payload_json = json.dumps(
+        envelope["payload"], sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    )
+    config_json = json.dumps(
+        envelope["payload"]["config"], sort_keys=True, separators=(",", ":")
+    )
+    database_path = tmp_path / "track7-snapshot-candidate.sqlite3"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE test_only_track7_snapshot_candidate (
+                snapshot_id TEXT PRIMARY KEY,
+                strategy_id TEXT NOT NULL,
+                strategy_version TEXT NOT NULL,
+                config_json TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                payload_sha256 TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO test_only_track7_snapshot_candidate
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "SYNTHETIC-TRACK7-SNAPSHOT-001",
+                source.strategy_id,
+                source.version,
+                config_json,
+                payload_json,
+                envelope["sha256"],
+            ),
+        )
+        connection.commit()
+
+    child_code = textwrap.dedent(
+        """\
+        import json
+        import runpy
+        import sqlite3
+        import sys
+
+        module = runpy.run_path(sys.argv[1])
+        with sqlite3.connect(sys.argv[2]) as connection:
+            row = connection.execute(
+                "SELECT strategy_id, strategy_version, config_json, payload_json, payload_sha256 "
+                "FROM test_only_track7_snapshot_candidate WHERE snapshot_id = ?",
+                ("SYNTHETIC-TRACK7-SNAPSHOT-001",),
+            ).fetchone()
+        if row is None:
+            raise RuntimeError("TRACK7_TEST_SNAPSHOT_NOT_FOUND")
+        strategy_id, strategy_version, config_json, payload_json, payload_sha256 = row
+        payload = json.loads(payload_json)
+        if strategy_id != payload["strategy_id"] or strategy_version != payload["strategy_version"]:
+            raise RuntimeError("TRACK7_TEST_SNAPSHOT_IDENTITY_MISMATCH")
+        restored, gate = module["_restore_aggregate"](
+            {"payload": payload, "sha256": payload_sha256},
+            x2_latched=True,
+            expected_config=json.loads(config_json),
+        )
+        print(
+            json.dumps(
+                {
+                    "strategy_id": restored.strategy_id,
+                    "strategy_version": restored.version,
+                    "payload": module["_capture_aggregate"](restored)["payload"],
+                    "gate": gate,
+                },
+                sort_keys=True,
+            )
+        )
+        """
+    )
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            child_code,
+            str(Path(__file__).resolve()),
+            str(database_path),
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    restored = json.loads(completed.stdout.strip().splitlines()[-1])
+
+    assert restored["strategy_id"] == source.strategy_id
+    assert restored["strategy_version"] == source.version
+    assert restored["payload"] == envelope["payload"]
+    assert restored["gate"] == {
+        "state_restored": True,
+        "side_effect_actions_allowed": False,
+    }

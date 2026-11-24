@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from collections import Counter
 from pathlib import Path
@@ -8,6 +9,7 @@ import pytest
 
 import environments.high_speed.virtual_runtime_replay as replay
 from verification.track2_quote_profile_binding import bind_validation_only_track2_quote_scenario_profile
+from verification.track2_u18_stop_scenario import build_validation_only_track2_u18_stop_scenario
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -35,6 +37,29 @@ def test_s2_u18_stop_close_uses_shared_virtual_runtime_and_finishes_group_flat(t
             f"preserved source inventory before classifying missing data: {missing}"
         )
 
+    source_hashes_before = {
+        path: hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in (
+            DATASET / "manifest.json",
+            DATASET / "20261012.jsonl",
+            DATASET / "20261013.jsonl",
+            SIDECAR / "manifest.json",
+            SIDECAR / "four_leg_quotes.jsonl",
+            SIDECAR / "candidate_inputs.json",
+        )
+    }
+    scenario = build_validation_only_track2_u18_stop_scenario(
+        source_manifest_path=SIDECAR / "manifest.json",
+        source_profile_path=SOURCE_PROFILE,
+        accepted_dataset_path=DATASET,
+        output_dir=tmp_path / "u18-stop-scenario",
+    )
+    assert scenario["candidate_count"] == 22
+    assert scenario["quote_rows"] == 88
+    assert scenario["supplemental_snapshots"][0]["source_anchor_age_seconds"] == 21
+    assert scenario["supplemental_snapshots"][0]["source_anchor_max_age_seconds"] == 854
+    assert scenario["supplemental_snapshots"][0]["underlying_anchor_price"] == "1034.97"
+
     captured = {}
     original_attach = replay.attach_standard_automated_loop
 
@@ -45,16 +70,16 @@ def test_s2_u18_stop_close_uses_shared_virtual_runtime_and_finishes_group_flat(t
 
     monkeypatch.setattr(replay, "attach_standard_automated_loop", capture_attach)
     binding = bind_validation_only_track2_quote_scenario_profile(
-        source_manifest_path=SIDECAR / "manifest.json",
+        source_manifest_path=scenario["manifest_path"],
         source_profile_path=SOURCE_PROFILE,
         target_profile_path=STOP_PROFILE,
         output_dir=tmp_path / "profile-bound-sidecar",
-        purpose="U18_STOP_PATH_VALIDATION_ONLY_SAME_MARKET_CALIBRATION_AND_QUOTE_VALUES",
+        purpose="U18_STOP_PATH_VALIDATION_ONLY_MARKET_ANCHORED_POSITION_AWARE_STRESS",
     )
     trace_path = tmp_path / "s2-u18-stop-runtime.jsonl"
     runner = replay.HighSpeedVirtualRuntimeReplayRunner(
         DATASET,
-        run_id="Q25-A8-R9-S2-U18-STOP-86-20261117",
+        run_id="Q25-A8-R9-S2-U18-STOP-87-20261124",
         strategy_keys=(("track2_asymmetric_trap", "1.0"),),
         validation_only_synthetic=True,
         validation_only_track2_manifest=DATASET / "manifest.json",
@@ -63,7 +88,7 @@ def test_s2_u18_stop_close_uses_shared_virtual_runtime_and_finishes_group_flat(t
         log_mode="detailed",
         trace_output=trace_path,
     )
-    report = runner.run(max_events=86)
+    report = runner.run(max_events=87)
 
     loop = captured["loop"]
     bridge = loop.multi_leg_bridge
@@ -78,7 +103,7 @@ def test_s2_u18_stop_close_uses_shared_virtual_runtime_and_finishes_group_flat(t
     purposes = Counter(item["payload"]["command"]["order_purpose"] for item in order_commands)
     fills = [item for item in trace if item.get("event_type") == "fill"]
 
-    assert report.events == 86
+    assert report.events == 87
     assert report.exhausted is False  # Deliberately stop after the first completed group-close scenario.
     assert report.signals == 2  # One four-leg entry and one U18 stop-close signal.
     assert report.approved == 2
@@ -89,6 +114,7 @@ def test_s2_u18_stop_close_uses_shared_virtual_runtime_and_finishes_group_flat(t
     assert open_lots == ()
     assert account.positions == {}
     assert float(snapshot.initial_net_premium_received) == pytest.approx(1_987_500.0)
+    assert all(hashlib.sha256(path.read_bytes()).hexdigest() == digest for path, digest in source_hashes_before.items())
 
     bound_manifest = json.loads(binding.manifest_path.read_text(encoding="utf-8"))
     bound_profile = json.loads(STOP_PROFILE.read_text(encoding="utf-8"))

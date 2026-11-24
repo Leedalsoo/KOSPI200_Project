@@ -1328,3 +1328,12 @@
 - 총 4개 통합 테스트 모듈 23 passed. 실행은 격리 worktree, py -m pytest -q -p no:cacheprovider 기준이며 종료 코드 0.
 - 제한: 전략별 자연 신호 생성 검증이 아니라 공통 Runtime 연결을 위한 test-only deterministic driver다. 이 결과는 전체 전략 1~9 자연 신호 E2E, Full T4 X3 fault matrix, Production/Live/실계좌 readiness를 의미하지 않는다. T4는 계속 진행 중이며 T5는 미착수다.
 - Production 코드 변경 없음. 테스트 입력 원본과 Raw/Canonical/accepted-source/manifest는 변경하지 않았다. KIS/REAL_VTS/Live/account API, 실제 주문·취소·청산, collector/service/scheduler 실행 및 신규 수집 없음. S4는 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED 유지.
+
+## 2026-11-24 No.1808 — T4 Virtual 통합 검증 보강
+
+- S2 U18 stop-close/trailing, U19 four-leg restart, shared StrategyHub/Virtual Runtime, Candidate/VSSF, X2 latch 및 Track7/Track8 lifecycle을 16개 모듈로 통합 검증: 145 passed, 0 skipped.
+- U18 stop-close는 09:26:21 synthetic position-aware stress quote 4-leg supplement를 사용했다. Original sidecar 84 rows/21 candidates는 보존했고 별도 산출물은 88 rows/22 candidates다. Source anchor age 21초, 최대 854초. 실제 옵션 호가나 Black-Scholes 재평가가 아니다.
+- Original KIS WS raw SHA-256 17940636bdf18c0b5ab8d128c524fd8c7593fb3db66dc9d5c6a696873a98145f와 accepted runtime source_raw_sha256 일치 확인. Timing file은 부재하므로 source timing capability는 UNVERIFIED로 유지하고 synthetic alternative 경로로 X2 검증.
+- Track7 test-only SQLite snapshot을 별도 Python 프로세스에서 복원하고 checksum/2개 만기 상태/X2 side-effect gate를 확인했다. Production Track7 snapshot/restore API는 없으므로 durable restart는 OPEN.
+- Production source 변경 없음. Raw/Canonical/accepted-source/manifest 원본 변경 없음. Full T4 X3 matrix 및 전략 1~9 자연 신호 E2E OPEN, T5 미착수, S4 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED 유지.
+- Notion: https://app.notion.com/p/4225f4f6eaa18154962bcbbd1f57a380
