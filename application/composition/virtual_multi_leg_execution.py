@@ -912,6 +912,21 @@ class VirtualMultiLegExecutionBridge:
             }
             return
 
+        # Validate every fill ID against the applied ledger before mutating any
+        # fill in this report. Otherwise an earlier new fill can be committed
+        # before a later fill in the same report raises an ID conflict.
+        for fill_report in fill_reports:
+            execution_id = fill_report.execution_id
+            fingerprint = (
+                fill_report.client_order_id, identity.instrument_id, leg.side,
+                fill_report.filled_quantity, fill_report.execution_price,
+                fill_report.execution_timestamp, fill_report.fee,
+                fill_report.group_id, fill_report.leg_id,
+            )
+            prior_fingerprint = self._applied_execution_fingerprints.get(execution_id)
+            if prior_fingerprint is not None and prior_fingerprint != fingerprint:
+                raise RuntimeError("MULTI_LEG_EXECUTION_ID_CONFLICT_RECONCILIATION_REQUIRED")
+
         from environments.virtual.position.virtual_position_aggregate import VirtualPositionAggregate
         from environments.virtual.position.virtual_position_fill_adapter import VirtualPositionFillAdapter
         leg_position = self.leg_positions.get(identity.instrument_id)

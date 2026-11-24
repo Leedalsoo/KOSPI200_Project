@@ -1404,3 +1404,14 @@
 - Ruff F821/F401 PASS; `py -m compileall -q application tests` PASS; `git diff --check` PASS. Whole-file Ruff format check exposes pre-existing formatting differences in the existing large source/test files; no broad auto-format was applied.
 - No KIS/REAL_VTS/Live/account API, broker orders/cancels/liquidations, collector/service/scheduler, or new data collection. Raw/Canonical/accepted-source/manifest originals unchanged. No.1689 phase/X2 exception and No.1652 aggregate separation retained. Track7 durable restart and Full T4 X3 OPEN; T5 not started; S4 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
 - Notion: [No.1814](https://app.notion.com/p/4225f4f6eaa1813784aec5b0f5dd8918).
+
+## 2026-11-24 No.1815 ? multi-fill report conflict preflight
+
+- Reconciled No.1814/1813/1812, Current Baseline v2, No.1546 A8 and local source before changing code.
+- Reproduced a partial-application defect: a multi-fill report's first new fill mutated PositionLot, fee ledger, aggregate, fingerprint and metadata before a later fill conflict raised. The exception left a partially applied report.
+- Updated `VirtualMultiLegExecutionBridge._apply_reconciled_execution()` to preflight all expanded fill fingerprints before creating/mutating the leg aggregate or applying any fill. Existing per-fill duplicate/conflict checks remain as a second guard.
+- Added regression `test_multi_fill_conflict_is_preflighted_before_any_new_fill_mutation`: seed a previously applied later fill, submit a report containing an earlier new fill plus a conflicting later fill, assert all prior lots/fees/aggregate/fingerprints/execution metadata/provenance remain unchanged, then submit the corrected report and verify the new fill is applied once while the prior fill remains once.
+- Test-first reproduction failed on the old code because the earlier fill was applied before the later conflict. After the fix, the focused S8 module passed 15 tests. Combined S8/S4/Fresh31 data-independent selection: 22 passed, 2 deselected. A full attempt without deselection showed exactly two Fresh31 tests require missing `data/accepted_market_data/runtime_v2`; these were not treated as code failures or PASS.
+- `py -m compileall -q application tests`, scoped Ruff F821/F401, and `git diff --check` passed.
+- Scope limitation: preflight prevents known duplicate-ID payload conflicts within the report from causing partial application. It does not establish general transactionality if later lot/fee/aggregate operations throw, nor concurrency safety, durable dedupe, KIS execution identity, Track7 callback, watermark, or X2 policy.
+- No Raw/Canonical/accepted-source/manifest original changes. No KIS/REAL_VTS/Live/account API, broker order/cancel/liquidation, collector/service/scheduler, or new collection. Track7 durable restart and Full T4 X3 remain OPEN; T5 not started; S4 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.

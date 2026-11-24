@@ -1374,3 +1374,11 @@
 - Ruff F821/F401 PASS; `py -m compileall -q application tests` PASS; `git diff --check` PASS. Whole-file Ruff format check exposes pre-existing formatting differences in the existing large source/test files; no broad auto-format was applied.
 - No KIS/REAL_VTS/Live/account API, broker orders/cancels/liquidations, collector/service/scheduler, or new data collection. Raw/Canonical/accepted-source/manifest originals unchanged. No.1689 phase/X2 exception and No.1652 aggregate separation retained. Track7 durable restart and Full T4 X3 OPEN; T5 not started; S4 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
 - Notion: [No.1814](https://app.notion.com/p/4225f4f6eaa1813784aec5b0f5dd8918).
+
+## 2026-11-24 No.1815 - multi-fill conflict preflight
+
+- When one aggregate report expands to multiple fills, validate every fill execution ID against the existing applied-fingerprint map before mutating any fill in that report. A conflict in a later fill must not leave earlier new fills partially applied.
+- Keep the existing per-fill duplicate/conflict guard during application. This is an in-memory Virtual bridge safeguard, not a transaction, durable dedupe mechanism, broker identity contract, or concurrency/locking policy.
+- Use provenance-labelled synthetic fixtures until an approved real-account API and authoritative execution contract are available. Preserve Raw/Canonical/accepted-source/manifest originals. Do not call Live/account APIs, submit broker actions, or start collectors/services/schedulers.
+- Track7 durable restart and Full T4 X3 integrated acceptance remain OPEN; T5 not started; S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+- Evidence: No.1815 multi-fill report with an already-applied later fill whose payload conflicts; preflight rejects the whole incoming report before the earlier new fill changes PositionLot, fee ledger, aggregate, fingerprint, execution metadata, or provenance. Corrected replay then applies only the missing fill and retains the previously applied fill once.

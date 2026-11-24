@@ -472,3 +472,67 @@ def test_legacy_aggregate_only_execution_report_keeps_single_event_compatibility
     assert expanded == (aggregate_only,)
     assert expanded[0].execution_id == "S8-LEGACY-AGGREGATE-FILL"
     assert expanded[0].filled_quantity == aggregate_only.filled_quantity
+
+
+def test_multi_fill_conflict_is_preflighted_before_any_new_fill_mutation():
+    bridge = _bridge()
+    plan, leg, identity, command, report = _inputs()
+    second_fill = replace(report.execution_fills[1], execution_price=Decimal("11.50"))
+    previously_applied = replace(
+        report,
+        execution_id=None,
+        filled_quantity=second_fill.filled_quantity,
+        remaining_quantity=3,
+        execution_price=second_fill.execution_price,
+        execution_timestamp=second_fill.execution_timestamp,
+        fee=second_fill.fee,
+        execution_fills=(second_fill,),
+    )
+    bridge._apply_reconciled_execution(
+        plan=plan, leg=leg, identity=identity,
+        broker_command=command, report=previously_applied,
+    )
+    before_lots = bridge.position_lot_store.history()
+    before_fees = bridge.fee_ledger.query(run_id=bridge.run_id)
+    before_position = bridge.leg_positions[identity.instrument_id].qty
+    before_leg_positions = dict(bridge.leg_positions)
+    before_fingerprints = dict(bridge._applied_execution_fingerprints)
+    before_execution_legs = dict(bridge.execution_legs)
+    before_provenance = dict(bridge.provenance)
+
+    conflicting_fill = replace(second_fill, execution_price=Decimal("11.00"))
+    conflicting = replace(
+        report,
+        execution_fills=(report.execution_fills[0], conflicting_fill),
+    )
+    with pytest.raises(
+        RuntimeError,
+        match="MULTI_LEG_EXECUTION_ID_CONFLICT_RECONCILIATION_REQUIRED",
+    ):
+        bridge._apply_reconciled_execution(
+            plan=plan, leg=leg, identity=identity,
+            broker_command=command, report=conflicting,
+        )
+
+    assert bridge.position_lot_store.history() == before_lots
+    assert bridge.fee_ledger.query(run_id=bridge.run_id) == before_fees
+    assert bridge.leg_positions[identity.instrument_id].qty == before_position
+    assert bridge.leg_positions == before_leg_positions
+    assert bridge._applied_execution_fingerprints == before_fingerprints
+    assert bridge.execution_legs == before_execution_legs
+    assert bridge.provenance == before_provenance
+
+    corrected = replace(
+        report,
+        execution_fills=(report.execution_fills[0], second_fill),
+    )
+    bridge._apply_reconciled_execution(
+        plan=plan, leg=leg, identity=identity,
+        broker_command=command, report=corrected,
+    )
+    assert [(lot.execution_id, lot.opened_quantity) for lot in bridge.position_lot_store.history()] == [
+        ("S8-FILL-002", 2),
+        ("S8-FILL-001", 1),
+    ]
+    assert bridge.leg_positions[identity.instrument_id].qty == 3
+    assert bridge.fee_ledger.total(run_id=bridge.run_id) == Decimal("0.30")
