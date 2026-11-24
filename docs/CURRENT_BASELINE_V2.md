@@ -1384,3 +1384,12 @@
 - No.1689 Observation ? Planning ? Action ? X2 latched fill-reconciliation ?? ??. No.1652 candidate/account aggregate? Track7 strategy aggregate ?? ??. UNKNOWN/CONFLICT??? global X2 ?? ?? ??. Track7 durable restart ? Full T4 X3 OPEN; T5 ???; S4 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
 - Production source/test ?? ??. Raw/Canonical/accepted-source/manifest ?? ?? ??. KIS/Live/account API, broker ????????, collector/service/scheduler ?? ? ?? ?? ??.
 - Next: bridge fingerprint namespace omissions/cross-group reuse ? partial/multi-fill callback event shape? read-only? ????. No.1746/1747 replay cases ?? ??. ??? authoritative contract ??? production identity/dedupe/persistence/sequence/callback ?? ?? ??.
+
+## 2026-11-24 No.1813 — Bridge fingerprint namespace and cross-group reuse
+
+- Read-only source trace of `VirtualMultiLegExecutionBridge._execution_fill_reports()` and `_apply_reconciled_execution()` found `_applied_execution_fingerprints` is an instance-local `dict` keyed only by `execution_id`. Fingerprint fields: client_order_id, instrument_id, side, filled_quantity, execution_price, execution_timestamp, fee, `report.group_id`, and `report.leg_id`.
+- The fingerprint omits `plan.strategy_id`, `plan.group_id` itself, `run_id`, `position_role`, `broker_order_id`, and identity/provenance metadata. `execution_legs[execution_id]` and `provenance[execution_id]` are written before fingerprint comparison.
+- Synthetic probe: reusing the same execution ID/fingerprint while changing strategy_id and position_role skips a second PositionLot/fee application but overwrites `execution_legs` and `provenance` strategy metadata.
+- Synthetic cross-group probe: with `report.group_id=None`, the same execution ID/client order/fill values under a different `plan.group_id` passes the optional lineage check and is skipped as a duplicate; PositionLot/fee counts stay unchanged while provenance group metadata is overwritten by the second plan. An explicit report group mismatch remains guarded by the existing lineage check.
+- These are Virtual synthetic implementation observations, not an authoritative KIS execution-ID uniqueness or conflict policy. No Production source/test changes. No Raw/Canonical/accepted-source/manifest changes or Live/API/broker/collector actions. No.1689 phase/X2 exception and No.1652 aggregate separation remain; Track7 durable restart and Full T4 X3 OPEN; T5 not started; S4 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+- Notion: [No.1813](https://app.notion.com/p/4225f4f6eaa181a1849dea4759c7224a).
