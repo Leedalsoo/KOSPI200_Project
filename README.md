@@ -1347,3 +1347,8 @@ Synthetic temporary-file test confirms that when the synchronous Frame Observer 
 ## Latest validation ? No.1811 (2026-11-24)
 
 The standard Virtual VSSF composition does not wire the standalone `ExecutionEventDeduplicator` / `VirtualExecutionPositionBridge` into the VSSF execution path, and Track7 callback does not consume that deduplicator. The standalone Virtual deduplicator keys only on `execution_id`: changed order/group/leg/quantity/price under the same ID is suppressed as a duplicate, while a fresh deduplicator instance accepts the ID again. Synthetic/read-only checks: 8/8 PASS. This is a code-path characterization, not an approved KIS execution identity or conflict policy. No production source/test changes; see [Current Baseline v2](docs/CURRENT_BASELINE_V2.md).
+
+
+## Latest validation ? No.1812 (2026-11-24)
+
+Actual Virtual route traced: VSSFExecutionAdapter ? VirtualMultiLegExecutionBridge ? factory callback ? StrategyHub ? StrategyOrchestrator ? Track7 callback. The multi-leg bridge has a separate in-memory fill fingerprint gate for PositionLot/fee application (exact repeat skipped; changed payload under same execution ID raises a reconciliation error); it is not the standalone deduplicator from No.1811 and does not protect Track7 callback state. Track7 consumes report-level fields and does not iterate `execution_fills`; a valid fill-level ID with `report.execution_id=None` is blocked while a report-level ID advances the sequential PUT state. Synthetic checks: 2/2; focused existing regressions: 4 passed. No production source/test changes. See [Current Baseline v2](docs/CURRENT_BASELINE_V2.md).
