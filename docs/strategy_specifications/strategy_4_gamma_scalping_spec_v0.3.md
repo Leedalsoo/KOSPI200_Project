@@ -473,3 +473,12 @@ Focused S4 Runtime identity + spec alignment + attribution + Greek decomposition
 - The adjacent R4 lifecycle batch had 6 initialization failures because its referenced derived-scenario manifest is absent; these are excluded from PASS/failure judgments and no original data was changed.
 - This does not approve event ownership, report-vs-fill consumption, signed quantity calculation, dedupe/replay, acknowledgement, late-fill recovery or Production behavior. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
 - Detail: https://app.notion.com/p/4235f4f6eaa18103afafc91f89c0ccde
+
+
+## 2026-11-25 — S4 target vs PositionLot/Virtual signed-position lineage (No.1825)
+
+- Existing Virtual bridge materializer writes canonical fills to both provenance-owned PositionLotStore and instrument-level VirtualPositionAggregate. Both store explicit side and positive quantity; signed quantity is derived only for validation (BUY positive, SELL negative).
+- Validation-only synthetic path: Track4 target -2; first SELL 1 gives PositionLot/Virtual signed -1; second SELL 1 gives -2; exact replay remains -2; BUY close 1 gives -1. PositionLot and Virtual aggregate agree at every checkpoint. Track4 target remains -2, proving it is not the actual-fill position projection.
+- Focused S4/Track4 12 modules: 75 passed; compileall, scoped Ruff and diff-check PASS.
+- No Production source/policy change. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. Authoritative target/pending/actual owner, callback contract, account reconciliation and full option-entry-to-hedge lifecycle remain OPEN.
+- Detail: https://app.notion.com/p/4235f4f6eaa181479ccfcf47614f48dd

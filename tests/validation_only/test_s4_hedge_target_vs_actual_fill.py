@@ -150,3 +150,139 @@ def test_s4_group_callback_exposes_fill_events_but_not_order_side_or_instrument(
     # GAMMA_REBALANCE is currently ignored by Track4; this is characterization only.
     strategy.on_execution_result("GAMMA_REBALANCE", result)
     assert strategy.state.active_hedge_qty == -2
+
+def test_s4_hedge_target_is_distinct_from_owned_lot_and_virtual_position_quantity() -> None:
+    """Trace synthetic hedge fills through the existing lot and position materializer."""
+    from datetime import timezone
+
+    from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
+    from contracts.futures_contract_spec import FuturesProductType
+    from contracts.futures_identity_source_port import FuturesInstrumentIdentity
+    from contracts.types import BrokerOrderCommand, ExecutionLeg, ExecutionReport, MultiLegExecutionPlan
+    from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
+    from environments.virtual.position.virtual_position_lot_store import VirtualPositionLotStore
+
+    source = "SYNTHETIC:DERIVED_SCENARIO"
+    run_id = "S4-SYNTHETIC-POSITION-LINEAGE-1825"
+    group_id = "S4-SYNTHETIC-HEDGE-GROUP-1825"
+    instrument = FuturesInstrumentIdentity(
+        instrument_id="SYNTHETIC_CONTRACT:S4-MINI-HEDGE-1825",
+        symbol="SYNTHETIC-S4-MINI-1825",
+        product_type=FuturesProductType.MINI,
+        contract_multiplier=Decimal("50000"),
+        identity_source=source,
+    )
+    strategy = Track4GammaScalping(
+        enabled=True,
+        capital_gate_min=Decimal("1"),
+        risk_limits_available=True,
+    )
+    signals = strategy.evaluate_delta_hedge(
+        _market_input(),
+        delta=Decimal("1000000"),
+        deadband=Decimal("0"),
+        equity=Decimal("1000000"),
+        max_hedge_qty=2,
+    )
+    assert len(signals) == 1
+    proposal = signals[0].execution_proposal
+    assert proposal is not None and proposal.proposed_quantity == 2
+    assert strategy.state.active_hedge_qty == -2  # target, before any fill
+
+    bridge = VirtualMultiLegExecutionBridge.__new__(VirtualMultiLegExecutionBridge)
+    bridge.run_id = run_id
+    bridge.position_lot_store = VirtualPositionLotStore()
+    bridge.fee_ledger = VirtualTrack9FeeLedger()
+    bridge.leg_positions = {}
+    bridge.execution_legs = {}
+    bridge.provenance = {}
+    bridge._applied_execution_fingerprints = {}
+
+    def apply_fill(*, execution_id: str, side: str, quantity: int, minute: int) -> None:
+        timestamp = datetime(2026, 11, 25, 10, minute, tzinfo=timezone.utc)
+        leg = ExecutionLeg(
+            leg_id="S4-MINI-HEDGE-LEG",
+            side=side,
+            quantity=quantity,
+        )
+        plan = MultiLegExecutionPlan(
+            group_id=group_id,
+            strategy_id=strategy.strategy_id,
+            purpose="GAMMA_REBALANCE",
+            legs=(leg,),
+        )
+        client_order_id = f"SYNTHETIC-ORDER-{execution_id}"
+        command = BrokerOrderCommand(
+            client_order_id=client_order_id,
+            instrument_id=instrument.instrument_id,
+            side=side,
+            quantity=quantity,
+            order_type="LIMIT",
+            instrument_identity=instrument,
+            asset_type="FUTURES",
+            strategy_id=strategy.strategy_id,
+            group_id=group_id,
+            leg_id=leg.leg_id,
+        )
+        report = ExecutionReport(
+            client_order_id=client_order_id,
+            broker_order_id=f"SYNTHETIC-BROKER-{execution_id}",
+            execution_id=execution_id,
+            status="FILLED",
+            filled_quantity=quantity,
+            remaining_quantity=0,
+            execution_price=Decimal("350"),
+            execution_timestamp=timestamp,
+            fee=Decimal("0.1"),
+            group_id=group_id,
+            leg_id=leg.leg_id,
+        )
+        bridge._apply_reconciled_execution(
+            plan=plan,
+            leg=leg,
+            identity=instrument,
+            broker_command=command,
+            report=report,
+        )
+        return plan, leg, command, report
+
+    def signed_from_lots() -> int:
+        lots = [
+            lot for lot in bridge.position_lot_store.open_lots()
+            if lot.run_id == run_id
+            and lot.strategy_id == strategy.strategy_id
+            and lot.group_id == group_id
+            and lot.instrument_id == instrument.instrument_id
+        ]
+        return sum(lot.remaining_quantity if lot.side == "BUY" else -lot.remaining_quantity for lot in lots)
+
+    def signed_from_aggregate() -> int:
+        position = bridge.leg_positions[instrument.instrument_id]
+        return position.qty if position.side == "BUY" else -position.qty
+
+    # One of two proposed contracts fills: target and actual projection diverge.
+    apply_fill(execution_id="SYNTH-S4-SELL-001", side="SELL", quantity=1, minute=1)
+    assert strategy.state.active_hedge_qty == -2
+    assert signed_from_lots() == -1
+    assert signed_from_aggregate() == -1
+    assert bridge.leg_positions[instrument.instrument_id].side == "SELL"
+    assert bridge.leg_positions[instrument.instrument_id].qty == 1
+
+    # Second independent fill brings both existing projections to -2.
+    first = apply_fill(execution_id="SYNTH-S4-SELL-002", side="SELL", quantity=1, minute=2)
+    assert signed_from_lots() == -2
+    assert signed_from_aggregate() == -2
+
+    # Exact replay does not double-count either projection.
+    plan, leg, command, report = first
+    bridge._apply_reconciled_execution(
+        plan=plan, leg=leg, identity=instrument, broker_command=command, report=report,
+    )
+    assert signed_from_lots() == -2
+    assert signed_from_aggregate() == -2
+
+    # One synthetic BUY close reduces the same owned run/strategy/group by one.
+    apply_fill(execution_id="SYNTH-S4-BUY-CLOSE-001", side="BUY", quantity=1, minute=3)
+    assert signed_from_lots() == -1
+    assert signed_from_aggregate() == -1
+    assert strategy.state.active_hedge_qty == -2  # target state is not auto-reconciled
