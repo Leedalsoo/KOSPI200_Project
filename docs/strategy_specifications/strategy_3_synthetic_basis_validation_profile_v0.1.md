@@ -125,3 +125,16 @@ The follow-up test batch extends the synthetic-only matrix without connecting th
 - close quantity is derived from actual filled quantity minus already-closed quantity, never requested quantity; over-close is rejected.
 
 These are pure validation-harness rules, not Production policy or Runtime execution evidence. Actual broker reconciliation, partial-fill repair, atomic group routing, durable restart persistence, and ETF/equity Virtual asset support remain outside this test scope.
+
+## 2026-11-25 No.1853 ? S2 U18/U19 and S3 synthetic validation follow-up
+
+- Notion Q&A: https://app.notion.com/p/4235f4f6eaa181ab8382f08d76c353cf
+- Reconciled No.1852, No.1836, No.1761, No.1764, No.1766, No.1838 and Current Baseline/A8 records. Existing collected and synthetic inputs remain provenance-labelled validation evidence; no new collection or source mutation.
+- S2 accepted Runtime v2: 20261012 SHA256 `c360b12e4c55551542490e73693ca59d42c3eb3135496d310cee7ee9fead62b5`; 20261013 `331c01e819e9ddd4d0c39e98bf0c9d43b9a82e575743c0c34b74e8178f494cf5`; manifest `7657c90f13a81a7f98a8ccd075a259c8ec9795477a2a0541366094cd87e0360f`. Base S2 sidecar is 21 candidates/84 quotes (manifest `13580e010c34c74a1787bffb6b6b72adebdc4964f848937c0894bfa0fd4918b7`); U18 builder creates the 22nd candidate/88th quote. The already-extended 22/88 sidecar must not be re-used as builder input.
+- S2 U18 stop-close + U19 four-leg restart E2E: 3 passed on current Project200 code. U18 closed all four synthetic legs and ended flat. U19 reconciled four PositionLots/account positions, persisted validation-only restart evidence, restored U16 retry state, and rejected restore with a pending order. No actual Runtime restore or order submission.
+- First test attempt used the already-extended 22/88 sidecar and correctly hit the builder's append-count invariant. Reconnecting the original 21/84 source sidecar yielded 3 passed. No Production/test source changed.
+- S1-S9 shared-runtime synthetic routing: 13 passed using P5 manifest SHA256 `47D6746BFD7ABFEA9D52016434CA06F097CA117E6724F96C522B58EB8E5590F` and exact KRX 20261008 anchor SHA256 `e770a22a882e71e500260203276a067fc27940587d1d7edcbd670548b36e20d9`. P5 is DERIVED_SCENARIO, validation_only=true, identity owner unresolved, runtime_use=PROHIBITED. Deterministic test-only signal driver, not natural-signal or profitability evidence.
+- S3 synthetic basis harness + source/profile/fail-closed tests: 46 passed. Covers beta drift, hedge quantity/residual, tracking error, asymmetric partial fill, duplicate-entry guard, restart observation-only behavior and close-quantity bounds. Cash proxy remains synthetic; Virtual OMS/Router/VSSF supports FUTURES/OPTION only.
+- No.1852 S1-S9 focused matrix remains S1 12 / S2 292 / S3 8 / S4 51 / S5 23 / S6 85 / S7 78 / S8 21 / S9 61 passed. Follow-up batches overlap; do not add into one acceptance total.
+- S2 remains `PSB_UNVERIFIED`; S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`; other OPEN/UNVERIFIED statuses remain unchanged. Natural-signal full lifecycle, real costs/margin/account risk and Production/Live readiness are not certified.
+- No KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original modification. Temporary data junctions were removed and source hashes remained unchanged.
