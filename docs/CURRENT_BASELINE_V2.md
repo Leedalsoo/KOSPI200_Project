@@ -1509,3 +1509,11 @@
 - No Production source/strategy/provider/Runtime/OMS/Router, persistence, execution semantics, event identity/dedupe/sequence/watermark/locking policy changed. No KIS/REAL_VTS/Live/account API, broker action, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original change.
 - S4 target/pending/actual quantity ownership, fill-vs-report event unit, callback acknowledgement/replay, actual hedge reconciliation, partial/reject/late-fill recovery, linked option-lot ownership and full option-entry-to-hedge lifecycle remain OPEN. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. Track7 durable restart and Full T4 X3 integrated acceptance remain OPEN; T5 not started.
 - Notion: https://app.notion.com/p/4235f4f6eaa18146ba9cde6f1d335c6a
+
+## 2026-11-25 No.1823 follow-up — S4 execution callback delivery trace
+
+- Read-only factory trace confirms `VirtualMultiLegExecutionBridge` is constructed with `execution_result_callback=on_multi_leg_execution_result`; the standard runtime wires `multi_leg_plan_resolver` and `multi_leg_executor=multi_leg_bridge.execute`.
+- `resolve_track4()` builds the S4 Futures plan with `purpose` equal to the proposal tag (`GAMMA_REBALANCE` for hedge adjustment). The bridge callback forwards plan strategy/purpose/result through `StrategyHub.on_execution_result()` → `StrategyOrchestrator.on_execution_result()` → `Track4GammaScalping.on_execution_result()`.
+- The callback route exists; the observed gap is that Track4 consumes only `UNWIND_FUT_HEDGE` and `PROFIT_TAKEN_TRAILING_STOP`, and ignores `GAMMA_REBALANCE` results. This is not a missing bridge-to-hub connection.
+- The callback currently delivers group-level `MultiLegExecutionResult`; this trace does not approve fill-vs-report event ownership or partial-fill accounting. Target/pending/actual quantity owner, event unit, acknowledgement/replay and actual hedge reconciliation remain OPEN.
+- No Production code or execution policy changed. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. Detail: https://app.notion.com/p/4235f4f6eaa18146ba9cde6f1d335c6a
