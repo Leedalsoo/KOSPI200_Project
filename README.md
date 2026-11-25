@@ -1813,3 +1813,17 @@ Validation-only synthetic test confirms VSSF `client_order_id` is formatted from
 - A broader F401 scan identified 9 pre-existing unused imports in two Production source modules; those files were unchanged and no unrelated cleanup was applied. The four source files and six tests remained unmodified by this validation.
 - Confirmed synthetic provenance/identity-bound quote-only evaluation and no order routing. Not proven: KIS authoritative live quote provider, Production session wiring, independent fallback feed, actual option identity, operational age/spread thresholds, broker execution or real costs. U21 synthetic values are not approved operating thresholds. S2 remains `PSB_UNVERIFIED`.
 - No KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection or Raw/Canonical/accepted-source/manifest original modification.
+
+
+## 2026-11-25 No.1858 ? S2 21-candidate STANDARD/MINI multiplier provenance audit
+
+- Notion Q&A: https://app.notion.com/p/4235f4f6eaa181a69bbcfa05ba0ba30d
+- Followed No.1635 next step; reconciled No.1492 ATM tie-break, No.1853 S2 OPEN, No.1534 data reuse policy, current S2 v0.5 and Project200 source. Read-only audit of preserved T4 candidate worktree original sidecar.
+- 21 candidate inputs / 84 quote rows; each candidate has exactly inner_put/inner_call/outer_put/outer_call once.
+- All 84 rows: MONTHLY, expiry 20261112, `contract_product_family=STANDARD`, `contract_multiplier=250000`, `contract_multiplier_provenance=KIS_OFFICIAL_PRODUCT_SPEC`, official product spec URL. All 84 also declare `contract_identity_authority=SYNTHETIC_ONLY_NOT_KIS_MASTER` and `source=SYNTHETIC:DERIVED_SCENARIO`.
+- 48 unique synthetic instrument IDs are reused across the 84 quote rows. Each ID maps to exactly one (expiry, option_type, strike, family, multiplier) tuple and each tuple maps to one ID; conflicts 0. Reuse across candidates is expected; did not assume all 84 rows must have distinct IDs.
+- Original hashes: candidate inputs `d2d96b35d0402c1bdf8a6b07e771e9bdc593772985610dc68d3fd74f615b5a32`; quote sidecar `466c796c536d48a91fd548e6c61c597da4bde558bd56a079cc8956a9f882786e`; manifest `13580e010c34c74a1787bffb6b6b72adebdc4964f848937c0894bfa0fd4918b7`. All row source manifest hashes match accepted Runtime v2 base manifest `7657c90f13a81a7f98a8ccd075a259c8ec9795477a2a0541366094cd87e0360f`.
+- Product spec code constants: STANDARD=250000, MINI=50000. No MINI/50000 row or family/multiplier mixing in this sidecar.
+- Six focused modules (monthly contract source, product spec runtime identity, spec alignment, synthetic profile, alternative provider, market-calibrated quote scenario): 52 passed. Compileall, Ruff F821/F401/F841 and diff-check PASS. Source/test files unchanged.
+- PASS is limited to consistency of synthetic family/multiplier provenance and ID-to-contract tuple mapping. It does not prove KIS-listed identity: all IDs explicitly declare `SYNTHETIC_ONLY_NOT_KIS_MASTER`. 20261112 remains weekday-only second-Thursday assumption; actual KRX/KIS holiday authority, KIS Master crosswalk, tradability and actual quote/fill identity remain OPEN. S2 remains `PSB_UNVERIFIED`.
+- No KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection or Raw/Canonical/accepted-source/manifest original modification.
