@@ -557,3 +557,194 @@ def test_s4_vssf_restart_snapshot_restores_only_balance_and_positions_not_execut
         Decimal("1000"), 1, timestamp=stamp,
     )
     assert next_fill.exec_id == first_fill.exec_id == "EXEC-000001"
+
+
+def test_s4_vssf_restart_late_fill_reconciles_account_but_not_prior_lot_fee_history() -> None:
+    """Characterize restart projections and late-fill replay using synthetic VSSF events only."""
+    from datetime import timezone
+
+    from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
+    from contracts.futures_contract_spec import FuturesProductType
+    from contracts.futures_identity_source_port import FuturesInstrumentIdentity
+    from contracts.types import BrokerOrderCommand, ExecutionLeg, ExecutionReport, MultiLegExecutionPlan
+    from environments.virtual.authoritative_vssf.firm_runtime import VirtualSecuritiesFirmRuntime
+    from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
+    from environments.virtual.position.virtual_position_lot_store import VirtualPositionLotStore
+    from shared.contracts.canonical import CanonicalAssetType, CanonicalOrderSide
+
+    stamp = datetime(2026, 11, 25, 1, 0, tzinfo=timezone.utc)
+    source = "SYNTHETIC:DERIVED_SCENARIO"
+    run_id = "SYNTHETIC:S4:RUN:1828"
+    candidate_id = "SYNTHETIC:S4:CANDIDATE:1828"
+    strategy_id = "track4_gamma_scalping"
+    group_id = "SYNTHETIC:S4:GROUP:1828"
+    leg_id = "mini"
+    instrument_id = "SYNTHETIC:MINI:RESTART:1828"
+    identity = FuturesInstrumentIdentity(
+        instrument_id=instrument_id,
+        symbol=instrument_id,
+        product_type=FuturesProductType.MINI,
+        contract_multiplier=Decimal("50000"),
+        identity_source=source,
+    )
+
+    def vssf_command(client_order_id: str, side: str) -> SimpleNamespace:
+        return SimpleNamespace(
+            client_order_id=client_order_id,
+            track_id=strategy_id,
+            asset_type=CanonicalAssetType.FUTURES,
+            side=CanonicalOrderSide(side),
+            symbol=instrument_id,
+            instrument_id=instrument_id,
+            contract_multiplier=Decimal("50000"),
+            strategy_id=strategy_id,
+            group_id=group_id,
+            leg_id=leg_id,
+            identity_source=source,
+            option_type=None,
+            strike=0,
+            expiry="20261210",
+        )
+
+    def signed_account(runtime: VirtualSecuritiesFirmRuntime) -> int:
+        position = runtime.account.positions.get(instrument_id)
+        if not position:
+            return 0
+        quantity = int(position["qty"])
+        return quantity if str(position["side"]).upper() == "BUY" else -quantity
+
+    def make_bridge() -> VirtualMultiLegExecutionBridge:
+        bridge = VirtualMultiLegExecutionBridge.__new__(VirtualMultiLegExecutionBridge)
+        bridge.run_id = run_id
+        bridge.position_lot_store = VirtualPositionLotStore()
+        bridge.fee_ledger = VirtualTrack9FeeLedger()
+        bridge.leg_positions = {}
+        bridge.execution_legs = {}
+        bridge.provenance = {}
+        bridge._applied_execution_fingerprints = {}
+        return bridge
+
+    def apply_bridge_event(
+        bridge: VirtualMultiLegExecutionBridge, fill, side: str,
+    ) -> tuple[MultiLegExecutionPlan, ExecutionLeg, BrokerOrderCommand, ExecutionReport]:
+        client_order_id = fill.client_order_id
+        quantity = int(fill.executed_qty)
+        leg = ExecutionLeg(
+            leg_id=leg_id, side=side, quantity=quantity,
+            instrument_identity=identity,
+        )
+        plan = MultiLegExecutionPlan(
+            group_id=group_id, strategy_id=strategy_id,
+            purpose="S4_SYNTHETIC_GAMMA_REBALANCE_1828", legs=(leg,),
+        )
+        broker_command = BrokerOrderCommand(
+            client_order_id=client_order_id,
+            instrument_id=instrument_id,
+            side=side,
+            quantity=quantity,
+            order_type="MARKET",
+            instrument_identity=identity,
+            asset_type="FUTURES",
+            strategy_id=strategy_id,
+            track_id=strategy_id,
+            group_id=group_id,
+            leg_id=leg_id,
+        )
+        report = ExecutionReport(
+            client_order_id=client_order_id,
+            broker_order_id=f"SYNTHETIC-BROKER:{fill.exec_id}",
+            execution_id=fill.exec_id,
+            status="FILLED",
+            filled_quantity=quantity,
+            remaining_quantity=0,
+            execution_price=Decimal(str(fill.executed_price)),
+            execution_timestamp=datetime.fromisoformat(fill.timestamp),
+            fee=Decimal(str(fill.fee)),
+            group_id=group_id,
+            leg_id=leg_id,
+        )
+        bridge._apply_reconciled_execution(
+            plan=plan, leg=leg, identity=identity,
+            broker_command=broker_command, report=report,
+        )
+        return plan, leg, broker_command, report
+
+    first_runtime = VirtualSecuritiesFirmRuntime(
+        initial_capital=1_000_000_000,
+        validation_run_id=run_id,
+        validation_candidate_id=candidate_id,
+    )
+    entry = first_runtime.execution_engine.execute_order(
+        vssf_command("SYNTHETIC:S4:ENTRY:1828", "BUY"),
+        Decimal("1000"), 2, timestamp=stamp,
+    )
+    first_runtime.account.apply_execution(entry)
+    partial_close = first_runtime.execution_engine.execute_order(
+        vssf_command("SYNTHETIC:S4:PARTIAL-CLOSE:1828", "SELL"),
+        Decimal("1002"), 1, timestamp=stamp,
+    )
+    first_runtime.account.apply_execution(partial_close)
+
+    pre_restart_bridge = make_bridge()
+    apply_bridge_event(pre_restart_bridge, entry, "BUY")
+    apply_bridge_event(pre_restart_bridge, partial_close, "SELL")
+    assert signed_account(first_runtime) == 1
+    assert len(first_runtime.account.ledger_engine.transactions) == 2
+    assert len(pre_restart_bridge.position_lot_store.open_lots()) == 1
+    assert pre_restart_bridge.position_lot_store.open_lots()[0].remaining_quantity == 1
+    assert len(pre_restart_bridge.fee_ledger.snapshot(run_id=run_id)) == 2
+    assert pre_restart_bridge.leg_positions[instrument_id].side == "BUY"
+    assert pre_restart_bridge.leg_positions[instrument_id].qty == 1
+
+    snapshot = first_runtime.recovery_engine.create_snapshot(
+        "SYNTHETIC:S4:CHECKPOINT:1828", metrics=first_runtime.metrics,
+    )
+
+    # A late fill is generated after the checkpoint by the original synthetic runtime.
+    late_close = first_runtime.execution_engine.execute_order(
+        vssf_command("SYNTHETIC:S4:LATE-CLOSE:1828", "SELL"),
+        Decimal("1003"), 1, timestamp=stamp,
+    )
+    first_runtime.account.apply_execution(late_close)
+    assert late_close.exec_id == "EXEC-000003"
+    assert signed_account(first_runtime) == 0
+
+    restarted_runtime = VirtualSecuritiesFirmRuntime(
+        initial_capital=1_000_000_000,
+        validation_run_id=run_id,
+        validation_candidate_id=candidate_id,
+    )
+    assert restarted_runtime.recovery_engine.restore_from_snapshot(snapshot) is True
+    assert signed_account(restarted_runtime) == 1
+    assert restarted_runtime.account.ledger_engine.transactions == []
+    assert restarted_runtime.execution_engine.reports == []
+    assert restarted_runtime.execution_engine._seq == 0
+
+    # Deliver the late event to the restored account and a fresh bridge projection.
+    restarted_runtime.account.apply_execution(late_close)
+    post_restart_bridge = make_bridge()
+    late_event = apply_bridge_event(post_restart_bridge, late_close, "SELL")
+    assert signed_account(restarted_runtime) == 0
+    assert len(restarted_runtime.account.ledger_engine.transactions) == 1
+    assert restarted_runtime.execution_engine.reports == []
+
+    # The account restores its pre-checkpoint net position, but the new bridge has
+    # no pre-checkpoint PositionLot/Fee history: only the late SELL event is present.
+    assert len(post_restart_bridge.position_lot_store.open_lots()) == 1
+    late_lot = post_restart_bridge.position_lot_store.open_lots()[0]
+    assert late_lot.execution_id == late_close.exec_id
+    assert late_lot.side == "SELL" and late_lot.remaining_quantity == 1
+    assert len(post_restart_bridge.fee_ledger.snapshot(run_id=run_id)) == 1
+    assert post_restart_bridge.leg_positions[instrument_id].side == "SELL"
+    assert post_restart_bridge.leg_positions[instrument_id].qty == 1
+    assert (signed_account(restarted_runtime), -1, -1) == (0, -1, -1)
+
+    # Exact redelivery is deduplicated only inside this fresh bridge's in-memory state.
+    plan, leg, broker_command, report = late_event
+    post_restart_bridge._apply_reconciled_execution(
+        plan=plan, leg=leg, identity=identity,
+        broker_command=broker_command, report=report,
+    )
+    assert len(post_restart_bridge.position_lot_store.open_lots()) == 1
+    assert len(post_restart_bridge.fee_ledger.snapshot(run_id=run_id)) == 1
+    assert post_restart_bridge.leg_positions[instrument_id].qty == 1
