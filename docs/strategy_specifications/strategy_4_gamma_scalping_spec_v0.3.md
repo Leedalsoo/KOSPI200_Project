@@ -632,3 +632,13 @@ Focused S4 Runtime identity + spec alignment + attribution + Greek decomposition
 - S4 focused 12 modules: **84 passed**; compileall and git diff check PASS. No production code or strategy semantics changed. No KIS/Live/account/broker/collector/new collection or original market-data mutation.
 - OPEN: approved source lifecycle/owner, multi-instrument storage/routing, duplicate/out-of-order policy, source-vs-receive timestamp/ACK contract, Analytics provenance schema and default bootstrap wiring. Continue validation-only synthetic tests; do not wire production bootstrap until contracts are approved. S4 remains **DRAFT / UNVERIFIED / UNAPPROVED / DISABLED**.
 - Detail: [No.1840](https://app.notion.com/p/4235f4f6eaa18165b8d1fc65fe9b72b6).
+
+## 2026-11-25 No.1841 — VSSF account apply / Bridge publication call-order trace
+
+- The actual multi-leg path is ConcreteVirtualEnvironmentBuilder → VSSFExecutionAdapter → VirtualExecutionEngine/VirtualBroker → VSSF runtime `_execute()` → PaperTradingAccount.apply_execution() → ExecutionReport → VirtualMultiLegExecutionBridge._apply_reconciled_execution(). VSSF account state is therefore mutated before Bridge PositionLot/Fee/aggregate projections.
+- For FILLED reports, `pending_legs` is removed before `_apply_reconciled_execution()`. A later Bridge projection exception is not caught by `_AckAdapter` (whose query fallback is only around broker.submit); no pending record remains for next-tick `process_pending_quotes()`, and the final PositionGroup snapshot/execution_result_callback is not reached.
+- Non-terminal reports with remaining quantity remain pending and are queried on later ticks; that existing lifecycle does not own post-FILLED Bridge repair. VSSF report/lifecycle state is in-memory, without shared durable account/Bridge checkpoint or restart acknowledgement.
+- `PaperTradingAccount.apply_execution()` itself has no execution-ID dedupe. Keep this separate from runtime-local VSSF client-order/report history checks; No.1835's direct duplicate application is not proof of automatic whole-flow retry.
+- Synthetic/data-independent regression: 64 passed, 2 accepted-runtime-v2-dependent tests deselected. Those two tests require `data/accepted_market_data/runtime_v2` manifest and 20261012.jsonl, absent from root. Do not substitute a different synthetic dataset for accepted provenance. compileall and diff-check PASS.
+- OPEN: post-FILLED Bridge repair owner, durable acknowledgement/checkpoint, retry/repair precedence, compensation and restart recovery. No policy or Production code changed. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+- Detail: [No.1841](https://app.notion.com/p/4235f4f6eaa18122b6cdcba48e2bc734).

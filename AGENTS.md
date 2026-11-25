@@ -1654,3 +1654,13 @@
 - `build_track4_analytics_snapshot()` currently emits generic `standard-runtime.track4` provenance and no instrument identity. Do not invent provenance schema or Greek units/period/IV scale.
 - S4 focused regression: 84 passed; compileall and git diff check PASS. No production code change. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. Synthetic fixtures remain validation-only; no KIS/Live/account/broker/collector/new collection or Raw/Canonical/accepted-source/manifest mutation.
 - Existing user dirty/untracked/Graphify/worktree files must be preserved; no reset/clean/stash.
+
+## 2026-11-25 No.1841 — S4 VSSF → Bridge retry/ack source trace
+
+- Latest No.1840/1838 and No.1835 next-step instruction are authoritative. Reuse No.1834/1835 failure/replay evidence and No.1815–1818 Bridge internal replay evidence; do not repeat those fault cases.
+- Actual flow: ConcreteVirtualEnvironmentBuilder → VSSFExecutionAdapter → VirtualExecutionEngine/VirtualBroker → VirtualSecuritiesFirmRuntime._execute → PaperTradingAccount.apply_execution → report return → VirtualMultiLegExecutionBridge._apply_reconciled_execution (PositionLotStore, FeeLedger, aggregate and projection indexes) → PositionGroup snapshot → execution_result_callback.
+- FILLED report is removed from `pending_legs` before Bridge projection. If Bridge projection then raises, the pending observer/process_pending_quotes path has no pending record to query; result callback is not reached. `_AckAdapter` query fallback only handles broker submit exceptions, not downstream Bridge projection exceptions.
+- Non-terminal orders with remaining quantity remain in `pending_legs`; next-tick query/reconcile is pending-order lifecycle, not a post-FILLED Bridge repair owner. VSSF execution reports/lifecycle and query state are in-memory; no shared durable checkpoint/restart acknowledgement is present.
+- `PaperTradingAccount.apply_execution()` itself has no execution-ID dedupe. Do not generalize No.1835's explicit direct reapply simulation into automatic orchestration behavior; runtime-local VSSF execution history has separate client-order/report checks.
+- Root accepted runtime-v2 path and required derived manifest are absent. Dataset-backed two FRESH31 tests remain unrun; do not replace accepted provenance with another synthetic dataset. Synthetic/data-independent batch: 64 passed, 2 deselected; compileall and git diff-check PASS.
+- No retry owner, idempotency key, shared checkpoint, compensation or repair precedence may be invented. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. No Production/API/broker/collector/data mutation. Preserve all pre-existing dirty/untracked/Graphify/worktree files; no reset/clean/stash.
