@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+
+import pytest
 from types import SimpleNamespace
 
 from core.strategy.track4_gamma_scalping import Track4GammaScalping, Track4MarketInput
@@ -1429,3 +1431,233 @@ def test_s4_vssf_account_apply_and_bridge_publication_failure_are_separate_bound
     assert bridge.fee_ledger.total(run_id=run_id) == Decimal("0.10")
     assert bridge.leg_positions[instrument_id].qty == 1
     assert len(bridge._applied_execution_fingerprints) == 1
+@pytest.mark.parametrize(
+    "failure_stage",
+    (
+        "position_lot_after_write",
+        "fee_ledger_after_write",
+        "aggregate_candidate_after_apply",
+        "leg_positions_after_write",
+        "fingerprint_after_write",
+        "execution_legs_after_write",
+        "provenance_after_write",
+    ),
+)
+def test_s4_filled_account_apply_then_each_bridge_stage_failure_is_bridge_replayable(
+    monkeypatch, failure_stage: str,
+) -> None:
+    """Characterize each in-memory Bridge failure boundary after one synthetic VSSF apply."""
+    from dataclasses import replace
+    from datetime import datetime
+    from decimal import Decimal
+    from types import SimpleNamespace
+
+    from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
+    from contracts.futures_contract_spec import FuturesProductType
+    from contracts.futures_identity_source_port import FuturesInstrumentIdentity
+    from contracts.types import BrokerOrderCommand, ExecutionLeg, ExecutionReport, MultiLegExecutionPlan
+    from environments.virtual.authoritative_vssf.firm_runtime import VirtualSecuritiesFirmRuntime
+    from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
+    from environments.virtual.position.virtual_position_lot_store import VirtualPositionLotStore
+    from environments.virtual.position.virtual_position_fill_adapter import VirtualPositionFillAdapter
+    from shared.contracts.canonical import CanonicalAssetType, CanonicalOrderSide
+
+    import json
+    from pathlib import Path
+    manifest_path = Path(__file__).resolve().parents[1] / "fixtures" / "track4" / "synthetic_s4_bridge_post_filled_stage_failure_v1.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["validation_only"] is True
+    assert manifest["runtime_use"] == "PROHIBITED_OUTSIDE_VALIDATION"
+    assert failure_stage in manifest["failure_stages"]
+    scenario = manifest["scenario"]
+    stamp = datetime.fromisoformat(scenario["execution_timestamp"])
+    suffix = failure_stage.upper()
+    run_id = f"SYNTHETIC:S4:RUN:1842:{suffix}"
+    candidate_id = f"SYNTHETIC:S4:CANDIDATE:1842:{suffix}"
+    strategy_id = "track4_gamma_scalping"
+    group_id = f"SYNTHETIC:S4:GROUP:1842:{suffix}"
+    leg_id = "mini"
+    instrument_id = f"SYNTHETIC:MINI:CROSS-STORE:1842:{suffix}"
+    source = manifest["provenance"]
+    multiplier = Decimal(scenario["contract_multiplier"])
+    identity = FuturesInstrumentIdentity(
+        instrument_id=instrument_id,
+        symbol=instrument_id,
+        product_type=FuturesProductType.MINI,
+        contract_multiplier=multiplier,
+        identity_source=source,
+    )
+
+    def command(client_order_id: str) -> SimpleNamespace:
+        return SimpleNamespace(
+            client_order_id=client_order_id,
+            track_id=strategy_id,
+            asset_type=CanonicalAssetType.FUTURES,
+            side=CanonicalOrderSide.BUY,
+            symbol=instrument_id,
+            instrument_id=instrument_id,
+            contract_multiplier=multiplier,
+            strategy_id=strategy_id,
+            group_id=group_id,
+            leg_id=leg_id,
+            identity_source=source,
+            option_type=None,
+            strike=0,
+            expiry=scenario["expiry"],
+        )
+
+    runtime = VirtualSecuritiesFirmRuntime(
+        initial_capital=1_000_000_000,
+        validation_run_id=run_id,
+        validation_candidate_id=candidate_id,
+    )
+    fill = runtime.execution_engine.execute_order(
+        command(f"SYNTHETIC:S4:ORDER:1842:{suffix}"),
+        Decimal("1000"),
+        1,
+        timestamp=stamp,
+    )
+    fill = replace(fill, fee=Decimal(scenario["fee"]))
+
+    bridge = VirtualMultiLegExecutionBridge.__new__(VirtualMultiLegExecutionBridge)
+    bridge.run_id = run_id
+    bridge.position_lot_store = VirtualPositionLotStore()
+    bridge.fee_ledger = VirtualTrack9FeeLedger()
+    bridge.leg_positions = {}
+    bridge.execution_legs = {}
+    bridge.provenance = {}
+    bridge._applied_execution_fingerprints = {}
+
+    leg = ExecutionLeg(
+        leg_id=leg_id,
+        side=scenario["side"],
+        quantity=int(scenario["quantity"]),
+        instrument_identity=identity,
+    )
+    plan = MultiLegExecutionPlan(
+        group_id=group_id,
+        strategy_id=strategy_id,
+        purpose="S4_SYNTHETIC_BRIDGE_STAGE_FAILURE_1842",
+        legs=(leg,),
+    )
+    broker_command = BrokerOrderCommand(
+        client_order_id=fill.client_order_id,
+        instrument_id=instrument_id,
+        side=scenario["side"],
+        quantity=int(scenario["quantity"]),
+        order_type="MARKET",
+        instrument_identity=identity,
+        asset_type="FUTURES",
+        strategy_id=strategy_id,
+        track_id=strategy_id,
+        group_id=group_id,
+        leg_id=leg_id,
+    )
+    report = ExecutionReport(
+        client_order_id=fill.client_order_id,
+        broker_order_id=f"SYNTHETIC-BROKER:{fill.exec_id}",
+        execution_id=fill.exec_id,
+        status="FILLED",
+        filled_quantity=int(scenario["quantity"]),
+        remaining_quantity=0,
+        execution_price=Decimal(scenario["execution_price"]),
+        execution_timestamp=stamp,
+        fee=Decimal(scenario["fee"]),
+        group_id=group_id,
+        leg_id=leg_id,
+    )
+
+    # Model the source-confirmed order: account apply occurs once before Bridge publication.
+    runtime.account.apply_execution(fill)
+    account_after_apply = runtime.account.balance
+    position_after_apply = dict(runtime.account.positions[instrument_id])
+    assert len(runtime.account.ledger_engine.transactions) == 1
+
+    failure_marker = f"SYNTHETIC_S4_BRIDGE_STAGE_FAILURE:{failure_stage}"
+    if failure_stage == "position_lot_after_write":
+        original_apply = bridge.position_lot_store.apply_execution
+
+        def fail_after_lot_write(lot) -> None:
+            original_apply(lot)
+            raise RuntimeError(failure_marker)
+
+        monkeypatch.setattr(bridge.position_lot_store, "apply_execution", fail_after_lot_write)
+    elif failure_stage == "fee_ledger_after_write":
+        original_record = bridge.fee_ledger.record
+
+        def fail_after_fee_write(record) -> None:
+            original_record(record)
+            raise RuntimeError(failure_marker)
+
+        monkeypatch.setattr(bridge.fee_ledger, "record", fail_after_fee_write)
+    elif failure_stage == "aggregate_candidate_after_apply":
+        original_candidate_apply = VirtualPositionFillAdapter.apply
+
+        def fail_after_candidate_apply(adapter, order, execution) -> None:
+            original_candidate_apply(adapter, order, execution)
+            raise RuntimeError(failure_marker)
+
+        monkeypatch.setattr(VirtualPositionFillAdapter, "apply", fail_after_candidate_apply)
+    else:
+        mapping_name, key = {
+            "leg_positions_after_write": ("leg_positions", instrument_id),
+            "fingerprint_after_write": ("_applied_execution_fingerprints", fill.exec_id),
+            "execution_legs_after_write": ("execution_legs", fill.exec_id),
+            "provenance_after_write": ("provenance", fill.exec_id),
+        }[failure_stage]
+
+        class FailOnceAfterWriteDict(dict):
+            failed = False
+
+            def __setitem__(self, item_key, value) -> None:
+                super().__setitem__(item_key, value)
+                if item_key == key and not self.failed:
+                    self.failed = True
+                    raise RuntimeError(failure_marker)
+
+        setattr(bridge, mapping_name, FailOnceAfterWriteDict())
+
+    with pytest.raises(RuntimeError, match=failure_marker):
+        bridge._apply_reconciled_execution(
+            plan=plan,
+            leg=leg,
+            identity=identity,
+            broker_command=broker_command,
+            report=report,
+        )
+
+    # Failure never rolls back the already-applied VSSF account event.
+    assert runtime.account.balance == account_after_apply
+    assert runtime.account.positions[instrument_id] == position_after_apply
+    assert len(runtime.account.ledger_engine.transactions) == 1
+    assert bridge.leg_positions == {}
+    assert bridge._applied_execution_fingerprints == {}
+    assert bridge.execution_legs == {}
+    assert bridge.provenance == {}
+
+    # Store-level write-after-mutation faults retain only the rows written before the fault.
+    assert len(bridge.position_lot_store.history()) == 1
+    expected_fee_rows = 0 if failure_stage == "position_lot_after_write" else 1
+    assert len(bridge.fee_ledger.snapshot(run_id=run_id)) == expected_fee_rows
+
+    # Explicit Bridge-only replay: no second account apply. Existing lot/fee idempotency
+    # and guarded projection publication must converge the in-memory Bridge views.
+    monkeypatch.undo()
+    bridge._apply_reconciled_execution(
+        plan=plan,
+        leg=leg,
+        identity=identity,
+        broker_command=broker_command,
+        report=report,
+    )
+
+    assert len(bridge.position_lot_store.history()) == 1
+    assert len(bridge.fee_ledger.snapshot(run_id=run_id)) == 1
+    assert bridge.fee_ledger.total(run_id=run_id) == Decimal(scenario["fee"])
+    assert bridge.leg_positions[instrument_id].qty == 1
+    assert len(bridge._applied_execution_fingerprints) == 1
+    assert len(bridge.execution_legs) == 1
+    assert len(bridge.provenance) == 1
+    assert runtime.account.balance == account_after_apply
+    assert runtime.account.positions[instrument_id] == position_after_apply
+    assert len(runtime.account.ledger_engine.transactions) == 1

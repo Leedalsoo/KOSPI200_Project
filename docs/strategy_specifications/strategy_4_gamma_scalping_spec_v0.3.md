@@ -642,3 +642,13 @@ Focused S4 Runtime identity + spec alignment + attribution + Greek decomposition
 - Synthetic/data-independent regression: 64 passed, 2 accepted-runtime-v2-dependent tests deselected. Those two tests require `data/accepted_market_data/runtime_v2` manifest and 20261012.jsonl, absent from root. Do not substitute a different synthetic dataset for accepted provenance. compileall and diff-check PASS.
 - OPEN: post-FILLED Bridge repair owner, durable acknowledgement/checkpoint, retry/repair precedence, compensation and restart recovery. No policy or Production code changed. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
 - Detail: [No.1841](https://app.notion.com/p/4235f4f6eaa18122b6cdcba48e2bc734).
+
+## 2026-11-25 No.1842 — VSSF account apply then seven Bridge failure-stage replays
+
+- Added validation-only test `test_s4_filled_account_apply_then_each_bridge_stage_failure_is_bridge_replayable` with seven write-after-mutation fault points: PositionLotStore, FeeLedger, aggregate candidate apply, `leg_positions`, fingerprint map, `execution_legs`, provenance map.
+- Versioned input manifest: `tests/fixtures/track4/synthetic_s4_bridge_post_filled_stage_failure_v1.json`; fixture ID `S4-BRIDGE-POST-FILLED-STAGE-FAILURE-MATRIX-001`; schema 1.0.0; provenance `SYNTHETIC:DERIVED_SCENARIO`; validation_only=true; runtime_use=PROHIBITED_OUTSIDE_VALIDATION; SHA-256 `8E2F572AE332E4E90B4095D6054D43FCCF5971D4A490F19CE6A42BEB4131CB81`.
+- Deterministic MINI Futures BUY 1 @ 1000, multiplier 50,000, fee 0.10. Account is applied once before Bridge fault. Explicit Bridge-only replay converges all seven cases to PositionLot 1, Fee row 1 / 0.10, aggregate quantity 1, fingerprint 1, execution metadata 1, provenance 1; account ledger remains one transaction.
+- Five-module synthetic/data-independent regression: 71 passed, 2 accepted-runtime-v2-dependent tests deselected. Compileall, scoped Ruff F821/F401/F841 and diff-check PASS.
+- Scope is in-memory Bridge-only replay. Does not prove automatic orchestration retry, final callback/ACK, durable cross-store checkpoint, restart recovery, compensation, concurrency or locking. No.1841 post-FILLED repair owner remains OPEN. Do not repeat No.1835 whole-flow retry; it already shows account/Bridge divergence under explicit duplicate account apply.
+- No Production code/policy change. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. No KIS/Live/account API, broker action, collector, or original market-data mutation.
+- Detail: [No.1842](https://app.notion.com/p/4235f4f6eaa181709335c30675ed8403).

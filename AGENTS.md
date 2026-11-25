@@ -1664,3 +1664,14 @@
 - `PaperTradingAccount.apply_execution()` itself has no execution-ID dedupe. Do not generalize No.1835's explicit direct reapply simulation into automatic orchestration behavior; runtime-local VSSF execution history has separate client-order/report checks.
 - Root accepted runtime-v2 path and required derived manifest are absent. Dataset-backed two FRESH31 tests remain unrun; do not replace accepted provenance with another synthetic dataset. Synthetic/data-independent batch: 64 passed, 2 deselected; compileall and git diff-check PASS.
 - No retry owner, idempotency key, shared checkpoint, compensation or repair precedence may be invented. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. No Production/API/broker/collector/data mutation. Preserve all pre-existing dirty/untracked/Graphify/worktree files; no reset/clean/stash.
+
+## 2026-11-25 No.1842 — S4 post-FILLED Bridge stage failure matrix
+
+- Latest No.1841 next step is authoritative. Reuse No.1834/1835 account/Bridge and whole-flow evidence plus No.1817/1818 projection-map rollback/replay; do not duplicate those whole scenarios.
+- Added validation-only parameterized test for seven write-after-mutation boundaries after one synthetic VSSF account apply: PositionLotStore, FeeLedger, aggregate candidate apply, `leg_positions`, execution fingerprint, `execution_legs`, and provenance.
+- Versioned fixture: `tests/fixtures/track4/synthetic_s4_bridge_post_filled_stage_failure_v1.json`, ID `S4-BRIDGE-POST-FILLED-STAGE-FAILURE-MATRIX-001`, schema `1.0.0`, provenance `SYNTHETIC:DERIVED_SCENARIO`, validation_only=true, runtime_use=PROHIBITED_OUTSIDE_VALIDATION. SHA-256 `8E2F572AE332E4E90B4095D6054D43FCCF5971D4A490F19CE6A42BEB4131CB81`.
+- All seven faults followed by explicit Bridge-only replay converge to 1 PositionLot, 1 Fee row / 0.10, aggregate quantity 1, 1 fingerprint, 1 execution metadata row and 1 provenance row. VSSF account remains applied once; no second account apply or rollback.
+- Five-module synthetic/data-independent batch: 71 passed, 2 deselected. The two Fresh31 tests require missing accepted runtime-v2 inputs; they are not PASS or code failures. Compileall, scoped Ruff F821/F401/F841, and git diff-check PASS.
+- This proves only in-memory Bridge-only replay under the test harness. It does not prove actual orchestration retry, callback/ACK recovery, durable checkpoint/restart, cross-store compensation, or concurrency/locking. No.1841 post-FILLED automatic retry owner remains OPEN; No.1835 whole-flow account/Bridge divergence evidence is unchanged.
+- No retry owner, identity/idempotency policy, durable checkpoint, compensation or repair precedence may be invented. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. No Production/KIS/Live/broker/collector/data-source mutation. Preserve all pre-existing user/Graphify/worktree files; no reset/clean/stash.
+- Detail: https://app.notion.com/p/4235f4f6eaa181709335c30675ed8403.

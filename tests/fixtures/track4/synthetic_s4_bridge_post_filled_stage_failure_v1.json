@@ -1,0 +1,37 @@
+{
+  "fixture_id": "S4-BRIDGE-POST-FILLED-STAGE-FAILURE-MATRIX-001",
+  "schema_version": "1.0.0",
+  "provenance": "SYNTHETIC:DERIVED_SCENARIO",
+  "validation_only": true,
+  "runtime_use": "PROHIBITED_OUTSIDE_VALIDATION",
+  "generation_rule": "Deterministic single-contract MINI Futures BUY fill; apply the synthetic VSSF account event once, inject a write-after-mutation exception at one Bridge publication boundary, then explicitly replay only the Bridge report.",
+  "source_anchor": "No.1841 actual VSSF-account-before-Bridge call order; No.1817/1818 synchronous in-memory Bridge publication rollback/replay.",
+  "scenario": {
+    "contract_multiplier": "50000",
+    "execution_timestamp": "2026-11-25T07:30:00+00:00",
+    "expiry": "20261210",
+    "side": "BUY",
+    "quantity": 1,
+    "execution_price": "1000",
+    "fee": "0.10"
+  },
+  "failure_stages": [
+    "position_lot_after_write",
+    "fee_ledger_after_write",
+    "aggregate_candidate_after_apply",
+    "leg_positions_after_write",
+    "fingerprint_after_write",
+    "execution_legs_after_write",
+    "provenance_after_write"
+  ],
+  "expected_after_bridge_only_replay": {
+    "position_lot_rows": 1,
+    "fee_rows": 1,
+    "fee_total": "0.10",
+    "aggregate_quantity": 1,
+    "fingerprint_rows": 1,
+    "execution_metadata_rows": 1,
+    "provenance_rows": 1,
+    "vssf_account_apply_count": 1
+  }
+}
