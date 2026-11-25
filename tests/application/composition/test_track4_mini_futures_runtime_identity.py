@@ -1207,6 +1207,7 @@ def test_track4_filled_report_bridge_projection_failure_ack_boundary(monkeypatch
         result=SimpleNamespace(execution_proposal=proposal),
     )
     canonical = SimpleNamespace(
+        signal_id="SIG-1-track4_gamma_scalping-1",
         side=SimpleNamespace(value=scenario["side"]),
         qty=int(scenario["quantity"]),
         tag_id="GAMMA_REBALANCE",
@@ -1214,6 +1215,35 @@ def test_track4_filled_report_bridge_projection_failure_ack_boundary(monkeypatch
     )
     plan = loop.multi_leg_plan_resolver(evaluation, canonical)
     assert plan is not None
+    assert plan.attempt_id is None
+    assert plan.group_id == f"{bridge.run_id}-track4_gamma_scalping-FUTURES-HEDGE"
+
+    # Runtime signal identity changes with tick sequence, but the current S4
+    # resolver does not propagate it into attempt_id or the stable hedge group.
+    next_tick = SimpleNamespace(
+        underlying_symbol="SYNTHETIC_KOSPI200",
+        symbol="SYNTHETIC_KOSPI200",
+        instrument_id="SYNTHETIC_KOSPI200",
+        timestamp="2026-10-08T09:00:50+09:00",
+    )
+    next_evaluation = SimpleNamespace(
+        context=SimpleNamespace(
+            strategy_id="track4_gamma_scalping",
+            market_state=SimpleNamespace(ticks={"synthetic": next_tick}),
+        ),
+        result=SimpleNamespace(execution_proposal=proposal),
+    )
+    next_canonical = SimpleNamespace(
+        signal_id="SIG-2-track4_gamma_scalping-1",
+        side=SimpleNamespace(value=scenario["side"]),
+        qty=int(scenario["quantity"]),
+        tag_id="GAMMA_REBALANCE",
+        track_id="track4_gamma_scalping",
+    )
+    next_plan = loop.multi_leg_plan_resolver(next_evaluation, next_canonical)
+    assert next_plan is not None
+    assert next_plan.attempt_id is None
+    assert next_plan.group_id == plan.group_id
     identity = plan.legs[0].instrument_identity
     assert identity.product_type is FuturesProductType.MINI
     assert identity.contract_multiplier == Decimal(50000)

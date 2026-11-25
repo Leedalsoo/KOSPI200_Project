@@ -26,11 +26,14 @@
     "bridge_aggregate_fingerprint_provenance_not_published": true,
     "automatic_retry_owner_not_established": true,
     "manual_same_process_bridge_reentry_reconciles_prior_fill": true,
-    "manual_reentry_does_not_issue_second_fill": true
+    "manual_reentry_does_not_issue_second_fill": true,
+    "runtime_tick_signal_id_not_propagated_to_attempt_id": true,
+    "hedge_group_id_stable_across_tick_signal_ids": true
   },
   "limitations": [
     "Characterizes the current in-process Virtual execution ordering only.",
     "Does not define an approved retry, compensation, idempotency, ACK or durable checkpoint policy.",
-    "Does not establish KIS broker or Live behavior, account semantics or Production readiness."
+    "Does not establish KIS broker or Live behavior, account semantics or Production readiness.",
+    "Uses synthetic SIG-1/SIG-2 identifiers to characterize resolver propagation only; does not prescribe attempt identity policy."
   ]
 }
