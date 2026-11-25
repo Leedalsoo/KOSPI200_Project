@@ -1553,3 +1553,14 @@
 - Focused S4 regression: six modules, **50 passed**. `py -m compileall -q application core contracts environments tests`, scoped Ruff F821/F401/F841 on the changed test, and `git diff --check`: PASS.
 - No Production source/policy, broker/API, KIS/REAL_VTS/Live/account API, order/cancel/liquidation, collector/service/scheduler, Raw/Canonical/accepted-source/manifest change. S4 remains **DRAFT / UNVERIFIED / UNAPPROVED / DISABLED**.
 - OPEN: authoritative execution identity and account-level idempotency ownership; durable account/ledger/PnL/margin and Bridge checkpoint; late-fill delivery/acknowledgement across restart; VSSF account vs candidate attribution; cross-store reconciliation; approved full option-entry-to-Futures-hedge lifecycle.
+
+## 2026-11-25 No.1830 — S4 same execution ID with changed payload characterization
+
+- No.1829, Current Baseline v2, No.1546 A8 and the live Project200 source were reconciled before adding one deterministic validation-only synthetic test.
+- Test: test_s4_vssf_same_execution_id_changed_payload_diverges_from_bridge_conflict_gate in tests/validation_only/test_s4_hedge_target_vs_actual_fill.py.
+- A restored VSSF account accepted two reports carrying the same execution ID but different client order ID, quantity, price and fee. The first SELL 1 @ 1001 partially reduced the restored BUY 3 to BUY 2; the altered SELL 2 @ 1002 reduced it to FLAT. Both ledger rows retained the same execution ID; the second fee reduced account balance again and realized PnL increased. Used margin returned to zero.
+- On a fresh VirtualMultiLegExecutionBridge, the first event created one PositionLot, one Fee Ledger row (0.10) and aggregate SELL 1. Reusing that execution ID with the changed payload raised MULTI_LEG_EXECUTION_ID_CONFLICT_RECONCILIATION_REQUIRED before a second lot/fee/aggregate publication; projections remained unchanged.
+- This is an implementation-boundary comparison only. It does not select an authoritative dedupe key, owner, namespace, restart policy, or cross-store reconciliation rule. No.1605 SQLite exactly-once remains a separate implementation and is not generalized to VSSF.
+- New test: 1 passed. Six selected S4 modules: 32 passed. py -m compileall -q application core contracts environments tests, scoped Ruff F821/F401/F841 on the changed test, and git diff --check: PASS.
+- Synthetic MINI Futures multiplier 50,000; source SYNTHETIC:DERIVED_SCENARIO. No Production source/policy, KIS/REAL_VTS/Live/account API, broker action, collector/service/scheduler, or Raw/Canonical/accepted-source/manifest mutation.
+- S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. OPEN: authoritative execution identity/idempotency owner, durable VSSF account/ledger/PnL/margin and Bridge checkpoint, restart late-fill acknowledgement, account-vs-candidate attribution, cross-store reconciliation, and approved full option-entry-to-Futures-hedge lifecycle.

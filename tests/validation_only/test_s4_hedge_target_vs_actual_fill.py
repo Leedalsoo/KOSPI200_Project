@@ -830,3 +830,153 @@ def test_s4_vssf_restored_account_reapplies_duplicate_late_fill_without_executio
     ]
     assert restored.account.realized_pnl == Decimal("50000.0")
     assert restored.execution_engine.reports == []
+
+def test_s4_vssf_same_execution_id_changed_payload_diverges_from_bridge_conflict_gate() -> None:
+    """Characterize changed-payload reuse of one synthetic execution ID after restart."""
+    from dataclasses import replace
+    from datetime import datetime, timezone
+
+    import pytest
+
+    from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
+    from contracts.futures_contract_spec import FuturesProductType
+    from contracts.futures_identity_source_port import FuturesInstrumentIdentity
+    from contracts.types import BrokerOrderCommand, ExecutionLeg, ExecutionReport, MultiLegExecutionPlan
+    from environments.virtual.authoritative_vssf.firm_runtime import VirtualSecuritiesFirmRuntime
+    from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
+    from environments.virtual.position.virtual_position_lot_store import VirtualPositionLotStore
+    from shared.contracts.canonical import CanonicalAssetType, CanonicalOrderSide
+
+    stamp = datetime(2026, 11, 25, 3, 0, tzinfo=timezone.utc)
+    run_id = "SYNTHETIC:S4:RUN:1830"
+    candidate_id = "SYNTHETIC:S4:CANDIDATE:1830"
+    strategy_id = "track4_gamma_scalping"
+    group_id = "SYNTHETIC:S4:GROUP:1830"
+    leg_id = "mini"
+    instrument_id = "SYNTHETIC:MINI:EXECUTION-ID-REUSE:1830"
+    source = "SYNTHETIC:DERIVED_SCENARIO"
+    multiplier = Decimal("50000")
+    identity = FuturesInstrumentIdentity(
+        instrument_id=instrument_id, symbol=instrument_id,
+        product_type=FuturesProductType.MINI,
+        contract_multiplier=multiplier, identity_source=source,
+    )
+
+    def account_command(client_order_id: str, side: CanonicalOrderSide) -> SimpleNamespace:
+        return SimpleNamespace(
+            client_order_id=client_order_id, track_id=strategy_id,
+            asset_type=CanonicalAssetType.FUTURES, side=side,
+            symbol=instrument_id, instrument_id=instrument_id,
+            contract_multiplier=multiplier, strategy_id=strategy_id,
+            group_id=group_id, leg_id=leg_id, identity_source=source,
+            option_type=None, strike=0, expiry="20261210",
+        )
+
+    def signed_position(runtime: VirtualSecuritiesFirmRuntime) -> int:
+        position = runtime.account.positions.get(instrument_id)
+        if not position:
+            return 0
+        quantity = int(position["qty"])
+        return quantity if str(position["side"]).upper() == "BUY" else -quantity
+
+    original = VirtualSecuritiesFirmRuntime(
+        initial_capital=1_000_000_000,
+        validation_run_id=run_id,
+        validation_candidate_id=candidate_id,
+    )
+    entry = original.execution_engine.execute_order(
+        account_command("SYNTHETIC:S4:ENTRY:1830", CanonicalOrderSide.BUY),
+        Decimal("1000"), 3, timestamp=stamp,
+    )
+    original.account.apply_execution(replace(entry, fee=0.05))
+    snapshot = original.recovery_engine.create_snapshot(
+        "SYNTHETIC:S4:CHECKPOINT:1830", metrics=original.metrics,
+    )
+    late_fill = original.execution_engine.execute_order(
+        account_command("SYNTHETIC:S4:LATE-SELL:1830", CanonicalOrderSide.SELL),
+        Decimal("1001"), 1, timestamp=stamp,
+    )
+    late_fill = replace(late_fill, fee=0.10)
+
+    restored = VirtualSecuritiesFirmRuntime(
+        initial_capital=1_000_000_000,
+        validation_run_id=run_id,
+        validation_candidate_id=candidate_id,
+    )
+    assert restored.recovery_engine.restore_from_snapshot(snapshot) is True
+    assert signed_position(restored) == 3
+
+    # The first report partially reduces the restored long position.
+    restored.account.apply_execution(late_fill)
+    assert signed_position(restored) == 2
+    first_balance = restored.account.balance
+    first_realized = restored.account.realized_pnl
+    assert [row["exec_id"] for row in restored.account.ledger_engine.transactions] == [late_fill.exec_id]
+
+    # Same execution ID, but changed client order, quantity, price and fee.
+    changed_payload = replace(
+        late_fill,
+        client_order_id="SYNTHETIC:S4:ALTERED-ORDER:1830",
+        executed_qty=2,
+        executed_price=1002.0,
+        fee=0.25,
+    )
+    restored.account.apply_execution(changed_payload)
+    assert signed_position(restored) == 0
+    assert [row["exec_id"] for row in restored.account.ledger_engine.transactions] == [
+        late_fill.exec_id, late_fill.exec_id,
+    ]
+    assert restored.account.balance == first_balance - Decimal("0.25")
+    assert restored.account.realized_pnl > first_realized
+    assert restored.account.used_margin == 0
+
+    # The Bridge has a different in-memory fingerprint boundary: same ID with
+    # changed payload raises before a second lot/fee/aggregate publication.
+    bridge = VirtualMultiLegExecutionBridge.__new__(VirtualMultiLegExecutionBridge)
+    bridge.run_id = run_id
+    bridge.position_lot_store = VirtualPositionLotStore()
+    bridge.fee_ledger = VirtualTrack9FeeLedger()
+    bridge.leg_positions = {}
+    bridge.execution_legs = {}
+    bridge.provenance = {}
+    bridge._applied_execution_fingerprints = {}
+
+    def bridge_apply(client_order_id: str, quantity: int, price: str, fee: str) -> None:
+        leg = ExecutionLeg(
+            leg_id=leg_id, side="SELL", quantity=quantity,
+            instrument_identity=identity,
+        )
+        plan = MultiLegExecutionPlan(
+            group_id=group_id, strategy_id=strategy_id,
+            purpose="S4_SYNTHETIC_EXECUTION_ID_REUSE_1830", legs=(leg,),
+        )
+        command = BrokerOrderCommand(
+            client_order_id=client_order_id, instrument_id=instrument_id,
+            side="SELL", quantity=quantity, order_type="MARKET",
+            instrument_identity=identity, asset_type="FUTURES",
+            strategy_id=strategy_id, track_id=strategy_id,
+            group_id=group_id, leg_id=leg_id,
+        )
+        report = ExecutionReport(
+            client_order_id=client_order_id,
+            broker_order_id="SYNTHETIC-BROKER:1830",
+            execution_id=late_fill.exec_id, status="FILLED",
+            filled_quantity=quantity, remaining_quantity=0,
+            execution_price=Decimal(price), execution_timestamp=stamp,
+            fee=Decimal(fee), group_id=group_id, leg_id=leg_id,
+        )
+        bridge._apply_reconciled_execution(
+            plan=plan, leg=leg, identity=identity,
+            broker_command=command, report=report,
+        )
+
+    bridge_apply("SYNTHETIC:S4:LATE-SELL:1830", 1, "1001", "0.10")
+    assert len(bridge.position_lot_store.open_lots()) == 1
+    assert len(bridge.fee_ledger.snapshot(run_id=run_id)) == 1
+    assert bridge.leg_positions[instrument_id].qty == 1
+    with pytest.raises(RuntimeError, match="MULTI_LEG_EXECUTION_ID_CONFLICT_RECONCILIATION_REQUIRED"):
+        bridge_apply("SYNTHETIC:S4:ALTERED-ORDER:1830", 2, "1002", "0.25")
+    assert len(bridge.position_lot_store.open_lots()) == 1
+    assert len(bridge.fee_ledger.snapshot(run_id=run_id)) == 1
+    assert bridge.fee_ledger.total(run_id=run_id) == Decimal("0.10")
+    assert bridge.leg_positions[instrument_id].qty == 1
