@@ -1,5 +1,13 @@
 # KOSPI200 Project200
 
+## 2026-11-25 validation update — No.1849 S4 repeated hedge intent identity
+
+- Synthetic Track4 MINI Futures `GAMMA_REBALANCE` SELL 2 intents at two distinct tick timestamps resolve to the same run-scoped group ID and tag-derived leg ID; `attempt_id` remains unset.
+- Bridge client-order ID inputs omit tick sequence/time. The second identical intent reuses the first FILLED report and does not cause a second VSSF submission in the tested Virtual path.
+- This is validation-only characterization, not an approved duplicate/retry/attempt policy. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
+- Seven-module S4/VSSF/adapter/recovery/store regression: 83 passed. Compileall, scoped Ruff, fixture JSON and diff-check PASS. Details: [No.1849](https://app.notion.com/p/4235f4f6eaa18173aabcfcdcaf2d7c13).
+
+
 KOSPI200 선물·옵션 자동매매 시스템 개발 프로젝트다. 현재 개발·검증의 중심은 **Virtual Trading / KIS VTS / Control Tower / Strategy 1~9 / REAL_VTS 기반 E2E**이며, Live 주문은 실행하지 않는다.
 
 상세 작업 기준은 [AGENTS.md](AGENTS.md)를 따른다.

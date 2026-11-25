@@ -1,3 +1,20 @@
+## 2026-11-25 No.1849 — 최신 사용자 작업 기준 및 S4 반복 헤지 ID 검증
+
+- 최신 사용자 직접 지시와 최신 Notion 결정·실행결과를 우선한다. 자료 불일치·데이터 부족을 즉시 BLOCKED/UNAVAILABLE로 판정하지 않는다. 먼저 최신 Q&A/결정로그/Current Baseline/A8 roadmap과 실제 local/remote Project200 코드, Raw/Canonical/accepted registry/manifest/hash/identity/event-time/provenance를 대조한다.
+- 부족 데이터는 기존 자료 재사용, crosswalk, 독립 replay, schema/contract 검사 또는 provenance-preserving deterministic synthetic/complementary fixture로 대체 검증한다. Synthetic은 공식 validation-only 검증 입력일 수 있으나 관측 KIS, authoritative account, Production/Live 사실로 승격하지 않는다.
+- 실계좌 투자 API 연결 전까지 synthetic data와 validation-only 기준으로 검증한다. API 연결 후 실제 계약 identity, multiplier, account, fee, margin, risk, execution 기준이 근거로 확정되면 전체 코드와 Runtime을 그 기준에 다시 매칭한다.
+- 검증 결과가 코드 변경을 정당화할 때만 격리 worktree에서 수정·회귀검증하고 authored paths만 stage/commit/push한다. AGENTS.md, README.md, docs/CURRENT_BASELINE_V2.md 및 관련 전략 명세도 최신 결과를 반영한다. 기존 dirty/untracked/Graphify/nested worktree와 Raw/Canonical/accepted-source/manifest는 보존하며 reset/clean/stash 금지. Live/REAL_VTS/account API, broker action, collector/service/scheduler, 신규 수집은 별도 승인 없이 실행하지 않는다.
+
+### No.1849 — S4 repeated hedge intent Bridge client-order ID reuse
+
+- `resolve_track4()` creates `group_id = run_id-track4_gamma_scalping-FUTURES-HEDGE`; the single-leg plan builder derives `leg_id = futures-gamma_rebalance` from the proposal tag. The resolver leaves optional `attempt_id` unset.
+- Bridge `_client_order_id()` hashes group, strategy, leg, instrument, side, quantity, position_role and optional attempt_id; tick sequence/time is not included.
+- Two synthetic MINI Futures `GAMMA_REBALANCE` SELL 2 intents at distinct tick timestamps produced identical plan group/leg and null attempt_id. The second Bridge execution reused the first FILLED report's client_order_id/execution_id; VSSF `order_commands` remained 1 and account/PositionLot remained at the first 2-contract fill.
+- This is a validation-only characterization of current ID reuse and duplicate suppression, not a decision that the second intent is duplicate, new rebalance, or retry. No attempt-ID, retry, compensation or Production policy was inferred.
+- Fixture `S4-REPEATED-HEDGE-INTENT-CLIENT-ORDER-ID-REUSE-001`, `SYNTHETIC:DERIVED_SCENARIO`, `validation_only=true`, `runtime_use=PROHIBITED_OUTSIDE_VALIDATION`. Fixture SHA-256 `82AEBA664AB544CEFCDB537D41685B61024B2B6B7D1DBF10E22DDD001349157F`; test module SHA-256 `242B298B65988652D5360EAB10A78B56B2BBC21F4E27D12C89EF31841E0F0895`.
+- Focused test 1 passed; seven-module S4/VSSF/adapter/recovery/store regression 83 passed. Compileall, scoped Ruff F821/F401/F841, fixture JSON parse and `git diff --check` PASS.
+- Test commit `89433c25ed0647ff88b03dfe3c992058a45a0d3e`. Notion: https://app.notion.com/p/4235f4f6eaa18173aabcfcdcaf2d7c13
+- OPEN: authoritative hedge attempt identity/namespace/lifecycle, attempt_id ownership/uniqueness, tick/run/restart continuity, broker execution identity/durable query, ACK/retry/repair owner. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
 ## 2026-11-25 No.1848 — S4 Bridge first-delivery command/plan group-leg lineage gap
 
 - Reconciled No.1847, No.1846~1841, Current Baseline v2, A8 SSOT/roadmap and current Project200 source. Continued validation-only synthetic characterization; no authoritative group/leg precedence was inferred.

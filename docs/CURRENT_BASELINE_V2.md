@@ -1801,3 +1801,15 @@
 - No Production source/policy, KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original changed. S4 remains **DRAFT / UNVERIFIED / UNAPPROVED / DISABLED**.
 - Notion: https://app.notion.com/p/4235f4f6eaa181838948c45c5744c41d
 - Commit: `0a2a80108404d67ddfb51d0dcc51a28bffc7ee80` (`test: characterize S4 first-delivery group-leg lineage gap`); six authored files pushed to `origin/Project200`. Isolated worktree clean; original working folder 203 pre-existing user status entries preserved.
+
+## 2026-11-25 No.1849 — S4 repeated hedge intent Bridge client-order ID reuse
+
+- Notion Q&A: https://app.notion.com/p/4235f4f6eaa18173aabcfcdcaf2d7c13
+- Reconciled No.1848, No.1844~1847, No.1824~1828, Current Baseline/A8 policy and current Project200 source. Used an isolated worktree at live origin/Project200; original root's 203 pre-existing user/Graphify/untracked status entries were not modified.
+- `resolve_track4()` creates the stable run-scoped group ID `run_id-track4_gamma_scalping-FUTURES-HEDGE`; `build_futures_single_leg_plan()` derives `futures-gamma_rebalance` from the proposal tag. `attempt_id` is optional and remains unset.
+- Bridge `_client_order_id()` hashes group, strategy, leg, instrument, side, quantity, position_role and optional attempt_id; tick sequence/time is absent. Two same-intent synthetic requests on distinct ticks reused the same client_order_id. The second Bridge call returned the prior FILLED report/execution ID; VSSF order_commands remained 1; account/PositionLot remained at the first two-contract fill.
+- This proves current Bridge ID reuse/duplicate suppression for this exact synthetic intent only. It does not decide duplicate versus new rebalance versus retry, and does not define attempt-ID ownership or uniqueness.
+- Fixture `S4-REPEATED-HEDGE-INTENT-CLIENT-ORDER-ID-REUSE-001`, `SYNTHETIC:DERIVED_SCENARIO`, `validation_only=true`, `runtime_use=PROHIBITED_OUTSIDE_VALIDATION`; fixture SHA-256 `82AEBA664AB544CEFCDB537D41685B61024B2B6B7D1DBF10E22DDD001349157F`; test module SHA-256 `242B298B65988652D5360EAB10A78B56B2BBC21F4E27D12C89EF31841E0F0895`.
+- Focused test 1 passed; seven-module S4/VSSF/adapter/recovery/store regression 83 passed. `py -m compileall -q application core contracts environments tests`, scoped Ruff F821/F401/F841, fixture JSON parse and `git diff --check`: PASS.
+- Test commit `89433c25ed0647ff88b03dfe3c992058a45a0d3e` (`test: characterize S4 repeated hedge intent ID reuse`).
+- OPEN: authoritative S4 attempt identity/namespace/lifecycle; attempt_id ownership/uniqueness; tick/run/restart continuity; broker execution identity/durable query; ACK/retry/repair owner. No Production source/policy/API/broker/collector/data change. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.

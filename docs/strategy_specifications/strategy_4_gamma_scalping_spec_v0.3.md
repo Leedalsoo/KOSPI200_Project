@@ -734,3 +734,13 @@ Focused S4 Runtime identity + spec alignment + attribution + Greek decomposition
 - No Production source/policy, KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original changed. S4 remains **DRAFT / UNVERIFIED / UNAPPROVED / DISABLED**.
 - Notion: https://app.notion.com/p/4235f4f6eaa181838948c45c5744c41d
 - Commit: `0a2a80108404d67ddfb51d0dcc51a28bffc7ee80` (`test: characterize S4 first-delivery group-leg lineage gap`); six authored files pushed to `origin/Project200`. Isolated worktree clean; original working folder 203 pre-existing user status entries preserved.
+
+## 2026-11-25 No.1849 — repeated hedge intent identity characterization (validation-only)
+
+- Current `resolve_track4()` group identity is run-scoped (`run_id-track4_gamma_scalping-FUTURES-HEDGE`); the single-leg plan builder derives the leg ID from the proposal tag (`futures-gamma_rebalance`). The resolver does not assign optional `MultiLegExecutionPlan.attempt_id`.
+- `VirtualMultiLegExecutionBridge._client_order_id()` derives the client-order ID from group, strategy, leg, instrument, side, quantity, position role and optional attempt ID; it does not include tick sequence/time.
+- Synthetic same-quantity/same-side MINI Futures `GAMMA_REBALANCE` requests at two distinct tick timestamps produced the same client-order ID. The second Bridge call reused the first FILLED report/execution ID and did not submit a second VSSF order; account and PositionLot remained at the initial two-contract fill.
+- This characterizes existing behavior only. Whether a repeated intent is a duplicate, new rebalance attempt or retry; attempt-ID owner/namespace; and restart continuity remain OPEN. No strategy, order, retry, compensation or Production policy was changed.
+- Fixture `S4-REPEATED-HEDGE-INTENT-CLIENT-ORDER-ID-REUSE-001`, `SYNTHETIC:DERIVED_SCENARIO`, `validation_only=true`, `runtime_use=PROHIBITED_OUTSIDE_VALIDATION`. Fixture SHA-256 `82AEBA664AB544CEFCDB537D41685B61024B2B6B7D1DBF10E22DDD001349157F`; test module SHA-256 `242B298B65988652D5360EAB10A78B56B2BBC21F4E27D12C89EF31841E0F0895`.
+- Focused test 1 passed; seven-module regression 83 passed; compileall/scoped Ruff/JSON/diff-check PASS. Test commit `89433c25ed0647ff88b03dfe3c992058a45a0d3e`.
+- S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`. Notion: https://app.notion.com/p/4235f4f6eaa18173aabcfcdcaf2d7c13.
