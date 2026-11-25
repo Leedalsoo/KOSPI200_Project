@@ -472,3 +472,88 @@ def test_s4_vssf_account_matches_position_lot_and_virtual_aggregate_across_parti
     assert account_position is None or int(account_position.get("qty", 0)) == 0
     aggregate = bridge.leg_positions[identity.instrument_id]
     assert aggregate.qty == 0
+
+def test_s4_vssf_restart_snapshot_restores_only_balance_and_positions_not_execution_state() -> None:
+    """Characterize the current in-memory VSSF snapshot boundary; do not approve restart policy."""
+    from datetime import timezone
+    from environments.virtual.authoritative_vssf.firm_runtime import VirtualSecuritiesFirmRuntime
+    from shared.contracts.canonical import CanonicalAssetType, CanonicalOrderSide
+
+    stamp = datetime(2026, 11, 25, 1, 0, tzinfo=timezone.utc)
+    instrument_id = "SYNTHETIC:MINI-RESTART-1827"
+
+    def command(client_order_id: str, side: object) -> SimpleNamespace:
+        return SimpleNamespace(
+            client_order_id=client_order_id,
+            track_id="track4_gamma_scalping",
+            asset_type=CanonicalAssetType.FUTURES,
+            side=side,
+            symbol=instrument_id,
+            instrument_id=instrument_id,
+            contract_multiplier=Decimal("50000"),
+            strategy_id="track4_gamma_scalping",
+            group_id="SYNTHETIC:GROUP:1827",
+            leg_id="mini",
+            identity_source="SYNTHETIC:DERIVED_SCENARIO",
+            option_type=None,
+            strike=0,
+            expiry="20261210",
+        )
+
+    first_runtime = VirtualSecuritiesFirmRuntime(
+        initial_capital=1_000_000_000,
+        validation_run_id="SYNTHETIC:RUN:1827",
+        validation_candidate_id="SYNTHETIC:CANDIDATE:S4",
+    )
+    first_fill = first_runtime.execution_engine.execute_order(
+        command("SYNTHETIC:ENTRY:1827", CanonicalOrderSide.BUY),
+        Decimal("1000"), 2, timestamp=stamp,
+    )
+    first_runtime.account.apply_execution(first_fill)
+    close_fill = first_runtime.execution_engine.execute_order(
+        command("SYNTHETIC:PARTIAL-CLOSE:1827", CanonicalOrderSide.SELL),
+        Decimal("1002"), 1, timestamp=stamp,
+    )
+    first_runtime.account.apply_execution(close_fill)
+    first_runtime.account.update_tick_price(Decimal("1003"), instrument_id)
+
+    pending_command = command("SYNTHETIC:PENDING:1827", CanonicalOrderSide.BUY)
+    first_runtime.order_book.add_pending_order(pending_command)
+    first_runtime._submitted_at[pending_command.client_order_id] = stamp
+    snapshot = first_runtime.recovery_engine.create_snapshot(
+        "SYNTHETIC:CHECKPOINT:1827", metrics=first_runtime.metrics,
+    )
+
+    restarted_runtime = VirtualSecuritiesFirmRuntime(
+        initial_capital=1_000_000_000,
+        validation_run_id="SYNTHETIC:RUN:1827",
+        validation_candidate_id="SYNTHETIC:CANDIDATE:S4",
+    )
+    restored_metrics: dict[str, int] = {}
+    assert restarted_runtime.recovery_engine.restore_from_snapshot(
+        snapshot, target_metrics=restored_metrics,
+    ) is True
+
+    # The existing snapshot restores only balance and position dictionaries.
+    assert restarted_runtime.account.balance == first_runtime.account.balance
+    assert restarted_runtime.account.positions == first_runtime.account.positions
+    assert restarted_runtime.account.realized_pnl == Decimal("0")
+    assert restarted_runtime.account.realized_pnl != first_runtime.account.realized_pnl
+    assert restarted_runtime.account.unrealized_pnl == Decimal("0")
+    assert restarted_runtime.account.unrealized_pnl != first_runtime.account.unrealized_pnl
+    assert restarted_runtime.account.used_margin == Decimal("0")
+    assert restarted_runtime.account.used_margin != first_runtime.account.used_margin
+    assert restarted_runtime.account.ledger_engine.transactions == []
+    assert len(first_runtime.account.ledger_engine.transactions) == 2
+
+    # Runtime-local execution IDs and pending-order state are not restored.
+    assert len(first_runtime.execution_engine.reports) == 2
+    assert restarted_runtime.execution_engine.reports == []
+    assert restarted_runtime.execution_engine._seq == 0
+    assert restarted_runtime.order_book.pending_orders() == ()
+    assert pending_command.client_order_id not in restarted_runtime._submitted_at
+    next_fill = restarted_runtime.execution_engine.execute_order(
+        command("SYNTHETIC:AFTER-RESTART:1827", CanonicalOrderSide.BUY),
+        Decimal("1000"), 1, timestamp=stamp,
+    )
+    assert next_fill.exec_id == first_fill.exec_id == "EXEC-000001"
