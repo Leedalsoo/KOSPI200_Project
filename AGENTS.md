@@ -10,6 +10,7 @@
 - OPEN: authoritative group/leg lineage source and validation contract; authoritative execution identity namespace/scope; identity version/effective time; cross-store dedupe; durable restart; ACK/retry/repair owner. No precedence, fallback, retry, compensation or Production policy was invented.
 - No Production source/policy, KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original changed. S4 remains **DRAFT / UNVERIFIED / UNAPPROVED / DISABLED**.
 - Notion: https://app.notion.com/p/4235f4f6eaa181838948c45c5744c41d
+- Commit: `0a2a80108404d67ddfb51d0dcc51a28bffc7ee80` (`test: characterize S4 first-delivery group-leg lineage gap`); six authored files pushed to `origin/Project200`. Isolated worktree clean; original working folder 203 pre-existing user status entries preserved.
 
 ## 2026-11-25 No.1844 — S4 tick/order/execution identity lineage
 
