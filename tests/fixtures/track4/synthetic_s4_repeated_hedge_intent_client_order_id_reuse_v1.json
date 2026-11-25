@@ -1,0 +1,31 @@
+{
+    "fixture_id":  "S4-REPEATED-HEDGE-INTENT-CLIENT-ORDER-ID-REUSE-001",
+    "schema_version":  "1.0.0",
+    "provenance":  "SYNTHETIC:DERIVED_SCENARIO",
+    "validation_only":  true,
+    "runtime_use":  "PROHIBITED_OUTSIDE_VALIDATION",
+    "generation_rule":  "Run the same synthetic Track4 MINI Futures GAMMA_REBALANCE proposal with identical side, quantity, instrument, strategy and run scope at two distinct tick timestamps. Trace the plan group/leg, optional attempt_id, Bridge client-order ID, VSSF submissions and resulting projections without changing production behavior.",
+    "scenario":  {
+                     "run_id":  "SYNTHETIC:S4:REPEATED-HEDGE-INTENT-001",
+                     "strategy_id":  "track4_gamma_scalping",
+                     "asset_type":  "FUTURES",
+                     "product_type":  "MINI",
+                     "contract_multiplier":  "50000",
+                     "side":  "SELL",
+                     "quantity":  2,
+                     "tag_id":  "GAMMA_REBALANCE",
+                     "first_tick_timestamp":  "2026-10-08T09:00:49+09:00",
+                     "second_tick_timestamp":  "2026-10-08T09:01:49+09:00",
+                     "first_attempt_id":  null,
+                     "second_attempt_id":  null,
+                     "identity_source":  "SYNTHETIC:high-speed-market-model-v2"
+                 },
+    "expected_observations":  {
+                                  "plan_group_id_is_run_scoped_and_constant":  "{run_id}-track4_gamma_scalping-FUTURES-HEDGE",
+                                  "plan_leg_id_is_tag_derived_and_constant":  "futures-gamma_rebalance",
+                                  "bridge_client_order_id_inputs_omit_tick_sequence":  true,
+                                  "same_intent_at_distinct_ticks_reuses_client_order_id":  true,
+                                  "second_bridge_call_reuses_prior_filled_report_without_new_vssf_submission":  true,
+                                  "no_attempt_identity_or_retry_policy_is_inferred":  true
+                              }
+}

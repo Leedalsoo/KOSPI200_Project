@@ -1007,3 +1007,120 @@ def test_track4_strategy_emits_futures_hedge_without_owned_option_lot_evidence()
     assert hedge[0].execution_proposal is not None
     assert hedge[0].execution_proposal.asset_type == "FUTURES"
     assert hedge[0].execution_proposal.proposed_quantity > 0
+
+def test_s4_repeated_same_hedge_intent_reuses_bridge_client_order_id_across_ticks() -> None:
+    """Characterize the existing Bridge ID scope; do not infer retry/attempt policy."""
+    import json
+    from pathlib import Path
+
+    fixture_path = (
+        Path(__file__).resolve().parents[2]
+        / "fixtures"
+        / "track4"
+        / "synthetic_s4_repeated_hedge_intent_client_order_id_reuse_v1.json"
+    )
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    assert fixture["validation_only"] is True
+    assert fixture["runtime_use"] == "PROHIBITED_OUTSIDE_VALIDATION"
+    scenario = fixture["scenario"]
+
+    loop = _loop(
+        (scenario["strategy_id"], "1.0"),
+        scenario["run_id"],
+    )
+    bridge = loop.multi_leg_bridge
+    vssf = bridge.bundle.execution._authoritative_execute.__self__.vssf_runtime
+    bridge.bundle.market._futures_price = Decimal("1000")
+
+    def build_request(timestamp: str):
+        tick = SimpleNamespace(
+            underlying_symbol="SYNTHETIC_KOSPI200",
+            symbol="SYNTHETIC_KOSPI200",
+            instrument_id="SYNTHETIC_KOSPI200",
+            timestamp=timestamp,
+        )
+        proposal = StrategyExecutionProposal(
+            proposed_quantity=int(scenario["quantity"]),
+            asset_type="FUTURES",
+            requested_price=None,
+            side=scenario["side"],
+            track_id=scenario["strategy_id"],
+            tag_id=scenario["tag_id"],
+            option_type=None,
+            strike=None,
+        )
+        evaluation = SimpleNamespace(
+            context=SimpleNamespace(
+                strategy_id=scenario["strategy_id"],
+                market_state=SimpleNamespace(ticks={"synthetic": tick}),
+            ),
+            result=SimpleNamespace(execution_proposal=proposal),
+        )
+        canonical = SimpleNamespace(
+            side=SimpleNamespace(value=scenario["side"]),
+            qty=int(scenario["quantity"]),
+            tag_id=scenario["tag_id"],
+            track_id=scenario["strategy_id"],
+        )
+        return tick, loop.multi_leg_plan_resolver(evaluation, canonical)
+
+    first_tick, first_plan = build_request(scenario["first_tick_timestamp"])
+    second_tick, second_plan = build_request(scenario["second_tick_timestamp"])
+    assert first_plan is not None and second_plan is not None
+    assert first_plan.group_id == second_plan.group_id == (
+        f'{scenario["run_id"]}-{scenario["strategy_id"]}-FUTURES-HEDGE'
+    )
+    assert first_plan.legs[0].leg_id == second_plan.legs[0].leg_id == "futures-gamma_rebalance"
+    assert first_plan.attempt_id is None
+    assert second_plan.attempt_id is None
+
+    identity = first_plan.legs[0].instrument_identity
+    assert identity is not None
+    assert identity.product_type is FuturesProductType.MINI
+    assert identity.contract_multiplier == Decimal(scenario["contract_multiplier"])
+    assert identity.identity_source == scenario["identity_source"]
+    assert second_plan.legs[0].instrument_identity == identity
+
+    vssf.order_book.update_bid_ask(1000, 1000, identity.instrument_id)
+
+    def freshness(_plan, _leg, resolved_identity, command):
+        observed_at = datetime.fromisoformat(first_tick.timestamp)
+        return FreshnessVerdict(
+            status=FreshnessStatus.FRESH,
+            reason="S4_SYNTHETIC_REPEATED_HEDGE_INTENT",
+            policy_version="S4-REPEATED-HEDGE-INTENT-v1",
+            source="SYNTHETIC:DERIVED_SCENARIO",
+            tr_id="S4-SYNTHETIC-VIRTUAL",
+            environment="VIRTUAL_VALIDATION_ONLY",
+            instrument_id=command.instrument_id,
+            symbol=command.broker_symbol,
+            source_instant=observed_at,
+            received_at=observed_at,
+            evidence_sha256=sha256(
+                f"{observed_at.isoformat()}|{resolved_identity.instrument_id}|S4-REPEAT".encode()
+            ).hexdigest(),
+        )
+
+    bridge.freshness_verdict_provider = freshness
+    first = bridge.execute(first_plan)
+    assert first.group_complete is True
+    assert first.reports[0].status == "FILLED"
+    first_report = first.reports[0]
+    first_client_order_id = first_report.client_order_id
+    assert first_report.group_id == first_plan.group_id
+    assert first_report.leg_id == first_plan.legs[0].leg_id
+
+    # The second tick differs, but the plan's stable fields and Bridge ID inputs do not.
+    assert first_tick.timestamp != second_tick.timestamp
+    before_second_submission = vssf.metrics["order_commands"]
+    second = bridge.execute(second_plan)
+
+    assert second.reports[0].client_order_id == first_client_order_id
+    assert second.reports[0].execution_id == first_report.execution_id
+    assert second.reports[0].status == "FILLED"
+    assert vssf.metrics["order_commands"] == before_second_submission == 1
+    assert len(bridge.position_lot_store.open_lots()) == 1
+    assert sum(lot.remaining_quantity for lot in bridge.position_lot_store.open_lots()) == int(scenario["quantity"])
+    assert vssf.account.positions[identity.instrument_id]["qty"] == int(scenario["quantity"])
+    assert fixture["expected_observations"]["same_intent_at_distinct_ticks_reuses_client_order_id"] is True
+    assert fixture["expected_observations"]["no_attempt_identity_or_retry_policy_is_inferred"] is True
