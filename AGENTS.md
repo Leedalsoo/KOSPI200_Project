@@ -1722,3 +1722,13 @@
 - Seven-module S4/VSSF/adapter/recovery/store regression: 93 passed. KIS raw-store duplicate local-sequence focused test: 1 passed, 17 deselected. compileall, scoped Ruff F821/F401/F841, fixture JSON parse, diff-check PASS.
 - OPEN: authoritative broker execution-ID uniqueness scope; cross-order/global collision resolution; official lot identity fingerprint including multiplier/source; consistent VSSF/PositionLot/FeeLedger/Bridge idempotency contract; durable history/restart, ACK/retry/repair owner. No global namespace, dedupe precedence, compensation, checkpoint or repair policy invented.
 - S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. No Production/API/broker/collector/service/scheduler or original Raw/Canonical/accepted-source/manifest mutation.
+
+## 2026-11-25 No.1846 — S4 Bridge identity fingerprint omission
+
+- Notion Q&A: https://app.notion.com/p/4235f4f6eaa181fea086cf6c10693e59
+- `VirtualMultiLegExecutionBridge._apply_reconciled_execution()` execution fingerprint includes client_order_id, instrument_id, side, filled_quantity, execution_price, execution_timestamp, fee, group_id and leg_id; it omits `contract_multiplier` and `identity_source`.
+- Two individually valid synthetic Futures identities with same instrument_id and otherwise identical execution fields but different multiplier/source: second Bridge delivery is treated as identical duplicate; first PositionLot identity metadata remains and no second FeeLedger/aggregate publication occurs.
+- Fixture `S4-BRIDGE-IDENTITY-FINGERPRINT-OMISSION-001`, `SYNTHETIC:DERIVED_SCENARIO`, `validation_only=true`, `runtime_use=PROHIBITED_OUTSIDE_VALIDATION`. Fixture SHA-256 `7062837A8DB46A8C37113FCF81944B2577DEA0A2EF4EB59AE28C243EC9F367BF`; test SHA-256 `CFB78B9C4E7696AD0835728B44635E2621C74E1DE0E74471BF96A8B1C8F4DF47`.
+- Seven-module S4/VSSF/adapter/recovery/store regression: 94 passed. compileall, scoped Ruff F821/F401/F841, fixture JSON parse and diff-check PASS.
+- OPEN: authoritative identity version/effective time, execution identity + identity snapshot contract, multiplier/source conflict policy, cross-store dedupe contract, durable event/restart/ACK/retry/repair. No precedence or repair policy invented.
+- S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. No Production/API/broker/collector/service/scheduler or original Raw/Canonical/accepted-source/manifest mutation.

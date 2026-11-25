@@ -1,0 +1,23 @@
+﻿{
+  "fixture_id": "S4-BRIDGE-IDENTITY-FINGERPRINT-OMISSION-001",
+  "schema_version": "1.0.0",
+  "provenance": "SYNTHETIC:DERIVED_SCENARIO",
+  "validation_only": true,
+  "runtime_use": "PROHIBITED_OUTSIDE_VALIDATION",
+  "generation_rule": "Use two individually valid synthetic FuturesInstrumentIdentity values sharing instrument_id but carrying different positive contract_multiplier and non-empty identity_source. Apply the same execution_id and otherwise identical report/command/plan twice to an isolated in-memory Bridge.",
+  "scenario": {
+    "instrument_id": "SYNTHETIC_CONTRACT:S4-BRIDGE-IDENTITY",
+    "execution_id": "SYNTH-EXEC-BRIDGE-IDENTITY-001",
+    "client_order_id": "SYNTH-ORDER-BRIDGE-IDENTITY-001",
+    "identity_a": {"contract_multiplier": "25000", "identity_source": "SYNTHETIC:IDENTITY-A"},
+    "identity_b": {"contract_multiplier": "50000", "identity_source": "SYNTHETIC:IDENTITY-B"},
+    "all_other_execution_fingerprint_fields_equal": true
+  },
+  "expected_observations": {
+    "both_identity_values_validate_individually": true,
+    "bridge_fingerprint_does_not_include_multiplier_or_identity_source": true,
+    "second_delivery_is_treated_as_identical_duplicate": true,
+    "first_position_lot_identity_metadata_remains": true,
+    "no_authoritative_identity_precedence_is_inferred": true
+  }
+}

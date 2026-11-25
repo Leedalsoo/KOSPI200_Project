@@ -2048,3 +2048,83 @@ def test_s4_execution_id_collision_scope_across_vssf_and_ledgers() -> None:
         fee_ledger.record(conflicting_fee)
     assert len(fee_ledger.snapshot(run_id="SYNTHETIC-RUN")) == 1
     assert fixture["expected_observations"]["no_global_execution_identity_policy_is_inferred"] is True
+
+
+def test_s4_bridge_execution_fingerprint_omits_contract_multiplier_and_identity_source() -> None:
+    """Characterize Bridge duplicate handling when only identity metadata changes."""
+    import json
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    from contracts.futures_contract_spec import FuturesProductType
+    from contracts.futures_identity_source_port import FuturesInstrumentIdentity
+    from contracts.types import BrokerOrderCommand, ExecutionLeg, ExecutionReport, MultiLegExecutionPlan
+    from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
+    from environments.virtual.position.virtual_position_lot_store import VirtualPositionLotStore
+    from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
+
+    fixture_path = Path(__file__).resolve().parents[1] / "fixtures" / "track4" / "synthetic_s4_bridge_identity_fingerprint_omission_v1.json"
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8-sig"))
+    assert fixture["validation_only"] is True
+    assert fixture["runtime_use"] == "PROHIBITED_OUTSIDE_VALIDATION"
+    scenario = fixture["scenario"]
+    stamp = datetime(2026, 11, 25, 4, 0, tzinfo=timezone.utc)
+    identity_a = FuturesInstrumentIdentity(
+        instrument_id=scenario["instrument_id"], symbol="SYNTH-S4-BRIDGE",
+        product_type=FuturesProductType.MINI,
+        contract_multiplier=Decimal(scenario["identity_a"]["contract_multiplier"]),
+        identity_source=scenario["identity_a"]["identity_source"],
+    )
+    identity_b = FuturesInstrumentIdentity(
+        instrument_id=scenario["instrument_id"], symbol="SYNTH-S4-BRIDGE",
+        product_type=FuturesProductType.MINI,
+        contract_multiplier=Decimal(scenario["identity_b"]["contract_multiplier"]),
+        identity_source=scenario["identity_b"]["identity_source"],
+    )
+
+    bridge = VirtualMultiLegExecutionBridge.__new__(VirtualMultiLegExecutionBridge)
+    bridge.run_id = "SYNTHETIC:S4:BRIDGE-IDENTITY-FINGERPRINT"
+    bridge.position_lot_store = VirtualPositionLotStore()
+    bridge.fee_ledger = VirtualTrack9FeeLedger()
+    bridge.leg_positions = {}
+    bridge.execution_legs = {}
+    bridge.provenance = {}
+    bridge._applied_execution_fingerprints = {}
+
+    def apply(identity: FuturesInstrumentIdentity) -> None:
+        leg = ExecutionLeg(leg_id="mini", side="BUY", quantity=1, instrument_identity=identity)
+        plan = MultiLegExecutionPlan(
+            group_id="SYNTHETIC-GROUP:BRIDGE-IDENTITY", strategy_id="track4_gamma_scalping",
+            purpose="S4_SYNTHETIC_IDENTITY_FINGERPRINT_CHARACTERIZATION", legs=(leg,),
+        )
+        command = BrokerOrderCommand(
+            client_order_id=scenario["client_order_id"], instrument_id=identity.instrument_id,
+            side="BUY", quantity=1, order_type="MARKET", instrument_identity=identity,
+            asset_type="FUTURES", strategy_id="track4_gamma_scalping",
+            track_id="track4_gamma_scalping", group_id=plan.group_id, leg_id="mini",
+        )
+        report = ExecutionReport(
+            client_order_id=scenario["client_order_id"], broker_order_id="SYNTHETIC-BROKER:IDENTITY",
+            execution_id=scenario["execution_id"], status="FILLED", filled_quantity=1,
+            remaining_quantity=0, execution_price=Decimal("1000"), execution_timestamp=stamp,
+            fee=Decimal("0.10"), group_id=plan.group_id, leg_id="mini",
+        )
+        bridge._apply_reconciled_execution(
+            plan=plan, leg=leg, identity=identity, broker_command=command, report=report,
+        )
+
+    apply(identity_a)
+    first_lot = bridge.position_lot_store.history()[0]
+    assert first_lot.contract_multiplier == Decimal("25000")
+    assert first_lot.identity_source == "SYNTHETIC:IDENTITY-A"
+    apply(identity_b)
+    assert len(bridge.position_lot_store.history()) == 1
+    assert len(bridge.fee_ledger.snapshot(run_id=bridge.run_id)) == 1
+    retained_lot = bridge.position_lot_store.history()[0]
+    assert retained_lot.contract_multiplier == Decimal("25000")
+    assert retained_lot.identity_source == "SYNTHETIC:IDENTITY-A"
+    assert bridge.leg_positions[identity_a.instrument_id].qty == 1
+    assert bridge._applied_execution_fingerprints[scenario["execution_id"]] == (
+        scenario["client_order_id"], identity_a.instrument_id, "BUY", 1,
+        Decimal("1000"), stamp, Decimal("0.10"), "SYNTHETIC-GROUP:BRIDGE-IDENTITY", "mini",
+    )
