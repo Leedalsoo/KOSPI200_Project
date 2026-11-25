@@ -2,6 +2,16 @@
 
 > Notion decision source: `4135f4f6-eaa1-81f7-ac42-dea70e10fa42`. This repository file is the synchronized state snapshot. Detailed chronological updates are maintained separately in the A8 update log; the pre-rewrite SSOT is preserved in the linked archive.
 
+## 2026-11-25 latest execution supplement — No.1839
+
+- S4 validation-only H0IOCNT0-shaped synthetic fixture SHA-256: `81244942FA2ACC349F8EECE0D4BC9019B32821A3AF9A53B079E3491F25B2596A`.
+- Source → VirtualRuntimeDataProvider → StandardRuntimeInputProvider → Track4MarketInput integration: Delta/Gamma exact instrument+tick pass-through verified; wrong-instrument/prior-tick inputs remain unavailable. Theta raw value remains unavailable because unit/period are unresolved; raw IV scale is not interpreted.
+- S4 focused regression: 84 passed; compileall and diff check passed. Test/fixture/docs only; no Production source/runtime/order semantics changed.
+- `create_virtual_run_session` accepts explicit Track4 Greeks source, while default `create_virtual_runtime_bootstrap` does not expose it. Final AnalyticsSnapshot still has generic source provenance. These remain OPEN.
+- S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`. Full option-entry → owned option lot → Greeks → linked Futures hedge → attribution remains unverified. No Live/account API or original data mutation.
+- Detail: [No.1839](https://app.notion.com/p/4235f4f6eaa18116a809d0152f54bdcc).
+
+
 ## 기준 헤더 — 2026-11-17 (KST)
 
 - CB2 ID: `4135f4f6-eaa1-81f7-ac42-dea70e10fa42`.

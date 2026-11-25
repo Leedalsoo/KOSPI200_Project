@@ -4,6 +4,13 @@ KOSPI200 선물·옵션 자동매매 시스템 개발 프로젝트다. 현재 �
 
 상세 작업 기준은 [AGENTS.md](AGENTS.md)를 따른다.
 
+## 2026-11-25 validation update — S4 Greeks
+
+- A versioned `SYNTHETIC:DERIVED_SCENARIO` H0IOCNT0-shaped fixture now verifies the source → VirtualRuntimeDataProvider → StandardRuntimeInputProvider → Track4 input path.
+- Delta/Gamma pass through only for the exact option instrument and tick timestamp. Theta remains unavailable until its unit/period contract is established; raw IV is not normalized or treated as decimal IV.
+- The fixture is validation-only (`runtime_use=PROHIBITED_OUTSIDE_VALIDATION`), not a KIS capture or operating input. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
+- Default bootstrap source wiring, Greek provenance propagation, multi-instrument lifecycle, owned-option-lot lineage, linked hedge and full attribution remain open. See [No.1839](https://app.notion.com/p/4235f4f6eaa18116a809d0152f54bdcc).
+
 ## 1. 현재 표준 실행 구조
 
 **Market Data Source → Runtime Input → Strategy → Decision → Risk → OMS/Order Router → Broker → Execution → Position/Margin/PnL → Control Tower Read Model**

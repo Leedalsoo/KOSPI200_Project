@@ -611,3 +611,14 @@ Focused S4 Runtime identity + spec alignment + attribution + Greek decomposition
 - Eight focused S4/S8/adapter/candidate modules: **76 passed**. The focused new/extended test: **1 passed**. `py -m compileall -q application core contracts environments tests`, scoped Ruff F821/F401/F841, and `git diff --check`: PASS.
 - Only the existing validation-only test was extended (24 inserted lines); no Production source/runtime/policy change. No KIS/REAL_VTS/Live/account API, broker action, collector/service/scheduler, or Raw/Canonical/accepted-source/manifest original mutation.
 - S4 remains **DRAFT / UNVERIFIED / UNAPPROVED / DISABLED**. OPEN: authoritative execution identity/idempotency owner; shared durable account/Bridge checkpoint and restart acknowledgement; cross-store reconciliation/repair precedence; authoritative KIS contract/fee/tax/margin semantics; approved full option-entry-to-Futures-hedge lifecycle.
+
+## 2026-11-25 No.1839 — synthetic Greeks to Standard Runtime input boundary
+
+- Added a versioned validation-only fixture at `tests/fixtures/track4/synthetic_s4_greeks_runtime_v1.json`, provenance `SYNTHETIC:DERIVED_SCENARIO`, SHA-256 `81244942FA2ACC349F8EECE0D4BC9019B32821A3AF9A53B079E3491F25B2596A`.
+- Verified synthetic H0IOCNT0-shaped frame → `KISTrack4GreeksRealtimeSource.accept_frame()` → `VirtualRuntimeDataProvider` → `StandardRuntimeInputProvider.build()` → `Track4MarketInput` and Analytics. Delta 0.31 and Gamma 0.017 are passed through only for exact option identity and tick timestamp. Wrong-instrument and prior-tick observations remain unavailable.
+- Theta raw -0.42 remains unavailable because H0IOCNT0 theta unit and period are not established. IV raw 24.5 is not normalized or treated as decimal IV. These are deliberate validation boundaries, not inferred KIS operating semantics.
+- S4 focused regression: 84 passed; compileall, scoped Ruff F821/F401, and git diff check passed. No Production source/runtime/bootstrap/strategy/risk/order semantics changed.
+- `create_virtual_run_session(track4_greeks_source=...)` supports explicit injection, but `create_virtual_runtime_bootstrap()` does not expose/pass the source. AnalyticsSnapshot provenance remains generic and does not retain source instrument identity. Default bootstrap lifecycle and Greek provenance propagation remain OPEN.
+- S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. Full option-entry → owned option lot → Greeks → linked Futures hedge → attribution remains unverified.
+- No KIS/REAL_VTS/account/Live API, WebSocket subscription, collector/service/scheduler, broker action, new collection, or Raw/Canonical/accepted-source/manifest original mutation.
+- Detail: https://app.notion.com/p/4235f4f6eaa18116a809d0152f54bdcc.

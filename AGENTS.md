@@ -1,3 +1,14 @@
+## 2026-11-25 No.1839 — S4 synthetic Greeks → Standard Runtime input validation
+
+- Applied latest No.1535/1765 synthetic-input policy and No.1784/1785 S4 ownership/Greeks lineage decisions, then reconciled No.1838 and current Project200 source. Synthetic fixtures are official validation-only inputs when provenance, generation rule, versioned manifest and SHA-256 are preserved; they are never promoted to observed KIS, account, Production or Live facts.
+- Added `tests/fixtures/track4/synthetic_s4_greeks_runtime_v1.json` (SHA-256 `81244942FA2ACC349F8EECE0D4BC9019B32821A3AF9A53B079E3491F25B2596A`) and `tests/application/test_track4_standard_input_greeks_integration.py`.
+- Synthetic H0IOCNT0-shaped frame → `KISTrack4GreeksRealtimeSource.accept_frame()` → `VirtualRuntimeDataProvider` → `StandardRuntimeInputProvider.build()` → `Track4MarketInput`/Analytics was exercised. Same-instrument/same-tick Delta 0.31 and Gamma 0.017 reach S4 input. Wrong instrument and prior-tick Greeks remain unavailable. Theta raw -0.42 remains unavailable because unit/period are unresolved; IV raw 24.5 is not promoted to decimal IV.
+- S4 focused regression: 84 passed. `py -m compileall -q application core contracts environments tests` and `git diff --check` PASS. No Production source/runtime/bootstrap/strategy/risk/order semantics changed.
+- Current `create_virtual_run_session(track4_greeks_source=...)` supports explicit source injection, but `create_virtual_runtime_bootstrap()` does not expose/pass that source. Analytics metric provenance is still generic `standard-runtime.track4`; source/contract identity provenance is not preserved in the final AnalyticsSnapshot. These are OPEN integration/lineage boundaries, not reasons to discard the synthetic validation result.
+- S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`. OPEN: default bootstrap source lifecycle, multi-instrument source ownership, authoritative Greek unit/period/IV scale, S4-owned option fills → lots → Greeks, hedge sizing/atomicity, gamma/theta attribution and full Runtime path.
+- No KIS/REAL_VTS/account/Live API, WebSocket subscription, collector/service/scheduler, broker action, new collection, or Raw/Canonical/accepted-source/manifest original mutation. Existing user/Graphify/untracked files are preserved.
+- Detail: [No.1839](https://app.notion.com/p/4235f4f6eaa18116a809d0152f54bdcc).
+
 ## 2026-11-25 No.1818 ? multi-fill intermediate publication failure/replay
 
 - Reconciled latest No.1817/1816, Current Baseline v2, No.1546 A8, No.1763 and local Project200 source before testing. Continued with validation-only synthetic two-fill report; original datasets untouched.
