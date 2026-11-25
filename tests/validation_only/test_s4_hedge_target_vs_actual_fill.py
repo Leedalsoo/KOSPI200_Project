@@ -1121,3 +1121,125 @@ def test_s4_vssf_account_bridge_fee_pnl_margin_and_restart_projection_divergence
     # projection and are not part of the VSSF account snapshot.
     assert len(bridge.position_lot_store.open_lots()) == 1
     assert bridge.fee_ledger.total(run_id=run_id) == Decimal("0.30")
+
+def test_s4_vssf_and_bridge_have_no_shared_restart_checkpoint_contract() -> None:
+    """Characterize separate account/fee snapshots and missing Bridge/lot restore APIs."""
+    from datetime import datetime, timezone
+
+    from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
+    from contracts.futures_contract_spec import FuturesProductType
+    from contracts.futures_identity_source_port import FuturesInstrumentIdentity
+    from contracts.position_provenance import PositionLotProvenance, PositionRole
+    from contracts.track9_fee_ledger import Track9FeeRecord
+    from environments.virtual.authoritative_vssf.firm_runtime import VirtualSecuritiesFirmRuntime
+    from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
+    from environments.virtual.position.virtual_position_lot_store import VirtualPositionLotStore
+
+    stamp = datetime(2026, 11, 25, 6, 0, tzinfo=timezone.utc)
+    run_id = "SYNTHETIC:S4:RUN:1832"
+    strategy_id = "track4_gamma_scalping"
+    group_id = "SYNTHETIC:S4:GROUP:1832"
+    instrument_id = "SYNTHETIC:MINI:COMBINED-CHECKPOINT:1832"
+    source = "SYNTHETIC:DERIVED_SCENARIO"
+    multiplier = Decimal("50000")
+    identity = FuturesInstrumentIdentity(
+        instrument_id=instrument_id,
+        symbol=instrument_id,
+        product_type=FuturesProductType.MINI,
+        contract_multiplier=multiplier,
+        identity_source=source,
+    )
+
+    lot_store = VirtualPositionLotStore()
+    lot_store.apply_execution(PositionLotProvenance(
+        run_id=run_id,
+        instrument_id=instrument_id,
+        strategy_id=strategy_id,
+        group_id=group_id,
+        leg_id="mini",
+        client_order_id="SYNTHETIC:S4:ORDER:1832",
+        execution_id="SYNTHETIC:S4:EXEC:1832",
+        side="BUY",
+        opened_quantity=1,
+        remaining_quantity=1,
+        execution_timestamp=stamp,
+        instrument_identity=identity,
+        contract_multiplier=multiplier,
+        identity_source=source,
+        position_role=PositionRole.NONE,
+    ))
+    fee_ledger = VirtualTrack9FeeLedger()
+    fee_ledger.record(Track9FeeRecord(
+        run_id=run_id,
+        strategy_id=strategy_id,
+        group_id=group_id,
+        leg_id="mini",
+        client_order_id="SYNTHETIC:S4:ORDER:1832",
+        execution_id="SYNTHETIC:S4:EXEC:1832",
+        instrument_id=instrument_id,
+        fee_amount=Decimal("0.10"),
+        executed_quantity=1,
+        executed_price=Decimal("1000"),
+        executed_at=stamp,
+        source=source,
+    ))
+
+    # Fee Ledger exposes a read snapshot, but neither a restore API nor a
+    # shared checkpoint envelope is defined by the current implementation.
+    fee_snapshot = fee_ledger.snapshot(run_id=run_id)
+    assert len(fee_snapshot) == 1
+    assert fee_snapshot[0].fee_amount == Decimal("0.10")
+    fresh_fee_ledger = VirtualTrack9FeeLedger()
+    assert fresh_fee_ledger.snapshot(run_id=run_id) == ()
+
+    # PositionLotStore retains lots, close history and execution fingerprints
+    # only in instance memory; no public snapshot/restore pair is exposed.
+    assert len(lot_store.open_lots()) == 1
+    assert len(lot_store.history()) == 1
+    assert len(lot_store.close_events()) == 0
+    assert not callable(getattr(lot_store, "snapshot", None))
+    assert not callable(getattr(lot_store, "restore", None))
+    fresh_lot_store = VirtualPositionLotStore()
+    assert fresh_lot_store.open_lots() == ()
+    assert fresh_lot_store.history() == ()
+
+    # Bridge-owned aggregates, reports, pending work and fingerprints also
+    # have no bridge-level snapshot/restore API.
+    assert not callable(getattr(VirtualMultiLegExecutionBridge, "snapshot", None))
+    assert not callable(getattr(VirtualMultiLegExecutionBridge, "restore", None))
+    bridge = VirtualMultiLegExecutionBridge.__new__(VirtualMultiLegExecutionBridge)
+    bridge.run_id = run_id
+    bridge.position_lot_store = lot_store
+    bridge.fee_ledger = fee_ledger
+    bridge.leg_positions = {instrument_id: SimpleNamespace(side="BUY", qty=1)}
+    bridge.execution_legs = {"SYNTHETIC:S4:EXEC:1832": {"quantity": 1}}
+    bridge.provenance = {"SYNTHETIC:S4:EXEC:1832": {"source": source}}
+    bridge._applied_execution_fingerprints = {"SYNTHETIC:S4:EXEC:1832": ("synthetic",)}
+    fresh_bridge = VirtualMultiLegExecutionBridge.__new__(VirtualMultiLegExecutionBridge)
+    fresh_bridge.run_id = run_id
+    fresh_bridge.position_lot_store = VirtualPositionLotStore()
+    fresh_bridge.fee_ledger = VirtualTrack9FeeLedger()
+    fresh_bridge.leg_positions = {}
+    fresh_bridge.execution_legs = {}
+    fresh_bridge.provenance = {}
+    fresh_bridge._applied_execution_fingerprints = {}
+    assert fresh_bridge.position_lot_store.open_lots() == ()
+    assert fresh_bridge.fee_ledger.snapshot(run_id=run_id) == ()
+    assert fresh_bridge.leg_positions == {}
+    assert fresh_bridge.execution_legs == {}
+    assert fresh_bridge.provenance == {}
+    assert fresh_bridge._applied_execution_fingerprints == {}
+
+    runtime = VirtualSecuritiesFirmRuntime(
+        initial_capital=1_000_000_000,
+        validation_run_id=run_id,
+        validation_candidate_id="SYNTHETIC:S4:CANDIDATE:1832",
+    )
+    account_snapshot = runtime.recovery_engine.create_snapshot(
+        "SYNTHETIC:S4:ACCOUNT-CHECKPOINT:1832",
+    )
+    assert set(account_snapshot) == {"sequence_id", "balance", "positions", "metrics"}
+    assert "bridge" not in account_snapshot
+    assert "fee_ledger" not in account_snapshot
+    assert "position_lots" not in account_snapshot
+    assert "execution_fingerprints" not in account_snapshot
