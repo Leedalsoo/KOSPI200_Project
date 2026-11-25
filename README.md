@@ -1570,3 +1570,26 @@ A synthetic fault injected after each of PositionLot, Fee Ledger, and Position A
 - No Production source/policy, KIS/REAL_VTS/Live/account API, broker action, collector/service/scheduler, or Raw/Canonical/accepted-source/manifest mutation. S4 remains **DRAFT / UNVERIFIED / UNAPPROVED / DISABLED**.
 - OPEN: shared durable checkpoint ownership and schema; account ledger/PnL/margin and execution sequence/report restoration; Bridge lot/close-event/fee/aggregate/provenance/fingerprint/pending restoration; restart late-fill acknowledgement and idempotency; account-vs-candidate attribution; cross-store reconciliation; authoritative KIS identity/fee/margin semantics; approved full option-entry-to-Futures-hedge lifecycle.
 - Detail: https://app.notion.com/p/4235f4f6eaa181299f09f9a3df700abb
+
+## 2026-11-25 No.1833 — strategy status review and S4 candidate/account attribution
+
+- Reconciled Current Baseline v2, A8 No.1546, No.1659/1662/1663/1664, No.1760–1766, No.1763/1808–1822, No.1823–1832 and actual Project200 source. Full strategy-by-strategy evidence and limitations: https://app.notion.com/p/4235f4f6eaa181529c16e73aa2eb3cfe.
+- S1: partial validation-only PASS / PLUMBING_ONLY; KIS identity, operating costs/margin/risk and full natural entry-to-flat remain unverified.
+- S2: PSB_UNVERIFIED; U17 IV source/metric/window/threshold, U18 operating values, U19 durable broker restore, U21 authoritative provider/wiring, actual costs/margin and 12 risk limits remain unresolved.
+- S3: synthetic basis-spread economic harness PASS (No.1766 46 tests); approved tradable legs, authoritative runtime input and Virtual execution lifecycle remain open.
+- S4: DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. No.1823–1832 characterize hedge target/fill, callback, position, duplicate/restart, PnL/margin and combined checkpoint boundaries.
+- S5: existing-position close-only validation PASS; new entry remains fail-closed pending A8 R6 D1–D8 user approval.
+- S6: rank 5/6 validation matrix PASS; operating defaults remain null/fail-closed and authoritative account/contract mapping remains unverified.
+- S7: Virtual lifecycle subset PASS; durable Production state restore, callback ack/replay and full T4 X3 remain open.
+- S8: multi-contract partial-fill validation subset PASS; default size remains one, operating sizing/fees/identity and U16/U19/U21/U22 residuals remain open.
+- S9: independent ATM PUT+CALL BUY/BUY validation subset PASS; authoritative KIS data/fees/margin and durable Production restore remain open.
+- T4 remains in progress; T5–T8 pending. No full S1–S9 natural-signal integrated E2E acceptance.
+
+### S4 candidate/account attribution cross-check
+
+- No.1652 candidate child/account aggregate checkpoint separation, No.1655 candidate-specific VSSF runtime/account injection, No.1656 candidate PnL/PositionLot/Fee reconciliation and No.1657 candidate multi-leg restart replay were reconciled with No.1832.
+- Current composition passes validation_candidate_id through VirtualCompositionDependencies → ConcreteVirtualEnvironmentBuilder → VSSF runtime/account. The validation-only evidence adapter filters reports/lots/fees by run/candidate group and rejects mismatched account candidate scope. PositionLot/Fee provenance uses run/group lineage rather than a dedicated candidate field.
+- This supports candidate-scoped Virtual validation evidence only; it does not define authoritative shared-account attribution or a durable shared checkpoint.
+- My_Caddy_TS1 isolated-worktree regression: seven focused modules, **49 passed**. compileall, scoped Ruff F821/F401/F841 and git diff-check PASS. No strategy policy, Production source or data changes.
+- Next T4 X3 boundary: characterize VSSF account apply versus Bridge PositionLot/Fee/aggregate cross-store reconciliation. Reuse No.1815–1818 and No.1827–1832 evidence without duplicating those tests. Synthetic/validation-only only.
+- No.1833: https://app.notion.com/p/4235f4f6eaa181529c16e73aa2eb3cfe.
