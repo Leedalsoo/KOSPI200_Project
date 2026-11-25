@@ -240,20 +240,48 @@ def test_track2_group_stop_exit_builds_trap_close_signal_when_test_policy_is_inj
 
 def test_track2_runtime_tick_processor_refreshes_group_pnl_before_strategy_evaluation():
     import ast
-    source = Path("application/composition/automated_virtual_runtime_factory.py").read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    processor = next(
-        node for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef) and node.name == "process_pending_multi_leg"
-    )
-    calls = {
+
+    factory_source = Path("application/composition/automated_virtual_runtime_factory.py").read_text(encoding="utf-8")
+    factory_tree = ast.parse(factory_source)
+    factory_functions = {
+        node.name: node
+        for node in ast.walk(factory_tree)
+        if isinstance(node, ast.FunctionDef)
+    }
+    refresh = factory_functions["refresh_track2_position_marks"]
+    refresh_calls = {
         node.func.attr
-        for node in ast.walk(processor)
+        for node in ast.walk(refresh)
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
     }
-    assert "refresh_position_group_marks" in calls
-    assert "update_group_pnl_snapshot" in calls
-    assert "update_group_pnl_status" in calls
+    assert "refresh_position_group_marks" in refresh_calls
+    assert "update_group_pnl_snapshot" in refresh_calls
+    assert "update_group_pnl_status" in refresh_calls
+
+    observer = factory_functions["observe_pending_multi_leg"]
+    observer_calls = [
+        (node.lineno, node.func.attr if isinstance(node.func, ast.Attribute) else node.func.id)
+        for node in ast.walk(observer)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, (ast.Attribute, ast.Name))
+    ]
+    observer_calls = [name for _line, name in sorted(observer_calls)]
+    assert observer_calls.index("process_pending_quotes") < observer_calls.index("refresh_track2_position_marks")
+
+    loop_source = Path("application/composition/automated_virtual_trading_loop.py").read_text(encoding="utf-8")
+    loop_tree = ast.parse(loop_source)
+    on_tick = next(
+        node for node in ast.walk(loop_tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "on_tick"
+    )
+    on_tick_calls = [
+        (node.lineno, node.func.attr if isinstance(node.func, ast.Attribute) else node.func.id)
+        for node in ast.walk(on_tick)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, (ast.Attribute, ast.Name))
+    ]
+    on_tick_calls = [name for _line, name in sorted(on_tick_calls)]
+    assert on_tick_calls.index("_reconcile_pending_multi_leg") < on_tick_calls.index("run")
 
 
 
