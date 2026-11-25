@@ -1816,3 +1816,15 @@
 
 ## 2026-11-25 No.1850 — S4 attempt_id contribution
 - Notion: https://app.notion.com/p/4235f4f6eaa1819c868dffeeb8544d25. _client_order_id() appends a truthy attempt_id to its hash inputs. Same explicit synthetic ID across ticks produces the same client-order ID; different non-empty values produce different IDs. Pure derivation probe; no second VSSF order submitted. Fixture SHA FBE61DFFE8DB9876DFD32E0926BE202787AA40B926E2AB961DDA7A90C7BDF878; test SHA 4C8A9830973770ACAD41AC25A9C8BBA6D9B2C92E6B85653818C11212C1AB182A. Seven-module regression 83 passed; static checks PASS. OPEN: authoritative issuer/namespace/uniqueness/lifecycle/restart and duplicate/new-attempt/retry semantics. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+
+
+## 2026-11-25 No.1851 ? S4 attempt_id upstream issuer/propagation trace
+
+- Notion Q&A: https://app.notion.com/p/4235f4f6eaa1810eb7a6fba4bea94655
+- Reconciled No.1850/1849/1848~1845, Current Baseline v2, A8 SSOT/roadmap and live origin/Project200 before tracing.
+- `Track4GammaScalping.evaluate_delta_hedge()` creates `StrategyExecutionProposal`, whose current contract has no `attempt_id` field. `RuntimeStrategyResultCollectionAdapter.collect()` creates `RuntimeExecutionContext(tick_sequence, local_sequence)`, so per-tick signal/client-order IDs differ.
+- `RuntimeStrategyToDecisionAdapter` passes evaluation/canonical to the resolver. S4 `resolve_track4()` calls `build_futures_single_leg_plan()` with run-scoped group ID and tag-derived leg ID. That builder constructs `MultiLegExecutionPlan` without `attempt_id`; the contract default remains `None`. The resolver does not copy Runtime signal identity into the plan.
+- New synthetic test passes typed `RuntimeStrategyEvaluation` and distinct Runtime tick sequences through the actual S4 resolver. Runtime signal/client-order identities differ, while plan group/leg remain constant, attempt_id remains None, and Bridge pure client-order-ID derivation remains equal. No Bridge.execute/VSSF submission/order API was invoked.
+- Fixture `S4-ATTEMPT-ID-UPSTREAM-PROPAGATION-001`, `SYNTHETIC:DERIVED_SCENARIO`, `validation_only=true`, `runtime_use=PROHIBITED_OUTSIDE_VALIDATION`. Focused test 1 passed; seven-module S4/VSSF/adapter/recovery/store regression plus new test: 88 passed.
+- OPEN: authoritative attempt_id issuer/owner, namespace, uniqueness across tick/run/process/restart, lifecycle and retry/new-attempt/duplicate semantics, persistence and broker/KIS mapping. This source trace does not approve an identity design.
+- No Production source/policy, KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection or Raw/Canonical/accepted-source/manifest original changed. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
