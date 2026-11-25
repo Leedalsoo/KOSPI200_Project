@@ -1773,3 +1773,7 @@
 - Seven-module S4/VSSF/adapter/recovery/store regression: 95 passed. compileall, scoped Ruff F821/F401/F841, fixture JSON parse and diff-check PASS.
 - OPEN: report group/leg missing lineage source, authoritative execution identity namespace/scope, identity version/effective time, cross-store dedupe contract, durable restart, ACK/retry/repair. No policy invented.
 - S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. No Production/API/broker/collector/service/scheduler or original Raw/Canonical/accepted-source/manifest mutation.
+
+## 2026-11-25 No.1850 — S4 attempt_id contribution
+- Bridge _client_order_id() appends str(plan.attempt_id) only when truthy; otherwise tick-varying identical intents can reuse an ID. Same non-empty synthetic attempt_id across ticks yields the same ID; distinct non-empty values yield different IDs.
+- Pure deterministic hash probe only; no additional VSSF order submitted and no attempt-ID owner/retry policy inferred. Fixture S4-REPEATED-HEDGE-INTENT-CLIENT-ORDER-ID-REUSE-001, SYNTHETIC:DERIVED_SCENARIO, alidation_only=true, untime_use=PROHIBITED_OUTSIDE_VALIDATION. Fixture SHA FBE61DFFE8DB9876DFD32E0926BE202787AA40B926E2AB961DDA7A90C7BDF878; test SHA 4C8A9830973770ACAD41AC25A9C8BBA6D9B2C92E6B85653818C11212C1AB182A. Regression 83 passed; compileall/Ruff/JSON/diff-check PASS. Notion: https://app.notion.com/p/4235f4f6eaa1819c868dffeeb8544d25. OPEN: issuer/namespace/uniqueness/lifecycle/restart and duplicate/new-attempt/retry semantics. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.

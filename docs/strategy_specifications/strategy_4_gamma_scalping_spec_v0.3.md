@@ -744,3 +744,7 @@ Focused S4 Runtime identity + spec alignment + attribution + Greek decomposition
 - Fixture `S4-REPEATED-HEDGE-INTENT-CLIENT-ORDER-ID-REUSE-001`, `SYNTHETIC:DERIVED_SCENARIO`, `validation_only=true`, `runtime_use=PROHIBITED_OUTSIDE_VALIDATION`. Fixture SHA-256 `82AEBA664AB544CEFCDB537D41685B61024B2B6B7D1DBF10E22DDD001349157F`; test module SHA-256 `242B298B65988652D5360EAB10A78B56B2BBC21F4E27D12C89EF31841E0F0895`.
 - Focused test 1 passed; seven-module regression 83 passed; compileall/scoped Ruff/JSON/diff-check PASS. Test commit `89433c25ed0647ff88b03dfe3c992058a45a0d3e`.
 - S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`. Notion: https://app.notion.com/p/4235f4f6eaa18173aabcfcdcaf2d7c13.
+
+## 2026-11-25 No.1850 — attempt_id contribution (validation-only)
+- Bridge _client_order_id() includes str(plan.attempt_id) only when truthy. Pure synthetic probe: same explicit attempt_id across equivalent plans/ticks yields same ID; distinct non-empty attempt IDs yield distinct IDs. No additional VSSF order was executed.
+- This does not establish attempt_id issuer, namespace, uniqueness, lifecycle, restart behavior, or retry/duplicate semantics. Fixture/test hashes: FBE61DFFE8DB9876DFD32E0926BE202787AA40B926E2AB961DDA7A90C7BDF878 / 4C8A9830973770ACAD41AC25A9C8BBA6D9B2C92E6B85653818C11212C1AB182A. Seven-module regression 83 passed. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. Notion: https://app.notion.com/p/4235f4f6eaa1819c868dffeeb8544d25.

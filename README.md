@@ -1717,3 +1717,6 @@ Validation-only synthetic test confirms VSSF `client_order_id` is formatted from
 - No Production source/policy, KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original changed. S4 remains **DRAFT / UNVERIFIED / UNAPPROVED / DISABLED**.
 - Notion: https://app.notion.com/p/4235f4f6eaa181838948c45c5744c41d
 - Commit: `0a2a80108404d67ddfb51d0dcc51a28bffc7ee80` (`test: characterize S4 first-delivery group-leg lineage gap`); six authored files pushed to `origin/Project200`. Isolated worktree clean; original working folder 203 pre-existing user status entries preserved.
+
+## 2026-11-25 validation update — No.1850 S4 attempt_id contribution
+- Bridge client-order ID includes a non-empty attempt_id in its hash; equal IDs across ticks yield equal client-order IDs and distinct values yield distinct IDs. Pure derivation only; no new order executed and no policy inferred. Seven-module regression 83 passed. Details: https://app.notion.com/p/4235f4f6eaa1819c868dffeeb8544d25.
