@@ -748,3 +748,85 @@ def test_s4_vssf_restart_late_fill_reconciles_account_but_not_prior_lot_fee_hist
     assert len(post_restart_bridge.position_lot_store.open_lots()) == 1
     assert len(post_restart_bridge.fee_ledger.snapshot(run_id=run_id)) == 1
     assert post_restart_bridge.leg_positions[instrument_id].qty == 1
+
+
+def test_s4_vssf_restored_account_reapplies_duplicate_late_fill_without_execution_dedupe() -> None:
+    """Characterize duplicate late-fill delivery to a restored synthetic VSSF account."""
+    from datetime import timezone
+
+    from environments.virtual.authoritative_vssf.firm_runtime import VirtualSecuritiesFirmRuntime
+    from shared.contracts.canonical import CanonicalAssetType, CanonicalOrderSide
+
+    stamp = datetime(2026, 11, 25, 2, 0, tzinfo=timezone.utc)
+    run_id = "SYNTHETIC:S4:RUN:1829"
+    candidate_id = "SYNTHETIC:S4:CANDIDATE:1829"
+    instrument_id = "SYNTHETIC:MINI:DUPLICATE:1829"
+
+    def command(client_order_id: str, side: CanonicalOrderSide) -> SimpleNamespace:
+        return SimpleNamespace(
+            client_order_id=client_order_id,
+            track_id="track4_gamma_scalping",
+            asset_type=CanonicalAssetType.FUTURES,
+            side=side,
+            symbol=instrument_id,
+            instrument_id=instrument_id,
+            contract_multiplier=Decimal("50000"),
+            strategy_id="track4_gamma_scalping",
+            group_id="SYNTHETIC:S4:GROUP:1829",
+            leg_id="mini",
+            identity_source="SYNTHETIC:DERIVED_SCENARIO",
+            option_type=None,
+            strike=0,
+            expiry="20261210",
+        )
+
+    def signed_position(runtime: VirtualSecuritiesFirmRuntime) -> int:
+        position = runtime.account.positions.get(instrument_id)
+        if not position:
+            return 0
+        qty = int(position["qty"])
+        return qty if str(position["side"]).upper() == "BUY" else -qty
+
+    original = VirtualSecuritiesFirmRuntime(
+        initial_capital=1_000_000_000,
+        validation_run_id=run_id,
+        validation_candidate_id=candidate_id,
+    )
+    entry = original.execution_engine.execute_order(
+        command("SYNTHETIC:S4:ENTRY:1829", CanonicalOrderSide.BUY),
+        Decimal("1000"), 1, timestamp=stamp,
+    )
+    original.account.apply_execution(entry)
+    snapshot = original.recovery_engine.create_snapshot(
+        "SYNTHETIC:S4:CHECKPOINT:1829", metrics=original.metrics,
+    )
+    late_fill = original.execution_engine.execute_order(
+        command("SYNTHETIC:S4:LATE-EXIT:1829", CanonicalOrderSide.SELL),
+        Decimal("1001"), 1, timestamp=stamp,
+    )
+
+    restored = VirtualSecuritiesFirmRuntime(
+        initial_capital=1_000_000_000,
+        validation_run_id=run_id,
+        validation_candidate_id=candidate_id,
+    )
+    assert restored.recovery_engine.restore_from_snapshot(snapshot) is True
+    assert signed_position(restored) == 1
+    assert restored.account.ledger_engine.transactions == []
+
+    # First delivery closes the restored BUY position.
+    restored.account.apply_execution(late_fill)
+    assert signed_position(restored) == 0
+    assert [row["exec_id"] for row in restored.account.ledger_engine.transactions] == [late_fill.exec_id]
+
+    # Exact redelivery reaches PaperTradingAccount again; no execution-ID gate is present.
+    restored.account.apply_execution(late_fill)
+    position = restored.account.positions[instrument_id]
+    assert signed_position(restored) == -1
+    assert position["side"] == "SELL" and position["qty"] == 1
+    assert position["avg_price"] == 1001.0
+    assert [row["exec_id"] for row in restored.account.ledger_engine.transactions] == [
+        late_fill.exec_id, late_fill.exec_id,
+    ]
+    assert restored.account.realized_pnl == Decimal("50000.0")
+    assert restored.execution_engine.reports == []
