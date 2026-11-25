@@ -1645,3 +1645,12 @@
 - Eight focused S4/S8/adapter/candidate modules: **76 passed**. The focused new/extended test: **1 passed**. `py -m compileall -q application core contracts environments tests`, scoped Ruff F821/F401/F841, and `git diff --check`: PASS.
 - Only the existing validation-only test was extended (24 inserted lines); no Production source/runtime/policy change. No KIS/REAL_VTS/Live/account API, broker action, collector/service/scheduler, or Raw/Canonical/accepted-source/manifest original mutation.
 - S4 remains **DRAFT / UNVERIFIED / UNAPPROVED / DISABLED**. OPEN: authoritative execution identity/idempotency owner; shared durable account/Bridge checkpoint and restart acknowledgement; cross-store reconciliation/repair precedence; authoritative KIS contract/fee/tax/margin semantics; approved full option-entry-to-Futures-hedge lifecycle.
+
+## 2026-11-25 No.1840 — S4 Greeks bootstrap/source lifecycle boundary
+
+- Latest No.1839 and prior No.1785 are authoritative: do not duplicate Option Master injection; do not connect/start a KIS WS subscription or collector until source ownership, lifecycle, timestamp and acknowledgement contracts are approved.
+- `create_virtual_run_session(track4_greeks_source=...)` supports explicit Greeks source injection. `create_virtual_runtime_bootstrap()` does not expose or forward it.
+- Current `KISTrack4GreeksRealtimeSource` is a single-provider facade: multi-record adapter support does not imply per-instrument source ownership. Duplicate frames are reprocessed; older frames may overwrite newer snapshots; transport start/stop/close lifecycle is not owned by this facade.
+- `build_track4_analytics_snapshot()` currently emits generic `standard-runtime.track4` provenance and no instrument identity. Do not invent provenance schema or Greek units/period/IV scale.
+- S4 focused regression: 84 passed; compileall and git diff check PASS. No production code change. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. Synthetic fixtures remain validation-only; no KIS/Live/account/broker/collector/new collection or Raw/Canonical/accepted-source/manifest mutation.
+- Existing user dirty/untracked/Graphify/worktree files must be preserved; no reset/clean/stash.

@@ -622,3 +622,13 @@ Focused S4 Runtime identity + spec alignment + attribution + Greek decomposition
 - S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. Full option-entry → owned option lot → Greeks → linked Futures hedge → attribution remains unverified.
 - No KIS/REAL_VTS/account/Live API, WebSocket subscription, collector/service/scheduler, broker action, new collection, or Raw/Canonical/accepted-source/manifest original mutation.
 - Detail: https://app.notion.com/p/4235f4f6eaa18116a809d0152f54bdcc.
+
+## 2026-11-25 No.1840 — Greeks bootstrap/source lifecycle/provenance follow-up
+
+- Latest No.1839 OPEN items were traced against current Project200 source. The standard run-session factory accepts `track4_greeks_source` and passes it to the automated loop/provider; the default Virtual bootstrap does not expose or forward this source.
+- `KISTrack4GreeksRealtimeSource` is a single-snapshot facade. Although the adapter can decode multiple records, the facade retains one provider; duplicate frames are reprocessed and older frames can replace newer state. No transport subscription/start/stop/close lifecycle is owned by this facade.
+- The source uses caller-provided `observed_at`; separate source event time and receive time/ACK correlation are not represented by this boundary. Do not infer the authoritative clock or dedupe/order key.
+- `build_track4_analytics_snapshot()` currently uses generic `standard-runtime.track4` provenance and `instrument_identity=None`; Greek source/contract identity is not propagated to final metric provenance.
+- S4 focused 12 modules: **84 passed**; compileall and git diff check PASS. No production code or strategy semantics changed. No KIS/Live/account/broker/collector/new collection or original market-data mutation.
+- OPEN: approved source lifecycle/owner, multi-instrument storage/routing, duplicate/out-of-order policy, source-vs-receive timestamp/ACK contract, Analytics provenance schema and default bootstrap wiring. Continue validation-only synthetic tests; do not wire production bootstrap until contracts are approved. S4 remains **DRAFT / UNVERIFIED / UNAPPROVED / DISABLED**.
+- Detail: [No.1840](https://app.notion.com/p/4235f4f6eaa18165b8d1fc65fe9b72b6).

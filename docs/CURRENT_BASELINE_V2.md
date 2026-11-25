@@ -1683,3 +1683,16 @@
 - Eight focused S4/S8/adapter/candidate modules: **76 passed**. The focused new/extended test: **1 passed**. `py -m compileall -q application core contracts environments tests`, scoped Ruff F821/F401/F841, and `git diff --check`: PASS.
 - Only the existing validation-only test was extended (24 inserted lines); no Production source/runtime/policy change. No KIS/REAL_VTS/Live/account API, broker action, collector/service/scheduler, or Raw/Canonical/accepted-source/manifest original mutation.
 - S4 remains **DRAFT / UNVERIFIED / UNAPPROVED / DISABLED**. OPEN: authoritative execution identity/idempotency owner; shared durable account/Bridge checkpoint and restart acknowledgement; cross-store reconciliation/repair precedence; authoritative KIS contract/fee/tax/margin semantics; approved full option-entry-to-Futures-hedge lifecycle.
+
+## 2026-11-25 No.1840 — S4 Greeks bootstrap, source lifecycle and Analytics provenance
+
+- Reconciled latest No.1839 with No.1785 and No.1838. Existing authoritative Option Master injection is retained; no duplicate injection or KIS subscription/collector start.
+- Root Project200 HEAD and origin: `99f3af20d6558d41ef1cb5b058c561f3af59903c`; existing user dirty/untracked/Graphify status count 203 preserved.
+- `create_virtual_run_session(track4_greeks_source=...)` and `attach_standard_automated_loop(track4_greeks_provider=...)` support explicit source injection. `create_virtual_runtime_bootstrap()` exposes no Greeks source parameter and forwards none to its session creation calls.
+- `KISTrack4GreeksRealtimeSource` stores a single `_provider`. `adapt_many()` does not create multi-instrument ownership in the facade; `accept_frame()` stores one adapted provider. Duplicate frames are reprocessed and an older frame can overwrite a newer snapshot. The facade has no transport subscription/start/stop/close lifecycle API. Caller-provided `observed_at` is retained, while source/payload time and receive time are not separately reconciled here.
+- `build_track4_analytics_snapshot()` stamps generic `standard-runtime.track4` provenance and `instrument_identity=None`; source instrument identity/source provenance is not carried to final metrics.
+- S4 focused 12 modules: **84 passed**. `py -m compileall -q application core contracts environments tests`: PASS. `git diff --check`: PASS.
+- No Production source/bootstrap/analytics/strategy/risk/order changes. No KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original mutation.
+- OPEN: bootstrap injection contract; multi-instrument owner/store and lifecycle; duplicate/out-of-order policy; source-time/receive-time authority; Analytics metric provenance schema. Do not infer these policies. S4 remains **DRAFT / UNVERIFIED / UNAPPROVED / DISABLED**.
+- Next: test-only characterization of transport/source lifecycle and multi-instrument routing; reconcile approved timestamp/ACK/provenance contract before any production bootstrap wiring.
+- Detail: [No.1840](https://app.notion.com/p/4235f4f6eaa18165b8d1fc65fe9b72b6).
