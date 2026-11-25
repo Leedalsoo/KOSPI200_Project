@@ -464,3 +464,11 @@ Focused S4 Runtime identity + spec alignment + attribution + Greek decomposition
 - Unit test only; no weekday orchestration, KIS API/network, collector process/scheduler or new data collection. No ACK parsing/acceptance, Raw retention, retry/backoff, unsubscribe/session ownership or Production semantics inferred.
 - S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
 - Validation: S4 Track4 source/runtime + Canonical WebSocket focused regression 28 passed; compileall, scoped Ruff F821/F401 and git diff --check PASS.
+## 2026-11-25 — Group callback fill-event boundary (No.1824)
+
+- The Virtual bridge delivers a group-level MultiLegExecutionResult; reports contains order-level ExecutionReport records, and each report may contain individual ExecutionFill events. The bridge expands fills for ledger application, but Track4 receives the group result through StrategyHub.
+- Current ExecutionReport includes group/leg/order lineage and fill details but does not include order side or instrument identity. The factory callback has the plan but forwards only strategy ID, purpose and result. Track4 cannot derive signed instrument-specific actual hedge quantity from its current callback argument alone.
+- MultiLegExecutionResult.filled_legs is currently accumulated from filled contract quantity, not distinct leg count. No rename or semantic change was made.
+- Validation-only synthetic 2-fill partial-result characterization: one group result, one order report, two fill events; bridge expansion preserved both fill identities and quantities. GAMMA_REBALANCE remains ignored by Track4. Focused S4 hedge-boundary + MINI Futures Runtime identity tests: 25 passed; compileall, scoped Ruff and diff check passed.
+- The adjacent R4 lifecycle batch had 6 initialization failures because its referenced derived-scenario manifest is absent; these are excluded from PASS/failure judgments and no original data was changed.
+- This does not approve event ownership, report-vs-fill consumption, signed quantity calculation, dedupe/replay, acknowledgement, late-fill recovery or Production behavior. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
