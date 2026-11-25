@@ -18,7 +18,9 @@
                      "second_tick_timestamp":  "2026-10-08T09:01:49+09:00",
                      "first_attempt_id":  null,
                      "second_attempt_id":  null,
-                     "identity_source":  "SYNTHETIC:high-speed-market-model-v2"
+                     "identity_source":  "SYNTHETIC:high-speed-market-model-v2",
+                     "first_explicit_attempt_id":  "SYNTHETIC:ATTEMPT:001",
+                     "second_explicit_attempt_id":  "SYNTHETIC:ATTEMPT:002"
                  },
     "expected_observations":  {
                                   "plan_group_id_is_run_scoped_and_constant":  "{run_id}-track4_gamma_scalping-FUTURES-HEDGE",
@@ -26,6 +28,9 @@
                                   "bridge_client_order_id_inputs_omit_tick_sequence":  true,
                                   "same_intent_at_distinct_ticks_reuses_client_order_id":  true,
                                   "second_bridge_call_reuses_prior_filled_report_without_new_vssf_submission":  true,
-                                  "no_attempt_identity_or_retry_policy_is_inferred":  true
+                                  "no_attempt_identity_or_retry_policy_is_inferred":  true,
+                                  "same_attempt_id_preserves_bridge_client_order_id_across_ticks":  true,
+                                  "distinct_nonempty_attempt_ids_change_bridge_client_order_id":  true,
+                                  "attempt_id_probe_is_pure_and_does_not_submit_orders":  true
                               }
 }

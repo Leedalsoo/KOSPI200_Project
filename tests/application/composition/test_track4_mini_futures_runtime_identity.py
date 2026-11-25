@@ -1124,3 +1124,41 @@ def test_s4_repeated_same_hedge_intent_reuses_bridge_client_order_id_across_tick
     assert vssf.account.positions[identity.instrument_id]["qty"] == int(scenario["quantity"])
     assert fixture["expected_observations"]["same_intent_at_distinct_ticks_reuses_client_order_id"] is True
     assert fixture["expected_observations"]["no_attempt_identity_or_retry_policy_is_inferred"] is True
+
+    # A caller-supplied non-empty attempt_id participates in the Bridge ID digest.
+    # This pure probe does not execute another order or define who owns the ID.
+    from dataclasses import replace
+
+    first_explicit_attempt = replace(
+        first_plan, attempt_id=scenario["first_explicit_attempt_id"]
+    )
+    same_explicit_attempt_next_tick = replace(
+        second_plan, attempt_id=scenario["first_explicit_attempt_id"]
+    )
+    second_explicit_attempt = replace(
+        second_plan, attempt_id=scenario["second_explicit_attempt_id"]
+    )
+    first_attempt_id = bridge._client_order_id(
+        first_explicit_attempt, first_explicit_attempt.legs[0], identity
+    )
+    same_attempt_next_tick_id = bridge._client_order_id(
+        same_explicit_attempt_next_tick,
+        same_explicit_attempt_next_tick.legs[0],
+        identity,
+    )
+    second_attempt_id = bridge._client_order_id(
+        second_explicit_attempt, second_explicit_attempt.legs[0], identity
+    )
+    assert first_attempt_id == same_attempt_next_tick_id
+    assert first_attempt_id != first_client_order_id
+    assert second_attempt_id != first_attempt_id
+    assert vssf.metrics["order_commands"] == 1
+    assert fixture["expected_observations"][
+        "same_attempt_id_preserves_bridge_client_order_id_across_ticks"
+    ] is True
+    assert fixture["expected_observations"][
+        "distinct_nonempty_attempt_ids_change_bridge_client_order_id"
+    ] is True
+    assert fixture["expected_observations"][
+        "attempt_id_probe_is_pure_and_does_not_submit_orders"
+    ] is True
