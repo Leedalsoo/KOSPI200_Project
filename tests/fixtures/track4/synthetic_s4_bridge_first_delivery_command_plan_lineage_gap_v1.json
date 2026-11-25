@@ -1,0 +1,30 @@
+﻿{
+  "fixture_id": "S4-BRIDGE-FIRST-DELIVERY-COMMAND-PLAN-LINEAGE-GAP-001",
+  "schema_version": "1.0.0",
+  "provenance": "SYNTHETIC:DERIVED_SCENARIO",
+  "validation_only": true,
+  "runtime_use": "PROHIBITED_OUTSIDE_VALIDATION",
+  "generation_rule": "Create one isolated synthetic fill where the pre-submit BrokerOrderCommand carries one group/leg pair, the Bridge plan carries a different pair, and the ExecutionReport omits group_id/leg_id. Observe whether first-delivery reconciliation validates the command-to-plan lineage or publishes the plan lineage.",
+  "scenario": {
+    "instrument_id": "SYNTHETIC_CONTRACT:S4-FIRST-DELIVERY-LINEAGE",
+    "client_order_id": "SYNTH-ORDER-FIRST-DELIVERY-LINEAGE-001",
+    "execution_id": "SYNTH-EXEC-FIRST-DELIVERY-LINEAGE-001",
+    "command_group_id": "SYNTH-COMMAND-GROUP-001",
+    "command_leg_id": "SYNTH-COMMAND-LEG-001",
+    "plan_group_id": "SYNTH-PLAN-GROUP-002",
+    "plan_leg_id": "SYNTH-PLAN-LEG-002",
+    "report_group_id": null,
+    "report_leg_id": null,
+    "filled_quantity": 1,
+    "execution_price": "1000",
+    "fee": "0.10",
+    "contract_multiplier": "50000",
+    "identity_source": "SYNTHETIC:DERIVED_SCENARIO"
+  },
+  "expected_observations": {
+    "report_missing_group_leg_does_not_trigger_lineage_mismatch": true,
+    "command_group_leg_are_not_compared_to_plan_group_leg": true,
+    "first_delivery_is_projected_using_plan_group_leg": true,
+    "no_authoritative_group_leg_precedence_is_inferred": true
+  }
+}

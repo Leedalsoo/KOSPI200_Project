@@ -2200,3 +2200,81 @@ def test_s4_bridge_duplicate_gate_precedes_projection_metadata_publication() -> 
     assert len(bridge.fee_ledger.snapshot(run_id=bridge.run_id)) == 1
     assert bridge.leg_positions[identity.instrument_id].qty == 1
     assert fixture["expected_observations"]["historical_no1813_metadata_overwrite_observation_is_not_reproduced_by_current_source"] is True
+
+
+def test_s4_bridge_first_delivery_does_not_compare_command_group_leg_with_plan_when_report_lineage_is_missing() -> None:
+    """Characterize first-delivery lineage when the execution report omits group/leg."""
+    import json
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    from contracts.futures_contract_spec import FuturesProductType
+    from contracts.futures_identity_source_port import FuturesInstrumentIdentity
+    from contracts.types import BrokerOrderCommand, ExecutionLeg, ExecutionReport, MultiLegExecutionPlan
+    from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
+    from environments.virtual.position.virtual_position_lot_store import VirtualPositionLotStore
+    from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
+
+    fixture_path = Path(__file__).resolve().parents[1] / "fixtures" / "track4" / "synthetic_s4_bridge_first_delivery_command_plan_lineage_gap_v1.json"
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8-sig"))
+    assert fixture["validation_only"] is True
+    assert fixture["runtime_use"] == "PROHIBITED_OUTSIDE_VALIDATION"
+    scenario = fixture["scenario"]
+    identity = FuturesInstrumentIdentity(
+        instrument_id=scenario["instrument_id"], symbol="SYNTH-S4-LINEAGE-GAP",
+        product_type=FuturesProductType.MINI,
+        contract_multiplier=Decimal(scenario["contract_multiplier"]),
+        identity_source=scenario["identity_source"],
+    )
+    leg = ExecutionLeg(
+        leg_id=scenario["plan_leg_id"], side="BUY", quantity=int(scenario["filled_quantity"]),
+        instrument_identity=identity,
+    )
+    plan = MultiLegExecutionPlan(
+        group_id=scenario["plan_group_id"], strategy_id="track4_gamma_scalping",
+        purpose="S4_SYNTHETIC_FIRST_DELIVERY_LINEAGE_GAP", legs=(leg,),
+    )
+    command = BrokerOrderCommand(
+        client_order_id=scenario["client_order_id"], instrument_id=identity.instrument_id,
+        side="BUY", quantity=int(scenario["filled_quantity"]), order_type="MARKET",
+        instrument_identity=identity, asset_type="FUTURES", strategy_id="track4_gamma_scalping",
+        track_id="track4_gamma_scalping", group_id=scenario["command_group_id"],
+        leg_id=scenario["command_leg_id"],
+    )
+    report = ExecutionReport(
+        client_order_id=scenario["client_order_id"], broker_order_id="SYNTHETIC-BROKER:LINEAGE-GAP",
+        execution_id=scenario["execution_id"], status="FILLED",
+        filled_quantity=int(scenario["filled_quantity"]), remaining_quantity=0,
+        execution_price=Decimal(scenario["execution_price"]),
+        execution_timestamp=datetime(2026, 11, 25, 6, 0, tzinfo=timezone.utc),
+        fee=Decimal(scenario["fee"]), group_id=None, leg_id=None,
+    )
+    bridge = VirtualMultiLegExecutionBridge.__new__(VirtualMultiLegExecutionBridge)
+    bridge.run_id = "SYNTHETIC:S4:FIRST-DELIVERY-LINEAGE-GAP"
+    bridge.position_lot_store = VirtualPositionLotStore()
+    bridge.fee_ledger = VirtualTrack9FeeLedger()
+    bridge.leg_positions = {}
+    bridge.execution_legs = {}
+    bridge.provenance = {}
+    bridge._applied_execution_fingerprints = {}
+
+    # Current source accepts this first delivery: it checks report-vs-plan only
+    # when report lineage is present, but does not compare command-vs-plan lineage.
+    bridge._apply_reconciled_execution(
+        plan=plan, leg=leg, identity=identity, broker_command=command, report=report,
+    )
+
+    assert command.group_id != plan.group_id
+    assert command.leg_id != leg.leg_id
+    assert report.group_id is None and report.leg_id is None
+    lot = bridge.position_lot_store.history()[0]
+    fee = bridge.fee_ledger.snapshot(run_id=bridge.run_id)[0]
+    provenance = bridge.provenance[scenario["execution_id"]]
+    assert (lot.group_id, lot.leg_id) == (scenario["plan_group_id"], scenario["plan_leg_id"])
+    assert (fee.group_id, fee.leg_id) == (scenario["plan_group_id"], scenario["plan_leg_id"])
+    assert (provenance["group_id"], provenance["leg_id"]) == (
+        scenario["plan_group_id"], scenario["plan_leg_id"],
+    )
+    assert len(bridge.position_lot_store.history()) == 1
+    assert len(bridge.fee_ledger.snapshot(run_id=bridge.run_id)) == 1
+    assert fixture["expected_observations"]["command_group_leg_are_not_compared_to_plan_group_leg"] is True

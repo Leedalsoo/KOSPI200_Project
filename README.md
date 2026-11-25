@@ -1694,3 +1694,17 @@ Validation-only synthetic test confirms VSSF `client_order_id` is formatted from
 - Seven-module S4/VSSF/adapter/recovery/store regression: 95 passed. compileall, scoped Ruff F821/F401/F841, fixture JSON parse and diff-check PASS.
 - OPEN: report group/leg missing lineage source, authoritative execution identity namespace/scope, identity version/effective time, cross-store dedupe contract, durable restart, ACK/retry/repair. No policy invented.
 - S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. No Production/API/broker/collector/service/scheduler or original Raw/Canonical/accepted-source/manifest mutation.
+
+
+## 2026-11-25 No.1848 — S4 Bridge first-delivery command/plan group-leg lineage gap
+
+- Reconciled No.1847, No.1846~1841, Current Baseline v2, A8 SSOT/roadmap and current Project200 source. Continued validation-only synthetic characterization; no authoritative group/leg precedence was inferred.
+- `VirtualMultiLegExecutionBridge._apply_reconciled_execution()` checks report `client_order_id` against `broker_command.client_order_id`. It checks report `group_id`/`leg_id` against plan group/leg only when those report fields are non-null. It does not compare `broker_command.group_id`/`leg_id` with `plan.group_id`/`leg.leg_id`.
+- With a first-delivery synthetic FILLED report whose group/leg are null, and a pre-submit BrokerOrderCommand group/leg different from the Bridge plan, current source accepts the fill. PositionLotStore, FeeLedger and provenance are populated from the plan group/leg, not the command group/leg.
+- Added `tests/validation_only/test_s4_hedge_target_vs_actual_fill.py::test_s4_bridge_first_delivery_does_not_compare_command_group_leg_with_plan_when_report_lineage_is_missing` and fixture `tests/fixtures/track4/synthetic_s4_bridge_first_delivery_command_plan_lineage_gap_v1.json`, ID `S4-BRIDGE-FIRST-DELIVERY-COMMAND-PLAN-LINEAGE-GAP-001`, schema 1.0.0, `SYNTHETIC:DERIVED_SCENARIO`, `validation_only=true`, `runtime_use=PROHIBITED_OUTSIDE_VALIDATION`.
+- Fixture SHA-256 `BE5FE234A731D5A05A7FFB2CE210072CEF0364B9581569A24BF093872FB996FD`; test SHA-256 `0FAA74DFEF6B3A74D6EB86118B958E7555084428B0FB4122D949050BFAFFE3DD`.
+- New focused test: 1 passed. Seven-module data-independent S4/VSSF/adapter/recovery/store regression: 75 passed. Compileall, scoped Ruff F821/F401/F841, fixture JSON parse and `git diff --check`: PASS.
+- A separate broader candidate batch including `test_r4_positive_multileg_runtime_lifecycle.py` had 52 passed / 6 failed because `data/derived_scenario/p5_run_20261026_trend_up_seed20261026/manifest.json` is absent in this checkout. These are unavailable-input failures, not code regressions or PASS. `data/accepted_market_data/runtime_v2` is also absent; no substitute dataset was used.
+- OPEN: authoritative group/leg lineage source and validation contract; authoritative execution identity namespace/scope; identity version/effective time; cross-store dedupe; durable restart; ACK/retry/repair owner. No precedence, fallback, retry, compensation or Production policy was invented.
+- No Production source/policy, KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original changed. S4 remains **DRAFT / UNVERIFIED / UNAPPROVED / DISABLED**.
+- Notion: https://app.notion.com/p/4235f4f6eaa181838948c45c5744c41d
