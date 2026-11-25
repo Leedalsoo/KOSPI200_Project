@@ -1,0 +1,34 @@
+{
+  "fixture_id": "S4-ATTEMPT-ID-UPSTREAM-PROPAGATION-001",
+  "schema_version": "1.0.0",
+  "provenance": "SYNTHETIC:DERIVED_SCENARIO",
+  "validation_only": true,
+  "runtime_use": "PROHIBITED_OUTSIDE_VALIDATION",
+  "generation_rule": "Use two deterministic synthetic RuntimeExecutionContext tick sequences and same S4 MINI Futures GAMMA_REBALANCE proposal. Pass typed RuntimeStrategyEvaluation objects through the current S4 multi_leg_plan_resolver and inspect plan identity without invoking Bridge.execute or any order submission.",
+  "scenario": {
+    "run_id": "SYNTHETIC:S4:ATTEMPT-UPSTREAM-001",
+    "strategy_id": "track4_gamma_scalping",
+    "asset_type": "FUTURES",
+    "product_type": "MINI",
+    "contract_multiplier": 50000,
+    "side": "SELL",
+    "quantity": 2,
+    "tag_id": "GAMMA_REBALANCE",
+    "first_tick_sequence": 101,
+    "second_tick_sequence": 102,
+    "first_tick_timestamp": "2026-10-08T09:00:49+09:00",
+    "second_tick_timestamp": "2026-10-08T09:01:49+09:00"
+  },
+  "expected_observations": {
+    "runtime_tick_signal_identity_changes": true,
+    "strategy_execution_proposal_has_no_attempt_id_field": true,
+    "resolver_plan_attempt_id_remains_none": true,
+    "tick_identity_is_not_injected_into_bridge_plan_identity": true,
+    "no_order_submission_performed": true
+  },
+  "limitations": [
+    "Does not define an authoritative attempt_id issuer, namespace, uniqueness scope, lifecycle or restart contract.",
+    "Does not decide whether a repeated hedge signal is a duplicate, a new rebalance attempt or a retry.",
+    "Does not establish broker or KIS client-order-ID semantics, persistence or Live behavior."
+  ]
+}
