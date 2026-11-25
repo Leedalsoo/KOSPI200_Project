@@ -286,3 +286,189 @@ def test_s4_hedge_target_is_distinct_from_owned_lot_and_virtual_position_quantit
     assert signed_from_lots() == -1
     assert signed_from_aggregate() == -1
     assert strategy.state.active_hedge_qty == -2  # target state is not auto-reconciled
+
+def test_s4_vssf_account_matches_position_lot_and_virtual_aggregate_across_partial_fill_close_and_replay(monkeypatch) -> None:
+    """Compare all three synthetic Virtual projections without defining Production ownership policy."""
+    from hashlib import sha256
+    from application.bootstrap import create_virtual_runtime_bootstrap
+    from application.composition.automated_virtual_runtime_factory import attach_standard_automated_loop
+    from contracts.market_data_freshness import FreshnessStatus, FreshnessVerdict
+    from core.option.option_master import InMemoryOptionContractMaster
+    from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
+    from environments.high_speed.synthetic_runtime_sources import SyntheticRuntimeSources
+
+    sources = SyntheticRuntimeSources()
+    bootstrap = create_virtual_runtime_bootstrap(
+        option_master=InMemoryOptionContractMaster(auto_load_kis_source=False),
+        initial_capital=1_000_000_000.0,
+        risk_guard_status_source=sources,
+    )
+    if bootstrap.automated_loop is not None:
+        bootstrap.bundle.market.unsubscribe(bootstrap.automated_loop.on_tick)
+    loop = attach_standard_automated_loop(
+        bootstrap,
+        strategy_keys=(("track4_gamma_scalping", "1.0"),),
+        run_id="S4-VSSF-THREE-PROJECTION-1826",
+        synthetic_runtime_sources=sources,
+        track4_greeks_provider=sources,
+        risk_guard_status_source=sources,
+    )
+    bridge = loop.multi_leg_bridge
+    tick = SimpleNamespace(
+        underlying_symbol="SYNTHETIC_KOSPI200",
+        symbol="SYNTHETIC_KOSPI200",
+        instrument_id="SYNTHETIC_KOSPI200",
+        timestamp="2026-11-25T10:00:00+09:00",
+    )
+    proposal = StrategyExecutionProposal(
+        proposed_quantity=2, asset_type="FUTURES", requested_price=None,
+        side="SELL", track_id="track4_gamma_scalping", tag_id="GAMMA_REBALANCE",
+        option_type=None, strike=None,
+    )
+    evaluation = SimpleNamespace(
+        context=SimpleNamespace(
+            strategy_id="track4_gamma_scalping",
+            market_state=SimpleNamespace(ticks={"synthetic": tick}),
+        ),
+        result=SimpleNamespace(execution_proposal=proposal),
+    )
+    canonical = SimpleNamespace(
+        side=SimpleNamespace(value="SELL"), qty=2,
+        tag_id="GAMMA_REBALANCE", track_id="track4_gamma_scalping",
+    )
+    plan = loop.multi_leg_plan_resolver(evaluation, canonical)
+    assert plan is not None
+    identity = plan.legs[0].instrument_identity
+    assert identity.identity_source.startswith("SYNTHETIC:")
+    assert identity.contract_multiplier == Decimal("50000")
+
+    vssf = bridge.bundle.execution._authoritative_execute.__self__.vssf_runtime
+    bridge.bundle.market._futures_price = Decimal("1000")
+    vssf.order_book.update_bid_ask(1000, 1000, identity.instrument_id)
+
+    def freshness(_plan, _leg, resolved_identity, command):
+        observed_at = datetime.fromisoformat(tick.timestamp)
+        return FreshnessVerdict(
+            status=FreshnessStatus.FRESH,
+            reason="S4_SYNTHETIC_DERIVED_SCENARIO",
+            policy_version="S4-VSSF-THREE-PROJECTION-v1",
+            source="SYNTHETIC:DERIVED_SCENARIO",
+            tr_id="S4-SYNTHETIC-VIRTUAL",
+            environment="VIRTUAL_VALIDATION_ONLY",
+            instrument_id=command.instrument_id,
+            symbol=command.broker_symbol,
+            source_instant=observed_at,
+            received_at=observed_at,
+            evidence_sha256=sha256(
+                f"{observed_at.isoformat()}|{resolved_identity.instrument_id}|S4-1826".encode()
+            ).hexdigest(),
+        )
+
+    bridge.freshness_verdict_provider = freshness
+    original_execute = vssf._execute
+    first_entry_fill = {"done": False}
+
+    def partial_entry(command, price, now, *, quantity=None):
+        if not first_entry_fill["done"]:
+            first_entry_fill["done"] = True
+            return original_execute(command, price, now, quantity=1)
+        return original_execute(command, price, now, quantity=quantity)
+
+    monkeypatch.setattr(vssf, "_execute", partial_entry)
+    partial_entry_result = bridge.execute(plan)
+    assert partial_entry_result.reports[0].status == "PARTIALLY_FILLED"
+    assert partial_entry_result.reports[0].filled_quantity == 1
+    client_order_id = partial_entry_result.reports[0].client_order_id
+    pending_plan, pending_leg, broker_command = bridge.pending_legs[client_order_id]
+
+    def signed_projections() -> tuple[int, int, int]:
+        account_position = vssf.account.positions[identity.instrument_id]
+        account_signed = int(account_position["qty"]) * (
+            1 if str(account_position["side"]).upper() == "BUY" else -1
+        )
+        lots = [
+            lot for lot in bridge.position_lot_store.open_lots()
+            if lot.run_id == bridge.run_id
+            and lot.strategy_id == plan.strategy_id
+            and lot.group_id == plan.group_id
+            and lot.instrument_id == identity.instrument_id
+        ]
+        lot_signed = sum(
+            lot.remaining_quantity if lot.side == "BUY" else -lot.remaining_quantity
+            for lot in lots
+        )
+        aggregate = bridge.leg_positions[identity.instrument_id]
+        aggregate_signed = aggregate.qty if aggregate.side == "BUY" else -aggregate.qty
+        return account_signed, lot_signed, aggregate_signed
+
+    assert signed_projections() == (-1, -1, -1)
+
+    # Exact bridge replay must not reapply PositionLot/aggregate; VSSF account is unchanged.
+    bridge._apply_reconciled_execution(
+        plan=pending_plan, leg=pending_leg, identity=identity,
+        broker_command=broker_command, report=partial_entry_result.reports[0],
+    )
+    assert signed_projections() == (-1, -1, -1)
+
+    # Complete the second contract in the same synthetic VSSF order and reconcile both fills.
+    canonical_command = bridge.command_context.build_command(broker_command)
+    original_execute(canonical_command, Decimal("1000"), vssf._now(), quantity=1)
+    latest_entry = bridge.ack.broker.query(client_order_id)
+    assert latest_entry is not None and latest_entry.status == "FILLED"
+    assert sorted(fill.filled_quantity for fill in latest_entry.execution_fills) == [1, 1]
+    bridge.execute(
+        plan, group_plan=pending_plan,
+        reconciled_reports={client_order_id: latest_entry},
+        reconciled_commands={client_order_id: broker_command},
+    )
+    assert signed_projections() == (-2, -2, -2)
+
+    # Replay the cumulative two-fill report: the already-applied fill IDs remain idempotent.
+    bridge._apply_reconciled_execution(
+        plan=pending_plan, leg=pending_leg, identity=identity,
+        broker_command=broker_command, report=latest_entry,
+    )
+    assert signed_projections() == (-2, -2, -2)
+
+    # A one-contract BUY partial close leaves one SELL contract in every projection.
+    close_plan = bridge.build_close_plan_from_open_lots(
+        strategy_id=plan.strategy_id, purpose="S4_SYNTHETIC_PARTIAL_CLOSE_1826",
+        asset_type="FUTURES",
+    )
+    assert close_plan.legs[0].side == "BUY" and close_plan.legs[0].quantity == 2
+    partial_close_state = {"done": False}
+
+    def partial_close(command, price, now, *, quantity=None):
+        if not partial_close_state["done"]:
+            partial_close_state["done"] = True
+            return original_execute(command, price, now, quantity=1)
+        return original_execute(command, price, now, quantity=quantity)
+
+    monkeypatch.setattr(vssf, "_execute", partial_close)
+    partial_close_result = bridge.execute(close_plan)
+    assert partial_close_result.reports[0].status == "PARTIALLY_FILLED"
+    assert partial_close_result.reports[0].filled_quantity == 1
+    close_client_order_id = partial_close_result.reports[0].client_order_id
+    close_pending_plan, close_pending_leg, close_command = bridge.pending_legs[close_client_order_id]
+    assert signed_projections() == (-1, -1, -1)
+
+    bridge._apply_reconciled_execution(
+        plan=close_pending_plan, leg=close_pending_leg, identity=identity,
+        broker_command=close_command, report=partial_close_result.reports[0],
+    )
+    assert signed_projections() == (-1, -1, -1)
+
+    # Close the remaining contract; the three projections converge to flat.
+    final_close_plan = bridge.build_close_plan_from_open_lots(
+        strategy_id=plan.strategy_id, purpose="S4_SYNTHETIC_FINAL_CLOSE_1826",
+        asset_type="FUTURES",
+    )
+    assert final_close_plan.legs[0].side == "BUY"
+    assert final_close_plan.legs[0].quantity == 1
+    final_close = bridge.execute(final_close_plan)
+    assert final_close.group_complete is True
+    assert bridge.position_lot_store.open_lots() == ()
+    account_position = vssf.account.positions.get(identity.instrument_id)
+    assert account_position is None or int(account_position.get("qty", 0)) == 0
+    aggregate = bridge.leg_positions[identity.instrument_id]
+    assert aggregate.qty == 0
