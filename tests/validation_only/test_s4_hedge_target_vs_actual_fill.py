@@ -1791,3 +1791,150 @@ def test_s4_execution_identity_and_client_order_query_are_runtime_local_across_r
     assert restarted.account.positions[scenario["first_instrument_id"]]["qty"] == 1
     assert restarted.account.positions[scenario["second_instrument_id"]]["qty"] == 1
     assert fixture["expected_observations"]["automatic_repair_policy"] == "NOT_DEFINED"
+
+
+def test_s4_tick_to_vssf_and_bridge_execution_identity_lineage() -> None:
+    """Trace synthetic tick/order/fill IDs across the existing validation path."""
+    import json
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    from application.composition.runtime_decision_command_adapter import RuntimeDecisionCommandAdapter
+    from application.composition.runtime_strategy_result_collection_adapter import RuntimeStrategyResultCollectionAdapter
+    from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
+    from application.composition.vms_market_tick_projection_adapter import VMSMarketTickProjectionAdapter
+    from contracts.futures_contract_spec import FuturesProductType
+    from contracts.futures_identity_source_port import FuturesInstrumentIdentity
+    from contracts.position_provenance import PositionRole
+    from contracts.types import BrokerOrderCommand, ExecutionLeg, MultiLegExecutionPlan
+    from environments.virtual.authoritative_vssf.firm_runtime import VirtualSecuritiesFirmRuntime
+    from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
+    from environments.virtual.clock import VirtualClock
+    from environments.virtual.execution.vssf_command_context_provider import CanonicalVSSFCommandContextProvider
+    from environments.virtual.execution.vssf_execution_adapter import VSSFExecutionAdapter
+    from environments.virtual.market.canonical import ReferenceCanonicalMarketTick
+    from environments.virtual.position.virtual_position_lot_store import VirtualPositionLotStore
+    from shared.contracts.canonical import CanonicalAssetType, CanonicalOrderSide, CanonicalStrategySignal
+
+    fixture_path = Path(__file__).resolve().parents[1] / "fixtures" / "track4" / "synthetic_s4_execution_identity_lineage_v1.json"
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8-sig"))
+    assert fixture["validation_only"] is True
+    assert fixture["runtime_use"] == "PROHIBITED_OUTSIDE_VALIDATION"
+    scenario = fixture["scenario"]
+    timestamp = datetime.fromisoformat(scenario["timestamp"])
+    track_id = scenario["strategy_id"]
+
+    source_tick = ReferenceCanonicalMarketTick(
+        timestamp=scenario["timestamp"],
+        last_price=float(scenario["price"]),
+        volume=int(scenario["quantity"]),
+        seq_id=int(scenario["tick_sequence"]),
+    )
+    canonical_tick = VMSMarketTickProjectionAdapter(scenario["instrument_id"]).project(source_tick)
+    assert canonical_tick.source_sequence == scenario["tick_sequence"]
+
+    evaluation = RuntimeStrategyResultCollectionAdapter().collect(
+        tick_sequence=canonical_tick.source_sequence,
+        context=SimpleNamespace(strategy_id=track_id),
+        result=SimpleNamespace(signals=(SimpleNamespace(strategy_id=track_id),), config_provenance=()),
+    )[0]
+    assert evaluation.local_sequence == scenario["local_sequence"]
+    assert evaluation.runtime_context.client_order_id(track_id) == scenario["expected_client_order_id"]
+
+    signal = CanonicalStrategySignal(
+        signal_id=evaluation.runtime_context.signal_id(track_id),
+        track_id=track_id,
+        asset_type=CanonicalAssetType.FUTURES,
+        side=CanonicalOrderSide.BUY,
+        qty=int(scenario["quantity"]),
+        price=float(scenario["price"]),
+        tag_id="GAMMA_REBALANCE",
+        timestamp=scenario["timestamp"],
+        symbol=scenario["symbol"],
+        instrument_id=scenario["instrument_id"],
+        contract_multiplier=float(scenario["contract_multiplier"]),
+        identity_source=fixture["provenance"],
+    )
+    canonical_command = RuntimeDecisionCommandAdapter().build_commands((evaluation,), (signal,))[0]
+    assert canonical_command.client_order_id == scenario["expected_client_order_id"]
+
+    identity = FuturesInstrumentIdentity(
+        instrument_id=scenario["instrument_id"],
+        symbol=scenario["symbol"],
+        product_type=FuturesProductType.MINI,
+        contract_multiplier=Decimal(scenario["contract_multiplier"]),
+        identity_source=fixture["provenance"],
+    )
+    broker_command = BrokerOrderCommand(
+        client_order_id=canonical_command.client_order_id,
+        instrument_id=identity.instrument_id,
+        side=canonical_command.side.value,
+        quantity=canonical_command.qty,
+        order_type="LIMIT",
+        broker_symbol=identity.symbol,
+        instrument_identity=identity,
+        asset_type=canonical_command.asset_type.value,
+        requested_price=Decimal(str(canonical_command.price)),
+        strategy_id=track_id,
+        track_id=track_id,
+        tag_id=canonical_command.tag_id,
+        group_id="SYNTHETIC:S4:GROUP:1844",
+        leg_id="SYNTHETIC:S4:LEG:1844",
+        position_role=PositionRole.NONE.value,
+    )
+    runtime = VirtualSecuritiesFirmRuntime(
+        initial_capital=Decimal("250000000"),
+        clock=VirtualClock(timestamp),
+        validation_run_id="SYNTHETIC:S4:RUN:1844",
+        validation_candidate_id="SYNTHETIC:S4:CANDIDATE:1844",
+    )
+    runtime.order_book.update_bid_ask(
+        Decimal(scenario["price"]), Decimal(scenario["price"]), instrument_id=identity.instrument_id,
+    )
+    report = VSSFExecutionAdapter(CanonicalVSSFCommandContextProvider(), runtime).execute(broker_command)
+    assert report.status == scenario["expected_status"]
+    assert report.client_order_id == scenario["expected_client_order_id"]
+    assert report.execution_id == scenario["expected_execution_id"]
+    assert runtime.execution_engine.reports[0].exec_id == report.execution_id
+    assert runtime.execution_engine.reports[0].client_order_id == report.client_order_id
+
+    bridge = VirtualMultiLegExecutionBridge.__new__(VirtualMultiLegExecutionBridge)
+    bridge.run_id = "SYNTHETIC:S4:RUN:1844"
+    bridge.position_lot_store = VirtualPositionLotStore()
+    bridge.fee_ledger = VirtualTrack9FeeLedger()
+    bridge.leg_positions = {}
+    bridge.execution_legs = {}
+    bridge.provenance = {}
+    bridge._applied_execution_fingerprints = {}
+    leg = ExecutionLeg(
+        leg_id=broker_command.leg_id,
+        side=broker_command.side,
+        quantity=broker_command.quantity,
+        position_role=PositionRole.NONE.value,
+    )
+    plan = MultiLegExecutionPlan(
+        group_id=broker_command.group_id,
+        strategy_id=track_id,
+        purpose="GAMMA_REBALANCE",
+        legs=(leg,),
+    )
+    bridge._apply_reconciled_execution(
+        plan=plan,
+        leg=leg,
+        identity=identity,
+        broker_command=broker_command,
+        report=report,
+    )
+
+    lot = bridge.position_lot_store.history()[0]
+    fee = bridge.fee_ledger.snapshot(run_id=bridge.run_id)[0]
+    fingerprint = bridge._applied_execution_fingerprints[report.execution_id]
+    provenance = bridge.provenance[report.execution_id]
+    assert lot.client_order_id == fee.client_order_id == report.client_order_id
+    assert lot.execution_id == fee.execution_id == report.execution_id
+    assert fingerprint[0] == report.client_order_id
+    assert provenance["client_order_id"] == report.client_order_id
+    assert provenance["execution_id"] == report.execution_id
+    assert bridge.execution_legs[report.execution_id]["strategy_id"] == track_id
+    assert bridge.leg_positions[identity.instrument_id].qty == 1
+    assert fixture["expected_observations"]["automatic_retry_or_durable_identity_policy"] == "NOT_DEFINED"

@@ -1,0 +1,31 @@
+﻿{
+  "fixture_id": "S4-EXECUTION-IDENTITY-LINEAGE-001",
+  "schema_version": "1.0.0",
+  "provenance": "SYNTHETIC:DERIVED_SCENARIO",
+  "validation_only": true,
+  "runtime_use": "PROHIBITED_OUTSIDE_VALIDATION",
+  "generation_rule": "Deterministic single VMS tick sequence 73, one Track4 signal, one MINI Futures order and one VSSF fill; trace the generated client_order_id and execution_id through command/report/PositionLot/FeeLedger/Bridge fingerprint and projection.",
+  "scenario": {
+    "timestamp": "2026-11-25T10:00:00+09:00",
+    "tick_sequence": 73,
+    "local_sequence": 1,
+    "strategy_id": "track4_gamma_scalping",
+    "instrument_id": "SYNTHETIC_CONTRACT:S4-MINI-LINEAGE-1844",
+    "symbol": "SYNTHETIC-S4-MINI-LINEAGE-1844",
+    "contract_multiplier": "50000",
+    "price": "1000",
+    "quantity": 1,
+    "fee": "0.0",
+    "expected_client_order_id": "ORD-T73-track4_gamma_scalping-1",
+    "expected_execution_id": "EXEC-000001",
+    "expected_status": "FILLED"
+  },
+  "expected_observations": {
+    "tick_sequence_is_projected_without_resequencing": true,
+    "client_order_id_is_preserved_through_command_and_report": true,
+    "execution_id_is_preserved_through_vssf_adapter": true,
+    "position_lot_and_fee_ledger_share_both_ids": true,
+    "bridge_fingerprint_and_provenance_are_keyed_by_execution_id": true,
+    "automatic_retry_or_durable_identity_policy": "NOT_DEFINED"
+  }
+}
