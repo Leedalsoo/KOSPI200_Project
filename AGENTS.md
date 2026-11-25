@@ -1844,3 +1844,17 @@
 - Test SHA256 `0BC2E77C74CA7FA1B49CA999E7CD6D168C40C9E86B938125C34A64ED598EDDF2`; fixture SHA256 `E5D99E6E611EAF1533513A4C1479ABBD6E239DDE73D73682C9D81F1F288C9FB5`.
 - Confirmed current S4 plan does not propagate Runtime tick signal ID into attempt_id; this is an observed implementation gap, not an approved identity policy. OPEN: issuer, namespace, uniqueness across tick/run/process/restart, retry/new-attempt/duplicate semantics, durable broker lookup and repair/ACK owner. No policy invented.
 - S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`. No Production source/policy, KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection or original Raw/Canonical/accepted-source/manifest modified.
+
+
+## 2026-11-25 No.1856 ? S4 same-run restart order identity / VSSF report restore boundary
+
+- Notion Q&A: https://app.notion.com/p/4235f4f6eaa181b5aee8e9788b509707
+- Reconciled latest No.1855 (Runtime signal ? attempt_id propagation), No.1854 (Bridge projection fault and same-process re-entry), No.1843/1838 (VSSF report/sequence restart boundary), No.1841 (ACK/retry OPEN), No.1852 (accepted Runtime v2 provenance) and current Project200 source.
+- Constructed two independent fresh S4 Virtual runtime instances with the same synthetic run_id and distinct tick timestamps. Both plans had `attempt_id=None` and the same group_id; Bridge `_client_order_id()` derived the same client_order_id.
+- The second runtime's VSSF is a distinct instance. Its query for that client_order_id returned None; its ExecutionEngine sequence was 0 and report list empty. The first fresh instance also began with sequence 0 and empty reports. No Bridge.execute, VSSF submit, broker call or order action occurred.
+- Test: `tests/application/composition/test_track4_mini_futures_runtime_identity.py::test_s4_same_run_restart_reuses_client_order_id_without_restored_vssf_report`; fixture `tests/fixtures/track4/synthetic_s4_same_run_restart_order_identity_v1.json`, ID `S4-SAME-RUN-RESTART-ORDER-IDENTITY-001`, `SYNTHETIC:DERIVED_SCENARIO`, `validation_only=true`, `runtime_use=PROHIBITED_OUTSIDE_VALIDATION`.
+- Focused 1 passed; all S4 track4-focused tests 53 passed; seven-module S4/VSSF/adapter/recovery/store regression 91 passed. Compileall, scoped Ruff F821/F401/F841, fixture JSON/provenance and diff-check PASS.
+- Test SHA256 `31BEA8FDBD190A422FE4BA30D5BEB78F16C6AF0867CEE83F5874EB717B240414`; fixture SHA256 `70588A33CDA8EF65E4437E7D98BF864236E750DAB428D4CBCBA4DA3DF482423A`.
+- Accepted Runtime v2 manifest/20261012/20261013 were temporarily linked read-only from preserved T4 candidate worktree; hashes unchanged before/after and junction removed.
+- Confirmed only the current in-memory Virtual boundary: same run/plan can reproduce client_order_id while a fresh VSSF runtime does not restore its prior report or sequence. This does not establish actual broker query/idempotency, durable process restart, account checkpoint, or restart policy. OPEN: run namespace/continuity, attempt_id owner, durable broker execution identity/query, VSSF/account/Bridge checkpoint, ACK/retry/repair/compensation and actual KIS semantics.
+- No Production source/policy, KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection or Raw/Canonical/accepted-source/manifest original modification. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.

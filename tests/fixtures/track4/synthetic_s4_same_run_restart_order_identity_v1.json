@@ -1,0 +1,30 @@
+{
+  "fixture_id": "S4-SAME-RUN-RESTART-ORDER-IDENTITY-001",
+  "schema_version": "1.0.0",
+  "provenance": "SYNTHETIC:DERIVED_SCENARIO",
+  "validation_only": true,
+  "runtime_use": "PROHIBITED_OUTSIDE_VALIDATION",
+  "generation_rule": "Deterministic same-run S4 MINI Futures plan construction in two independent fresh Virtual runtime instances. No Bridge.execute, VSSF submit, broker call or order action is performed.",
+  "scenario": {
+    "same_run_id": "SYNTHETIC:S4:SAME-RUN-RESTART-001",
+    "strategy_id": "track4_gamma_scalping",
+    "side": "SELL",
+    "quantity": 1,
+    "first_tick": "2026-10-08T09:00:49+09:00",
+    "restart_tick": "2026-10-08T09:00:50+09:00"
+  },
+  "expected_observations": {
+    "same_run_id_and_group_id": true,
+    "attempt_id_unset_in_both_runtime_instances": true,
+    "client_order_id_reused_across_fresh_runtime_instances": true,
+    "prior_vssf_report_not_restored": true,
+    "vssf_execution_sequence_restarts_at_zero": true,
+    "no_order_submission_performed": true
+  },
+  "limitations": [
+    "Characterizes current in-memory Virtual runtime construction and deterministic ID derivation only.",
+    "Does not simulate a durable broker query, actual process termination, persisted account snapshot restore, or real broker semantics.",
+    "Does not prescribe whether a restart is a retry, duplicate, continuation, or new hedge attempt.",
+    "Does not establish approved identity namespace, idempotency, ACK, repair, or restart policy."
+  ]
+}

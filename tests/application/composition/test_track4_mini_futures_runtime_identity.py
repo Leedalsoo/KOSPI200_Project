@@ -1332,3 +1332,87 @@ def test_track4_filled_report_bridge_projection_failure_ack_boundary(monkeypatch
     assert broker_report.execution_id in bridge.execution_legs
     assert broker_report.execution_id in bridge.provenance
     assert len(callbacks) == 1
+
+
+
+def test_s4_same_run_restart_reuses_client_order_id_without_restored_vssf_report() -> None:
+    import json
+    from pathlib import Path
+
+    fixture_path = (
+        Path(__file__).resolve().parents[2]
+        / "fixtures" / "track4"
+        / "synthetic_s4_same_run_restart_order_identity_v1.json"
+    )
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    assert fixture["validation_only"] is True
+    assert fixture["runtime_use"] == "PROHIBITED_OUTSIDE_VALIDATION"
+    scenario = fixture["scenario"]
+
+    def build_plan(timestamp: str):
+        loop = _loop(
+            ("track4_gamma_scalping", "1.0"),
+            scenario["same_run_id"],
+        )
+        tick = SimpleNamespace(
+            underlying_symbol="SYNTHETIC_KOSPI200",
+            symbol="SYNTHETIC_KOSPI200",
+            instrument_id="SYNTHETIC_KOSPI200",
+            timestamp=timestamp,
+        )
+        proposal = StrategyExecutionProposal(
+            proposed_quantity=int(scenario["quantity"]),
+            asset_type="FUTURES",
+            requested_price=None,
+            side=scenario["side"],
+            track_id="track4_gamma_scalping",
+            tag_id="GAMMA_REBALANCE",
+            option_type=None,
+            strike=None,
+        )
+        evaluation = SimpleNamespace(
+            context=SimpleNamespace(
+                strategy_id="track4_gamma_scalping",
+                market_state=SimpleNamespace(ticks={"synthetic": tick}),
+            ),
+            result=SimpleNamespace(execution_proposal=proposal),
+        )
+        canonical = SimpleNamespace(
+            signal_id=f"SIG-{timestamp}-track4_gamma_scalping-1",
+            side=SimpleNamespace(value=scenario["side"]),
+            qty=int(scenario["quantity"]),
+            tag_id="GAMMA_REBALANCE",
+            track_id="track4_gamma_scalping",
+        )
+        plan = loop.multi_leg_plan_resolver(evaluation, canonical)
+        assert plan is not None
+        assert plan.attempt_id is None
+        return loop, plan
+
+    first_loop, first_plan = build_plan(scenario["first_tick"])
+    second_loop, second_plan = build_plan(scenario["restart_tick"])
+    first_bridge = first_loop.multi_leg_bridge
+    second_bridge = second_loop.multi_leg_bridge
+    first_identity = first_plan.legs[0].instrument_identity
+    second_identity = second_plan.legs[0].instrument_identity
+
+    first_client_order_id = first_bridge._client_order_id(
+        first_plan, first_plan.legs[0], first_identity
+    )
+    second_client_order_id = second_bridge._client_order_id(
+        second_plan, second_plan.legs[0], second_identity
+    )
+
+    assert first_bridge.run_id == second_bridge.run_id == scenario["same_run_id"]
+    assert first_plan.group_id == second_plan.group_id
+    assert first_client_order_id == second_client_order_id
+
+    first_vssf = first_bridge.bundle.execution._authoritative_execute.__self__.vssf_runtime
+    second_vssf = second_bridge.bundle.execution._authoritative_execute.__self__.vssf_runtime
+    assert first_vssf is not second_vssf
+    assert first_vssf.query_order(first_client_order_id) is None
+    assert second_vssf.query_order(second_client_order_id) is None
+    assert first_vssf.execution_engine._seq == 0
+    assert second_vssf.execution_engine._seq == 0
+    assert first_vssf.execution_engine.reports == []
+    assert second_vssf.execution_engine.reports == []
