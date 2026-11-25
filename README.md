@@ -1421,14 +1421,22 @@ A synthetic fault injected after each of PositionLot, Fee Ledger, and Position A
 - Test-only SQLite/subprocess integration regression restores a synthetic CALL_PENDING snapshot into a freshly initialized Track7 StrategyHub process, delivers a synthetic CALL fill callback, and verifies the first post-restore Hub evaluation observes/preserves COMPLETE with both legs open. Focused Track7 snapshot/restore/callback/lifecycle selection: 63 passed.
 - This is not Production durable recovery or crash-consistency proof. No Production persistence/bootstrap/restore API, startup provenance, event identity/dedupe/watermark, callback retry/acknowledgement, locking, or phase policy changed. Track7 durable restart and Full T4 X3 remain OPEN.
 
-## 2026-11-25 No.1821 ? Track7 callback ?? 2? ? ???? ??? ?? ??
+## 2026-11-25 No.1821 - Track7 callback snapshot second-process restore
 
-- ?? No.1820? ? ???? restore ? callback ? ? Hub ?? ??? ????. No.1728? fresh observation ?? stale snapshot ???? ??? ?? ???? ???? ???. No.1739/1744/1745? identity/event merge/readiness ??? ??? Production ??? ???.
-- ? ?? ?? Python ?????? ? Track7/StrategyHub ?? initialize ? synthetic CALL_PENDING snapshot restore ? synthetic CALL FILLED callback ? ? Hub evaluation? ????. COMPLETE, PUT/CALL open, CALL fill price 1.75? ??? ? callback ?? aggregate? test-only SQLite snapshot row? ?? ????.
-- ? ?? ?? Python ?????? ? Track7/StrategyHub? ?? ???? ?? initialize ? ?? snapshot restore ? ? Hub evaluation? ????. COMPLETE, PUT/CALL open, CALL fill price 1.75? ?? ???? ????.
-- Regression: `tests/core/test_track7_aggregate_snapshot_contract.py::test_track7_test_only_new_process_restore_callback_and_first_hub_run_preserve_fill`.
-- Track7 aggregate snapshot, restore/observation, callback acknowledgement-loss, sequential lifecycle 4? ??: **63 passed**. `py -m compileall -q application tests`, scoped Ruff F821/F401/F841, `git diff --check`: PASS.
-- Test-only SQLite/subprocess round-trip??. Production durable restart, OS crash/power-loss consistency, durable-store atomicity, multi-process concurrent writes, Production factory restore wiring ?? broker-native identity? ???? ???. Production source/API/persistence/bootstrap/restore/phase ?? ??.
-- Event identity/dedupe/sequence/watermark, callback acknowledgement/retry, locking/compensation ??? ???? ???. No.1689 Observation ? Planning ? Action ? X2 latched submitted-fill reconciliation ??, No.1652 candidate/account aggregate? Track7 strategy aggregate ??? ????. UNKNOWN/CONFLICT??? global X2? ?? ???? ???.
-- Track7 durable restart recovery? Full T4 X3 integrated acceptance? ?? OPEN. T5 ???. S4 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. Raw/Canonical/accepted-source/manifest ??, KIS/REAL_VTS/Live/account API, broker action, collector/service/scheduler, ?? ?? ?? ??.
+- Extended No.1820's test-only SQLite/subprocess flow: process B restores synthetic CALL_PENDING, receives a synthetic CALL FILLED callback, completes the first Hub evaluation, and writes the updated aggregate snapshot; independent process C initializes a fresh StrategyHub, restores the updated snapshot, and runs its first evaluation.
+- Process C preserved COMPLETE, both PUT/CALL open flags, and CALL fill price 1.75. Four focused Track7 modules: 63 passed. Compileall, scoped Ruff F821/F401/F841, and git diff check PASS.
+- Test-only evidence; no Production source/API/persistence/bootstrap/restore/phase or event identity/dedupe/watermark/acknowledgement/locking policy change. Track7 durable restart and Full T4 X3 remain OPEN.
 - Notion: https://app.notion.com/p/4235f4f6eaa18129b7e8e2016de0ebf8
+
+
+## 2026-11-25 No.1822 - Live execution host/supervisor read-only audit
+
+- Reconciled Notion No.1753/1754/1755, No.1752/1751, No.1546, Current Baseline v2, No.1821, and current Project200 source before inspection.
+- `KISFuturesExecutionConsumer.start()` connects and subscribes once; `receive_once()` performs one receive/parse/correlation/report operation and propagates transport errors. It contains no reconnect/resubscribe/retry/backfill loop.
+- `LiveRuntimeLifecycleCoordinator.start()` performs controller start -> startup REST reconciliation -> execution start. `receive_execution_once()` delegates one receive and only drains receive tracking in `finally`; it does not invoke REST recovery or reconnect after a receive exception.
+- The production composition/factory builds the lifecycle graph, but repository inspection found no application host/launcher call site that starts a continuous receive loop or supervises/restarts it. The authoritative composition function has no discovered repository caller.
+- Windows read-only inspection: no matching Live execution process or Windows service; no Live execution scheduled task. `Project200-KIS-VTS-WebSocket-Collector` is Disabled and points to the separate market-data collector command, not the Live execution consumer. No task/service/process was started or changed.
+- Focused consumer + REST recovery service/transport + SQLite settlement tests: 53 passed in 8.77s. No Production source, tests, credentials, APIs, broker actions, collector, Raw/Canonical/accepted-source/manifest data changed.
+- Conclusion: in-repository consumer/coordinator behavior is known, but external deployment host/supervisor ownership is not evidenced. Reconnect/backfill, token refresh, replay/gap watermark, automatic inbox resolution, and order-admission policy remain unapproved. This is not a global system block; continue synthetic/read-only validation only.
+- Preserve No.1689 Observation -> Planning -> Action and X2 submitted-fill reconciliation exception; preserve No.1652 candidate/account aggregate vs Track7 strategy aggregate separation. UNKNOWN/CONFLICT alone must not trigger global X2. Track7 durable restart and Full T4 X3 integrated acceptance remain OPEN; T5 not started; S4 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+- Notion: [No.1822](https://app.notion.com/p/4235f4f6eaa181d8ad3dca59c4b66ce9)
