@@ -1,0 +1,38 @@
+{
+  "fixture_id": "S4-EXECUTION-IDENTITY-RESTART-QUERY-001",
+  "schema_version": "1.0.0",
+  "provenance": "SYNTHETIC:DERIVED_SCENARIO",
+  "validation_only": true,
+  "runtime_use": "PROHIBITED_OUTSIDE_VALIDATION",
+  "generation_rule": "Deterministic VSSF MINI Futures fills on two runtime instances separated by an account-only recovery snapshot restore. Compare process-local execution IDs and client-order query availability without defining a repair or idempotency policy.",
+  "scenario": {
+    "timestamp": "2026-11-25T08:00:00+00:00",
+    "initial_capital": "1000000000",
+    "contract_multiplier": "50000",
+    "quantity": 1,
+    "price": "1000",
+    "fee": "0",
+    "tick_sequence": 1,
+    "local_sequence": 1,
+    "first_client_order_id": "ORD-T1-track4_gamma_scalping-1",
+    "second_client_order_id": "ORD-T1-track4_gamma_scalping-1",
+    "first_instrument_id": "SYNTHETIC:MINI:IDENTITY:1843:A",
+    "second_instrument_id": "SYNTHETIC:MINI:IDENTITY:1843:B",
+    "strategy_id": "track4_gamma_scalping",
+    "group_id": "SYNTHETIC:S4:GROUP:1843",
+    "leg_id": "mini",
+    "identity_source": "SYNTHETIC:DERIVED_SCENARIO",
+    "expiry": "20261210"
+  },
+  "expected_observations": {
+    "pre_restart_query": "FILLED",
+    "post_restart_query": null,
+    "post_restart_query_before_new_order": null,
+    "post_restart_query_after_reuse": "FILLED",
+    "same_runtime_context_client_order_id": true,
+    "restored_execution_reports": 0,
+    "restored_execution_sequence": 0,
+    "new_runtime_execution_id_reuse": true,
+    "automatic_repair_policy": "NOT_DEFINED"
+  }
+}

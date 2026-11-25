@@ -1462,6 +1462,7 @@ def test_s4_filled_account_apply_then_each_bridge_stage_failure_is_bridge_replay
     from environments.virtual.position.virtual_position_fill_adapter import VirtualPositionFillAdapter
     from shared.contracts.canonical import CanonicalAssetType, CanonicalOrderSide
 
+
     import json
     from pathlib import Path
     manifest_path = Path(__file__).resolve().parents[1] / "fixtures" / "track4" / "synthetic_s4_bridge_post_filled_stage_failure_v1.json"
@@ -1661,3 +1662,132 @@ def test_s4_filled_account_apply_then_each_bridge_stage_failure_is_bridge_replay
     assert runtime.account.balance == account_after_apply
     assert runtime.account.positions[instrument_id] == position_after_apply
     assert len(runtime.account.ledger_engine.transactions) == 1
+def test_s4_execution_identity_and_client_order_query_are_runtime_local_across_restart() -> None:
+    """Characterize process-local execution IDs and client-order lookup loss after account restore."""
+    import json
+    from datetime import datetime
+    from decimal import Decimal
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    from environments.virtual.authoritative_vssf.firm_runtime import VirtualSecuritiesFirmRuntime
+    from environments.virtual.clock import VirtualClock
+    from environments.virtual.execution.vssf_execution_adapter import VSSFExecutionAdapter
+    from shared.contracts.canonical import CanonicalAssetType, CanonicalOrderSide
+    from core.runtime.runtime_execution_context import RuntimeExecutionContext
+
+
+
+    fixture_path = Path(__file__).resolve().parents[1] / "fixtures" / "track4" / "synthetic_s4_execution_identity_restart_query_v1.json"
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    assert fixture["validation_only"] is True
+    assert fixture["runtime_use"] == "PROHIBITED_OUTSIDE_VALIDATION"
+    scenario = fixture["scenario"]
+    stamp = datetime.fromisoformat(scenario["timestamp"])
+    generated_client_order_id = RuntimeExecutionContext(
+        tick_sequence=int(scenario["tick_sequence"]),
+        local_sequence=int(scenario["local_sequence"]),
+    ).client_order_id(scenario["strategy_id"])
+    assert generated_client_order_id == scenario["first_client_order_id"] == scenario["second_client_order_id"]
+
+    class CommandContext:
+        def build_command(self, order):
+            return order
+
+    def command(client_order_id: str, instrument_id: str) -> SimpleNamespace:
+        return SimpleNamespace(
+            client_order_id=client_order_id,
+            track_id=scenario["strategy_id"],
+            asset_type=CanonicalAssetType.FUTURES,
+            side=CanonicalOrderSide.BUY,
+            qty=int(scenario["quantity"]),
+            price=Decimal(scenario["price"]),
+            requested_price=Decimal(scenario["price"]),
+            symbol=instrument_id,
+            instrument_id=instrument_id,
+            contract_multiplier=Decimal(scenario["contract_multiplier"]),
+            strategy_id=scenario["strategy_id"],
+            group_id=scenario["group_id"],
+            leg_id=scenario["leg_id"],
+            identity_source=scenario["identity_source"],
+            option_type=None,
+            strike=0,
+            expiry=scenario["expiry"],
+        )
+
+    def filled_runtime(client_order_id: str, instrument_id: str):
+        clock = VirtualClock(stamp)
+        runtime = VirtualSecuritiesFirmRuntime(
+            initial_capital=Decimal(scenario["initial_capital"]),
+            clock=clock,
+            validation_run_id="SYNTHETIC:S4:RUN:1843",
+            validation_candidate_id="SYNTHETIC:S4:CANDIDATE:1843",
+        )
+        runtime.order_book.update_bid_ask(
+            Decimal(scenario["price"]), Decimal(scenario["price"]),
+            instrument_id=instrument_id,
+        )
+        result = runtime.process_order(command(client_order_id, instrument_id))
+        assert result.executed_qty == int(scenario["quantity"])
+        return runtime, result
+
+    first, first_result = filled_runtime(
+        scenario["first_client_order_id"], scenario["first_instrument_id"],
+    )
+    first_query = first.query_order(scenario["first_client_order_id"])
+    first_adapter_query = VSSFExecutionAdapter(CommandContext(), first).query(
+        scenario["first_client_order_id"],
+    )
+    assert first_query is not None and first_query.status == fixture["expected_observations"]["pre_restart_query"]
+    assert first_query.exec_id == first_result.exec_id == "EXEC-000001"
+    assert first_adapter_query is not None and first_adapter_query.execution_id == first_result.exec_id
+    assert len(first.execution_engine.reports) == 1
+    assert first.execution_engine._seq == 1
+    assert first.account.positions[scenario["first_instrument_id"]]["qty"] == 1
+
+    snapshot = first.recovery_engine.create_snapshot(
+        "SYNTHETIC:S4:CHECKPOINT:1843", metrics=first.metrics,
+    )
+    restarted_clock = VirtualClock(stamp)
+    restarted = VirtualSecuritiesFirmRuntime(
+        initial_capital=Decimal(scenario["initial_capital"]),
+        clock=restarted_clock,
+        validation_run_id="SYNTHETIC:S4:RUN:1843",
+        validation_candidate_id="SYNTHETIC:S4:CANDIDATE:1843",
+    )
+    assert restarted.recovery_engine.restore_from_snapshot(snapshot) is True
+    assert restarted.account.positions == first.account.positions
+    assert restarted.query_order(scenario["first_client_order_id"]) is fixture["expected_observations"]["post_restart_query_before_new_order"]
+    assert VSSFExecutionAdapter(CommandContext(), restarted).query(
+        scenario["first_client_order_id"],
+    ) is None
+    assert restarted.execution_engine.reports == []
+    assert restarted.execution_engine._seq == fixture["expected_observations"]["restored_execution_sequence"]
+    assert scenario["first_client_order_id"] not in restarted._submitted_at
+    assert scenario["first_client_order_id"] not in restarted._lifecycle_results
+    assert restarted._execution_snapshot(scenario["first_client_order_id"]) == (
+        0, None, None, None, None, None, (),
+    )
+
+    # Reusing the same runtime tick/local sequence recreates the same client order ID.
+    # The fresh VSSF execution counter also reuses EXEC-000001; query now resolves to
+    # the new post-restart order, not the pre-restart order represented in the account snapshot.
+    restarted.order_book.update_bid_ask(
+        Decimal(scenario["price"]), Decimal(scenario["price"]),
+        instrument_id=scenario["second_instrument_id"],
+    )
+    second_result = restarted.process_order(
+        command(scenario["second_client_order_id"], scenario["second_instrument_id"]),
+    )
+    assert second_result.exec_id == first_result.exec_id == "EXEC-000001"
+    assert scenario["second_client_order_id"] == scenario["first_client_order_id"]
+    assert fixture["expected_observations"]["same_runtime_context_client_order_id"] is True
+    assert fixture["expected_observations"]["new_runtime_execution_id_reuse"] is True
+    reused_query = restarted.query_order(scenario["first_client_order_id"])
+    assert reused_query is not None
+    assert reused_query.status == fixture["expected_observations"]["post_restart_query_after_reuse"]
+    assert reused_query.exec_id == first_result.exec_id
+    assert reused_query.symbol == scenario["second_instrument_id"]
+    assert restarted.account.positions[scenario["first_instrument_id"]]["qty"] == 1
+    assert restarted.account.positions[scenario["second_instrument_id"]]["qty"] == 1
+    assert fixture["expected_observations"]["automatic_repair_policy"] == "NOT_DEFINED"
