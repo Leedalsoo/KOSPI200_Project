@@ -1162,3 +1162,143 @@ def test_s4_repeated_same_hedge_intent_reuses_bridge_client_order_id_across_tick
     assert fixture["expected_observations"][
         "attempt_id_probe_is_pure_and_does_not_submit_orders"
     ] is True
+
+
+
+def test_track4_filled_report_bridge_projection_failure_ack_boundary(monkeypatch) -> None:
+    import json
+    from pathlib import Path
+
+    from environments.virtual.position.virtual_position_fill_adapter import VirtualPositionFillAdapter
+
+    fixture_path = (
+        Path(__file__).resolve().parents[2]
+        / "fixtures" / "track4"
+        / "synthetic_s4_bridge_projection_failure_ack_boundary_v1.json"
+    )
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    assert fixture["validation_only"] is True
+    assert fixture["runtime_use"] == "PROHIBITED_OUTSIDE_VALIDATION"
+    scenario = fixture["scenario"]
+
+    loop = _loop(("track4_gamma_scalping", "1.0"), scenario["run_id"])
+    bridge = loop.multi_leg_bridge
+    tick = SimpleNamespace(
+        underlying_symbol="SYNTHETIC_KOSPI200",
+        symbol="SYNTHETIC_KOSPI200",
+        instrument_id="SYNTHETIC_KOSPI200",
+        timestamp=scenario["timestamp"],
+    )
+    proposal = StrategyExecutionProposal(
+        proposed_quantity=int(scenario["quantity"]),
+        asset_type="FUTURES",
+        requested_price=None,
+        side=scenario["side"],
+        track_id="track4_gamma_scalping",
+        tag_id="GAMMA_REBALANCE",
+        option_type=None,
+        strike=None,
+    )
+    evaluation = SimpleNamespace(
+        context=SimpleNamespace(
+            strategy_id="track4_gamma_scalping",
+            market_state=SimpleNamespace(ticks={"synthetic": tick}),
+        ),
+        result=SimpleNamespace(execution_proposal=proposal),
+    )
+    canonical = SimpleNamespace(
+        side=SimpleNamespace(value=scenario["side"]),
+        qty=int(scenario["quantity"]),
+        tag_id="GAMMA_REBALANCE",
+        track_id="track4_gamma_scalping",
+    )
+    plan = loop.multi_leg_plan_resolver(evaluation, canonical)
+    assert plan is not None
+    identity = plan.legs[0].instrument_identity
+    assert identity.product_type is FuturesProductType.MINI
+    assert identity.contract_multiplier == Decimal(50000)
+
+    vssf = bridge.bundle.execution._authoritative_execute.__self__.vssf_runtime
+    price = Decimal(str(scenario["price"]))
+    bridge.bundle.market._futures_price = price
+    vssf.order_book.update_bid_ask(float(price), float(price), identity.instrument_id)
+
+    def freshness(_plan, _leg, resolved_identity, command):
+        observed_at = datetime.fromisoformat(scenario["timestamp"])
+        return FreshnessVerdict(
+            status=FreshnessStatus.FRESH,
+            reason="S4_SYNTHETIC_DERIVED_SCENARIO",
+            policy_version="S4-BRIDGE-PROJECTION-ACK-v1",
+            source="SYNTHETIC:DERIVED_SCENARIO",
+            tr_id="S4-SYNTHETIC-VIRTUAL",
+            environment="VIRTUAL_VALIDATION_ONLY",
+            instrument_id=command.instrument_id,
+            symbol=command.broker_symbol,
+            source_instant=observed_at,
+            received_at=observed_at,
+            evidence_sha256=sha256(
+                f"{observed_at.isoformat()}|{resolved_identity.instrument_id}|ACK-BOUNDARY".encode()
+            ).hexdigest(),
+        )
+
+    bridge.freshness_verdict_provider = freshness
+    callbacks = []
+    bridge.execution_result_callback = lambda received_plan, result: callbacks.append(
+        (received_plan, result)
+    )
+
+    def fail_bridge_aggregate_projection(_adapter, _command, _report):
+        raise RuntimeError("S4_SYNTHETIC_BRIDGE_AGGREGATE_PROJECTION_FAILURE")
+
+    monkeypatch.setattr(VirtualPositionFillAdapter, "apply", fail_bridge_aggregate_projection)
+    with pytest.raises(RuntimeError, match="S4_SYNTHETIC_BRIDGE_AGGREGATE_PROJECTION_FAILURE"):
+        bridge.execute(plan)
+
+    client_order_id = bridge._client_order_id(plan, plan.legs[0], identity)
+    broker_report = bridge.ack.broker.query(client_order_id)
+    assert broker_report is not None
+    assert broker_report.status == "FILLED"
+    assert broker_report.execution_id
+
+    # VSSF account, PositionLot and FeeLedger have already applied before the
+    # Bridge aggregate/fingerprint/provenance publication failure.
+    account_position = vssf.account.positions[identity.instrument_id]
+    assert int(account_position["qty"]) == int(scenario["quantity"])
+    assert str(account_position["side"]).upper() == scenario["side"]
+    lots = bridge.position_lot_store.open_lots()
+    assert len(lots) == 1
+    assert lots[0].execution_id == broker_report.execution_id
+    assert lots[0].remaining_quantity == int(scenario["quantity"])
+    fees = bridge.fee_ledger.snapshot(run_id=bridge.run_id)
+    assert len(fees) == 1
+    assert fees[0].execution_id == broker_report.execution_id
+
+    # The FILLED report was removed from pending before projection. The normal
+    # callback/group publication and Bridge identity indexes were not reached.
+    assert client_order_id not in bridge.pending_legs
+    assert client_order_id not in bridge._pending_attempt_ids
+    assert bridge.groups.get(plan.group_id) is None
+    assert broker_report.execution_id not in bridge._applied_execution_fingerprints
+    assert broker_report.execution_id not in bridge.execution_legs
+    assert broker_report.execution_id not in bridge.provenance
+    assert callbacks == []
+
+    # A deliberate same-process whole-bridge re-entry is different from an
+    # automatic retry owner. The VSSF duplicate submit raises after observing
+    # zero remaining quantity; _AckAdapter then queries the prior FILLED report.
+    # Bridge replay dedupes the already-applied PositionLot/Fee records and
+    # completes the previously interrupted in-memory projection.
+    executions_before = vssf.metrics["executions_issued"]
+    monkeypatch.undo()
+    replay_result = bridge.execute(plan)
+
+    assert replay_result.filled_legs == int(scenario["quantity"])
+    assert replay_result.group_complete is True
+    assert vssf.metrics["executions_issued"] == executions_before == 1
+    assert int(vssf.account.positions[identity.instrument_id]["qty"]) == int(scenario["quantity"])
+    assert len(bridge.position_lot_store.open_lots()) == 1
+    assert len(bridge.fee_ledger.snapshot(run_id=bridge.run_id)) == 1
+    assert broker_report.execution_id in bridge._applied_execution_fingerprints
+    assert broker_report.execution_id in bridge.execution_legs
+    assert broker_report.execution_id in bridge.provenance
+    assert len(callbacks) == 1

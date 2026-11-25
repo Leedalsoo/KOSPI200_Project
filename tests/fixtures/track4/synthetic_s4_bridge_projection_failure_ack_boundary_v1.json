@@ -1,0 +1,36 @@
+{
+  "fixture_id": "S4-BRIDGE-PROJECTION-FAILURE-ACK-BOUNDARY-001",
+  "schema_version": "1.0.0",
+  "provenance": "SYNTHETIC:DERIVED_SCENARIO",
+  "validation_only": true,
+  "runtime_use": "PROHIBITED_OUTSIDE_VALIDATION",
+  "generation_rule": "Deterministic single-leg synthetic MINI Futures fill through the current Virtual S4 resolver and VSSF/Bridge path. Inject an exception at VirtualPositionFillAdapter.apply after VSSF account, PositionLotStore and FeeLedger application. No broker or Live API is used.",
+  "scenario": {
+    "run_id": "SYNTHETIC:S4:BRIDGE-PROJECTION-ACK-001",
+    "strategy_id": "track4_gamma_scalping",
+    "asset_type": "FUTURES",
+    "product_type": "MINI",
+    "contract_multiplier": 50000,
+    "side": "SELL",
+    "quantity": 1,
+    "price": "1000.00",
+    "timestamp": "2026-10-08T09:00:49+09:00",
+    "tag_id": "GAMMA_REBALANCE"
+  },
+  "expected_observations": {
+    "vssf_account_applied_before_bridge_projection": true,
+    "position_lot_and_fee_ledger_applied_before_aggregate_projection": true,
+    "filled_report_queryable_after_exception": true,
+    "filled_order_removed_from_pending_before_projection": true,
+    "execution_result_callback_not_reached": true,
+    "bridge_aggregate_fingerprint_provenance_not_published": true,
+    "automatic_retry_owner_not_established": true,
+    "manual_same_process_bridge_reentry_reconciles_prior_fill": true,
+    "manual_reentry_does_not_issue_second_fill": true
+  },
+  "limitations": [
+    "Characterizes the current in-process Virtual execution ordering only.",
+    "Does not define an approved retry, compensation, idempotency, ACK or durable checkpoint policy.",
+    "Does not establish KIS broker or Live behavior, account semantics or Production readiness."
+  ]
+}
