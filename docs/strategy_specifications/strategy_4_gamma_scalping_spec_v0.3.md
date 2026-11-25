@@ -472,3 +472,4 @@ Focused S4 Runtime identity + spec alignment + attribution + Greek decomposition
 - Validation-only synthetic 2-fill partial-result characterization: one group result, one order report, two fill events; bridge expansion preserved both fill identities and quantities. GAMMA_REBALANCE remains ignored by Track4. Focused S4 hedge-boundary + MINI Futures Runtime identity tests: 25 passed; compileall, scoped Ruff and diff check passed.
 - The adjacent R4 lifecycle batch had 6 initialization failures because its referenced derived-scenario manifest is absent; these are excluded from PASS/failure judgments and no original data was changed.
 - This does not approve event ownership, report-vs-fill consumption, signed quantity calculation, dedupe/replay, acknowledgement, late-fill recovery or Production behavior. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+- Detail: https://app.notion.com/p/4235f4f6eaa18103afafc91f89c0ccde
