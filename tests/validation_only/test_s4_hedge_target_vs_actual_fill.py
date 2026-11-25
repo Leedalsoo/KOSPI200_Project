@@ -980,3 +980,144 @@ def test_s4_vssf_same_execution_id_changed_payload_diverges_from_bridge_conflict
     assert len(bridge.fee_ledger.snapshot(run_id=run_id)) == 1
     assert bridge.fee_ledger.total(run_id=run_id) == Decimal("0.10")
     assert bridge.leg_positions[instrument_id].qty == 1
+
+def test_s4_vssf_account_bridge_fee_pnl_margin_and_restart_projection_divergence() -> None:
+    """Compare synthetic account and Bridge projections before and after VSSF snapshot restore."""
+    from dataclasses import replace
+    from datetime import datetime, timezone
+
+    from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
+    from contracts.futures_contract_spec import FuturesProductType
+    from contracts.futures_identity_source_port import FuturesInstrumentIdentity
+    from contracts.types import BrokerOrderCommand, ExecutionLeg, ExecutionReport, MultiLegExecutionPlan
+    from environments.virtual.authoritative_vssf.firm_runtime import VirtualSecuritiesFirmRuntime
+    from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
+    from environments.virtual.position.virtual_position_lot_store import VirtualPositionLotStore
+    from shared.contracts.canonical import CanonicalAssetType, CanonicalOrderSide
+
+    stamp = datetime(2026, 11, 25, 5, 0, tzinfo=timezone.utc)
+    run_id = "SYNTHETIC:S4:RUN:1831"
+    candidate_id = "SYNTHETIC:S4:CANDIDATE:1831"
+    strategy_id = "track4_gamma_scalping"
+    group_id = "SYNTHETIC:S4:GROUP:1831"
+    leg_id = "mini"
+    instrument_id = "SYNTHETIC:MINI:ACCOUNT-BRIDGE-1831"
+    source = "SYNTHETIC:DERIVED_SCENARIO"
+    multiplier = Decimal("50000")
+    identity = FuturesInstrumentIdentity(
+        instrument_id=instrument_id, symbol=instrument_id,
+        product_type=FuturesProductType.MINI,
+        contract_multiplier=multiplier, identity_source=source,
+    )
+
+    def command(client_order_id: str, side: CanonicalOrderSide) -> SimpleNamespace:
+        return SimpleNamespace(
+            client_order_id=client_order_id, track_id=strategy_id,
+            asset_type=CanonicalAssetType.FUTURES, side=side,
+            symbol=instrument_id, instrument_id=instrument_id,
+            contract_multiplier=multiplier, strategy_id=strategy_id,
+            group_id=group_id, leg_id=leg_id, identity_source=source,
+            option_type=None, strike=0, expiry="20261210",
+        )
+
+    bridge = VirtualMultiLegExecutionBridge.__new__(VirtualMultiLegExecutionBridge)
+    bridge.run_id = run_id
+    bridge.position_lot_store = VirtualPositionLotStore()
+    bridge.fee_ledger = VirtualTrack9FeeLedger()
+    bridge.leg_positions = {}
+    bridge.execution_legs = {}
+    bridge.provenance = {}
+    bridge._applied_execution_fingerprints = {}
+
+    def apply_bridge(fill, side: str) -> None:
+        leg = ExecutionLeg(leg_id=leg_id, side=side, quantity=fill.executed_qty,
+                           instrument_identity=identity)
+        plan = MultiLegExecutionPlan(
+            group_id=group_id, strategy_id=strategy_id,
+            purpose="S4_SYNTHETIC_ACCOUNT_BRIDGE_RECON_1831", legs=(leg,),
+        )
+        broker_command = BrokerOrderCommand(
+            client_order_id=fill.client_order_id, instrument_id=instrument_id,
+            side=side, quantity=fill.executed_qty, order_type="MARKET",
+            instrument_identity=identity, asset_type="FUTURES",
+            strategy_id=strategy_id, track_id=strategy_id,
+            group_id=group_id, leg_id=leg_id,
+        )
+        report = ExecutionReport(
+            client_order_id=fill.client_order_id,
+            broker_order_id=f"SYNTHETIC-BROKER:{fill.exec_id}",
+            execution_id=fill.exec_id, status="FILLED",
+            filled_quantity=fill.executed_qty, remaining_quantity=0,
+            execution_price=Decimal(str(fill.executed_price)),
+            execution_timestamp=datetime.fromisoformat(fill.timestamp),
+            fee=Decimal(str(fill.fee)), group_id=group_id, leg_id=leg_id,
+        )
+        bridge._apply_reconciled_execution(
+            plan=plan, leg=leg, identity=identity,
+            broker_command=broker_command, report=report,
+        )
+
+    runtime = VirtualSecuritiesFirmRuntime(
+        initial_capital=1_000_000_000,
+        validation_run_id=run_id,
+        validation_candidate_id=candidate_id,
+    )
+    entry = runtime.execution_engine.execute_order(
+        command("SYNTHETIC:S4:ENTRY:1831", CanonicalOrderSide.BUY),
+        Decimal("1000"), 2, timestamp=stamp,
+    )
+    entry = replace(entry, fee=Decimal("0.10"))
+    runtime.account.apply_execution(entry)
+    apply_bridge(entry, "BUY")
+
+    partial_close = runtime.execution_engine.execute_order(
+        command("SYNTHETIC:S4:PARTIAL-CLOSE:1831", CanonicalOrderSide.SELL),
+        Decimal("1002"), 1, timestamp=stamp,
+    )
+    partial_close = replace(partial_close, fee=Decimal("0.20"))
+    runtime.account.apply_execution(partial_close)
+    apply_bridge(partial_close, "SELL")
+    runtime.account.update_tick_price(Decimal("1003"), instrument_id)
+
+    account = runtime.account
+    assert account.balance == Decimal("999999999.70")
+    assert account.realized_pnl == Decimal("100000.0")
+    assert account.unrealized_pnl == Decimal("150000.0")
+    assert account.used_margin == Decimal("50000000.0")
+    assert account.free_margin == Decimal("950249999.70")
+    assert account.positions[instrument_id]["qty"] == 1
+    assert account.positions[instrument_id]["side"] == "BUY"
+    assert [row["exec_id"] for row in account.ledger_engine.transactions] == [
+        entry.exec_id, partial_close.exec_id,
+    ]
+
+    lots = bridge.position_lot_store.open_lots()
+    assert len(lots) == 1
+    assert lots[0].side == "BUY" and lots[0].remaining_quantity == 1
+    assert bridge.fee_ledger.total(run_id=run_id) == Decimal("0.30")
+    assert len(bridge.fee_ledger.snapshot(run_id=run_id)) == 2
+    assert bridge.leg_positions[instrument_id].side == "BUY"
+    assert bridge.leg_positions[instrument_id].qty == 1
+
+    snapshot = runtime.recovery_engine.create_snapshot(
+        "SYNTHETIC:S4:CHECKPOINT:1831", metrics=runtime.metrics,
+    )
+    restored = VirtualSecuritiesFirmRuntime(
+        initial_capital=1_000_000_000,
+        validation_run_id=run_id,
+        validation_candidate_id=candidate_id,
+    )
+    assert restored.recovery_engine.restore_from_snapshot(snapshot) is True
+    assert restored.account.balance == account.balance
+    assert restored.account.positions == account.positions
+    assert restored.account.realized_pnl == Decimal("0")
+    assert restored.account.unrealized_pnl == Decimal("0")
+    assert restored.account.used_margin == Decimal("0")
+    assert restored.account.free_margin == Decimal("1000000000")
+    assert restored.account.ledger_engine.transactions == []
+    assert restored.execution_engine.reports == []
+    assert restored.execution_engine._seq == 0
+    # The Bridge's pre-checkpoint lot and fee records are a separate in-memory
+    # projection and are not part of the VSSF account snapshot.
+    assert len(bridge.position_lot_store.open_lots()) == 1
+    assert bridge.fee_ledger.total(run_id=run_id) == Decimal("0.30")
