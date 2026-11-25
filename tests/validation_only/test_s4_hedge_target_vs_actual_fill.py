@@ -1405,3 +1405,27 @@ def test_s4_vssf_account_apply_and_bridge_publication_failure_are_separate_bound
     assert runtime.account.balance == account_balance_after_apply
     assert runtime.account.positions[instrument_id] == account_position_after_apply
     assert len(runtime.account.ledger_engine.transactions) == 1
+
+    # A whole-flow retry would reapply the account event before Bridge sees its
+    # already-applied fingerprint. Characterize the resulting cross-store drift.
+    runtime.account.apply_execution(fill)
+    bridge._apply_reconciled_execution(
+        plan=plan,
+        leg=leg,
+        identity=identity,
+        broker_command=broker_command,
+        report=report,
+    )
+    assert runtime.account.balance == account_balance_after_apply - Decimal("0.10")
+    assert runtime.account.positions[instrument_id]["qty"] == 2
+    assert len(runtime.account.ledger_engine.transactions) == 2
+    assert [row["exec_id"] for row in runtime.account.ledger_engine.transactions] == [
+        fill.exec_id,
+        fill.exec_id,
+    ]
+    # Bridge fingerprint dedupe keeps the one original lot/fee/aggregate.
+    assert len(bridge.position_lot_store.history()) == 1
+    assert len(bridge.fee_ledger.snapshot(run_id=run_id)) == 1
+    assert bridge.fee_ledger.total(run_id=run_id) == Decimal("0.10")
+    assert bridge.leg_positions[instrument_id].qty == 1
+    assert len(bridge._applied_execution_fingerprints) == 1
