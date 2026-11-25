@@ -1776,3 +1776,13 @@
 - Seven-module S4/VSSF/adapter/recovery/store regression: 94 passed. compileall, scoped Ruff F821/F401/F841, fixture JSON parse and diff-check PASS.
 - OPEN: authoritative identity version/effective time, execution identity + identity snapshot contract, multiplier/source conflict policy, cross-store dedupe contract, durable event/restart/ACK/retry/repair. No precedence or repair policy invented.
 - S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. No Production/API/broker/collector/service/scheduler or original Raw/Canonical/accepted-source/manifest mutation.
+
+## 2026-11-25 No.1847 — S4 Bridge duplicate gate / metadata publication order
+
+- Notion Q&A: https://app.notion.com/p/4235f4f6eaa181cab200f29455b012ca
+- Reconciled current source against historical No.1813. No.1813 described execution_legs/provenance metadata being written before duplicate/conflict adjudication. Current Project200 source order is different: execution fingerprint conflict prevalidation and identical-duplicate skip occur before execution_metadata/provenance_metadata construction/publication.
+- Validation-only synthetic replay held execution/client-order/fill fingerprint constant, set report group_id/leg_id to null, and changed plan group/strategy. The second delivery was skipped; first execution_legs/provenance/fingerprint/PositionLot/FeeLedger/aggregate remained unchanged. Historical No.1813 metadata overwrite was not reproduced against current source.
+- Fixture `S4-BRIDGE-DUPLICATE-METADATA-ORDER-001`, `SYNTHETIC:DERIVED_SCENARIO`, `validation_only=true`, `runtime_use=PROHIBITED_OUTSIDE_VALIDATION`. Fixture SHA-256 `6320C15B53FAA089A07EF27AD30491903872AEFF26C0CF17B5AF4ACCA1C6D91F`; test SHA-256 `6B6E346836F6996A4C867FC30A6A1C9BECE29419B7B041EDB639137B3109E120`.
+- Seven-module S4/VSSF/adapter/recovery/store regression: 95 passed. compileall, scoped Ruff F821/F401/F841, fixture JSON parse and diff-check PASS.
+- OPEN: report group/leg missing lineage source, authoritative execution identity namespace/scope, identity version/effective time, cross-store dedupe contract, durable restart, ACK/retry/repair. No policy invented.
+- S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. No Production/API/broker/collector/service/scheduler or original Raw/Canonical/accepted-source/manifest mutation.

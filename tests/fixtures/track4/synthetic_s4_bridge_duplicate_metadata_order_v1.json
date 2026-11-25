@@ -1,0 +1,26 @@
+﻿{
+  "fixture_id": "S4-BRIDGE-DUPLICATE-METADATA-ORDER-001",
+  "schema_version": "1.0.0",
+  "provenance": "SYNTHETIC:DERIVED_SCENARIO",
+  "validation_only": true,
+  "runtime_use": "PROHIBITED_OUTSIDE_VALIDATION",
+  "generation_rule": "Apply one valid synthetic fill to an isolated in-memory Bridge, then redeliver the same execution/client-order/fill fingerprint under a different plan group and strategy while report group_id and leg_id are null. Compare the current source behavior with the historical No.1813 observation.",
+  "scenario": {
+    "instrument_id": "SYNTHETIC_CONTRACT:S4-METADATA-ORDER",
+    "execution_id": "SYNTH-EXEC-METADATA-ORDER-001",
+    "client_order_id": "SYNTH-ORDER-METADATA-ORDER-001",
+    "first_plan": {"group_id": "SYNTH-GROUP-FIRST", "strategy_id": "track4_gamma_scalping"},
+    "second_plan": {"group_id": "SYNTH-GROUP-SECOND", "strategy_id": "track9_event_overnight_insurance"},
+    "report_group_id": null,
+    "report_leg_id": null,
+    "all_fingerprint_fields_equal": true
+  },
+  "expected_observations": {
+    "duplicate_gate_runs_before_projection_metadata_publication": true,
+    "second_delivery_is_skipped": true,
+    "first_execution_metadata_and_provenance_remain_unchanged": true,
+    "position_lot_and_fee_rows_remain_single": true,
+    "historical_no1813_metadata_overwrite_observation_is_not_reproduced_by_current_source": true,
+    "no_authoritative_group_or_execution_identity_policy_is_inferred": true
+  }
+}

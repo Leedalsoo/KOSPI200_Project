@@ -2128,3 +2128,75 @@ def test_s4_bridge_execution_fingerprint_omits_contract_multiplier_and_identity_
         scenario["client_order_id"], identity_a.instrument_id, "BUY", 1,
         Decimal("1000"), stamp, Decimal("0.10"), "SYNTHETIC-GROUP:BRIDGE-IDENTITY", "mini",
     )
+
+
+def test_s4_bridge_duplicate_gate_precedes_projection_metadata_publication() -> None:
+    """Reconcile the historical No.1813 metadata-order observation against current source."""
+    import json
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    from contracts.futures_contract_spec import FuturesProductType
+    from contracts.futures_identity_source_port import FuturesInstrumentIdentity
+    from contracts.types import BrokerOrderCommand, ExecutionLeg, ExecutionReport, MultiLegExecutionPlan
+    from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
+    from environments.virtual.position.virtual_position_lot_store import VirtualPositionLotStore
+    from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
+
+    fixture_path = Path(__file__).resolve().parents[1] / "fixtures" / "track4" / "synthetic_s4_bridge_duplicate_metadata_order_v1.json"
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8-sig"))
+    assert fixture["validation_only"] is True
+    assert fixture["runtime_use"] == "PROHIBITED_OUTSIDE_VALIDATION"
+    scenario = fixture["scenario"]
+    identity = FuturesInstrumentIdentity(
+        instrument_id=scenario["instrument_id"], symbol="SYNTH-S4-METADATA-ORDER",
+        product_type=FuturesProductType.MINI, contract_multiplier=Decimal("25000"),
+        identity_source="SYNTHETIC:IDENTITY-METADATA-ORDER",
+    )
+    stamp = datetime(2026, 11, 25, 5, 0, tzinfo=timezone.utc)
+    bridge = VirtualMultiLegExecutionBridge.__new__(VirtualMultiLegExecutionBridge)
+    bridge.run_id = "SYNTHETIC:S4:METADATA-ORDER"
+    bridge.position_lot_store = VirtualPositionLotStore()
+    bridge.fee_ledger = VirtualTrack9FeeLedger()
+    bridge.leg_positions = {}
+    bridge.execution_legs = {}
+    bridge.provenance = {}
+    bridge._applied_execution_fingerprints = {}
+
+    def apply(plan_data: dict[str, str]) -> None:
+        leg = ExecutionLeg(leg_id="mini", side="BUY", quantity=1, instrument_identity=identity)
+        plan = MultiLegExecutionPlan(
+            group_id=plan_data["group_id"], strategy_id=plan_data["strategy_id"],
+            purpose="S4_SYNTHETIC_DUPLICATE_METADATA_ORDER", legs=(leg,),
+        )
+        command = BrokerOrderCommand(
+            client_order_id=scenario["client_order_id"], instrument_id=identity.instrument_id,
+            side="BUY", quantity=1, order_type="MARKET", instrument_identity=identity,
+            asset_type="FUTURES", strategy_id=plan.strategy_id, track_id=plan.strategy_id,
+            group_id=plan.group_id, leg_id="mini",
+        )
+        report = ExecutionReport(
+            client_order_id=scenario["client_order_id"], broker_order_id="SYNTHETIC-BROKER:METADATA-ORDER",
+            execution_id=scenario["execution_id"], status="FILLED", filled_quantity=1,
+            remaining_quantity=0, execution_price=Decimal("1000"), execution_timestamp=stamp,
+            fee=Decimal("0.10"), group_id=None, leg_id=None,
+        )
+        bridge._apply_reconciled_execution(
+            plan=plan, leg=leg, identity=identity, broker_command=command, report=report,
+        )
+
+    apply(scenario["first_plan"])
+    first_execution_metadata = dict(bridge.execution_legs[scenario["execution_id"]])
+    first_provenance = dict(bridge.provenance[scenario["execution_id"]])
+    first_fingerprint = bridge._applied_execution_fingerprints[scenario["execution_id"]]
+    apply(scenario["second_plan"])
+
+    assert bridge.execution_legs[scenario["execution_id"]] == first_execution_metadata
+    assert bridge.provenance[scenario["execution_id"]] == first_provenance
+    assert bridge._applied_execution_fingerprints[scenario["execution_id"]] == first_fingerprint
+    assert first_provenance["group_id"] == scenario["first_plan"]["group_id"]
+    assert first_provenance["strategy_id"] == scenario["first_plan"]["strategy_id"]
+    assert len(bridge.position_lot_store.history()) == 1
+    assert len(bridge.fee_ledger.snapshot(run_id=bridge.run_id)) == 1
+    assert bridge.leg_positions[identity.instrument_id].qty == 1
+    assert fixture["expected_observations"]["historical_no1813_metadata_overwrite_observation_is_not_reproduced_by_current_source"] is True
