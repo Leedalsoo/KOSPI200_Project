@@ -1938,3 +1938,113 @@ def test_s4_tick_to_vssf_and_bridge_execution_identity_lineage() -> None:
     assert bridge.execution_legs[report.execution_id]["strategy_id"] == track_id
     assert bridge.leg_positions[identity.instrument_id].qty == 1
     assert fixture["expected_observations"]["automatic_retry_or_durable_identity_policy"] == "NOT_DEFINED"
+
+
+def test_s4_execution_id_collision_scope_across_vssf_and_ledgers() -> None:
+    """Characterize existing per-order and per-ledger collision boundaries only."""
+    import json
+    from datetime import UTC, datetime
+    from pathlib import Path
+
+    from contracts.futures_contract_spec import FuturesProductType
+    from contracts.futures_identity_source_port import FuturesInstrumentIdentity
+    from contracts.position_provenance import PositionLotProvenance, PositionRole
+    from contracts.track9_fee_ledger import Track9FeeRecord
+    from environments.virtual.authoritative_vssf.firm_runtime import VirtualSecuritiesFirmRuntime
+    from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
+    from environments.virtual.position.virtual_position_lot_store import VirtualPositionLotStore
+    from shared.contracts.canonical import CanonicalAssetType, CanonicalExecutionReport, CanonicalOrderSide
+
+    fixture_path = Path(__file__).resolve().parents[1] / "fixtures" / "track4" / "synthetic_s4_execution_id_collision_scope_v1.json"
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8-sig"))
+    assert fixture["validation_only"] is True
+    assert fixture["runtime_use"] == "PROHIBITED_OUTSIDE_VALIDATION"
+    execution_id = fixture["scenario"]["execution_id"]
+
+    def report(client_order_id: str, *, quantity: int = 1, price: float = 1000.0):
+        return CanonicalExecutionReport(
+            exec_id=execution_id,
+            client_order_id=client_order_id,
+            track_id="track4_gamma_scalping",
+            asset_type=CanonicalAssetType.FUTURES,
+            side=CanonicalOrderSide.BUY,
+            executed_qty=quantity,
+            executed_price=price,
+            fee=0.1,
+            slippage=0.0,
+            timestamp="2026-11-25T10:00:00+09:00",
+            symbol="SYNTHETIC-S4-COLLISION",
+            strategy_id="track4_gamma_scalping",
+            group_id="SYNTHETIC-GROUP",
+            leg_id="SYNTHETIC-LEG",
+            instrument_id="SYNTHETIC_CONTRACT:S4-COLLISION",
+            contract_multiplier=50000.0,
+            identity_source="SYNTHETIC:DERIVED_SCENARIO",
+        )
+
+    runtime = VirtualSecuritiesFirmRuntime()
+    runtime.execution_engine.reports.extend((
+        report("SYNTH-ORDER-A"),
+        report("SYNTH-ORDER-A"),
+    ))
+    snapshot = runtime._execution_snapshot("SYNTH-ORDER-A", expected_quantity=1)
+    assert snapshot[0] == 1
+    assert snapshot[5] is None
+    assert len(snapshot[6]) == 1
+
+    runtime.execution_engine.reports.append(report("SYNTH-ORDER-A", quantity=1, price=1001.0))
+    conflicting = runtime._execution_snapshot("SYNTH-ORDER-A", expected_quantity=1)
+    assert conflicting[5] == "RECONCILIATION_REQUIRED"
+
+    cross_order_runtime = VirtualSecuritiesFirmRuntime()
+    cross_order_runtime.execution_engine.reports.extend((
+        report("SYNTH-ORDER-A"),
+        report("SYNTH-ORDER-B"),
+    ))
+    order_a = cross_order_runtime._execution_snapshot("SYNTH-ORDER-A", expected_quantity=1)
+    order_b = cross_order_runtime._execution_snapshot("SYNTH-ORDER-B", expected_quantity=1)
+    assert order_a[0] == order_b[0] == 1
+    assert order_a[6][0].exec_id == order_b[6][0].exec_id == execution_id
+
+    def lot(multiplier: str, source: str) -> PositionLotProvenance:
+        identity = FuturesInstrumentIdentity(
+            instrument_id="SYNTHETIC_CONTRACT:S4-COLLISION",
+            symbol="SYNTHETIC-S4-COLLISION",
+            product_type=FuturesProductType.MINI,
+            contract_multiplier=Decimal(multiplier),
+            identity_source=source,
+        )
+        return PositionLotProvenance(
+            run_id="SYNTHETIC-RUN", instrument_id=identity.instrument_id,
+            strategy_id="track4_gamma_scalping", group_id="SYNTHETIC-GROUP",
+            leg_id="SYNTHETIC-LEG", client_order_id="SYNTH-ORDER-A",
+            execution_id=execution_id, side="BUY", opened_quantity=1,
+            remaining_quantity=1, execution_timestamp=datetime(2026, 11, 25, 1, tzinfo=UTC),
+            instrument_identity=identity, contract_multiplier=Decimal(multiplier),
+            identity_source=source, position_role=PositionRole.NONE,
+        )
+
+    lot_store = VirtualPositionLotStore()
+    lot_store.apply_execution(lot("25000", "SYNTHETIC:IDENTITY-A"))
+    lot_store.apply_execution(lot("50000", "SYNTHETIC:IDENTITY-B"))
+    assert len(lot_store.history()) == 1
+    assert lot_store.history()[0].contract_multiplier == Decimal("25000")
+    assert lot_store.history()[0].identity_source == "SYNTHETIC:IDENTITY-A"
+
+    fee_ledger = VirtualTrack9FeeLedger()
+    first_fee = Track9FeeRecord(
+        run_id="SYNTHETIC-RUN", strategy_id="track4_gamma_scalping",
+        group_id="SYNTHETIC-GROUP", leg_id="SYNTHETIC-LEG",
+        client_order_id="SYNTH-ORDER-A", execution_id=execution_id,
+        instrument_id="SYNTHETIC_CONTRACT:S4-COLLISION", fee_amount=Decimal("0.1"),
+        executed_quantity=1, executed_price=Decimal("1000"),
+        executed_at=datetime(2026, 11, 25, 1, tzinfo=UTC), source="SYNTHETIC:IDENTITY-A",
+    )
+    fee_ledger.record(first_fee)
+    conflicting_fee = Track9FeeRecord(
+        **{**first_fee.__dict__, "source": "SYNTHETIC:IDENTITY-B"}
+    )
+    with pytest.raises(ValueError, match="TRACK9_FEE_DUPLICATE_CONFLICT"):
+        fee_ledger.record(conflicting_fee)
+    assert len(fee_ledger.snapshot(run_id="SYNTHETIC-RUN")) == 1
+    assert fixture["expected_observations"]["no_global_execution_identity_policy_is_inferred"] is True

@@ -1,0 +1,29 @@
+﻿{
+  "fixture_id": "S4-EXECUTION-ID-COLLISION-SCOPE-001",
+  "schema_version": "1.0.0",
+  "provenance": "SYNTHETIC:DERIVED_SCENARIO",
+  "validation_only": true,
+  "runtime_use": "PROHIBITED_OUTSIDE_VALIDATION",
+  "generation_rule": "Inject deterministic synthetic execution reports into isolated VSSF memory and apply identity-collision variants to isolated PositionLotStore and FeeLedger instances; do not invoke a broker, collector, account API, or Production runtime.",
+  "scenario": {
+    "execution_id": "SYNTH-EXEC-COLLISION-001",
+    "client_order_ids": ["SYNTH-ORDER-A", "SYNTH-ORDER-B"],
+    "same_order_duplicate": "identical payload repeated under one client_order_id",
+    "same_order_conflict": "same execution_id with different quantity/price payload under one client_order_id",
+    "cross_order_collision": "same execution_id and same fill payload attached to two different client_order_ids",
+    "position_lot_identity_variant": {
+      "same_execution_id": true,
+      "same_position_fingerprint_fields": true,
+      "different_contract_multiplier": ["25000", "50000"],
+      "different_identity_source": true
+    }
+  },
+  "expected_observations": {
+    "same_order_identical_duplicate_is_collapsed_by_vssf_snapshot": true,
+    "same_order_conflicting_duplicate_requires_reconciliation": true,
+    "cross_order_same_execution_id_is_not_globally_deduplicated_by_vssf_snapshot": true,
+    "position_lot_store_duplicate_fingerprint_omits_multiplier_and_identity_source": true,
+    "fee_ledger_full_record_conflict_is_rejected": true,
+    "no_global_execution_identity_policy_is_inferred": true
+  }
+}

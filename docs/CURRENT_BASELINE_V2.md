@@ -1753,3 +1753,16 @@
 - 6개 authored files clean. 기존 사용자 dirty/untracked/Graphify/worktree 203개 보존. reset/clean/stash 미사용.
 - 7-module regression 92 passed; compileall, scoped Ruff, fixture JSON parse, diff-check PASS.
 - S4 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. Production/API/broker/collector 및 원본 데이터 변경 없음.
+
+## 2026-11-25 No.1845 — S4 execution-ID collision scope / ledger fingerprint characterization
+
+- Notion Q&A: https://app.notion.com/p/4235f4f6eaa181dca451d70f0e99a03f
+- Reconciled No.1844/1843/1842/1841, Current Baseline v2, A8 SSOT/tracker and actual Project200 source. Did not repeat No.1815–1818/1834–1835 Bridge replay or account direct duplicate cases.
+- `VirtualSecuritiesFirmRuntime._execution_snapshot(client_order_id)` scopes reports to one client_order_id. Within that order, identical execution_id + identical quantity/price/fee/timestamp collapses; same ID with different fill fingerprint returns RECONCILIATION_REQUIRED. Same execution_id on two different client_order_ids is counted independently by each order snapshot; no global dedupe in this method.
+- `VirtualPositionLotStore.apply_execution()` duplicate fingerprint includes run/instrument/side/quantity/timestamp/strategy/group/leg/client-order/role but omits contract_multiplier and identity_source. Synthetic valid lots with same execution ID and fingerprint fields but different multiplier/source: second lot is silently treated as duplicate; first lot metadata remains.
+- `VirtualTrack9FeeLedger.record()` compares full record equality; same execution ID with different source raises TRACK9_FEE_DUPLICATE_CONFLICT.
+- Added validation-only test `test_s4_execution_id_collision_scope_across_vssf_and_ledgers` and fixture `S4-EXECUTION-ID-COLLISION-SCOPE-001`, schema 1.0.0, `SYNTHETIC:DERIVED_SCENARIO`, `validation_only=true`, `runtime_use=PROHIBITED_OUTSIDE_VALIDATION`.
+- Fixture SHA-256: `07E686A6018116FA003321A518B26581E72E82CD12F453BA58C5C1760E8AF018`; test SHA-256: `84B0EA159BA2DCB698C763DEA4D0B4095034F7AFF53BC2D70B2812107F9E0B2D`.
+- Seven-module S4/VSSF/adapter/recovery/store regression: 93 passed. KIS raw-store duplicate local-sequence focused test: 1 passed, 17 deselected. compileall, scoped Ruff F821/F401/F841, fixture JSON parse, diff-check PASS.
+- OPEN: authoritative broker execution-ID uniqueness scope; cross-order/global collision resolution; official lot identity fingerprint including multiplier/source; consistent VSSF/PositionLot/FeeLedger/Bridge idempotency contract; durable history/restart, ACK/retry/repair owner. No global namespace, dedupe precedence, compensation, checkpoint or repair policy invented.
+- S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. No Production/API/broker/collector/service/scheduler or original Raw/Canonical/accepted-source/manifest mutation.
