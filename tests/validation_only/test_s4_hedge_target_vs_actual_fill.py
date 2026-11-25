@@ -1243,3 +1243,165 @@ def test_s4_vssf_and_bridge_have_no_shared_restart_checkpoint_contract() -> None
     assert "fee_ledger" not in account_snapshot
     assert "position_lots" not in account_snapshot
     assert "execution_fingerprints" not in account_snapshot
+
+def test_s4_vssf_account_apply_and_bridge_publication_failure_are_separate_boundaries(monkeypatch) -> None:
+    """Characterize account apply surviving a later Bridge store failure; no repair policy is implied."""
+    from dataclasses import replace
+    from datetime import datetime, timezone
+
+    import pytest
+
+    from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
+    from contracts.futures_contract_spec import FuturesProductType
+    from contracts.futures_identity_source_port import FuturesInstrumentIdentity
+    from contracts.types import BrokerOrderCommand, ExecutionLeg, ExecutionReport, MultiLegExecutionPlan
+    from environments.virtual.authoritative_vssf.firm_runtime import VirtualSecuritiesFirmRuntime
+    from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
+    from environments.virtual.position.virtual_position_lot_store import VirtualPositionLotStore
+    from shared.contracts.canonical import CanonicalAssetType, CanonicalOrderSide
+
+    stamp = datetime(2026, 11, 25, 7, 0, tzinfo=timezone.utc)
+    run_id = "SYNTHETIC:S4:RUN:1834"
+    candidate_id = "SYNTHETIC:S4:CANDIDATE:1834"
+    strategy_id = "track4_gamma_scalping"
+    group_id = "SYNTHETIC:S4:GROUP:1834"
+    leg_id = "mini"
+    instrument_id = "SYNTHETIC:MINI:CROSS-STORE-1834"
+    source = "SYNTHETIC:DERIVED_SCENARIO"
+    multiplier = Decimal("50000")
+    identity = FuturesInstrumentIdentity(
+        instrument_id=instrument_id,
+        symbol=instrument_id,
+        product_type=FuturesProductType.MINI,
+        contract_multiplier=multiplier,
+        identity_source=source,
+    )
+
+    def command(client_order_id: str) -> SimpleNamespace:
+        return SimpleNamespace(
+            client_order_id=client_order_id,
+            track_id=strategy_id,
+            asset_type=CanonicalAssetType.FUTURES,
+            side=CanonicalOrderSide.BUY,
+            symbol=instrument_id,
+            instrument_id=instrument_id,
+            contract_multiplier=multiplier,
+            strategy_id=strategy_id,
+            group_id=group_id,
+            leg_id=leg_id,
+            identity_source=source,
+            option_type=None,
+            strike=0,
+            expiry="20261210",
+        )
+
+    runtime = VirtualSecuritiesFirmRuntime(
+        initial_capital=1_000_000_000,
+        validation_run_id=run_id,
+        validation_candidate_id=candidate_id,
+    )
+    fill = runtime.execution_engine.execute_order(
+        command("SYNTHETIC:S4:ORDER:1834"),
+        Decimal("1000"),
+        1,
+        timestamp=stamp,
+    )
+    fill = replace(fill, fee=Decimal("0.10"))
+
+    bridge = VirtualMultiLegExecutionBridge.__new__(VirtualMultiLegExecutionBridge)
+    bridge.run_id = run_id
+    bridge.position_lot_store = VirtualPositionLotStore()
+    bridge.fee_ledger = VirtualTrack9FeeLedger()
+    bridge.leg_positions = {}
+    bridge.execution_legs = {}
+    bridge.provenance = {}
+    bridge._applied_execution_fingerprints = {}
+
+    leg = ExecutionLeg(
+        leg_id=leg_id,
+        side="BUY",
+        quantity=1,
+        instrument_identity=identity,
+    )
+    plan = MultiLegExecutionPlan(
+        group_id=group_id,
+        strategy_id=strategy_id,
+        purpose="S4_SYNTHETIC_CROSS_STORE_BOUNDARY_1834",
+        legs=(leg,),
+    )
+    broker_command = BrokerOrderCommand(
+        client_order_id=fill.client_order_id,
+        instrument_id=instrument_id,
+        side="BUY",
+        quantity=1,
+        order_type="MARKET",
+        instrument_identity=identity,
+        asset_type="FUTURES",
+        strategy_id=strategy_id,
+        track_id=strategy_id,
+        group_id=group_id,
+        leg_id=leg_id,
+    )
+    report = ExecutionReport(
+        client_order_id=fill.client_order_id,
+        broker_order_id=f"SYNTHETIC-BROKER:{fill.exec_id}",
+        execution_id=fill.exec_id,
+        status="FILLED",
+        filled_quantity=1,
+        remaining_quantity=0,
+        execution_price=Decimal("1000"),
+        execution_timestamp=stamp,
+        fee=Decimal("0.10"),
+        group_id=group_id,
+        leg_id=leg_id,
+    )
+
+    # The VSSF account applies the execution before the separate Bridge projection call.
+    runtime.account.apply_execution(fill)
+    account_balance_after_apply = runtime.account.balance
+    account_position_after_apply = dict(runtime.account.positions[instrument_id])
+    assert len(runtime.account.ledger_engine.transactions) == 1
+
+    original_record = bridge.fee_ledger.record
+
+    def fail_before_fee_record(_record) -> None:
+        raise RuntimeError("SYNTHETIC_BRIDGE_FEE_STORE_FAILURE_1834")
+
+    monkeypatch.setattr(bridge.fee_ledger, "record", fail_before_fee_record)
+    with pytest.raises(RuntimeError, match="SYNTHETIC_BRIDGE_FEE_STORE_FAILURE_1834"):
+        bridge._apply_reconciled_execution(
+            plan=plan,
+            leg=leg,
+            identity=identity,
+            broker_command=broker_command,
+            report=report,
+        )
+
+    # Account apply is not rolled back when the later Bridge call raises.
+    assert runtime.account.balance == account_balance_after_apply
+    assert runtime.account.positions[instrument_id] == account_position_after_apply
+    assert len(runtime.account.ledger_engine.transactions) == 1
+    # Bridge stores show the exact partial boundary: lot applied, later fee/projections absent.
+    assert len(bridge.position_lot_store.history()) == 1
+    assert bridge.fee_ledger.snapshot(run_id=run_id) == ()
+    assert bridge.leg_positions == {}
+    assert bridge._applied_execution_fingerprints == {}
+
+    # A Bridge-only replay repairs the remaining Bridge projections in this in-memory fixture.
+    monkeypatch.setattr(bridge.fee_ledger, "record", original_record)
+    bridge._apply_reconciled_execution(
+        plan=plan,
+        leg=leg,
+        identity=identity,
+        broker_command=broker_command,
+        report=report,
+    )
+    assert len(bridge.position_lot_store.history()) == 1
+    assert len(bridge.fee_ledger.snapshot(run_id=run_id)) == 1
+    assert bridge.fee_ledger.total(run_id=run_id) == Decimal("0.10")
+    assert bridge.leg_positions[instrument_id].qty == 1
+    assert bridge._applied_execution_fingerprints[fill.exec_id]
+    # Bridge replay did not reapply the already-applied account execution.
+    assert runtime.account.balance == account_balance_after_apply
+    assert runtime.account.positions[instrument_id] == account_position_after_apply
+    assert len(runtime.account.ledger_engine.transactions) == 1
