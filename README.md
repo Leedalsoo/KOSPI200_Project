@@ -1420,3 +1420,15 @@ A synthetic fault injected after each of PositionLot, Fee Ledger, and Position A
 ## Track7 new-process restore → callback → first Hub run (No.1820)
 - Test-only SQLite/subprocess integration regression restores a synthetic CALL_PENDING snapshot into a freshly initialized Track7 StrategyHub process, delivers a synthetic CALL fill callback, and verifies the first post-restore Hub evaluation observes/preserves COMPLETE with both legs open. Focused Track7 snapshot/restore/callback/lifecycle selection: 63 passed.
 - This is not Production durable recovery or crash-consistency proof. No Production persistence/bootstrap/restore API, startup provenance, event identity/dedupe/watermark, callback retry/acknowledgement, locking, or phase policy changed. Track7 durable restart and Full T4 X3 remain OPEN.
+
+## 2026-11-25 No.1821 ? Track7 callback ?? 2? ? ???? ??? ?? ??
+
+- ?? No.1820? ? ???? restore ? callback ? ? Hub ?? ??? ????. No.1728? fresh observation ?? stale snapshot ???? ??? ?? ???? ???? ???. No.1739/1744/1745? identity/event merge/readiness ??? ??? Production ??? ???.
+- ? ?? ?? Python ?????? ? Track7/StrategyHub ?? initialize ? synthetic CALL_PENDING snapshot restore ? synthetic CALL FILLED callback ? ? Hub evaluation? ????. COMPLETE, PUT/CALL open, CALL fill price 1.75? ??? ? callback ?? aggregate? test-only SQLite snapshot row? ?? ????.
+- ? ?? ?? Python ?????? ? Track7/StrategyHub? ?? ???? ?? initialize ? ?? snapshot restore ? ? Hub evaluation? ????. COMPLETE, PUT/CALL open, CALL fill price 1.75? ?? ???? ????.
+- Regression: `tests/core/test_track7_aggregate_snapshot_contract.py::test_track7_test_only_new_process_restore_callback_and_first_hub_run_preserve_fill`.
+- Track7 aggregate snapshot, restore/observation, callback acknowledgement-loss, sequential lifecycle 4? ??: **63 passed**. `py -m compileall -q application tests`, scoped Ruff F821/F401/F841, `git diff --check`: PASS.
+- Test-only SQLite/subprocess round-trip??. Production durable restart, OS crash/power-loss consistency, durable-store atomicity, multi-process concurrent writes, Production factory restore wiring ?? broker-native identity? ???? ???. Production source/API/persistence/bootstrap/restore/phase ?? ??.
+- Event identity/dedupe/sequence/watermark, callback acknowledgement/retry, locking/compensation ??? ???? ???. No.1689 Observation ? Planning ? Action ? X2 latched submitted-fill reconciliation ??, No.1652 candidate/account aggregate? Track7 strategy aggregate ??? ????. UNKNOWN/CONFLICT??? global X2? ?? ???? ???.
+- Track7 durable restart recovery? Full T4 X3 integrated acceptance? ?? OPEN. T5 ???. S4 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. Raw/Canonical/accepted-source/manifest ??, KIS/REAL_VTS/Live/account API, broker action, collector/service/scheduler, ?? ?? ?? ??.
+- Notion: https://app.notion.com/p/4235f4f6eaa18129b7e8e2016de0ebf8

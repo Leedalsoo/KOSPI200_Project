@@ -1255,6 +1255,29 @@ def test_track7_test_only_new_process_restore_callback_and_first_hub_run_preserv
             raise RuntimeError("TRACK7_FIRST_POST_RESTORE_HUB_RUN_FAILED")
         if target.state.entry_stage != "COMPLETE" or not target.state.call_open:
             raise RuntimeError("TRACK7_FIRST_HUB_RUN_ERASED_RESTORED_FILL")
+
+        # Persist the callback-updated aggregate for a second independent process.
+        next_envelope = module["_capture_aggregate"](target)
+        next_payload_json = json.dumps(
+            next_envelope["payload"], sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        )
+        next_config_json = json.dumps(
+            next_envelope["payload"]["config"], sort_keys=True, separators=(",", ":")
+        )
+        with sqlite3.connect(sys.argv[2]) as connection:
+            connection.execute(
+                "UPDATE test_only_track7_snapshot_candidate "
+                "SET config_json = ?, payload_json = ?, payload_sha256 = ? "
+                "WHERE snapshot_id = ?",
+                (
+                    next_config_json,
+                    next_payload_json,
+                    next_envelope["sha256"],
+                    "SYNTHETIC-TRACK7-RESTART-CALLBACK-001",
+                ),
+            )
+            connection.commit()
+
         print(json.dumps({
             "strategy_id": target.strategy_id,
             "strategy_version": target.version,
@@ -1293,6 +1316,95 @@ def test_track7_test_only_new_process_restore_callback_and_first_hub_run_preserv
     assert resumed["call_entry_fill_price"] == "1.75"
     assert resumed["observed_at_evaluate"] == ["COMPLETE"]
     assert resumed["gate"] == {
+        "state_restored": True,
+        "side_effect_actions_allowed": True,
+    }
+
+    # A second independent process must restore the post-callback snapshot.
+    second_process_code = textwrap.dedent(
+        """\
+        import json
+        import runpy
+        import sqlite3
+        import sys
+
+        module = runpy.run_path(sys.argv[1])
+        with sqlite3.connect(sys.argv[2]) as connection:
+            row = connection.execute(
+                "SELECT strategy_id, strategy_version, config_json, payload_json, payload_sha256 "
+                "FROM test_only_track7_snapshot_candidate WHERE snapshot_id = ?",
+                ("SYNTHETIC-TRACK7-RESTART-CALLBACK-001",),
+            ).fetchone()
+        if row is None:
+            raise RuntimeError("TRACK7_SECOND_PROCESS_SNAPSHOT_NOT_FOUND")
+        strategy_id, strategy_version, config_json, payload_json, payload_sha256 = row
+        config = json.loads(config_json)
+        payload = json.loads(payload_json)
+        if strategy_id != payload["strategy_id"] or strategy_version != payload["strategy_version"]:
+            raise RuntimeError("TRACK7_SECOND_PROCESS_IDENTITY_MISMATCH")
+
+        target = module["Track7VolatilitySkewWeeklyInsurance"](**config)
+        registry = module["StrategyRegistry"]()
+        registry.register(target)
+        hub = module["StrategyHub"](registry, ((target.strategy_id, target.version),))
+        context = module["StrategyContext"](strategy_id=target.strategy_id)
+        initialized = hub.run({target.strategy_id: context})
+        if initialized.failures or target._states_by_expiry:
+            raise RuntimeError("TRACK7_SECOND_PROCESS_INITIALIZATION_FAILED")
+        gate = module["_restore_aggregate_into"](
+            target,
+            {"payload": payload, "sha256": payload_sha256},
+            expected_config=config,
+        )
+        if gate != {"state_restored": True, "side_effect_actions_allowed": True}:
+            raise RuntimeError("TRACK7_SECOND_PROCESS_RESTORE_GATE_UNEXPECTED")
+
+        observed = []
+        original_evaluate = target.evaluate
+        def capture_evaluate(current_context):
+            observed.append(target.state.entry_stage)
+            return original_evaluate(current_context)
+        target.evaluate = capture_evaluate
+        resumed = hub.run({target.strategy_id: context})
+        if resumed.failures:
+            raise RuntimeError("TRACK7_SECOND_PROCESS_FIRST_HUB_RUN_FAILED")
+        if target.state.entry_stage != "COMPLETE" or not target.state.call_open:
+            raise RuntimeError("TRACK7_SECOND_PROCESS_LOST_CALLBACK_FILL")
+        print(json.dumps({
+            "strategy_id": target.strategy_id,
+            "strategy_version": target.version,
+            "entry_stage": target.state.entry_stage,
+            "put_open": target.state.put_open,
+            "call_open": target.state.call_open,
+            "call_entry_fill_price": str(target.state.call_entry_fill_price),
+            "observed_at_evaluate": observed,
+            "gate": gate,
+        }, sort_keys=True))
+        """
+    )
+    second_completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            second_process_code,
+            str(Path(__file__).resolve()),
+            str(database_path),
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    second_resumed = json.loads(second_completed.stdout.strip().splitlines()[-1])
+    assert second_resumed["strategy_id"] == source.strategy_id
+    assert second_resumed["strategy_version"] == source.version
+    assert second_resumed["entry_stage"] == "COMPLETE"
+    assert second_resumed["put_open"] is True
+    assert second_resumed["call_open"] is True
+    assert second_resumed["call_entry_fill_price"] == "1.75"
+    assert second_resumed["observed_at_evaluate"] == ["COMPLETE"]
+    assert second_resumed["gate"] == {
         "state_restored": True,
         "side_effect_actions_allowed": True,
     }
