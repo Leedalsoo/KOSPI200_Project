@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import timezone
+from decimal import Decimal
 import hashlib
 import json
 import re
@@ -84,6 +85,34 @@ class ValidationOnlyAccountSnapshotBaselineAdapter:
         broker = reconciliation.broker_snapshot
         if projected.positions != broker.positions:
             raise ValidationOnlyBaselineImportError("ACCOUNT_U19_PROJECTED_BROKER_POSITION_MISMATCH")
+
+        expected_bundle_positions: dict[str, Decimal] = {}
+        for row in validation.normalized_positions:
+            instrument_id = str(row["instrument_id"])
+            quantity = Decimal(str(row["qty"]))
+            side = str(row.get("side") or "").upper()
+            if side == "LONG":
+                signed_quantity = quantity
+            elif side == "SHORT":
+                signed_quantity = -quantity
+            else:
+                signed_quantity = Decimal(0)
+            if signed_quantity:
+                expected_bundle_positions[instrument_id] = signed_quantity
+
+        for positions in (
+            projected.positions,
+            broker.positions,
+            decision.positions,
+        ):
+            observed_positions: dict[str, Decimal] = {}
+            for position in positions:
+                if position.instrument_id in observed_positions:
+                    raise ValidationOnlyBaselineImportError("ACCOUNT_U19_BUNDLE_POSITION_MISMATCH")
+                observed_positions[position.instrument_id] = position.signed_quantity
+            if observed_positions != expected_bundle_positions:
+                raise ValidationOnlyBaselineImportError("ACCOUNT_U19_BUNDLE_POSITION_MISMATCH")
+
         expected_as_of = validation.as_of.astimezone(timezone.utc)
         if any(
             item.as_of.tzinfo is None

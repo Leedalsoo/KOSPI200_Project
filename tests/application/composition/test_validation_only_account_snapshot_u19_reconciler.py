@@ -3617,3 +3617,53 @@ def test_u19_journal_report_quantity_price_timestamp_mismatch_never_creates_chec
     else:
         assert result.recovery_decision.status is U19RecoveryStatus.LEDGER_SNAPSHOT_UNVERIFIED
         assert result.projected_ledger_snapshot.complete is False
+
+
+@pytest.mark.parametrize("mismatch_kind", ("quantity", "side"))
+def test_baseline_import_rejects_u19_reconciliation_from_different_position_snapshot(
+    tmp_path, mismatch_kind,
+):
+    from application.composition.validation_only_account_snapshot_baseline_adapter import (
+        ValidationOnlyAccountSnapshotBaselineAdapter,
+        ValidationOnlyBaselineImportError,
+    )
+
+    bundle, validation, reconciliation, _, _ = _prepare_validation_startup_fixture(tmp_path)
+    broker_positions = reconciliation.broker_snapshot.positions
+    assert broker_positions
+    first = broker_positions[0]
+    mismatched_quantity = (
+        first.signed_quantity + Decimal("100")
+        if mismatch_kind == "quantity"
+        else -first.signed_quantity
+    )
+    mismatched_positions = (
+        U19Position(first.instrument_id, mismatched_quantity),
+        *broker_positions[1:],
+    )
+    forged_reconciliation = replace(
+        reconciliation,
+        projected_ledger_snapshot=replace(
+            reconciliation.projected_ledger_snapshot, positions=mismatched_positions,
+        ),
+        broker_snapshot=replace(
+            reconciliation.broker_snapshot, positions=mismatched_positions,
+        ),
+        recovery_decision=replace(
+            reconciliation.recovery_decision, positions=mismatched_positions,
+        ),
+    )
+    baseline_store = SQLiteSettlementStore(tmp_path / "crosswired-u19-baseline.sqlite3")
+    adapter = ValidationOnlyAccountSnapshotBaselineAdapter(baseline_store, validation_only=True)
+
+    with pytest.raises(
+        ValidationOnlyBaselineImportError,
+        match="ACCOUNT_U19_BUNDLE_POSITION_MISMATCH",
+    ):
+        adapter.import_reconciled_snapshot(
+            bundle=bundle, validation=validation, reconciliation=forged_reconciliation,
+        )
+
+    assert baseline_store.authoritative_baseline_evidence() is None
+    with sqlite3.connect(baseline_store.path) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM position_states").fetchone()[0] == 0
