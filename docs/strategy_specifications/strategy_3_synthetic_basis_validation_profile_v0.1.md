@@ -138,3 +138,11 @@ These are pure validation-harness rules, not Production policy or Runtime execut
 - No.1852 S1-S9 focused matrix remains S1 12 / S2 292 / S3 8 / S4 51 / S5 23 / S6 85 / S7 78 / S8 21 / S9 61 passed. Follow-up batches overlap; do not add into one acceptance total.
 - S2 remains `PSB_UNVERIFIED`; S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`; other OPEN/UNVERIFIED statuses remain unchanged. Natural-signal full lifecycle, real costs/margin/account risk and Production/Live readiness are not certified.
 - No KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original modification. Temporary data junctions were removed and source hashes remained unchanged.
+
+
+## No.1861 ? Synthetic asset-type transport boundary (2026-11-26)
+
+- CanonicalOrderTransport rejects `EQUITY`, `ETF` and `CASH_BASKET`; current transport supports only FUTURES/OPTION.
+- Track3 production adapter remains unresolved even with a synthetic Futures identity. VirtualMultiLegExecutionBridge rejects a custom synthetic cash-basket identity type rather than treating it as Futures.
+- Validation-only regression: six S3 modules, 51 passed. No Production source or routing contract changed.
+- Actual cash proxy identity, short-sale/borrow, KIS Master, beta/tracking error, costs, liquidity, margin and account risk remain OPEN.

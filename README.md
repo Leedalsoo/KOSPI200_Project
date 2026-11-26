@@ -1,5 +1,15 @@
 # KOSPI200 Project200
 
+## 2026-11-26 No.1861 ? S3 cash-proxy asset-type / Virtual routing boundary
+
+- Notion Q&A: https://app.notion.com/p/4245f4f6eaa18169adffd376eae2e834
+- No.1853 and No.1764/1766 retain No.956 Futures-minus-Index signal basis; the cash-basket/ETF proxy is a separate synthetic tradable-leg model. Existing Virtual OMS/Router/VSSF/canonical transport supports FUTURES/OPTION only.
+- Added validation-only tests: CanonicalOrderTransport rejects EQUITY/ETF/CASH_BASKET; Track3 adapter stays unresolved even when given a synthetic Futures identity; VirtualMultiLegExecutionBridge rejects a custom SyntheticCashBasketIdentity instead of aliasing it as Futures.
+- Six S3 focused modules: 51 passed. Compileall, Ruff F821/F841, changed-test/transport F401, diff-check PASS. A broader F401 scan surfaced two pre-existing unused imports in Track3 adapter; left untouched.
+- Only `tests/application/test_track3_spread_leg_definition_block.py` changed. No Production source, Runtime, OMS, Router, VSSF or transport contract changed. Actual cash proxy identity, short-sale/borrow, beta/tracking error, quotes/costs/liquidity/margin/account risk remain OPEN. S3 remains validation-only.
+- No KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection or Raw/Canonical/accepted-source/manifest original modification.
+
+
 ## 2026-11-26 No.1860 ? S2 four-leg strike geometry / quote parity audit
 
 - Notion Q&A: https://app.notion.com/p/4245f4f6eaa181df9b2bc8e4d07536c0
