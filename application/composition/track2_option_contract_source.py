@@ -123,8 +123,8 @@ class Track2OptionContractSource:
             raise ValueError("TRACK2_UNDERLYING_PRICE_REQUIRED")
 
         identities = tuple(self.option_master.list_contract_identities(expiry))
-        calls: dict[Decimal, Any] = {}
-        puts: dict[Decimal, Any] = {}
+        calls: dict[Decimal, list[Any]] = {}
+        puts: dict[Decimal, list[Any]] = {}
         for identity in identities:
             if (
                 str(getattr(identity, "instrument_family", "") or "").upper() != "STANDARD"
@@ -137,25 +137,30 @@ class Track2OptionContractSource:
             if option_type not in {"CALL", "PUT"} or strike is None:
                 continue
             strike = Decimal(str(strike))
-            if strike <= 0 or not getattr(identity, "shrn_iscd", ""):
+            if strike <= 0 or not str(getattr(identity, "shrn_iscd", "") or "").strip():
                 continue
-            (calls if option_type == "CALL" else puts)[strike] = identity
+            (calls if option_type == "CALL" else puts).setdefault(strike, []).append(identity)
 
         listed_strikes = sorted(set(calls) & set(puts))
         if not listed_strikes:
             raise ValueError("TRACK2_LISTED_STRIKE_NOT_FOUND")
         underlying = Decimal(str(current_price))
         atm = min(listed_strikes, key=lambda strike: (abs(strike - underlying), strike))
-        put = puts[atm]
-        call = calls[atm]
+        if len(puts[atm]) != 1 or len(calls[atm]) != 1:
+            raise ValueError("TRACK2_MONTHLY_LISTED_CONTRACT_NOT_UNIQUE")
+        put = puts[atm][0]
+        call = calls[atm][0]
         put_multiplier = getattr(put, "contract_multiplier", None)
         call_multiplier = getattr(call, "contract_multiplier", None)
         if put_multiplier is None or call_multiplier is None:
             raise ValueError("TRACK2_CONTRACT_MULTIPLIER_REQUIRED")
         put_multiplier = Decimal(str(put_multiplier))
         call_multiplier = Decimal(str(call_multiplier))
-        if put_multiplier <= 0 or call_multiplier <= 0:
-            raise ValueError("TRACK2_CONTRACT_MULTIPLIER_REQUIRED")
+        if (
+            put_multiplier != KIS_KOSPI200_OPTION_CONTRACT_MULTIPLIER
+            or call_multiplier != KIS_KOSPI200_OPTION_CONTRACT_MULTIPLIER
+        ):
+            raise ValueError("TRACK2_CONTRACT_MULTIPLIER_MISMATCH")
         if put_multiplier != call_multiplier:
             raise ValueError("TRACK2_CONTRACT_MULTIPLIER_MISMATCH")
         return Track2OptionContractSelection(str(expiry).replace("-", "")[:8], atm, put, call)

@@ -1,5 +1,16 @@
 # KOSPI200 Project200
 
+## 2026-11-26 No.1859 ? S2 U17 ATM identity uniqueness / STANDARD multiplier validation
+
+- Notion Q&A: https://app.notion.com/p/4245f4f6eaa181919a83e6aca1458166
+- No.1492 lower-strike ATM tie-break remains the only user-approved U17 selection rule. No.1635/1636 exact monthly expiry, STANDARD/MINI separation and KIS Master vs synthetic identity boundaries remain in force. No.1858's 21/84 sidecar remains synthetic-only.
+- Test-first exposed two `Track2OptionContractSource.select()` defects: duplicate same-strike/same-option-type identities were overwritten in a dict; a STANDARD/MONTHLY PUT+CALL pair with both multipliers 50000 passed despite the official STANDARD multiplier being 250000.
+- Fixed selection to retain all identities per strike and reject a selected ATM strike unless exactly one PUT and one CALL exist. STANDARD selection now requires both multipliers to equal the KIS official STANDARD multiplier 250000. Lower-strike tie-break remains unchanged.
+- Added two regressions; both failed before the fix. Nine focused S2 modules: 136 passed. Compileall, Ruff F821/F401/F841 and diff-check PASS.
+- Scope is synthetic Option Master fixtures/current code only. No actual KIS listed identity, tradability, holiday calendar, strike grid/tick rounding, offset mapping or IV operating policy is approved. S2 remains `PSB_UNVERIFIED`.
+- No KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection or Raw/Canonical/accepted-source/manifest original modification.
+
+
 ## 2026-11-25 validation update — No.1849 S4 repeated hedge intent identity
 
 - Synthetic Track4 MINI Futures `GAMMA_REBALANCE` SELL 2 intents at two distinct tick timestamps resolve to the same run-scoped group ID and tag-derived leg ID; `attempt_id` remains unset.

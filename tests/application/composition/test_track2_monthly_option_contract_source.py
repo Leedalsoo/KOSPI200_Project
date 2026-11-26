@@ -73,6 +73,31 @@ def test_monthly_selection_uses_lower_strike_when_atm_distance_ties():
     assert selected.call.shrn_iscd == "C490"
 
 
+def test_select_rejects_duplicate_listed_identity_for_selected_atm_strike():
+    rows = (
+        identity("P490-A", "20261210", "PUT", 490),
+        identity("P490-B", "20261210", "PUT", 490),
+        identity("C490", "20261210", "CALL", 490),
+    )
+
+    with pytest.raises(ValueError, match="TRACK2_MONTHLY_LISTED_CONTRACT_NOT_UNIQUE"):
+        Track2OptionContractSource(Master(rows)).select(
+            expiry="20261210", current_price=Decimal("490")
+        )
+
+
+def test_select_rejects_mini_multiplier_on_standard_monthly_contract_pair():
+    rows = (
+        dataclasses.replace(identity("P490", "20261210", "PUT", 490), contract_multiplier=Decimal("50000")),
+        dataclasses.replace(identity("C490", "20261210", "CALL", 490), contract_multiplier=Decimal("50000")),
+    )
+
+    with pytest.raises(ValueError, match="TRACK2_CONTRACT_MULTIPLIER_MISMATCH"):
+        Track2OptionContractSource(Master(rows)).select(
+            expiry="20261210", current_price=Decimal("490")
+        )
+
+
 def test_nearest_expiry_fails_when_only_weekly_or_mini_series_exist():
     master = Master((
         identity("WEEKLY", "20261112", "PUT", 500, series="THURSDAY_WEEKLY"),

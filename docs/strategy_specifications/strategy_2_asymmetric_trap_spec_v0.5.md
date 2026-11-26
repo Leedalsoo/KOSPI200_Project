@@ -65,6 +65,13 @@ BBW 산식·window, Z-score sample, OBI source/depth, basis 단위·동기화, P
 - 실제 상장 계약 존재 확인, strike offset 적용 후 listed strike 매핑, strike/tick rounding, exact monthly expiry 선택·공식 source, volatility 경계는 미확정.
 - nearest expiry를 monthly expiry로 간주하지 않는다. 월물임을 확인할 authoritative series/calendar 기준이 없으면 BLOCKED.
 
+### No.1859 ? U17 implementation audit (2026-11-26)
+
+- No.1492 tie-break is implemented as nearest listed paired strike, then lower strike on equal distance.
+- Duplicate identity rows at the selected strike are rejected; STANDARD/MONTHLY pair must have exactly one PUT and one CALL and both multipliers must equal 250000.
+- Synthetic regression: 9 focused S2 modules, 136 passed. This does not approve strike-grid/tick rounding, offset mapping, actual KIS Master identity/tradability, expiry holiday authority or IV basis/source/window/threshold.
+- S2 remains `PSB_UNVERIFIED`; no operating risk limits or Production/Live policy changed.
+
 ## 5. 월물 lifecycle
 
 - 대상 expiry series는 monthly only. 일물/주물은 미승인.

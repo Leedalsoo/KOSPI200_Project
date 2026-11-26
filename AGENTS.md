@@ -1,3 +1,13 @@
+## 2026-11-26 No.1859 ? S2 U17 ATM identity uniqueness / STANDARD multiplier validation
+
+- Notion Q&A: https://app.notion.com/p/4245f4f6eaa181919a83e6aca1458166
+- No.1492 lower-strike ATM tie-break remains the only user-approved U17 selection rule. No.1635/1636 exact monthly expiry, STANDARD/MINI separation and KIS Master vs synthetic identity boundaries remain in force. No.1858's 21/84 sidecar remains synthetic-only.
+- Test-first exposed two `Track2OptionContractSource.select()` defects: duplicate same-strike/same-option-type identities were overwritten in a dict; a STANDARD/MONTHLY PUT+CALL pair with both multipliers 50000 passed despite the official STANDARD multiplier being 250000.
+- Fixed selection to retain all identities per strike and reject a selected ATM strike unless exactly one PUT and one CALL exist. STANDARD selection now requires both multipliers to equal the KIS official STANDARD multiplier 250000. Lower-strike tie-break remains unchanged.
+- Added two regressions; both failed before the fix. Nine focused S2 modules: 136 passed. Compileall, Ruff F821/F401/F841 and diff-check PASS.
+- Scope is synthetic Option Master fixtures/current code only. No actual KIS listed identity, tradability, holiday calendar, strike grid/tick rounding, offset mapping or IV operating policy is approved. S2 remains `PSB_UNVERIFIED`.
+- No KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection or Raw/Canonical/accepted-source/manifest original modification.
+
 ## 2026-11-25 No.1849 — 최신 사용자 작업 기준 및 S4 반복 헤지 ID 검증
 
 - 최신 사용자 직접 지시와 최신 Notion 결정·실행결과를 우선한다. 자료 불일치·데이터 부족을 즉시 BLOCKED/UNAVAILABLE로 판정하지 않는다. 먼저 최신 Q&A/결정로그/Current Baseline/A8 roadmap과 실제 local/remote Project200 코드, Raw/Canonical/accepted registry/manifest/hash/identity/event-time/provenance를 대조한다.
