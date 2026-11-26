@@ -1804,7 +1804,8 @@
 
 ## 2026-11-25 No.1850 — S4 attempt_id contribution
 - Bridge _client_order_id() appends str(plan.attempt_id) only when truthy; otherwise tick-varying identical intents can reuse an ID. Same non-empty synthetic attempt_id across ticks yields the same ID; distinct non-empty values yield different IDs.
-- Pure deterministic hash probe only; no additional VSSF order submitted and no attempt-ID owner/retry policy inferred. Fixture S4-REPEATED-HEDGE-INTENT-CLIENT-ORDER-ID-REUSE-001, SYNTHETIC:DERIVED_SCENARIO, alidation_only=true, untime_use=PROHIBITED_OUTSIDE_VALIDATION. Fixture SHA FBE61DFFE8DB9876DFD32E0926BE202787AA40B926E2AB961DDA7A90C7BDF878; test SHA 4C8A9830973770ACAD41AC25A9C8BBA6D9B2C92E6B85653818C11212C1AB182A. Regression 83 passed; compileall/Ruff/JSON/diff-check PASS. Notion: https://app.notion.com/p/4235f4f6eaa1819c868dffeeb8544d25. OPEN: issuer/namespace/uniqueness/lifecycle/restart and duplicate/new-attempt/retry semantics. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+- Pure deterministic hash probe only; no additional VSSF order submitted and no attempt-ID owner/retry policy inferred. Fixture S4-REPEATED-HEDGE-INTENT-CLIENT-ORDER-ID-REUSE-001, SYNTHETIC:DERIVED_SCENARIO, validation_only=true,
+runtime_use=PROHIBITED_OUTSIDE_VALIDATION. Fixture SHA FBE61DFFE8DB9876DFD32E0926BE202787AA40B926E2AB961DDA7A90C7BDF878; test SHA 4C8A9830973770ACAD41AC25A9C8BBA6D9B2C92E6B85653818C11212C1AB182A. Regression 83 passed; compileall/Ruff/JSON/diff-check PASS. Notion: https://app.notion.com/p/4235f4f6eaa1819c868dffeeb8544d25. OPEN: issuer/namespace/uniqueness/lifecycle/restart and duplicate/new-attempt/retry semantics. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
 
 
 ## 2026-11-25 No.1851 ? S4 attempt_id upstream issuer/propagation trace
@@ -1911,4 +1912,15 @@
 - Product spec code constants: STANDARD=250000, MINI=50000. No MINI/50000 row or family/multiplier mixing in this sidecar.
 - Six focused modules (monthly contract source, product spec runtime identity, spec alignment, synthetic profile, alternative provider, market-calibrated quote scenario): 52 passed. Compileall, Ruff F821/F401/F841 and diff-check PASS. Source/test files unchanged.
 - PASS is limited to consistency of synthetic family/multiplier provenance and ID-to-contract tuple mapping. It does not prove KIS-listed identity: all IDs explicitly declare `SYNTHETIC_ONLY_NOT_KIS_MASTER`. 20261112 remains weekday-only second-Thursday assumption; actual KRX/KIS holiday authority, KIS Master crosswalk, tradability and actual quote/fill identity remain OPEN. S2 remains `PSB_UNVERIFIED`.
+- No KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection or Raw/Canonical/accepted-source/manifest original modification.
+
+## 2026-11-26 No.1863 ? S4 RiskEngine position identity isolation
+
+- Notion Q&A: https://app.notion.com/p/4245f4f6eaa18166a8e7e75d14a78537
+- Reconciled No.1862, No.1854/1841, No.1769 and S4 v0.3 F14/F16. A synthetic MINI Futures risk-preflight probe found that RiskEngine treated the only position in an account as the order instrument's position even when neither instrument_id nor symbol matched.
+- Reproduced two failures before the fix: unrelated BUY 5 caused a new instrument BUY 1 to be evaluated as quantity 6 and falsely rejected at max-position 5; an unrelated opposite-side position could also be misclassified as a pure reduction and bypass required margin.
+- Fixed `core/risk/risk_engine.py`: removed the single-position fallback from expected-position calculation, current-position/pure-reduction classification, and position-limit capacity. Exact instrument key and explicit symbol alias matching remain supported.
+- Added `tests/core/test_risk_engine_position_identity_isolation.py` covering unrelated position isolation, false rejection, pure-reduction margin bypass, and symbol alias compatibility.
+- Eight focused/regression modules: **133 passed**. Compileall, scoped Ruff F821/F401/F841, and `git diff --check` PASS.
+- Scope is common RiskEngine position-key matching with synthetic inputs only. It does not certify full S4 group/account preflight, authoritative account/broker position reconciliation, durable restart, or KIS behavior. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
 - No KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection or Raw/Canonical/accepted-source/manifest original modification.

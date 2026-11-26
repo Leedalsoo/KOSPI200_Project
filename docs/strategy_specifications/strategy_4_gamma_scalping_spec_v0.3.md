@@ -801,3 +801,11 @@ Focused S4 Runtime identity + spec alignment + attribution + Greek decomposition
 - Accepted Runtime v2 manifest/20261012/20261013 were temporarily linked read-only from preserved T4 candidate worktree; hashes unchanged before/after and junction removed.
 - Confirmed only the current in-memory Virtual boundary: same run/plan can reproduce client_order_id while a fresh VSSF runtime does not restore its prior report or sequence. This does not establish actual broker query/idempotency, durable process restart, account checkpoint, or restart policy. OPEN: run namespace/continuity, attempt_id owner, durable broker execution identity/query, VSSF/account/Bridge checkpoint, ACK/retry/repair/compensation and actual KIS semantics.
 - No Production source/policy, KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection or Raw/Canonical/accepted-source/manifest original modification. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
+
+## 2026-11-26 No.1863 ? RiskEngine position identity isolation
+
+- Synthetic fault injection showed `RiskEngine` using the only account position as the command position when neither the command instrument key nor explicit symbol matched. This could create a false instrument-limit rejection or misclassify an order as a pure reduction with zero required margin.
+- Fixed common RiskEngine matching to use only exact instrument key or explicit symbol alias. Removed the unrelated-single-position fallback from expected-position, pure-reduction and limit-capacity paths.
+- Added validation regression `tests/core/test_risk_engine_position_identity_isolation.py`; the two original defect tests failed before the fix. Eight focused/regression modules: 133 passed; compileall, scoped Ruff F821/F401/F841 and diff-check PASS.
+- This closes only the generic position-key misassociation defect. It does not prove S4 group/account preflight completeness, authoritative broker/account position reconciliation, freshness/effective-time, durable restart, or repair ownership. F14/F16 broader S4 acceptance remains OPEN; S4 status remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
+- Synthetic validation only; no KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection or Raw/Canonical/accepted-source/manifest original mutation.

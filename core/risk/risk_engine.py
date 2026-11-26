@@ -82,8 +82,6 @@ class RiskEngine:
             command_symbol = str(getattr(command, "symbol", "") or "").strip()
             if command_symbol:
                 current = positions_map.get(command_symbol)
-        if current is None and len(positions_map) == 1:
-            current = next(iter(positions_map.values()))
         curr_qty = int(getattr(current, "qty", 0)) if current is not None else 0
         curr_side = getattr(current, "side", None) if current is not None else None
         order_side = self._order_side(command)
@@ -119,8 +117,6 @@ class RiskEngine:
                 command_symbol = str(getattr(effective_cmd, "symbol", "") or "").strip()
                 if command_symbol:
                     current_position = positions.positions.get(command_symbol)
-            if current_position is None and len(positions.positions) == 1:
-                current_position = next(iter(positions.positions.values()))
         current_qty = int(getattr(current_position, "qty", 0)) if current_position is not None else 0
         current_side = getattr(current_position, "side", None) if current_position is not None else None
         order_side = self._order_side(effective_cmd)
@@ -142,10 +138,7 @@ class RiskEngine:
                 token, None,
             )
         if expected["qty"] > self.config.max_position_per_instrument:
-            current = positions.positions.get(expected["instrument_key"]) if positions is not None else None
-            current_qty = int(getattr(current, "qty", 0)) if current is not None else 0
-            if current is None and positions is not None and len(positions.positions) == 1:
-                current = next(iter(positions.positions.values())); current_qty = int(getattr(current, "qty", 0))
+            current_qty = int(getattr(current_position, "qty", 0)) if current_position is not None else 0
             remaining_capacity = self.config.max_position_per_instrument - current_qty
             if allow_reduction and 0 < remaining_capacity < effective_cmd.qty:
                 effective_cmd = _replace_command_qty(effective_cmd, remaining_capacity)

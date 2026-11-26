@@ -1858,3 +1858,14 @@ Validation-only synthetic test confirms VSSF `client_order_id` is formatted from
 - Six focused modules (monthly contract source, product spec runtime identity, spec alignment, synthetic profile, alternative provider, market-calibrated quote scenario): 52 passed. Compileall, Ruff F821/F401/F841 and diff-check PASS. Source/test files unchanged.
 - PASS is limited to consistency of synthetic family/multiplier provenance and ID-to-contract tuple mapping. It does not prove KIS-listed identity: all IDs explicitly declare `SYNTHETIC_ONLY_NOT_KIS_MASTER`. 20261112 remains weekday-only second-Thursday assumption; actual KRX/KIS holiday authority, KIS Master crosswalk, tradability and actual quote/fill identity remain OPEN. S2 remains `PSB_UNVERIFIED`.
 - No KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection or Raw/Canonical/accepted-source/manifest original modification.
+
+## 2026-11-26 No.1863 ? S4 RiskEngine position identity isolation
+
+- Notion Q&A: https://app.notion.com/p/4245f4f6eaa18166a8e7e75d14a78537
+- Reconciled No.1862, No.1854/1841, No.1769 and S4 v0.3 F14/F16. A synthetic MINI Futures risk-preflight probe found that RiskEngine treated the only position in an account as the order instrument's position even when neither instrument_id nor symbol matched.
+- Reproduced two failures before the fix: unrelated BUY 5 caused a new instrument BUY 1 to be evaluated as quantity 6 and falsely rejected at max-position 5; an unrelated opposite-side position could also be misclassified as a pure reduction and bypass required margin.
+- Fixed `core/risk/risk_engine.py`: removed the single-position fallback from expected-position calculation, current-position/pure-reduction classification, and position-limit capacity. Exact instrument key and explicit symbol alias matching remain supported.
+- Added `tests/core/test_risk_engine_position_identity_isolation.py` covering unrelated position isolation, false rejection, pure-reduction margin bypass, and symbol alias compatibility.
+- Eight focused/regression modules: **133 passed**. Compileall, scoped Ruff F821/F401/F841, and `git diff --check` PASS.
+- Scope is common RiskEngine position-key matching with synthetic inputs only. It does not certify full S4 group/account preflight, authoritative account/broker position reconciliation, durable restart, or KIS behavior. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
+- No KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection or Raw/Canonical/accepted-source/manifest original modification.
