@@ -1,5 +1,15 @@
 # KOSPI200 Project200
 
+## 2026-11-26 No.1860 ? S2 four-leg strike geometry / quote parity audit
+
+- Notion Q&A: https://app.notion.com/p/4245f4f6eaa181df9b2bc8e4d07536c0
+- Read-only audit of preserved 21-candidate/84-quote sidecar against current Track2AsymmetricTrap builder. Candidate?quote parity passed 21/21 for role, option type, strike, timestamp, expiry and source observation ID; all 84 two-sided quotes had positive bid/ask quantities and matched the accepted Runtime v2 base manifest hash.
+- Manifest mapping: inner PUT/CALL are LONG legs; outer PUT/CALL are SHORT legs. All 21 candidates have symmetric four-leg geometry around a common center: 13 NARROW (inner ?2.5 / outer ?7.5), 8 WIDE (inner ?5 / outer ?10). Current strategy builder arithmetic independently matched both structures.
+- Original candidate/quote/manifest SHA256 unchanged: d2d96b35d0402c1bdf8a6b07e771e9bdc593772985610dc68d3fd74f615b5a32 / 466c796c536d48a91fd548e6c61c597da4bde558bd56a079cc8956a9f882786e / 13580e010c34c74a1787bffb6b6b72adebdc4964f848937c0894bfa0fd4918b7.
+- OPEN: candidate inputs do not carry active/base volatility values, so geometry counts do not prove WIDE/NARROW regime selection. The sidecar is not a complete option chain or authoritative KIS Option Master; ATM center mapping, listed strike grid/tick rounding, actual KIS code and tradability remain unverified. No policy inferred. S2 remains `PSB_UNVERIFIED`.
+- No KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection or Raw/Canonical/accepted-source/manifest original modification.
+
+
 ## 2026-11-26 No.1859 ? S2 U17 ATM identity uniqueness / STANDARD multiplier validation
 
 - Notion Q&A: https://app.notion.com/p/4245f4f6eaa181919a83e6aca1458166

@@ -72,6 +72,12 @@ BBW 산식·window, Z-score sample, OBI source/depth, basis 단위·동기화, P
 - Synthetic regression: 9 focused S2 modules, 136 passed. This does not approve strike-grid/tick rounding, offset mapping, actual KIS Master identity/tradability, expiry holiday authority or IV basis/source/window/threshold.
 - S2 remains `PSB_UNVERIFIED`; no operating risk limits or Production/Live policy changed.
 
+### No.1860 ? U17 four-leg geometry audit (2026-11-26)
+
+- 21/21 candidate rows match all four quote roles/types/strikes/timestamps/source observation IDs; all 84 quotes have valid two-sided price/quantity and source manifest lineage.
+- 13 candidate geometries match NARROW inner ?2.5 / outer ?7.5; 8 match WIDE inner ?5 / outer ?10. All are symmetric and consistent with the strategy builder's arithmetic.
+- Candidate data lacks active/base volatility values and is not a full KIS Option Master. WIDE/NARROW regime selection, ATM center/listed-strike crosswalk, strike grid/tick rounding and tradability remain OPEN. S2 remains `PSB_UNVERIFIED`.
+
 ## 5. 월물 lifecycle
 
 - 대상 expiry series는 monthly only. 일물/주물은 미승인.
