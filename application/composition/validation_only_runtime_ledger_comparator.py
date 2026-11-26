@@ -136,7 +136,10 @@ class ValidationOnlyRuntimeLedgerComparator:
 
         actual_history = {}
         for lot in actual_position_lot_history:
-            actual_history[str(self._get(lot, "execution_id"))] = (
+            execution_id = str(self._get(lot, "execution_id"))
+            if execution_id in actual_history:
+                issues.append(f"RUNTIME_LEDGER_DUPLICATE_POSITION_LOT_HISTORY_EXECUTION_ID:{execution_id}")
+            actual_history[execution_id] = (
                 str(self._get(lot, "side")).upper(),
                 int(self._get(lot, "opened_quantity")),
                 self._decimal(self._get(lot, "contract_multiplier"), "HISTORY_MULTIPLIER"),
@@ -150,15 +153,17 @@ class ValidationOnlyRuntimeLedgerComparator:
             )
             for instrument, queue in queues.items() for lot in queue if lot["qty"] > 0
         }
-        actual_open = {
-            (str(self._get(lot, "instrument_id")), str(self._get(lot, "execution_id"))): (
+        actual_open = {}
+        for lot in actual_open_position_lots:
+            key = (str(self._get(lot, "instrument_id")), str(self._get(lot, "execution_id")))
+            if key in actual_open:
+                issues.append(f"RUNTIME_LEDGER_DUPLICATE_OPEN_POSITION_LOT_KEY:{key[0]}:{key[1]}")
+            actual_open[key] = (
                 str(self._get(lot, "side")).upper(),
                 int(self._get(lot, "remaining_quantity")),
                 self._decimal(self._get(lot, "contract_multiplier"), "OPEN_LOT_MULTIPLIER"),
                 self._timestamp(self._get(lot, "execution_timestamp")),
             )
-            for lot in actual_open_position_lots
-        }
         if actual_open != expected_open:
             issues.append("RUNTIME_LEDGER_OPEN_POSITION_LOTS_MISMATCH")
 

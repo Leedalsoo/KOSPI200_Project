@@ -185,3 +185,47 @@ def test_cancelled_order_without_fill_keeps_open_lot_and_has_no_fee_or_close_eve
     assert len(store.open_lots()) == 1
     assert store.close_events() == ()
     assert ledger.total(run_id="FRESH30") == Decimal("0")
+
+
+def _compare_single_open_lot(*, duplicate_history=False, duplicate_open=False):
+    lot = _lot("OPEN-DUPLICATE", "BUY", 1, 10)
+    store = VirtualPositionLotStore()
+    store.apply_execution(lot)
+    history = store.history()
+    open_lots = store.open_lots()
+    if duplicate_history:
+        history = history + history
+    if duplicate_open:
+        open_lots = open_lots + open_lots
+    return ValidationOnlyRuntimeLedgerComparator().compare(
+        opening_lots=[{
+            "instrument_id": "SYNTH-OPT", "execution_id": "OPEN-DUPLICATE",
+            "side": "BUY", "quantity": 1, "unit_price": "10",
+            "contract_multiplier": "10", "executed_at": STAMP,
+        }],
+        executions=[], expected_fee_records=[],
+        actual_position_lot_history=history, actual_open_position_lots=open_lots,
+        actual_close_events=(), actual_fee_records=(),
+        vssf_positions={"SYNTH-OPT": {"side": "BUY", "qty": 1, "avg_price": Decimal("10")}},
+        vssf_realized_pnl_delta=Decimal("0"), vssf_unrealized_pnl=Decimal("20"),
+        mark_prices={"SYNTH-OPT": Decimal("12")},
+        source_namespace="SYNTHETIC:POSITION-LOT-DUPLICATE",
+        deterministic_rule_id="POSITION-LOT-DUPLICATE-IDENTITY-v1",
+        source_manifest_sha256="b" * 64, source_anchor_refs=("SYNTHETIC:OPEN-ANCHOR",),
+        source_anchor_as_of=STAMP, scenario_timestamp=STAMP,
+        evidence_refs=("TEST:POSITION-LOT-DUPLICATE",),
+    )
+
+
+def test_duplicate_position_lot_history_execution_id_is_not_silently_collapsed():
+    result = _compare_single_open_lot(duplicate_history=True)
+
+    assert result.status == "RECONCILIATION_REQUIRED"
+    assert "RUNTIME_LEDGER_DUPLICATE_POSITION_LOT_HISTORY_EXECUTION_ID:OPEN-DUPLICATE" in result.issues
+
+
+def test_duplicate_open_position_lot_key_is_not_silently_collapsed():
+    result = _compare_single_open_lot(duplicate_open=True)
+
+    assert result.status == "RECONCILIATION_REQUIRED"
+    assert "RUNTIME_LEDGER_DUPLICATE_OPEN_POSITION_LOT_KEY:SYNTH-OPT:OPEN-DUPLICATE" in result.issues
