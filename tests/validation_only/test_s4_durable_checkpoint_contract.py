@@ -590,3 +590,113 @@ print("CROSS_PROCESS_RECOVERY_AND_LATE_FILL_ACKED", flush=True)
     assert latest["revision"] == 8
     assert latest["phase"] == "ACKED"
     assert latest["state"]["callback_state"]["completed"] is True
+
+
+def test_two_recovery_processes_can_observe_same_unclaimed_work_before_stage_cas(tmp_path):
+    """Characterize duplicate dispatch before durable stage compare-and-swap."""
+    import os
+    import subprocess
+    import sys
+    import time
+
+    database = tmp_path / "s4-concurrent-recovery.sqlite3"
+    store = SqliteS4ValidationCheckpointStore(database)
+    event = identity()
+    store.record_received(event, event_payload())
+    store.commit_stage(
+        event,
+        S4ExecutionStage.ACCOUNT_APPLIED,
+        checkpoint(checkpoint_id="cp-1", revision=1),
+    )
+
+    worker = r'''
+import sys, time
+from pathlib import Path
+from application.composition.validation_only_s4_checkpoint import (
+    S4ExecutionEventIdentity, S4ExecutionStage,
+    SqliteS4ValidationCheckpointStore, ValidationOnlyS4CheckpointCoordinator,
+)
+database, worker_id, directory = Path(sys.argv[1]), sys.argv[2], Path(sys.argv[3])
+store = SqliteS4ValidationCheckpointStore(database)
+coordinator = ValidationOnlyS4CheckpointCoordinator(store)
+work = coordinator.recovery_work()
+assert len(work) == 1
+item = work[0]
+assert item["stage"] == "ACCOUNT_APPLIED" and item["next_stage"] == "BRIDGE_APPLIED"
+assert item["last_committed_checkpoint"]["checkpoint_id"] == "cp-1"
+(directory / (worker_id + ".ready")).write_text(item["identity"]["execution_id"], encoding="utf-8")
+deadline = time.monotonic() + 20
+while not (directory / "release").exists():
+    if time.monotonic() > deadline:
+        raise TimeoutError("release barrier timeout")
+    time.sleep(0.01)
+# Synthetic callback side effect occurs before the durable stage CAS.
+with (directory / "callbacks.log").open("a", encoding="utf-8") as stream:
+    stream.write(worker_id + "\n")
+identity = S4ExecutionEventIdentity(**item["identity"])
+checkpoint = {
+    "schema_version": 1,
+    "checkpoint_id": "cp-2-" + worker_id,
+    "run_id": "validation-run-001",
+    "strategy_id": "track4_gamma_scalping",
+    "group_id": "s4-group-001",
+    "source_namespace": "SYNTHETIC:S4_CHECKPOINT_CONTRACT_V1",
+    "account_id": "validation-account-001",
+    "execution_source_id": "validation-vssf-engine-001",
+    "execution_id": "EXEC-000001",
+    "revision": 2,
+    "previous_checkpoint_id": "cp-1",
+    "phase": "BRIDGE_APPLIED",
+    "validation_only": True,
+    "runtime_use": "PROHIBITED_OUTSIDE_VALIDATION",
+    "state": {
+        "account_state": {"balance": "1000000", "positions": []},
+        "bridge_state": {"applied_execution_ids": ["EXEC-000001"]},
+        "strategy_state": {"exit_pending": False},
+        "pending_orders": [],
+        "position_lots": [],
+        "fee_ledger": [],
+        "execution_watermarks": {"validation-vssf-engine-001": "EXEC-000001"},
+        "callback_state": {"completed": False},
+    },
+}
+try:
+    coordinator.commit_projection(identity, S4ExecutionStage.BRIDGE_APPLIED, checkpoint)
+    result = "COMMITTED"
+except ValueError as error:
+    result = str(error)
+(directory / (worker_id + ".result")).write_text(result, encoding="utf-8")
+'''
+    processes = [
+        subprocess.Popen(
+            [sys.executable, "-c", worker, str(database), worker_id, str(tmp_path)],
+            cwd=os.getcwd(), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        for worker_id in ("worker-a", "worker-b")
+    ]
+    try:
+        deadline = time.monotonic() + 20
+        while not all((tmp_path / (name + ".ready")).exists() for name in ("worker-a", "worker-b")):
+            if time.monotonic() > deadline:
+                raise TimeoutError("workers did not both observe pending recovery work")
+            if any(process.poll() not in (None, 0) for process in processes):
+                raise AssertionError("worker exited before barrier")
+            time.sleep(0.01)
+        (tmp_path / "release").write_text("go", encoding="utf-8")
+        outputs = [process.communicate(timeout=30) for process in processes]
+        assert all(process.returncode == 0 for process in processes), outputs
+    finally:
+        (tmp_path / "release").write_text("go", encoding="utf-8")
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=5)
+
+    callback_calls = (tmp_path / "callbacks.log").read_text(encoding="utf-8").splitlines()
+    results = [(tmp_path / (name + ".result")).read_text(encoding="utf-8")
+               for name in ("worker-a", "worker-b")]
+    assert len(callback_calls) == 2
+    assert sorted(results) == ["COMMITTED", "S4_CHECKPOINT_STAGE_CONFLICT"]
+    assert store.get_event_status(event) == "BRIDGE_APPLIED"
+    assert len(store.pending_events()) == 1
+    assert store.pending_events()[0]["next_stage"] == "CALLBACK_APPLIED"

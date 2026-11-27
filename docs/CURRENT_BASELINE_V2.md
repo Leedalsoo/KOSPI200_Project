@@ -2134,3 +2134,15 @@
   - 20261012: `c360b12e4c55551542490e73693ca59d42c3eb3135496d310cee7ee9fead62b5`
   - 20261013: `331c01e819e9ddd4d0c39e98bf0c9d43b9a82e575743c0c34b74e8178f494cf5`
 - No KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original mutation. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
+## 2026-11-27 No.1877 — S4 F25 concurrent recovery reader / stage-CAS ownership boundary
+
+- Added validation-only test `tests/validation_only/test_s4_durable_checkpoint_contract.py::test_two_recovery_processes_can_observe_same_unclaimed_work_before_stage_cas`.
+- Two independent Python processes open the same synthetic SQLite journal. Both read the same ACCOUNT_APPLIED event and BRIDGE_APPLIED next stage because the current coordinator exposes read-only recovery enumeration but no claim/lease API.
+- Both processes pass a synchronized barrier and invoke a synthetic callback recorder before attempting the durable stage commit. Two callback invocations are observed. SQLite `BEGIN IMMEDIATE` + stage/revision CAS commits one BRIDGE_APPLIED checkpoint; the other worker receives `S4_CHECKPOINT_STAGE_CONFLICT`. Durable stage remains single-committed, but pre-commit callback dispatch can duplicate.
+- This is a characterization of the unclaimed recovery-work boundary, not a product defect against an approved ownership policy. No worker/service/scheduler was created or run. No lease expiry, owner, fencing token, retry/backoff or callback idempotency policy was invented. These remain OPEN pending explicit ownership/idempotency decisions.
+- Focused checkpoint + runtime snapshot: **42 passed**. All `tests/validation_only`: **151 passed**. Broad 28-file S4/U19/Track4/RiskEngine/PositionLot regression: **329 passed, 2 skipped**. Compileall, Ruff on changed test and `git diff --check`: PASS.
+- Broad regression initially found two missing-path assertions because isolated checkout lacks `data/accepted_market_data/runtime_v2`. Three preserved candidates were rechecked; all match manifest/date hashes below. A temporary read-only junction to Q25_A8_U22_Current_20261120 enabled full rerun; junction removed and originals unchanged.
+  - manifest: `7657c90f13a81a7f98a8ccd075a259c8ec9795477a2a0541366094cd87e0360f`
+  - 20261012: `c360b12e4c55551542490e73693ca59d42c3eb3135496d310cee7ee9fead62b5`
+  - 20261013: `331c01e819e9ddd4d0c39e98bf0c9d43b9a82e575743c0c34b74e8178f494cf5`
+- No product source defect reproduced; test-only characterization added. No KIS/REAL_VTS/account/Live API, broker action, actual order, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original mutation. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
