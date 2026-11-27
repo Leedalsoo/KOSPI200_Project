@@ -2085,3 +2085,11 @@ runtime_use=PROHIBITED_OUTSIDE_VALIDATION. Fixture SHA FBE61DFFE8DB9876DFD32E092
   - 20261012: `c360b12e4c55551542490e73693ca59d42c3eb3135496d310cee7ee9fead62b5`
   - 20261013: `331c01e819e9ddd4d0c39e98bf0c9d43b9a82e575743c0c34b74e8178f494cf5`
 - No KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original mutation. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
+## 2026-11-27 사용자 최신 검증·수정 절차
+
+- 작업 시작 시 원격 `origin/Project200:AGENTS.md`, 최신 관련 Notion 결정·실행결과, 기본 작업폴더와 격리 작업폴더 상태를 먼저 대조한다. 충돌하면 최신 Notion 결정을 우선한다.
+- 데이터 누락·불일치만으로 즉시 BLOCKED 판정하지 않는다. 보존 후보·manifest·SHA-256·identity·event-time·provenance를 먼저 대조하고, 필요하면 provenance가 보존된 deterministic synthetic/complementary fixture, crosswalk, independent replay 또는 schema/contract 검증을 적용한다. 합성값은 validation-only이며 관측 KIS·authoritative account·Production/Live 사실로 승격하지 않는다.
+- 테스트 실패가 제품 코드 결함을 가리키면 테스트만 추가하거나 문서에만 기록하고 끝내지 않는다. 실패 테스트로 결함을 재현한 뒤 실제 source module을 수정하고, 관련 테스트와 회귀검증을 실행한다. 코드 결함이 확인되지 않은 경우에만 test/document-only 변경으로 마무리한다.
+- 변경 파일만 명시적으로 stage/commit하고 `origin/Project200`에 non-force push한다. push 후 fetch로 remote HEAD를 확인한다. 기본 작업폴더의 기존 변경·Graphify·untracked 자료를 보존하며 reset/clean/stash를 사용하지 않는다.
+- 결과를 AGENTS.md, README.md, Current Baseline v2, 관련 전략 명세 및 Notion Q&A/SSOT/roadmap에 반영한다.
+- 별도 승인 전까지 KIS Live/REAL_VTS/account API, broker action, 실제 주문·취소·청산, collector/service/scheduler, 신규 수집 및 Raw/Canonical/accepted-source/manifest 원본 변경은 금지한다. S4는 `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`를 유지한다.
