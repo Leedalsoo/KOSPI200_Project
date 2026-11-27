@@ -69,6 +69,13 @@ from environments.high_speed.track6_validation_state_store import Track6Validati
 logger = logging.getLogger(__name__)
 
 
+def _should_release_validation_reservation_after_terminal_result(result) -> bool:
+    """Keep validation risk reserved until the group is flat and has no pending orders."""
+    return (
+        bool(getattr(result, "position_flat", False))
+        and int(getattr(result, "pending_legs", 0) or 0) == 0
+    )
+
 def _should_release_track7_validation_reservation(result, *, group_has_open_lots: bool) -> bool:
     """Keep Track7 risk reserved while any group order remains pending."""
     return not group_has_open_lots and int(getattr(result, "pending_legs", 0) or 0) == 0
@@ -482,9 +489,9 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         strategy_hub.on_execution_result(plan.strategy_id, plan.purpose or "", result)
         if (validation_only_s8_runtime_adapter is not None
                 and plan.strategy_id == "track8_macro_regime_monthly_strangle"
-                and bool(getattr(result, "position_flat", False))):
+                and _should_release_validation_reservation_after_terminal_result(result)):
             validation_only_s8_runtime_adapter.release_all_groups()
-        if (validation_only_s9_runtime_adapter is not None and plan.strategy_id == "track9_event_overnight_insurance" and bool(getattr(result, "position_flat", False))):
+        if (validation_only_s9_runtime_adapter is not None and plan.strategy_id == "track9_event_overnight_insurance" and _should_release_validation_reservation_after_terminal_result(result)):
             validation_only_s9_runtime_adapter.release_group(plan.group_id)
         if (validation_only_s7_runtime_adapter is not None and plan.strategy_id == "track7_volatility_skew_weekly_insurance"):
             group_has_open_lots = any(lot.run_id == run_id and lot.strategy_id == "track7_volatility_skew_weekly_insurance" and lot.group_id == plan.group_id and lot.remaining_quantity > 0 for lot in multi_leg_bridge.position_lot_store.open_lots())
