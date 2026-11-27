@@ -1292,18 +1292,14 @@ def test_track4_filled_report_bridge_projection_failure_ack_boundary(monkeypatch
     assert broker_report.status == "FILLED"
     assert broker_report.execution_id
 
-    # VSSF account, PositionLot and FeeLedger have already applied before the
-    # Bridge aggregate/fingerprint/provenance publication failure.
+    # The VSSF account execution precedes Bridge processing, but the Bridge
+    # rollback boundary preserves its own stores when aggregate construction fails.
     account_position = vssf.account.positions[identity.instrument_id]
     assert int(account_position["qty"]) == int(scenario["quantity"])
     assert str(account_position["side"]).upper() == scenario["side"]
-    lots = bridge.position_lot_store.open_lots()
-    assert len(lots) == 1
-    assert lots[0].execution_id == broker_report.execution_id
-    assert lots[0].remaining_quantity == int(scenario["quantity"])
-    fees = bridge.fee_ledger.snapshot(run_id=bridge.run_id)
-    assert len(fees) == 1
-    assert fees[0].execution_id == broker_report.execution_id
+    assert bridge.position_lot_store.history() == ()
+    assert bridge.position_lot_store.open_lots() == ()
+    assert bridge.fee_ledger.snapshot(run_id=bridge.run_id) == ()
 
     # The FILLED report was removed from pending before projection. The normal
     # callback/group publication and Bridge identity indexes were not reached.
@@ -1318,8 +1314,7 @@ def test_track4_filled_report_bridge_projection_failure_ack_boundary(monkeypatch
     # A deliberate same-process whole-bridge re-entry is different from an
     # automatic retry owner. The VSSF duplicate submit raises after observing
     # zero remaining quantity; _AckAdapter then queries the prior FILLED report.
-    # Bridge replay dedupes the already-applied PositionLot/Fee records and
-    # completes the previously interrupted in-memory projection.
+    # The Bridge applies its still-missing local projections exactly once.
     executions_before = vssf.metrics["executions_issued"]
     monkeypatch.undo()
     replay_result = bridge.execute(plan)
