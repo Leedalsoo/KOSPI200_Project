@@ -278,8 +278,19 @@ class VirtualMultiLegExecutionBridge:
         if not admitted and evaluation.rejection_reason:
             return str(evaluation.rejection_reason)
         return "GROUP_RISK_PREFLIGHT_REJECTED"
+
+    def _has_pending_group_orders(self, plan: MultiLegExecutionPlan) -> bool:
+        """A group cannot be flat while any of its orders can still fill."""
+        return any(
+            pending_plan.group_id == plan.group_id
+            and pending_plan.strategy_id == plan.strategy_id
+            for pending_plan, _pending_leg, _pending_command in getattr(self, "pending_legs", {}).values()
+        )
+
     def _position_flat_for_plan(self, plan: MultiLegExecutionPlan) -> bool:
         """Conservatively verify flatness across the complete entry group."""
+        if self._has_pending_group_orders(plan):
+            return False
         group = self.position_groups.all().get(plan.group_id)
         if group is not None:
             instrument_ids = {leg.instrument_id for leg in group.legs}
@@ -310,6 +321,8 @@ class VirtualMultiLegExecutionBridge:
 
     def _position_flat_for_result(self, plan: MultiLegExecutionPlan) -> bool:
         """Return flatness for the closed leg scope; S8 keeps full-group semantics."""
+        if self._has_pending_group_orders(plan):
+            return False
         purpose = str(plan.purpose or "").strip().upper()
         if plan.strategy_id == "track6_daily_tail_insurance" and (
             purpose == "DAILY_TAIL_INSURANCE_FORCE_CLOSE"
@@ -623,6 +636,7 @@ class VirtualMultiLegExecutionBridge:
         group_ids = {lot.group_id for lot in lots}
         if len(group_ids) != 1:
             raise ValueError(f"AMBIGUOUS_OPEN_POSITION_GROUPS:{strategy_id}:{len(group_ids)}")
+        selected_group_id = next(iter(group_ids))
 
         aggregated = defaultdict(int)
         identities = {}
@@ -653,6 +667,62 @@ class VirtualMultiLegExecutionBridge:
             identities[key] = identity
             roles[key] = str(lot.position_role)
             sides[key] = lot.side
+
+        # Filled close quantities are already reflected in PositionLots. Reserve only
+        # the remaining quantity of a still-working close order to prevent duplicate
+        # close plans from overselling the same owned lots.
+        for client_order_id, (pending_plan, pending_leg, _pending_command) in tuple(
+            getattr(self, "pending_legs", {}).items()
+        ):
+            if pending_plan.group_id != selected_group_id or pending_plan.strategy_id != strategy_id:
+                continue
+            pending_side = str(getattr(pending_leg, "side", "") or "").upper()
+            if pending_side not in {"BUY", "SELL"}:
+                raise ValueError("PENDING_CLOSE_ORDER_SIDE_REQUIRED")
+            pending_identity = self.identity_for_leg(pending_plan, pending_leg)
+            pending_role = str(getattr(pending_leg, "position_role", None) or "NONE")
+            lot_side = "BUY" if pending_side == "SELL" else "SELL"
+            matching_keys = [
+                key for key in aggregated
+                if key[1] == pending_identity.instrument_id
+                and key[5] == pending_role
+                and key[6] == lot_side
+            ]
+            if not matching_keys:
+                continue
+            if len(matching_keys) != 1:
+                raise ValueError("PENDING_CLOSE_ORDER_POSITION_SCOPE_AMBIGUOUS")
+            reports = [
+                report for report in getattr(self, "groups", {}).get(selected_group_id, ())
+                if str(getattr(report, "client_order_id", "")) == str(client_order_id)
+            ]
+            if len(reports) != 1:
+                raise ValueError("PENDING_CLOSE_ORDER_RECONCILIATION_REQUIRED")
+            report = reports[0]
+            status = str(getattr(getattr(report, "status", ""), "value", getattr(report, "status", ""))).strip().upper()
+            if (
+                status not in {"NEW", "PARTIALLY_FILLED"}
+                or getattr(report, "group_id", selected_group_id) not in {None, selected_group_id}
+                or getattr(report, "leg_id", pending_leg.leg_id) not in {None, pending_leg.leg_id}
+            ):
+                raise ValueError("PENDING_CLOSE_ORDER_RECONCILIATION_REQUIRED")
+            remaining = getattr(report, "remaining_quantity", None)
+            if isinstance(remaining, bool) or not isinstance(remaining, int) or remaining <= 0:
+                raise ValueError("PENDING_CLOSE_ORDER_REMAINING_QUANTITY_INVALID")
+            key = matching_keys[0]
+            if remaining > aggregated[key]:
+                raise ValueError("PENDING_CLOSE_ORDER_EXCEEDS_OPEN_LOT_QUANTITY")
+            aggregated[key] -= remaining
+
+        for key in tuple(aggregated):
+            if aggregated[key] == 0:
+                aggregated.pop(key)
+                identities.pop(key, None)
+                roles.pop(key, None)
+                sides.pop(key, None)
+
+        if not aggregated:
+            raise ValueError(f"PENDING_CLOSE_COVERS_ALL_OPEN_LOTS:{strategy_id}:{selected_group_id}")
 
         legs = []
         for key in sorted(aggregated, key=lambda item: tuple(str(part) for part in item)):

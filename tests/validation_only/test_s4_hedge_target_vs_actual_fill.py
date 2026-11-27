@@ -466,6 +466,14 @@ def test_s4_vssf_account_matches_position_lot_and_virtual_aggregate_across_parti
     )
     assert signed_projections() == (-1, -1, -1)
 
+    # The first close order still owns one pending contract. Confirm its terminal
+    # cancellation before rebuilding a close plan for the unreserved open remainder.
+    cancelled_close = bridge.cancel_pending_order(
+        close_client_order_id, reason="SYNTHETIC_REMAINDER_REPLAN_1826",
+    )
+    assert any(report.status == "CANCELLED" for report in cancelled_close.reports)
+    assert close_client_order_id not in bridge.pending_legs
+
     # Close the remaining contract; the three projections converge to flat.
     final_close_plan = bridge.build_close_plan_from_open_lots(
         strategy_id=plan.strategy_id, purpose="S4_SYNTHETIC_FINAL_CLOSE_1826",
@@ -476,6 +484,8 @@ def test_s4_vssf_account_matches_position_lot_and_virtual_aggregate_across_parti
     final_close = bridge.execute(final_close_plan)
     assert final_close.group_complete is True
     assert bridge.position_lot_store.open_lots() == ()
+    assert final_close.position_flat is True
+    assert bridge.pending_legs == {}
     account_position = vssf.account.positions.get(identity.instrument_id)
     assert account_position is None or int(account_position.get("qty", 0)) == 0
     aggregate = bridge.leg_positions[identity.instrument_id]

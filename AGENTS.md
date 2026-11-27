@@ -1970,3 +1970,16 @@ runtime_use=PROHIBITED_OUTSIDE_VALIDATION. Fixture SHA FBE61DFFE8DB9876DFD32E092
 
 - Notion Q&A: https://app.notion.com/p/4255f4f6eaa181448946c909125d1978
 - Eight-module S4/Track4/risk/PositionLot regression: 79 passed; compileall, scoped Ruff and diff-check PASS.
+
+## 2026-11-27 No.1868 — S4 F21 actual-lot / pending-close reservation / group-flat guard
+
+- Reconciled No.1867/1866, No.1772 signed-position and close-plan comparison, No.1773 partial-close/cancel/rebuild lifecycle, No.1824 group callback fill contract, No.1828 restart/late-fill boundary, and No.1826 account/PositionLot/Virtual three-projection evidence.
+- Test-first reproduced three defects in the existing Virtual Bridge path: (1) a new close plan used full remaining PositionLot quantity without subtracting a still-working close order's remaining quantity; (2) UNKNOWN pending close status did not block a new close plan; (3) group flat confirmation returned true while the same group still had a pending order.
+- Updated `application/composition/virtual_multi_leg_execution.py`: close-plan quantity now uses actual open PositionLots minus only the remaining quantity of matching same-group/same-strategy/same-instrument/same-position-role pending close orders. Already-filled quantities are not subtracted again because they are reflected in PositionLots. Missing/duplicate report lineage, UNKNOWN/non-working status, invalid remaining quantity, ambiguous scope, or pending quantity beyond open lots fails closed.
+- Group flat confirmation now requires no pending order for that group/strategy in addition to no remaining group PositionLots and no positive VSSF account position. Pending orders in another group do not block this group's flat confirmation.
+- Updated the No.1826 synthetic three-projection lifecycle: after a partial close, the remaining close order must first reach terminal CANCELLED before a replacement close plan is built. Final terminal fill now asserts PositionLot empty, VSSF account flat, aggregate flat, no pending orders and `position_flat=True`.
+- New F21-focused tests: 9 passed. Seven-module S4/Track4/close-lot/U16/U19/PositionLot regression: **139 passed**. Compileall, changed-file Ruff and diff-check PASS.
+- This covers current in-memory Virtual Bridge semantics only. It does not add broker/account authoritative pre-close reconciliation, durable pending-order restoration, cross-process late-fill delivery/ACK repair, or Production/KIS behavior. Those remain OPEN under No.1772/1828/F25. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
+- No KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original mutation.
+
+- Notion Q&A: https://app.notion.com/p/4255f4f6eaa181f8baedc8a13c9fbedd
