@@ -6,6 +6,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from application.composition.market_calendar_hub import MarketCalendarHub
+from application.composition.automated_virtual_runtime_factory import (
+    _should_release_track7_validation_reservation,
+)
 from core.strategy.track7_volatility_skew_weekly_insurance import Track7VolatilitySkewWeeklyInsurance
 from environments.high_speed.synthetic_runtime_sources import SyntheticRuntimeSources
 from environments.high_speed.validation_only_track7_execution import S7ValidationOnlyRuntimeAdapter
@@ -186,3 +189,75 @@ def test_s7_group_reservation_release_is_idempotent_for_duplicate_terminal_deliv
     assert adapter._reserved == {}
     assert adapter._reserved_entry_fees == {}
     assert adapter._group_expiry_by_id == {}
+
+
+def test_s7_two_group_pending_and_terminal_lifecycle_keeps_reservations_isolated():
+    adapter = _adapter()
+    adapter.bind_run_id("S7-TWO-GROUP-PENDING-LIFECYCLE")
+    plans = {
+        group_id: SimpleNamespace(
+            strategy_id="track7_volatility_skew_weekly_insurance",
+            purpose="WEEKLY_INSURANCE_ENTRY",
+            group_id=group_id,
+        )
+        for group_id in ("group-pending", "group-open")
+    }
+    for group_id, expiry, put_ask, call_ask in (
+        ("group-pending", "20261109", "1.26", "1.16"),
+        ("group-open", "20261112", "2.42", "2.20"),
+    ):
+        adapter.validate_group(plans[group_id], [
+            _prepared_leg("put", expiry, put_ask),
+            _prepared_leg("call", expiry, call_ask),
+        ])
+
+    assert set(adapter._reserved) == {"group-pending", "group-open"}
+
+    # Group A is position-flat but still has a pending entry order.
+    pending_result = SimpleNamespace(pending_legs=1)
+    assert not _should_release_track7_validation_reservation(
+        pending_result, group_has_open_lots=False,
+    )
+
+    # Group B has no pending order, but its PositionLot is still open.
+    terminal_order_result = SimpleNamespace(pending_legs=0)
+    assert not _should_release_track7_validation_reservation(
+        terminal_order_result, group_has_open_lots=True,
+    )
+
+    # Group B closes independently; Group A's pending reservation remains.
+    assert _should_release_track7_validation_reservation(
+        terminal_order_result, group_has_open_lots=False,
+    )
+    adapter.release_group("group-open")
+    assert set(adapter._reserved) == {"group-pending"}
+    assert set(adapter._reserved_entry_fees) == {"group-pending"}
+    assert set(adapter._group_expiry_by_id) == {"group-pending"}
+
+    # A pending order can resolve while a partial PositionLot remains open.
+    assert not _should_release_track7_validation_reservation(
+        terminal_order_result, group_has_open_lots=True,
+    )
+    assert set(adapter._reserved) == {"group-pending"}
+
+    # Only after both pending orders and open lots are absent may Group A release.
+    assert _should_release_track7_validation_reservation(
+        terminal_order_result, group_has_open_lots=False,
+    )
+    adapter.release_group("group-pending")
+    adapter.release_group("group-pending")
+    assert adapter._reserved == {}
+    assert adapter._reserved_entry_fees == {}
+    assert adapter._group_expiry_by_id == {}
+
+    # Capacity is reusable only after both independent group reservations release.
+    next_plan = SimpleNamespace(
+        strategy_id="track7_volatility_skew_weekly_insurance",
+        purpose="WEEKLY_INSURANCE_ENTRY",
+        group_id="group-next",
+    )
+    adapter.validate_group(next_plan, [
+        _prepared_leg("put", "20261116", "1.26"),
+        _prepared_leg("call", "20261116", "1.16"),
+    ])
+    assert set(adapter._reserved) == {"group-next"}
