@@ -1904,3 +1904,15 @@ Validation-only synthetic test confirms VSSF `client_order_id` is formatted from
 - Nine focused/regression modules: **142 passed**. Compileall PASS; changed adapter Ruff F821/F401/F841 PASS; changed test Ruff F821/F841 PASS; git diff --check PASS. One pre-existing unrelated F401 unused import at line 1898 in the touched test module was left unchanged.
 - Accepted Runtime v2 dependency was linked read-only from preserved Q25_T4_S4_Runtime_20261120 through a temporary junction. Tests passed; junction removed. Manifest/20261012/20261013 hashes unchanged: 7657c90f13a81a7f98a8ccd075a259c8ec9795477a2a0541366094cd87e0360f / c360b12e4c55551542490e73693ca59d42c3eb3135496d310cee7ee9fead62b5 / 331c01e819e9ddd4d0c39e98bf0c9d43b9a82e575743c0c34b74e8178f494cf5.
 - Validation-only adapter/test change. No Production/live/KIS/account API, broker action, collector/service/scheduler or Raw/Canonical/accepted-source/manifest original mutation. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED; authoritative account source, freshness/effective-time and durable restart/ACK remain OPEN.
+
+## 2026-11-27 No.1867 — S4 F14 group/account PositionLot risk projection (validation-only)
+
+- Added `application/composition/validation_only_position_lot_risk_projection.py` as a read-only validation projection. It keeps group keys `(run_id, strategy_id, group_id, instrument_id)` separate from account instrument aggregates.
+- Each projection retains signed net quantity plus gross long and gross short quantities. Opposite positions from different strategies/groups therefore cannot disappear behind a net-zero account quantity. Duplicate execution IDs, missing ownership/instrument identity, invalid side/quantity/multiplier, and inconsistent instrument multiplier/source provenance are rejected.
+- Synthetic same-instrument fixture covers S4 group A SELL 2, S4 group B SELL 1, and S3 group A BUY 3. Group quantities remain -2/-1/+3; account net is 0 while gross long=3 and gross short=3. A fixture-only group cap of 2 distinguishes group A at the boundary from group B; this is not an approved operating limit.
+- Test-first import failure confirmed the projection seam did not exist. Initial post-implementation tests exposed missing execution identity in the test fixture; the fixture was corrected, not the production PositionLot contract. Nine focused tests now pass.
+- This is a validation-only projection, not Runtime/RiskGate wiring, account authority, a new production limit, or a policy to net offsetting positions. Current RiskEngine still consumes instrument-keyed account positions and does not independently enforce S4 group caps. Full F14 group/account preflight acceptance remains OPEN pending approved group risk semantics and authoritative account data.
+- No KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest mutation. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
+
+- Notion Q&A: https://app.notion.com/p/4255f4f6eaa181448946c909125d1978
+- Eight-module S4/Track4/risk/PositionLot regression: 79 passed; compileall, scoped Ruff and diff-check PASS.
