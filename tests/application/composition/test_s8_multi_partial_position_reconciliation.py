@@ -569,9 +569,9 @@ def test_bridge_mutation_failure_can_replay_without_cross_ledger_double_count(
             broker_command=command, report=report,
         )
 
-    assert len(bridge.position_lot_store.history()) == 1
-    expected_fee_rows = 1 if fault_stage in {"fee_ledger", "position_aggregate"} else 0
-    assert len(bridge.fee_ledger.query(run_id=bridge.run_id)) == expected_fee_rows
+    # No.1880: every Bridge-local projection rolls back after an interrupted apply.
+    assert len(bridge.position_lot_store.history()) == 0
+    assert len(bridge.fee_ledger.query(run_id=bridge.run_id)) == 0
     assert bridge.leg_positions == {}
     assert bridge._applied_execution_fingerprints == {}
     assert bridge.execution_legs == {}
@@ -613,8 +613,9 @@ def test_bridge_publish_mapping_failure_rolls_back_indexes_and_replays_cleanly(f
             broker_command=command, report=report,
         )
 
-    assert len(bridge.position_lot_store.history()) == 1
-    assert len(bridge.fee_ledger.query(run_id=bridge.run_id)) == 1
+    # No.1880: the Bridge store writes are rolled back with index publication.
+    assert len(bridge.position_lot_store.history()) == 0
+    assert len(bridge.fee_ledger.query(run_id=bridge.run_id)) == 0
     assert bridge.leg_positions == {}
     assert bridge._applied_execution_fingerprints == {}
     assert bridge.execution_legs == {}
@@ -659,9 +660,10 @@ def test_second_fill_publication_failure_preserves_first_fill_and_replays_only_s
             broker_command=command, report=report,
         )
 
-    assert len(bridge.position_lot_store.history()) == 2
-    assert len(bridge.fee_ledger.query(run_id=bridge.run_id)) == 2
-    assert bridge.fee_ledger.total(run_id=bridge.run_id) == Decimal("0.30")
+    # The first fill committed; the interrupted second fill is fully rolled back.
+    assert len(bridge.position_lot_store.history()) == 1
+    assert len(bridge.fee_ledger.query(run_id=bridge.run_id)) == 1
+    assert bridge.fee_ledger.total(run_id=bridge.run_id) == Decimal("0.10")
     assert bridge.leg_positions[identity.instrument_id].qty == 1
     assert set(bridge._applied_execution_fingerprints) == {"S8-FILL-001"}
     assert set(bridge.execution_legs) == {"S8-FILL-001"}
