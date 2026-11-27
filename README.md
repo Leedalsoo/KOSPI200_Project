@@ -1999,3 +1999,7 @@ Validation-only synthetic test confirms VSSF `client_order_id` is formatted from
 ### S4 F21 validation-only pre-close reconciliation (2026-11-27)
 
 Added a read-only comparator for synthetic/validation-only account broker-position, execution-ledger and aggregate PositionLot evidence. It preserves group-scoped close quantity separately from account aggregate exposure. Any evidence/scope mismatch or pending/unknown account order suppresses close quantity and returns `RECONCILIATION_REQUIRED`. No order, cancel, retry, or live API is invoked. Six focused tests and 325 broader regression tests passed (2 skipped); accepted-data source hashes were checked before a temporary read-only junction and remained unchanged afterward. Full authoritative broker integration and durable restart/late-fill recovery remain open.
+
+### S4 F25 OS process termination validation (2026-11-27)
+
+Added a synthetic subprocess test that commits an ACCOUNT_APPLIED checkpoint, forcibly terminates the process, and reopens the SQLite journal from a fresh process. The committed checkpoint and next recovery stage are preserved; no automatic replay/ACK occurs. Focused 63 passed; broad 28-file S4/U19/Track4/RiskEngine/PositionLot regression 326 passed, 2 skipped. Accepted Runtime v2 source candidates were SHA-256 reconciled and temporarily linked read-only for tests; junction removed and originals unchanged. Automatic recovery worker, power-loss semantics, broker ACK/identity and Production wiring remain open.

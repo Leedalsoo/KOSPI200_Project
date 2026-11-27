@@ -2099,3 +2099,11 @@
 - Focused pre-close/F21/F14/F25 checkpoint/snapshot tests: **62 passed**. Broad 28-file S4/U19/Track4/RiskEngine/PositionLot batch: **325 passed, 2 skipped**. Compileall, Ruff and diff-check PASS.
 - The accepted Runtime v2 candidate files were hash-compared across three preserved candidates and temporarily exposed through a read-only junction for tests. Junction removed; original manifest and date-file hashes unchanged.
 - This remains validation-only. No authoritative broker API, production admission wiring, durable pending-order restore or cross-process late-fill/ACK recovery. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
+
+## 2026-11-27 No.1874 — S4 F25 OS process termination / durable recovery validation
+
+- Added a synthetic subprocess test to the durable checkpoint contract suite. A separate process records an event and commits ACCOUNT_APPLIED plus its composite checkpoint, is forcibly terminated, and a fresh process reopens the SQLite journal.
+- Verified persisted stage/checkpoint/balance and recovery plan next stage BRIDGE_APPLIED. Dirty in-memory value from the terminated process is not restored; no automatic projection replay or ACK is performed.
+- Focused F25/F21/F14 checkpoint and snapshot regression: **63 passed**. Broad 28-file S4/U19/Track4/RiskEngine/PositionLot regression: **326 passed, 2 skipped**. Compileall/Ruff/diff-check PASS.
+- Accepted Runtime v2 candidate data paths were hash-reconciled; temporary read-only junction removed and source hashes unchanged.
+- This does not validate power-loss/filesystem failure, automatic recovery worker/retry, runtime object auto-reconstruction, broker ACK/identity, cross-process late-fill delivery, or Production wiring. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import sqlite3
@@ -9,6 +9,7 @@ from application.composition.validation_only_s4_checkpoint import (
     S4ExecutionEventIdentity,
     S4ExecutionStage,
     SqliteS4ValidationCheckpointStore,
+    ValidationOnlyS4CheckpointCoordinator,
 )
 
 SOURCE = "SYNTHETIC:S4_CHECKPOINT_CONTRACT_V1"
@@ -417,3 +418,85 @@ def test_execution_source_owner_cannot_change_within_a_checkpoint_lineage(tmp_pa
             identity(execution_source="new-engine-after-restart"),
             event_payload(fingerprint="new-engine-fill"),
         )
+
+
+def test_os_process_termination_restores_last_committed_checkpoint_in_fresh_process(tmp_path):
+    import os
+    import subprocess
+    import sys
+
+    database = tmp_path / "s4-os-process-restart.sqlite3"
+    child_code = r'''import sys
+from pathlib import Path
+from application.composition.validation_only_s4_checkpoint import (
+    S4ExecutionEventIdentity, S4ExecutionStage,
+    SqliteS4ValidationCheckpointStore,
+    ValidationOnlyS4CheckpointCoordinator, ValidationOnlyS4CheckpointCoordinator,
+)
+database = Path(sys.argv[1])
+identity = S4ExecutionEventIdentity(
+    source_namespace="SYNTHETIC:S4_CHECKPOINT_CONTRACT_V1",
+    account_id="validation-account-001",
+    execution_source_id="validation-vssf-engine-001",
+    execution_id="EXEC-000001",
+)
+payload = {
+    "run_id": "validation-run-001", "strategy_id": "track4_gamma_scalping",
+    "group_id": "s4-group-001", "client_order_id": "client-order-001",
+    "fingerprint": "fill-fingerprint-001", "status": "FILLED",
+    "filled_quantity": 1, "remaining_quantity": 0,
+    "execution_timestamp": "2026-11-27T09:00:00+09:00",
+}
+coordinator = ValidationOnlyS4CheckpointCoordinator(SqliteS4ValidationCheckpointStore(database))
+coordinator.receive_execution(identity, payload)
+checkpoint = {
+    "schema_version": 1, "checkpoint_id": "os-restart-cp-1",
+    "run_id": payload["run_id"], "strategy_id": payload["strategy_id"],
+    "group_id": payload["group_id"], "source_namespace": identity.source_namespace,
+    "account_id": identity.account_id, "execution_source_id": identity.execution_source_id,
+    "execution_id": identity.execution_id, "revision": 1,
+    "previous_checkpoint_id": None, "phase": "ACCOUNT_APPLIED",
+    "validation_only": True, "runtime_use": "PROHIBITED_OUTSIDE_VALIDATION",
+    "state": {
+        "account_state": {"balance": "1000000", "positions": []},
+        "bridge_state": {"applied_execution_ids": []},
+        "strategy_state": {"exit_pending": False}, "pending_orders": [],
+        "position_lots": [], "fee_ledger": [],
+        "execution_watermarks": {}, "callback_state": {"completed": False},
+    },
+}
+coordinator.commit_projection(identity, S4ExecutionStage.ACCOUNT_APPLIED, checkpoint)
+# This mutation intentionally exists only in the dying process's memory.
+dirty_uncommitted_balance = "999999999"
+print("CHECKPOINT_COMMITTED", flush=True)
+while True:
+    time.sleep(1)
+'''
+    child = subprocess.Popen(
+        [sys.executable, "-c", child_code, str(database)],
+        cwd=os.getcwd(), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    try:
+        assert child.stdout is not None
+        assert child.stdout.readline().strip() == "CHECKPOINT_COMMITTED"
+        child.terminate()
+        child.wait(timeout=10)
+        assert child.returncode is not None
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait(timeout=10)
+
+    restarted = SqliteS4ValidationCheckpointStore(database)
+    event = identity()
+    assert restarted.get_event_status(event) == "ACCOUNT_APPLIED"
+    latest = restarted.load_latest_checkpoint(RUN, STRATEGY, GROUP, ACCOUNT)
+    assert latest["checkpoint_id"] == "os-restart-cp-1"
+    assert latest["state"]["account_state"]["balance"] == "1000000"
+    coordinator = ValidationOnlyS4CheckpointCoordinator(restarted)
+    work = coordinator.recovery_work()
+    assert len(work) == 1
+    assert work[0]["stage"] == "ACCOUNT_APPLIED"
+    assert work[0]["next_stage"] == "BRIDGE_APPLIED"
+    assert work[0]["last_committed_checkpoint"]["checkpoint_id"] == "os-restart-cp-1"
+    assert restarted.get_event_status(event) == "ACCOUNT_APPLIED"

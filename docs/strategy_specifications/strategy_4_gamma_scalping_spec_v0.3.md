@@ -942,3 +942,10 @@ Focused S4 Runtime identity + spec alignment + attribution + Greek decomposition
 - Any broker/ledger or broker/PositionLot mismatch, invalid scope/identity/time/source, or nonterminal/unknown account order blocks close eligibility and returns zero close quantity. This does not auto-correct positions or submit/cancel/retry orders.
 - Synthetic regression: account aggregate -3 across groups while the selected S4 group remains -4; the selected close quantity remains 4. Focused 62 tests PASS; broader 325 PASS / 2 SKIPPED; compileall/Ruff/diff-check PASS.
 - This does not constitute authoritative broker evidence or Production Runtime admission. Snapshot freshness/capability, authoritative account/order identity, durable pending-order restoration and cross-process late-fill/ACK repair remain OPEN. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
+
+## 2026-11-27 — F25 OS process termination validation (No.1874)
+
+- Added an OS subprocess termination test for the validation-only SQLite checkpoint contract: commit RECEIVED and ACCOUNT_APPLIED + full state checkpoint in a child process, terminate it, then reopen from a fresh process and verify exact last committed checkpoint and next recovery stage BRIDGE_APPLIED.
+- The test confirms dirty in-memory state is discarded and the coordinator only reports recovery work; it does not auto-replay or ACK. No production source defect was found, so the runtime source was not changed.
+- Focused 63 passed; broad 326 passed / 2 skipped; compileall/Ruff/diff-check PASS. Accepted dataset candidates were hash-reconciled and temporarily linked read-only; junction removed, original hashes unchanged.
+- Remaining OPEN: OS power-loss/filesystem failure, automatic recovery worker/retry, full fresh runtime object reconstruction after process death, cross-process late-fill/ACK repair, authoritative broker identity and Production orchestration. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
