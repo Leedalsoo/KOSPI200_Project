@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -730,3 +730,154 @@ def test_restore_rejects_execution_watermark_drift_before_mutating_runtime() -> 
         )
     assert target_runtime.account.ledger_engine.transactions == []
     assert target_bridge.position_lot_store.history() == ()
+
+
+def test_os_process_restart_reconstructs_vssf_bridge_track4_and_resumes_durable_stage(tmp_path) -> None:
+    import os
+    import subprocess
+    import sys
+
+    database = tmp_path / "s4-runtime-os-restart.sqlite3"
+    common = r'''
+from datetime import UTC, datetime
+from decimal import Decimal
+import runpy
+from pathlib import Path
+from application.composition.validation_only_s4_checkpoint import (
+    S4ExecutionEventIdentity, S4ExecutionStage,
+    SqliteS4ValidationCheckpointStore, ValidationOnlyS4CheckpointCoordinator,
+)
+from application.composition.validation_only_s4_runtime_snapshot import ValidationOnlyS4RuntimeSnapshotAdapter
+from contracts.futures_contract_spec import FuturesProductType
+from contracts.futures_identity_source_port import FuturesInstrumentIdentity
+from contracts.types import BrokerOrderCommand, ExecutionLeg, ExecutionReport, MultiLegExecutionPlan
+from core.strategy.track4_gamma_scalping import Track4GammaScalping
+from environments.virtual.authoritative_vssf.firm_runtime import VirtualSecuritiesFirmRuntime
+from shared.contracts.canonical import CanonicalAssetType, CanonicalOrderCommand, CanonicalOrderSide
+RUN="SYNTHETIC:S4:RUN:OS-RESTART"
+CANDIDATE="SYNTHETIC:S4:CANDIDATE:OS-RESTART"
+STRATEGY="track4_gamma_scalping"
+GROUP="SYNTHETIC:S4:GROUP:OS-RESTART"
+ACCOUNT="SYNTHETIC:S4:ACCOUNT:OS-RESTART"
+NAMESPACE="SYNTHETIC:S4:OS-RESTART"
+SOURCE_ID="SYNTHETIC:VSSF:ENGINE:OS-RESTART"
+SOURCE="SYNTHETIC:DERIVED_SCENARIO"
+STAMP=datetime(2026,11,27,5,0,tzinfo=UTC)
+INSTRUMENT=FuturesInstrumentIdentity(instrument_id="SYNTHETIC:MINI:OS-RESTART",symbol="SYNTHETIC:MINI:OS-RESTART",product_type=FuturesProductType.MINI,contract_multiplier=Decimal(50000),identity_source=SOURCE)
+def make_runtime():
+    return VirtualSecuritiesFirmRuntime(initial_capital=Decimal(1000000000),validation_run_id=RUN,validation_candidate_id=CANDIDATE)
+def make_bridge():
+    return runpy.run_path("tests/validation_only/test_s4_runtime_snapshot_restore.py")["_build_synthetic_bridge"](RUN,GROUP,STRATEGY)
+def make_strategy():
+    return Track4GammaScalping(enabled=True,capital_gate_min=Decimal(1000),risk_limits_available=True)
+def make_adapter():
+    return ValidationOnlyS4RuntimeSnapshotAdapter(source_namespace=NAMESPACE,account_id=ACCOUNT,execution_source_id=SOURCE_ID)
+def make_identity(execution_id):
+    return S4ExecutionEventIdentity(source_namespace=NAMESPACE,account_id=ACCOUNT,execution_source_id=SOURCE_ID,execution_id=execution_id)
+def make_bridge_event(execution_id, client_order_id):
+    leg=ExecutionLeg(leg_id="mini",side="BUY",quantity=1,instrument_identity=INSTRUMENT)
+    plan=MultiLegExecutionPlan(group_id=GROUP,strategy_id=STRATEGY,legs=(leg,))
+    command=BrokerOrderCommand(client_order_id=client_order_id,instrument_id=INSTRUMENT.instrument_id,side="BUY",quantity=1,order_type="MARKET",instrument_identity=INSTRUMENT,asset_type="FUTURES",strategy_id=STRATEGY,group_id=GROUP,leg_id="mini",position_role="NONE")
+    report=ExecutionReport(client_order_id=client_order_id,broker_order_id="SYNTHETIC:BROKER:OS-RESTART",execution_id=execution_id,status="FILLED",filled_quantity=1,remaining_quantity=0,execution_price=Decimal(1000),execution_timestamp=STAMP,fee=Decimal("0.1"),group_id=GROUP,leg_id="mini")
+    return leg,plan,command,report
+'''
+    process_a = common + r'''
+import os
+import sys
+from pathlib import Path
+runtime=make_runtime()
+command=CanonicalOrderCommand(client_order_id="SYNTHETIC:S4:ORDER:OS-RESTART",track_id=STRATEGY,asset_type=CanonicalAssetType.FUTURES,side=CanonicalOrderSide.BUY,qty=1,price=1000.0,symbol=INSTRUMENT.symbol,strategy_id=STRATEGY,group_id=GROUP,leg_id="mini",instrument_id=INSTRUMENT.instrument_id,contract_multiplier=50000.0,identity_source=SOURCE)
+fill=runtime.execution_engine.execute_order(command,Decimal(1000),1,timestamp=STAMP)
+runtime.account.apply_execution(fill)
+bridge=make_bridge()
+strategy=make_strategy()
+strategy.state.active_hedge_qty=-1
+strategy.state.basecamp_active=True
+strategy.state.is_active=True
+strategy.state.scalp_high_pnl=Decimal("125.5")
+strategy._exit_pending=True
+callbacks={"callback_sequence":0}
+adapter=make_adapter()
+snapshot=adapter.snapshot(runtime=runtime,bridge=bridge,strategy=strategy,run_id=RUN,strategy_id=STRATEGY,group_id=GROUP,callback_state=callbacks)
+identity=make_identity(fill.exec_id)
+payload={"run_id":RUN,"strategy_id":STRATEGY,"group_id":GROUP,"fingerprint":"SYNTHETIC:OS-RESTART:FINGERPRINT","client_order_id":fill.client_order_id,"status":"FILLED","filled_quantity":1,"remaining_quantity":0,"execution_timestamp":STAMP.isoformat()}
+coordinator=ValidationOnlyS4CheckpointCoordinator(SqliteS4ValidationCheckpointStore(Path(sys.argv[1])))
+assert coordinator.receive_execution(identity,payload)=="RECEIVED"
+envelope=adapter.checkpoint_envelope(snapshot,identity=identity,phase=S4ExecutionStage.ACCOUNT_APPLIED.value,checkpoint_id="SYNTHETIC:OS-RESTART:CP:1",revision=1,previous_checkpoint_id=None)
+coordinator.commit_projection(identity,S4ExecutionStage.ACCOUNT_APPLIED,envelope)
+runtime.account.balance=Decimal("999999999999")  # dirty memory must be discarded after abrupt process exit
+print("PROCESS_A_ACCOUNT_CHECKPOINT_COMMITTED",flush=True)
+os._exit(0)
+'''
+    first = subprocess.run([sys.executable,"-c",process_a,str(database)],cwd=os.getcwd(),capture_output=True,text=True,timeout=30,check=False)
+    assert first.returncode == 0, first.stderr
+    assert "PROCESS_A_ACCOUNT_CHECKPOINT_COMMITTED" in first.stdout
+
+    process_b = common + r'''
+import sys
+from pathlib import Path
+coordinator=ValidationOnlyS4CheckpointCoordinator(SqliteS4ValidationCheckpointStore(Path(sys.argv[1])))
+work=coordinator.recovery_work()
+assert len(work)==1 and work[0]["next_stage"]=="BRIDGE_APPLIED",work
+checkpoint=coordinator.store.load_latest_checkpoint(RUN,STRATEGY,GROUP,ACCOUNT)
+identity=make_identity(checkpoint["execution_id"])
+runtime=make_runtime(); bridge=make_bridge(); strategy=make_strategy(); callbacks={}
+adapter=make_adapter()
+restored=adapter.restore(checkpoint,runtime=runtime,bridge=bridge,strategy=strategy,run_id=RUN,strategy_id=STRATEGY,group_id=GROUP,callback_state=callbacks)
+assert restored["restored"] is True
+assert len(runtime.account.ledger_engine.transactions)==1
+assert runtime.execution_engine._seq==1 and len(runtime.execution_engine.reports)==1
+assert callbacks=={"callback_sequence":0}
+assert runtime.account.balance == Decimal("1000000000.0")
+assert strategy.state.active_hedge_qty == -1 and strategy.state.basecamp_active is True and strategy.state.is_active is True
+assert strategy.state.scalp_high_pnl == Decimal("125.5") and strategy._exit_pending is True
+# The account projection is already committed; exact redelivery must not apply it twice.
+runtime.account.apply_execution(runtime.execution_engine.reports[0])
+assert len(runtime.account.ledger_engine.transactions)==1
+leg,plan,command,report=make_bridge_event(identity.execution_id,runtime.execution_engine.reports[0].client_order_id)
+bridge._apply_reconciled_execution(plan=plan,leg=leg,identity=INSTRUMENT,broker_command=command,report=report)
+assert len(bridge.position_lot_store.history())==1
+assert len(bridge.fee_ledger.snapshot(run_id=RUN))==1
+snapshot=adapter.snapshot(runtime=runtime,bridge=bridge,strategy=strategy,run_id=RUN,strategy_id=STRATEGY,group_id=GROUP,callback_state=callbacks)
+bridge_cp=adapter.checkpoint_envelope(snapshot,identity=identity,phase=S4ExecutionStage.BRIDGE_APPLIED.value,checkpoint_id="SYNTHETIC:OS-RESTART:CP:2",revision=2,previous_checkpoint_id=checkpoint["checkpoint_id"])
+coordinator.commit_projection(identity,S4ExecutionStage.BRIDGE_APPLIED,bridge_cp)
+callbacks["callback_sequence"]=1
+snapshot=adapter.snapshot(runtime=runtime,bridge=bridge,strategy=strategy,run_id=RUN,strategy_id=STRATEGY,group_id=GROUP,callback_state=callbacks)
+callback_cp=adapter.checkpoint_envelope(snapshot,identity=identity,phase=S4ExecutionStage.CALLBACK_APPLIED.value,checkpoint_id="SYNTHETIC:OS-RESTART:CP:3",revision=3,previous_checkpoint_id=bridge_cp["checkpoint_id"])
+coordinator.commit_projection(identity,S4ExecutionStage.CALLBACK_APPLIED,callback_cp)
+ack_cp=adapter.checkpoint_envelope(snapshot,identity=identity,phase=S4ExecutionStage.ACKED.value,checkpoint_id="SYNTHETIC:OS-RESTART:CP:4",revision=4,previous_checkpoint_id=callback_cp["checkpoint_id"])
+coordinator.commit_projection(identity,S4ExecutionStage.ACKED,ack_cp)
+assert coordinator.recovery_work()==[]
+print("PROCESS_B_RUNTIME_RESTORED_BRIDGE_CALLBACK_ACKED",flush=True)
+'''
+    second = subprocess.run([sys.executable,"-c",process_b,str(database)],cwd=os.getcwd(),capture_output=True,text=True,timeout=30,check=False)
+    assert second.returncode == 0, second.stderr
+    assert "PROCESS_B_RUNTIME_RESTORED_BRIDGE_CALLBACK_ACKED" in second.stdout
+
+    process_c = common + r'''
+import sys
+from pathlib import Path
+coordinator=ValidationOnlyS4CheckpointCoordinator(SqliteS4ValidationCheckpointStore(Path(sys.argv[1])))
+checkpoint=coordinator.store.load_latest_checkpoint(RUN,STRATEGY,GROUP,ACCOUNT)
+assert checkpoint["phase"]=="ACKED"
+identity=make_identity(checkpoint["execution_id"])
+runtime=make_runtime(); bridge=make_bridge(); strategy=make_strategy(); callbacks={}
+adapter=make_adapter()
+adapter.restore(checkpoint,runtime=runtime,bridge=bridge,strategy=strategy,run_id=RUN,strategy_id=STRATEGY,group_id=GROUP,callback_state=callbacks)
+assert len(runtime.account.ledger_engine.transactions)==1
+assert len(bridge.position_lot_store.history())==1
+assert len(bridge.fee_ledger.snapshot(run_id=RUN))==1
+assert callbacks=={"callback_sequence":1}
+runtime.account.apply_execution(runtime.execution_engine.reports[0])
+leg,plan,command,report=make_bridge_event(identity.execution_id,runtime.execution_engine.reports[0].client_order_id)
+bridge._apply_reconciled_execution(plan=plan,leg=leg,identity=INSTRUMENT,broker_command=command,report=report)
+assert len(runtime.account.ledger_engine.transactions)==1
+assert len(bridge.position_lot_store.history())==1
+assert len(bridge.fee_ledger.snapshot(run_id=RUN))==1
+assert coordinator.receive_execution(identity,{"run_id":RUN,"strategy_id":STRATEGY,"group_id":GROUP,"fingerprint":"SYNTHETIC:OS-RESTART:FINGERPRINT","client_order_id":runtime.execution_engine.reports[0].client_order_id,"status":"FILLED","filled_quantity":1,"remaining_quantity":0,"execution_timestamp":STAMP.isoformat()})=="ACKED"
+assert coordinator.recovery_work()==[]
+print("PROCESS_C_FRESH_RESTORE_AND_REDELIVERY_IDEMPOTENT",flush=True)
+'''
+    third = subprocess.run([sys.executable,"-c",process_c,str(database)],cwd=os.getcwd(),capture_output=True,text=True,timeout=30,check=False)
+    assert third.returncode == 0, third.stderr
+    assert "PROCESS_C_FRESH_RESTORE_AND_REDELIVERY_IDEMPOTENT" in third.stdout

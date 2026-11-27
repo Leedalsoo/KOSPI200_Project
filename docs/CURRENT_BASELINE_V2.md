@@ -2120,3 +2120,17 @@
   - 20261012: `c360b12e4c55551542490e73693ca59d42c3eb3135496d310cee7ee9fead62b5`
   - 20261013: `331c01e819e9ddd4d0c39e98bf0c9d43b9a82e575743c0c34b74e8178f494cf5`
 - No KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original mutation. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
+## 2026-11-27 No.1876 — S4 F25 OS-process runtime reconstruction and stage resume
+
+- Reconciled latest Notion No.1875 cross-process late-fill/application ACK, No.1874 OS process termination, No.1873 F21 pre-close reconciliation, No.1872 F14 group/account reconciliation, No.1871 runtime snapshot/restore, No.1870 checkpoint contract, and current accepted Runtime v2 provenance. No.1871 fresh-instance restore and No.1875 event journal redelivery are separate earlier validations; this test joins them across actual OS process boundaries.
+- Added `tests/validation_only/test_s4_runtime_snapshot_restore.py::test_os_process_restart_reconstructs_vssf_bridge_track4_and_resumes_durable_stage`.
+- Process A builds synthetic VSSF account/execution, Bridge and Track4 state, commits an ACCOUNT_APPLIED runtime snapshot to SQLite, then mutates only dirty in-memory balance and exits abruptly with `os._exit(0)`.
+- Process B opens a new interpreter and SQLite store, reads the recovery plan (`BRIDGE_APPLIED`), constructs fresh VSSF/Bridge/Track4 objects, restores the committed snapshot, verifies the dirty balance did not survive, and confirms account execution redelivery is idempotent. It applies the synthetic Bridge fill, persists BRIDGE_APPLIED, CALLBACK_APPLIED and application ACKED.
+- Process C opens a third interpreter, restores the ACKED composite snapshot into new runtime objects, redelivers the same account and Bridge fill, and verifies one account ledger row, one PositionLot history record and one Fee Ledger record; callback state and empty recovery queue are preserved.
+- This establishes a validation-only OS-process boundary for runtime snapshot restore and ordered stage continuation. It does not establish power-loss/filesystem durability, automatic recovery worker/retry, broker ACK, authoritative broker identity/order, actual broker late-fill delivery, or Production runtime wiring. `ACKED` remains application ACK only.
+- No product source defect was reproduced; the change is one validation-only subprocess regression test. Focused checkpoint + runtime snapshot tests: **41 passed**. All `tests/validation_only`: **150 passed**. Broad 28-file S4/U19/Track4/RiskEngine/PositionLot regression: **328 passed, 2 skipped**. Compileall, Ruff on changed test and `git diff --check`: PASS.
+- Broad regression initially showed two missing-path assertions for `data/accepted_market_data/runtime_v2`; not classified as code defects. Three preserved candidates (`Q25_A8_R10`, `Q25_A8_U22_Current_20261120`, `Q25_T4_S4_Runtime_20261120`) were SHA-256 matched. Temporary read-only junction to Q25_A8_R10 was removed after rerun; originals unchanged.
+  - manifest: `7657c90f13a81a7f98a8ccd075a259c8ec9795477a2a0541366094cd87e0360f`
+  - 20261012: `c360b12e4c55551542490e73693ca59d42c3eb3135496d310cee7ee9fead62b5`
+  - 20261013: `331c01e819e9ddd4d0c39e98bf0c9d43b9a82e575743c0c34b74e8178f494cf5`
+- No KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original mutation. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
