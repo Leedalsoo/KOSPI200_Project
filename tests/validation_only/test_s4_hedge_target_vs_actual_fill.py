@@ -768,7 +768,7 @@ def test_s4_vssf_restart_late_fill_reconciles_account_but_not_prior_lot_fee_hist
     assert post_restart_bridge.leg_positions[instrument_id].qty == 1
 
 
-def test_s4_vssf_restored_account_reapplies_duplicate_late_fill_without_execution_dedupe() -> None:
+def test_s4_vssf_restored_account_deduplicates_exact_late_fill_redelivery() -> None:
     """Characterize duplicate late-fill delivery to a restored synthetic VSSF account."""
     from datetime import timezone
 
@@ -837,19 +837,18 @@ def test_s4_vssf_restored_account_reapplies_duplicate_late_fill_without_executio
     assert signed_position(restored) == 0
     assert [row["exec_id"] for row in restored.account.ledger_engine.transactions] == [late_fill.exec_id]
 
-    # Exact redelivery reaches PaperTradingAccount again; no execution-ID gate is present.
+    # Exact redelivery is ignored after the first application.
+    first_balance = restored.account.balance
+    first_realized = restored.account.realized_pnl
     restored.account.apply_execution(late_fill)
-    position = restored.account.positions[instrument_id]
-    assert signed_position(restored) == -1
-    assert position["side"] == "SELL" and position["qty"] == 1
-    assert position["avg_price"] == 1001.0
-    assert [row["exec_id"] for row in restored.account.ledger_engine.transactions] == [
-        late_fill.exec_id, late_fill.exec_id,
-    ]
-    assert restored.account.realized_pnl == Decimal("50000.0")
+    assert signed_position(restored) == 0
+    assert instrument_id not in restored.account.positions
+    assert len(restored.account.ledger_engine.transactions) == 1
+    assert restored.account.balance == first_balance
+    assert restored.account.realized_pnl == first_realized == Decimal("50000.0")
     assert restored.execution_engine.reports == []
 
-def test_s4_vssf_same_execution_id_changed_payload_diverges_from_bridge_conflict_gate() -> None:
+def test_s4_vssf_same_execution_id_changed_payload_fails_closed_in_account_and_bridge() -> None:
     """Characterize changed-payload reuse of one synthetic execution ID after restart."""
     from dataclasses import replace
     from datetime import datetime, timezone
@@ -939,14 +938,13 @@ def test_s4_vssf_same_execution_id_changed_payload_diverges_from_bridge_conflict
         executed_price=1002.0,
         fee=0.25,
     )
-    restored.account.apply_execution(changed_payload)
-    assert signed_position(restored) == 0
-    assert [row["exec_id"] for row in restored.account.ledger_engine.transactions] == [
-        late_fill.exec_id, late_fill.exec_id,
-    ]
-    assert restored.account.balance == first_balance - Decimal("0.25")
-    assert restored.account.realized_pnl > first_realized
-    assert restored.account.used_margin == 0
+    with pytest.raises(ValueError, match="VSSF_ACCOUNT_EXECUTION_ID_PAYLOAD_CONFLICT"):
+        restored.account.apply_execution(changed_payload)
+    assert signed_position(restored) == 2
+    assert [row["exec_id"] for row in restored.account.ledger_engine.transactions] == [late_fill.exec_id]
+    assert restored.account.balance == first_balance
+    assert restored.account.realized_pnl == first_realized
+    assert restored.account.used_margin > 0
 
     # The Bridge has a different in-memory fingerprint boundary: same ID with
     # changed payload raises before a second lot/fee/aggregate publication.
@@ -1431,8 +1429,7 @@ def test_s4_vssf_account_apply_and_bridge_publication_failure_are_separate_bound
     assert runtime.account.positions[instrument_id] == account_position_after_apply
     assert len(runtime.account.ledger_engine.transactions) == 1
 
-    # A whole-flow retry would reapply the account event before Bridge sees its
-    # already-applied fingerprint. Characterize the resulting cross-store drift.
+    # A whole-flow retry is idempotent at the account and Bridge projection owners.
     runtime.account.apply_execution(fill)
     bridge._apply_reconciled_execution(
         plan=plan,
@@ -1441,13 +1438,9 @@ def test_s4_vssf_account_apply_and_bridge_publication_failure_are_separate_bound
         broker_command=broker_command,
         report=report,
     )
-    assert runtime.account.balance == account_balance_after_apply - Decimal("0.10")
-    assert runtime.account.positions[instrument_id]["qty"] == 2
-    assert len(runtime.account.ledger_engine.transactions) == 2
-    assert [row["exec_id"] for row in runtime.account.ledger_engine.transactions] == [
-        fill.exec_id,
-        fill.exec_id,
-    ]
+    assert runtime.account.balance == account_balance_after_apply
+    assert runtime.account.positions[instrument_id] == account_position_after_apply
+    assert len(runtime.account.ledger_engine.transactions) == 1
     # Bridge fingerprint dedupe keeps the one original lot/fee/aggregate.
     assert len(bridge.position_lot_store.history()) == 1
     assert len(bridge.fee_ledger.snapshot(run_id=run_id)) == 1
