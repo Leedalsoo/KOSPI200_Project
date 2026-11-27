@@ -3,8 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-import pytest
 from types import SimpleNamespace
+
+import pytest
 
 from core.strategy.track4_gamma_scalping import Track4GammaScalping, Track4MarketInput
 
@@ -2355,3 +2356,49 @@ def test_s4_hedge_rebalance_requires_actual_and_pending_position_snapshot() -> N
 
     assert signals == ()
     assert strategy.state.active_hedge_qty == 0
+def test_s4_track4_callback_state_is_idempotent_when_replayed_after_restart() -> None:
+    """Synthetic crash-after-callback replay: strategy state is repeatable, external effects are out of scope."""
+    durable_pre_callback_state = {
+        "basecamp_active": True,
+        "active_hedge_qty": -1,
+        "scalp_high_pnl": Decimal("125.5"),
+        "is_active": True,
+    }
+    result = SimpleNamespace(group_complete=True, position_flat=True)
+
+    first_process_strategy = Track4GammaScalping(enabled=True)
+    first_process_strategy.state.basecamp_active = durable_pre_callback_state["basecamp_active"]
+    first_process_strategy.state.active_hedge_qty = durable_pre_callback_state["active_hedge_qty"]
+    first_process_strategy.state.scalp_high_pnl = durable_pre_callback_state["scalp_high_pnl"]
+    first_process_strategy.state.is_active = durable_pre_callback_state["is_active"]
+    first_process_strategy._exit_pending = True
+    first_process_strategy.on_execution_result("UNWIND_FUT_HEDGE", result)
+    assert first_process_strategy.state.active_hedge_qty == 0
+    assert first_process_strategy.state.scalp_high_pnl == Decimal("0")
+    assert first_process_strategy.state.is_active is False
+    assert first_process_strategy._exit_pending is False
+
+    # A process crash before CALLBACK_APPLIED means restart restores the prior durable state.
+    restarted_strategy = Track4GammaScalping(enabled=True)
+    restarted_strategy.state.basecamp_active = durable_pre_callback_state["basecamp_active"]
+    restarted_strategy.state.active_hedge_qty = durable_pre_callback_state["active_hedge_qty"]
+    restarted_strategy.state.scalp_high_pnl = durable_pre_callback_state["scalp_high_pnl"]
+    restarted_strategy.state.is_active = durable_pre_callback_state["is_active"]
+    restarted_strategy._exit_pending = True
+    restarted_strategy.on_execution_result("UNWIND_FUT_HEDGE", result)
+    after_replay = (
+        restarted_strategy.state.basecamp_active,
+        restarted_strategy.state.active_hedge_qty,
+        restarted_strategy.state.scalp_high_pnl,
+        restarted_strategy.state.is_active,
+        restarted_strategy._exit_pending,
+    )
+    restarted_strategy.on_execution_result("UNWIND_FUT_HEDGE", result)
+    assert after_replay == (
+        restarted_strategy.state.basecamp_active,
+        restarted_strategy.state.active_hedge_qty,
+        restarted_strategy.state.scalp_high_pnl,
+        restarted_strategy.state.is_active,
+        restarted_strategy._exit_pending,
+    )
+    assert after_replay == (True, 0, Decimal("0"), False, False)

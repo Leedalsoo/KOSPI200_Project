@@ -1,5 +1,17 @@
 # KOSPI200 Project200
 
+## 2026-11-27 No.1878 ? S4 F25 Track4 callback replay idempotency (validation-only)
+
+- Reconciled No.1877 concurrent Recovery Reader / stage-CAS result, No.1876 OS-process reconstruction, No.1875 cross-process late-fill/application ACK, No.1874 process termination, and current Notion Current Baseline / A8 SSOT / roadmap. No.1877 ownership/lease/fencing/retry decisions remain OPEN and are not superseded.
+- Traced the callback path: `automated_virtual_runtime_factory.on_multi_leg_execution_result()` delegates to `strategy_hub.on_execution_result()`; `StrategyOrchestrator` dispatches to the registered Track4 `on_execution_result()` method.
+- Track4 only handles `UNWIND_FUT_HEDGE` / `PROFIT_TAKEN_TRAILING_STOP` while `_exit_pending` is true. It resets active hedge target, scalp high PnL, active flag and exit-pending flag only when both `group_complete` and `position_flat` are true. After completion, duplicate delivery returns early because `_exit_pending` is false.
+- Added `tests/validation_only/test_s4_hedge_target_vs_actual_fill.py::test_s4_track4_callback_state_is_idempotent_when_replayed_after_restart`. Synthetic crash-after-callback/before-CALLBACK_APPLIED scenario restores the prior durable BRIDGE_APPLIED strategy state in a fresh strategy object, replays the same completed callback, then redelivers it once more. Final state is `(basecamp_active=True, active_hedge_qty=0, scalp_high_pnl=0, is_active=False, exit_pending=False)` and is unchanged by the duplicate.
+- This proves only Track4 in-memory strategy-state transition idempotency for this callback. It does not prove external side-effect idempotency, exactly-once callback dispatch, durable callback receipt/outbox, or concurrent worker ownership.
+- No product source defect was reproduced; no production source changed. One validation-only test was added. Focused S4 hedge/runtime snapshot/checkpoint regression: **73 passed**; all `tests/validation_only`: **152 passed**. Compileall, changed-test Ruff F821/F841, and `git diff --check`: PASS.
+- OPEN: external callback side-effect inventory, callback-specific idempotency key, durable receipt/outbox, owner/source of truth, recovery claim/lease/fencing, stale worker/expiry, retry/backoff and crash-after-side-effect-before-stage-commit policy. No policy inferred. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
+- No KIS/REAL_VTS/account/Live API, broker action, actual order, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original mutation.
+- Notion: https://app.notion.com/p/4255f4f6eaa1817aa4c3cd06ff328ba4
+
 ## 2026-11-27 No.1866 ? S4 F16 actual/pending-aware hedge rebalance
 
 - ?? No.1865/1864/1863, No.1825/1828/1829/1771, Current Baseline v2, A8 SSOT/roadmap ? S4 v0.3 F14/F16? ????. ?? No.1825? target vs PositionLot/Virtual position ??, No.1828/1829? restart/late-fill ?? ?? ??, No.1863~1865? identity/reconciliation ??? ?????.
