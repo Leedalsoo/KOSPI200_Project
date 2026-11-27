@@ -700,3 +700,94 @@ except ValueError as error:
     assert store.get_event_status(event) == "BRIDGE_APPLIED"
     assert len(store.pending_events()) == 1
     assert store.pending_events()[0]["next_stage"] == "CALLBACK_APPLIED"
+
+
+
+def test_callback_side_effect_can_repeat_after_process_exit_before_callback_stage_commit(tmp_path):
+    import os
+    import subprocess
+    import sys
+
+    database = tmp_path / "s4-callback-crash-window.sqlite3"
+    callback_log = tmp_path / "callback-side-effects.log"
+    store = SqliteS4ValidationCheckpointStore(database)
+    event = identity()
+    coordinator = ValidationOnlyS4CheckpointCoordinator(store)
+    coordinator.receive_execution(event, event_payload())
+    store.commit_stage(event, S4ExecutionStage.ACCOUNT_APPLIED, checkpoint(
+        checkpoint_id="cp-account", revision=1,
+    ))
+    store.commit_stage(event, S4ExecutionStage.BRIDGE_APPLIED, checkpoint(
+        checkpoint_id="cp-bridge", revision=2, previous_checkpoint_id="cp-account",
+        phase="BRIDGE_APPLIED",
+    ))
+
+    first_process = r'''
+import os, sys
+from pathlib import Path
+from application.composition.validation_only_s4_checkpoint import (
+    SqliteS4ValidationCheckpointStore, ValidationOnlyS4CheckpointCoordinator,
+)
+database, callback_log = Path(sys.argv[1]), Path(sys.argv[2])
+coordinator = ValidationOnlyS4CheckpointCoordinator(SqliteS4ValidationCheckpointStore(database))
+work = coordinator.recovery_work()
+assert len(work) == 1 and work[0]["next_stage"] == "CALLBACK_APPLIED"
+identity = work[0]["identity"]
+with callback_log.open("a", encoding="utf-8") as stream:
+    stream.write("|".join(identity.values()) + "\n")
+os._exit(23)
+'''
+    first = subprocess.run(
+        [sys.executable, "-c", first_process, str(database), str(callback_log)],
+        cwd=os.getcwd(), capture_output=True, text=True, timeout=20, check=False,
+    )
+    assert first.returncode == 23
+    assert store.get_event_status(event) == "BRIDGE_APPLIED"
+
+    second_process = r'''
+import sys
+from pathlib import Path
+from application.composition.validation_only_s4_checkpoint import (
+    S4ExecutionEventIdentity, S4ExecutionStage,
+    SqliteS4ValidationCheckpointStore, ValidationOnlyS4CheckpointCoordinator,
+)
+database, callback_log = Path(sys.argv[1]), Path(sys.argv[2])
+store = SqliteS4ValidationCheckpointStore(database)
+coordinator = ValidationOnlyS4CheckpointCoordinator(store)
+work = coordinator.recovery_work()
+assert len(work) == 1 and work[0]["next_stage"] == "CALLBACK_APPLIED"
+item = work[0]
+identity = S4ExecutionEventIdentity(**item["identity"])
+with callback_log.open("a", encoding="utf-8") as stream:
+    stream.write("|".join(item["identity"].values()) + "\n")
+checkpoint = {
+    "schema_version": 1, "checkpoint_id": "cp-callback", "run_id": "validation-run-001",
+    "strategy_id": "track4_gamma_scalping", "group_id": "s4-group-001",
+    "source_namespace": identity.source_namespace, "account_id": identity.account_id,
+    "execution_source_id": identity.execution_source_id, "execution_id": identity.execution_id,
+    "revision": 3, "previous_checkpoint_id": "cp-bridge", "phase": "CALLBACK_APPLIED",
+    "validation_only": True, "runtime_use": "PROHIBITED_OUTSIDE_VALIDATION",
+    "state": {
+        "account_state": {"balance": "1000000", "positions": []},
+        "bridge_state": {"applied_execution_ids": [identity.execution_id]},
+        "strategy_state": {"exit_pending": False}, "pending_orders": [],
+        "position_lots": [], "fee_ledger": [],
+        "execution_watermarks": {identity.execution_source_id: identity.execution_id},
+        "callback_state": {"completed": True},
+    },
+}
+coordinator.commit_projection(identity, S4ExecutionStage.CALLBACK_APPLIED, checkpoint)
+'''
+    second = subprocess.run(
+        [sys.executable, "-c", second_process, str(database), str(callback_log)],
+        cwd=os.getcwd(), capture_output=True, text=True, timeout=20, check=False,
+    )
+    assert second.returncode == 0, second.stdout + second.stderr
+    calls = callback_log.read_text(encoding="utf-8").splitlines()
+    assert len(calls) == 2
+    assert calls[0] == calls[1] == "|".join((SOURCE, ACCOUNT, EXECUTION_SOURCE, EXECUTION))
+    assert store.get_event_status(event) == "CALLBACK_APPLIED"
+    pending = store.pending_events()
+    assert len(pending) == 1
+    assert pending[0]["stage"] == "CALLBACK_APPLIED"
+    assert pending[0]["next_stage"] == "ACKED"
