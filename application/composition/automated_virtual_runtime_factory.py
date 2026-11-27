@@ -69,6 +69,11 @@ from environments.high_speed.track6_validation_state_store import Track6Validati
 logger = logging.getLogger(__name__)
 
 
+def _should_release_track7_validation_reservation(result, *, group_has_open_lots: bool) -> bool:
+    """Keep Track7 risk reserved while any group order remains pending."""
+    return not group_has_open_lots and int(getattr(result, "pending_legs", 0) or 0) == 0
+
+
 def _is_validation_only_synthetic_provider(provider) -> bool:
     return (
         getattr(provider, "validation_only", False) is True
@@ -483,7 +488,9 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
             validation_only_s9_runtime_adapter.release_group(plan.group_id)
         if (validation_only_s7_runtime_adapter is not None and plan.strategy_id == "track7_volatility_skew_weekly_insurance"):
             group_has_open_lots = any(lot.run_id == run_id and lot.strategy_id == "track7_volatility_skew_weekly_insurance" and lot.group_id == plan.group_id and lot.remaining_quantity > 0 for lot in multi_leg_bridge.position_lot_store.open_lots())
-            if not group_has_open_lots:
+            if _should_release_track7_validation_reservation(
+                result, group_has_open_lots=group_has_open_lots,
+            ):
                 validation_only_s7_runtime_adapter.release_group(plan.group_id)
         if (validation_only_track6_execution_gate is not None
                 and validation_only_track6_lifecycle_config is not None
