@@ -125,3 +125,64 @@ def test_s7_validation_gate_reserves_put_then_call_with_one_shared_group():
         "put": Decimal("315000.00"), "call": Decimal("290000.00")
     }
     assert adapter.risk_audit_records[-1]["computed_gross_premium_krw"] == "605000.00"
+
+
+def test_s7_group_reservations_are_instance_local_across_runtime_reconstruction():
+    original = _adapter()
+    original.bind_run_id("S7-RESTART-RESERVATION-TEST")
+    for group_id, expiry, put_ask, call_ask in (
+        ("group-mon", "20261109", "1.26", "1.16"),
+        ("group-thu", "20261112", "2.42", "2.20"),
+    ):
+        plan = SimpleNamespace(
+            strategy_id="track7_volatility_skew_weekly_insurance",
+            purpose="WEEKLY_INSURANCE_ENTRY",
+            group_id=group_id,
+        )
+        original.validate_group(plan, [
+            _prepared_leg("put", expiry, put_ask),
+            _prepared_leg("call", expiry, call_ask),
+        ])
+
+    assert set(original._reserved) == {"group-mon", "group-thu"}
+
+    # A newly constructed adapter has no durable reservation restore input.
+    recovered = _adapter()
+    recovered.bind_run_id("S7-RESTART-RESERVATION-TEST")
+    assert recovered._reserved == {}
+    assert recovered._reserved_entry_fees == {}
+    assert recovered._group_expiry_by_id == {}
+
+    # The fresh instance can consume its local two-group capacity without
+    # knowledge of the two still-reserved groups in the previous instance.
+    new_plan = SimpleNamespace(
+        strategy_id="track7_volatility_skew_weekly_insurance",
+        purpose="WEEKLY_INSURANCE_ENTRY",
+        group_id="group-after-reconstruction",
+    )
+    recovered.validate_group(new_plan, [
+        _prepared_leg("put", "20261116", "1.26"),
+        _prepared_leg("call", "20261116", "1.16"),
+    ])
+    assert set(recovered._reserved) == {"group-after-reconstruction"}
+
+
+def test_s7_group_reservation_release_is_idempotent_for_duplicate_terminal_delivery():
+    adapter = _adapter()
+    adapter.bind_run_id("S7-DUPLICATE-TERMINAL-TEST")
+    plan = SimpleNamespace(
+        strategy_id="track7_volatility_skew_weekly_insurance",
+        purpose="WEEKLY_INSURANCE_ENTRY",
+        group_id="group-terminal",
+    )
+    adapter.validate_group(plan, [
+        _prepared_leg("put", "20261109", "1.26"),
+        _prepared_leg("call", "20261109", "1.16"),
+    ])
+
+    adapter.release_group("group-terminal")
+    adapter.release_group("group-terminal")
+
+    assert adapter._reserved == {}
+    assert adapter._reserved_entry_fees == {}
+    assert adapter._group_expiry_by_id == {}
