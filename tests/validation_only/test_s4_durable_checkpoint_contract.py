@@ -500,3 +500,93 @@ while True:
     assert work[0]["next_stage"] == "BRIDGE_APPLIED"
     assert work[0]["last_committed_checkpoint"]["checkpoint_id"] == "os-restart-cp-1"
     assert restarted.get_event_status(event) == "ACCOUNT_APPLIED"
+
+
+def test_cross_process_recovery_and_late_fill_redelivery_preserve_event_ack_boundary(tmp_path):
+    import os
+    import subprocess
+    import sys
+
+    database = tmp_path / "s4-cross-process-late-fill.sqlite3"
+    first_process = r'''import sys
+from pathlib import Path
+from application.composition.validation_only_s4_checkpoint import (
+    S4ExecutionEventIdentity, S4ExecutionStage,
+    SqliteS4ValidationCheckpointStore, ValidationOnlyS4CheckpointCoordinator,
+)
+db = Path(sys.argv[1])
+identity = S4ExecutionEventIdentity("SYNTHETIC:S4_CHECKPOINT_CONTRACT_V1", "validation-account-001", "validation-vssf-engine-001", "EXEC-000001")
+payload = {"run_id":"validation-run-001", "strategy_id":"track4_gamma_scalping", "group_id":"s4-group-001", "client_order_id":"client-order-001", "fingerprint":"fill-fingerprint-001", "status":"FILLED", "filled_quantity":1, "remaining_quantity":0, "execution_timestamp":"2026-11-27T09:00:00+09:00"}
+coordinator = ValidationOnlyS4CheckpointCoordinator(SqliteS4ValidationCheckpointStore(db))
+coordinator.receive_execution(identity, payload)
+checkpoint = {"schema_version":1,"checkpoint_id":"cross-process-cp-1","run_id":payload["run_id"],"strategy_id":payload["strategy_id"],"group_id":payload["group_id"],"source_namespace":identity.source_namespace,"account_id":identity.account_id,"execution_source_id":identity.execution_source_id,"execution_id":identity.execution_id,"revision":1,"previous_checkpoint_id":None,"phase":"ACCOUNT_APPLIED","validation_only":True,"runtime_use":"PROHIBITED_OUTSIDE_VALIDATION","state":{"account_state":{"balance":"1000000","positions":["EXEC-000001"]},"bridge_state":{"applied_execution_ids":[]},"strategy_state":{"exit_pending":False},"pending_orders":[],"position_lots":[],"fee_ledger":[],"execution_watermarks":{},"callback_state":{"completed":False}}}
+coordinator.commit_projection(identity, S4ExecutionStage.ACCOUNT_APPLIED, checkpoint)
+print("ACCOUNT_CHECKPOINT_COMMITTED", flush=True)
+'''
+    first = subprocess.run(
+        [sys.executable, "-c", first_process, str(database)],
+        cwd=os.getcwd(), capture_output=True, text=True, timeout=20, check=False,
+    )
+    assert first.returncode == 0, first.stderr
+    assert "ACCOUNT_CHECKPOINT_COMMITTED" in first.stdout
+
+    second_process = r'''import sys
+from pathlib import Path
+from application.composition.validation_only_s4_checkpoint import (
+    S4ExecutionEventIdentity, S4ExecutionStage,
+    SqliteS4ValidationCheckpointStore, ValidationOnlyS4CheckpointCoordinator,
+)
+db = Path(sys.argv[1])
+store = SqliteS4ValidationCheckpointStore(db)
+coordinator = ValidationOnlyS4CheckpointCoordinator(store)
+identity = S4ExecutionEventIdentity("SYNTHETIC:S4_CHECKPOINT_CONTRACT_V1", "validation-account-001", "validation-vssf-engine-001", "EXEC-000001")
+payload = {"run_id":"validation-run-001", "strategy_id":"track4_gamma_scalping", "group_id":"s4-group-001", "client_order_id":"client-order-001", "fingerprint":"fill-fingerprint-001", "status":"FILLED", "filled_quantity":1, "remaining_quantity":0, "execution_timestamp":"2026-11-27T09:00:00+09:00"}
+assert coordinator.receive_execution(identity, payload) == "ACCOUNT_APPLIED"
+work = coordinator.recovery_work()
+assert len(work) == 1 and work[0]["next_stage"] == "BRIDGE_APPLIED"
+previous = "cross-process-cp-1"
+revision = 1
+def commit_all(event_identity, event_payload, prefix, start_revision):
+    global previous, revision
+    for stage in (S4ExecutionStage.BRIDGE_APPLIED, S4ExecutionStage.CALLBACK_APPLIED, S4ExecutionStage.ACKED):
+        revision += 1
+        phase = stage.value
+        state = {"account_state":{"balance":"1000000","positions":[event_identity.execution_id]},"bridge_state":{"applied_execution_ids":[event_identity.execution_id] if stage != S4ExecutionStage.BRIDGE_APPLIED else []},"strategy_state":{"exit_pending":False},"pending_orders":[],"position_lots":[],"fee_ledger":[],"execution_watermarks":{},"callback_state":{"completed":stage in (S4ExecutionStage.CALLBACK_APPLIED,S4ExecutionStage.ACKED)}}
+        cp = {"schema_version":1,"checkpoint_id":f"{prefix}-{revision}","run_id":event_payload["run_id"],"strategy_id":event_payload["strategy_id"],"group_id":event_payload["group_id"],"source_namespace":event_identity.source_namespace,"account_id":event_identity.account_id,"execution_source_id":event_identity.execution_source_id,"execution_id":event_identity.execution_id,"revision":revision,"previous_checkpoint_id":previous,"phase":phase,"validation_only":True,"runtime_use":"PROHIBITED_OUTSIDE_VALIDATION","state":state}
+        coordinator.commit_projection(event_identity, stage, cp)
+        previous = cp["checkpoint_id"]
+commit_all(identity, payload, "first-event", 2)
+late_identity = S4ExecutionEventIdentity(identity.source_namespace, identity.account_id, identity.execution_source_id, "EXEC-000000-LATE")
+late_payload = dict(payload, client_order_id="client-order-late", fingerprint="late-fill-fingerprint", execution_timestamp="2026-11-27T08:59:59+09:00")
+assert coordinator.receive_execution(late_identity, late_payload) == "RECEIVED"
+revision += 1
+late_account = {"schema_version":1,"checkpoint_id":f"late-account-{revision}","run_id":late_payload["run_id"],"strategy_id":late_payload["strategy_id"],"group_id":late_payload["group_id"],"source_namespace":late_identity.source_namespace,"account_id":late_identity.account_id,"execution_source_id":late_identity.execution_source_id,"execution_id":late_identity.execution_id,"revision":revision,"previous_checkpoint_id":previous,"phase":"ACCOUNT_APPLIED","validation_only":True,"runtime_use":"PROHIBITED_OUTSIDE_VALIDATION","state":{"account_state":{"balance":"1000000","positions":["EXEC-000001","EXEC-000000-LATE"]},"bridge_state":{"applied_execution_ids":["EXEC-000001"]},"strategy_state":{"exit_pending":False},"pending_orders":[],"position_lots":[],"fee_ledger":[],"execution_watermarks":{},"callback_state":{"completed":False}}}
+coordinator.commit_projection(late_identity, S4ExecutionStage.ACCOUNT_APPLIED, late_account)
+previous = late_account["checkpoint_id"]
+commit_all(late_identity, late_payload, "late-event", revision)
+assert coordinator.recovery_work() == []
+print("CROSS_PROCESS_RECOVERY_AND_LATE_FILL_ACKED", flush=True)
+'''
+    second = subprocess.run(
+        [sys.executable, "-c", second_process, str(database)],
+        cwd=os.getcwd(), capture_output=True, text=True, timeout=20, check=False,
+    )
+    assert second.returncode == 0, second.stderr
+    assert "CROSS_PROCESS_RECOVERY_AND_LATE_FILL_ACKED" in second.stdout
+
+    restarted = SqliteS4ValidationCheckpointStore(database)
+    coordinator = ValidationOnlyS4CheckpointCoordinator(restarted)
+    first_identity = identity()
+    late_identity = identity(execution_id="EXEC-000000-LATE")
+    assert coordinator.receive_execution(first_identity, event_payload()) == "ACKED"
+    late_payload = dict(event_payload(fingerprint="late-fill-fingerprint"),
+                        client_order_id="client-order-late",
+                        execution_timestamp="2026-11-27T08:59:59+09:00")
+    assert coordinator.receive_execution(late_identity, late_payload) == "ACKED"
+    with pytest.raises(ValueError, match="S4_EXECUTION_ID_PAYLOAD_CONFLICT"):
+        coordinator.receive_execution(late_identity, dict(late_payload, filled_quantity=2))
+    assert coordinator.recovery_work() == []
+    latest = restarted.load_latest_checkpoint(RUN, STRATEGY, GROUP, ACCOUNT)
+    assert latest["revision"] == 8
+    assert latest["phase"] == "ACKED"
+    assert latest["state"]["callback_state"]["completed"] is True
