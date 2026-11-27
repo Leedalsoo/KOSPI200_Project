@@ -1,17 +1,15 @@
 ﻿from dataclasses import replace
 from datetime import datetime, timedelta
 from decimal import Decimal
-from hashlib import sha256
 from pathlib import Path
 
 from application.bootstrap import create_virtual_runtime_bootstrap
 from application.composition.automated_virtual_runtime_factory import attach_standard_automated_loop
-from contracts.market_data_freshness import FreshnessStatus, FreshnessVerdict
 from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
-from core.strategy.track7_volatility_skew_weekly_insurance import Track7VolatilitySkewWeeklyInsurance
 from environments.high_speed.replay_runner import HighSpeedReplayRunner
 from environments.high_speed.synthetic_replay_adapter import SyntheticReplayAdapter
 from environments.high_speed.synthetic_runtime_sources import SyntheticRuntimeSources, build_synthetic_option_master
+from environments.high_speed.validation_only_track7_execution import S7ValidationOnlyRuntimeAdapter
 from environments.high_speed.virtual_runtime_replay import _publish_contract_scoped_replay_quote
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -19,11 +17,11 @@ DATASET = ROOT / "data/derived_scenario/q25_s05_3_s7_concurrent"
 MANIFEST = DATASET / "manifest.json"
 
 
-def _proposal(tag_id: str, option_type: str, strike: Decimal):
+def _proposal(tag_id: str, option_type: str, strike: Decimal, *, side: str = "BUY"):
     return StrategyExecutionProposal(
         proposed_quantity=1,
         asset_type="OPTION",
-        side="BUY",
+        side=side,
         track_id="track7_volatility_skew_weekly_insurance",
         tag_id=tag_id,
         option_type=option_type,
@@ -60,21 +58,26 @@ def test_s7_pending_call_reconciliation_keeps_original_expiry_after_market_tick_
     )
     if bootstrap.automated_loop is not None:
         bootstrap.bundle.market.unsubscribe(bootstrap.automated_loop.on_tick)
+    s7_adapter = S7ValidationOnlyRuntimeAdapter(
+        dataset=DATASET, manifest_path=MANIFEST,
+        risk_profile_path=ROOT / "config/validation_only/q25_s05_3_s7_concurrent/risk_profile.json",
+    )
+    s7_adapter.bind_run_id("Q25-S7-PENDING-IDENTITY-RECONCILIATION")
     loop = attach_standard_automated_loop(
         bootstrap,
-        strategy_keys=(("TRACK1_TAIL_DEFENSE", "1.2.0"),),
+        strategy_keys=(("track7_volatility_skew_weekly_insurance", "1.0"),),
         run_id="Q25-S7-PENDING-IDENTITY-RECONCILIATION",
         synthetic_runtime_sources=sources,
         track4_greeks_provider=sources,
         risk_guard_status_source=sources,
+        validation_only_s7_runtime_adapter=s7_adapter,
     )
     bootstrap.bundle.market.unsubscribe(loop.on_tick)
     bridge = loop.multi_leg_bridge
     vssf = bootstrap.bundle.execution._authoritative_execute.__self__.vssf_runtime
 
-    strategy = Track7VolatilitySkewWeeklyInsurance(
-        runtime_config_verified=True,
-        risk_limits_available=True,
+    strategy = loop.strategy_hub._orchestrator._registry.get(
+        "track7_volatility_skew_weekly_insurance", "1.0",
     )
     strategy._activate_expiry("20261112")
     strategy.state = strategy.state.__class__(
@@ -85,29 +88,6 @@ def test_s7_pending_call_reconciliation_keeps_original_expiry_after_market_tick_
         contract_multiplier=Decimal("250000"),
         entry_stage="PUT_READY",
     )
-    bridge.execution_result_callback = lambda plan, result: strategy.on_execution_result(
-        plan.purpose, result
-    )
-
-    def freshness(plan, leg, identity, command):
-        observed = datetime.fromisoformat(call_tick.timestamp)
-        return FreshnessVerdict(
-            status=FreshnessStatus.FRESH,
-            reason="S7_PENDING_IDENTITY_RECONCILIATION_FIXTURE",
-            policy_version="S7-PENDING-IDENTITY-v1",
-            source="DERIVED_SCENARIO_TEST_FIXTURE",
-            tr_id="SYNTHETIC-REPLAY-TEST",
-            environment="VIRTUAL_VALIDATION_ONLY",
-            instrument_id=command.instrument_id,
-            symbol=command.broker_symbol,
-            source_instant=observed,
-            received_at=observed,
-            evidence_sha256=sha256(
-                f"{observed.isoformat()}|{command.instrument_id}".encode()
-            ).hexdigest(),
-        )
-
-    bridge.freshness_verdict_provider = freshness
     _publish_contract_scoped_replay_quote(
         put_tick,
         option_master=master,
@@ -146,9 +126,26 @@ def test_s7_pending_call_reconciliation_keeps_original_expiry_after_market_tick_
     assert call_result.pending_legs == 1
     assert strategy.state.entry_stage == "CALL_PENDING"
 
+    # The factory callback correlates the pending Bridge order and the
+    # already-filled PUT PositionLot without releasing the group reservation.
+    assert set(s7_adapter._reserved[call_plan.group_id]) == {"put", "call"}
+    assert len(bridge.pending_legs) == 1
+    pending_lots = [lot for lot in bridge.position_lot_store.open_lots()
+                    if lot.run_id == "Q25-S7-PENDING-IDENTITY-RECONCILIATION"
+                    and lot.group_id == call_plan.group_id]
+    assert len(pending_lots) == 1
+    pending_fees = bridge.fee_ledger.snapshot(run_id="Q25-S7-PENDING-IDENTITY-RECONCILIATION")
+    assert len(pending_fees) == 1
+    assert pending_fees[0].execution_id == pending_lots[0].execution_id
+    assert pending_fees[0].group_id == pending_lots[0].group_id == call_plan.group_id
+
     client_order_id = call_result.reports[0].client_order_id
     stored_group_plan, stored_leg, stored_command = bridge.pending_legs[client_order_id]
     assert stored_command.client_order_id == client_order_id
+    assert stored_group_plan.group_id == call_plan.group_id
+    assert stored_leg.leg_id == "call"
+    assert stored_command.group_id == call_plan.group_id
+    assert stored_command.leg_id == "call"
     assert stored_leg.instrument_identity.expiry == "20261112"
     assert {
         leg.instrument_identity.expiry for leg in stored_group_plan.legs
@@ -192,6 +189,15 @@ def test_s7_pending_call_reconciliation_keeps_original_expiry_after_market_tick_
     open_lots = bridge.position_lot_store.open_lots()
     assert len(open_lots) == 2
     assert {lot.instrument_identity.expiry for lot in open_lots} == {"20261112"}
+    fee_rows = bridge.fee_ledger.snapshot(run_id="Q25-S7-PENDING-IDENTITY-RECONCILIATION")
+    assert len(fee_rows) == 2
+    assert {row.execution_id for row in fee_rows} == {lot.execution_id for lot in open_lots}
+    assert {row.group_id for row in fee_rows} == {call_plan.group_id}
+    assert {lot.group_id for lot in open_lots} == {call_plan.group_id}
+    assert {lot.run_id for lot in open_lots} == {"Q25-S7-PENDING-IDENTITY-RECONCILIATION"}
+    assert set(s7_adapter._reserved[call_plan.group_id]) == {"put", "call"}
+    assert s7_adapter._reserved_entry_fees[call_plan.group_id]
+    assert s7_adapter._group_expiry_by_id[call_plan.group_id] == "20261112"
     snapshot = bridge.position_groups.snapshot(call_plan.group_id)
     assert snapshot is not None
     assert {leg.instrument_id for leg in snapshot.legs} == {
