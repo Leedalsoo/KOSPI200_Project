@@ -1,0 +1,57 @@
+{
+  "fixture_id": "S4-DURABLE-CHECKPOINT-CONTRACT-001",
+  "schema_version": "1.0.0",
+  "provenance": "SYNTHETIC:DERIVED_SCENARIO",
+  "validation_only": true,
+  "runtime_use": "PROHIBITED_OUTSIDE_VALIDATION",
+  "purpose": "Characterize a validation-only durable execution inbox, projection checkpoint, and ordered acknowledgement contract for S4 F25.",
+  "execution_identity": {
+    "source_namespace": "SYNTHETIC:S4_CHECKPOINT_CONTRACT_V1",
+    "account_id": "validation-account-001",
+    "execution_source_id": "validation-vssf-engine-001",
+    "execution_id": "EXEC-000001"
+  },
+  "event_scope": {
+    "run_id": "validation-run-001",
+    "strategy_id": "track4_gamma_scalping",
+    "group_id": "s4-group-001"
+  },
+  "stages": [
+    "RECEIVED",
+    "ACCOUNT_APPLIED",
+    "BRIDGE_APPLIED",
+    "CALLBACK_APPLIED",
+    "ACKED"
+  ],
+  "checkpoint_state_sections": [
+    "account_state",
+    "bridge_state",
+    "strategy_state",
+    "pending_orders",
+    "position_lots",
+    "fee_ledger",
+    "execution_watermarks",
+    "callback_state"
+  ],
+  "execution_report": {
+    "client_order_id": "client-order-001",
+    "status": "FILLED",
+    "filled_quantity": 1,
+    "remaining_quantity": 0,
+    "execution_timestamp": "2026-11-27T09:00:00+09:00",
+    "fingerprint": "fill-fingerprint-001"
+  },
+  "checkpoint_scope": [
+    "run_id",
+    "strategy_id",
+    "group_id",
+    "account_id"
+  ],
+  "single_inflight_event_scope": [
+    "run_id",
+    "strategy_id",
+    "group_id",
+    "account_id"
+  ],
+  "execution_source_owner": "execution_source_id is stable for the lifetime of a checkpoint lineage; changing it requires a new lineage and is rejected within an existing one."
+}

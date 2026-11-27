@@ -2041,3 +2041,29 @@
 - No KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original mutation.
 
 - Notion Q&A: https://app.notion.com/p/4255f4f6eaa18198bc96c66f9ded10be
+
+## 2026-11-27 No.1870 — S4 F25 validation-only durable checkpoint contract v1 (user-approved)
+
+- Approval scope: define and implement a validation-only checkpoint contract/store prototype. This approval does not enable S4, Production, KIS, REAL_VTS, account API, broker actions, or Live execution.
+- Sole validation owner: `ValidationOnlyS4CheckpointCoordinator`. It owns event receipt, ordered projection-stage acknowledgement and recovery-work enumeration. `recovery_work()` reports the next stage and last committed checkpoint; it deliberately performs no automatic replay.
+- Execution event identity is the composite `(source_namespace, account_id, execution_source_id, execution_id)`. `client_order_id` is correlation metadata only and is never a fallback event key. The namespace must be `SYNTHETIC:` or `VALIDATION_ONLY:`. The production/broker execution identity namespace remains unverified and is not accepted by this validation-only store.
+- Event unit: one execution report/fill event with non-empty execution ID, client order ID, fingerprint, timezone-aware execution timestamp, FILLED/PARTIALLY_FILLED status and positive filled quantity. Same composite identity + same canonical payload is idempotent; same identity + different payload is a conflict and is rejected.
+- Durable stages: `RECEIVED → ACCOUNT_APPLIED → BRIDGE_APPLIED → CALLBACK_APPLIED → ACKED`. Receipt is persisted before projections. Each subsequent stage and its complete composite state checkpoint are committed in one SQLite transaction. ACKED is permitted only after callback state has been checkpointed. This is an application-level ACK, not a broker ACK.
+- Checkpoint v1 requires account, Bridge, strategy, pending-order, PositionLot, Fee Ledger, execution-watermark and callback state sections. The full JSON payload is committed atomically with the stage marker. SQLite uses WAL + synchronous FULL, append-only event/stage/checkpoint rows, canonical JSON SHA-256 integrity, monotonic per-run/strategy/group revisions and previous-checkpoint hash-chain linkage.
+- Crash rule: if process memory changes but the corresponding stage/checkpoint transaction did not commit, discard the uncommitted process objects, restore the last committed composite checkpoint and replay from the persisted event's next stage. Never resume from dirty in-memory state. Runtime serializers/restorers and production orchestration wiring are not yet implemented.
+- Recovery precedence: validate checkpoint integrity/chain first. Where broker/account evidence is available, retain the existing U19 contract: broker position snapshot is primary, execution ledger must match, and pending/unknown orders require reconciliation. Missing, stale, conflicting or incomplete evidence fails closed; no automatic position adjustment, compensation or new order is inferred.
+- New validation-only implementation: `application/composition/validation_only_s4_checkpoint.py`; fixture `tests/fixtures/track4/synthetic_s4_durable_checkpoint_contract_v1.json`; tests `tests/validation_only/test_s4_durable_checkpoint_contract.py`.
+- Test-first import failure reproduced the missing store seam. Contract tests cover identity namespace, duplicate/conflict handling, durable receipt, stage order, atomic checkpoint+ACK, revision CAS, callback-before-ACK, restart readback, pending recovery plan, append-only behavior, payload tamper detection, hash-chain integrity and required state sections.
+- **25 focused contract tests passed**. Ten-module S4/F14/F16/F21/U16/U19/PositionLot/RiskEngine regression: **230 passed**. Compileall, scoped Ruff F821/F401/F841, fixture JSON parse and `git diff --check` PASS.
+- This is a validation-only persistence contract/store prototype, not an integrated runtime checkpoint. VSSF/Bridge/Track4 object serializers/restorers, cross-process runtime reconstruction, actual account↔Bridge projection wiring, automated recovery scheduling and authoritative broker execution identity remain OPEN. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
+- No KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original mutation.
+
+- Notion Q&A: https://app.notion.com/p/4255f4f6eaa181c08020cc3c91fbf5e0
+
+### F25 contract v1 clarification — account scope and single-writer lineage
+
+- Checkpoint lineage scope and single in-flight event scope are `(run_id, strategy_id, group_id, account_id)`. A second unacknowledged event in that same scope is rejected until the first reaches durable ACKED; different accounts/groups remain independent.
+- `execution_source_id` must remain stable across a checkpoint lineage. A changed source owner is rejected rather than silently continuing the prior sequence. This is validation-only synthetic engine ownership, not an approved KIS/broker identity.
+- Updated final validation after these constraints: 25 focused tests and 230 ten-module regressions passed. Current source/test/fixture SHA-256 values are recorded in No.1870.
+
+- Final SHA-256: source `B1E39CBF89E9E508D3D0D76FD41615B49076CD8AED208C56B45A0B3479DA9716`; test `870EBDABAF7FCDF264F8462F5E3EEF4DFB60D14CD20898E464BBD1B5C531F6E9`; fixture `1F5D424155A62A4F03ADD22336633BB8758CD612F0AA21D5571EA0192F07D1C9`.
