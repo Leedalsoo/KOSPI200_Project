@@ -881,3 +881,153 @@ print("PROCESS_C_FRESH_RESTORE_AND_REDELIVERY_IDEMPOTENT",flush=True)
     third = subprocess.run([sys.executable,"-c",process_c,str(database)],cwd=os.getcwd(),capture_output=True,text=True,timeout=30,check=False)
     assert third.returncode == 0, third.stderr
     assert "PROCESS_C_FRESH_RESTORE_AND_REDELIVERY_IDEMPOTENT" in third.stdout
+
+
+def test_s4_bridge_projection_interruption_restores_account_checkpoint_and_replays_after_fresh_instances(tmp_path, monkeypatch) -> None:
+    """A failed Bridge projection is discarded by restoring the last durable ACCOUNT_APPLIED snapshot."""
+    from application.composition.validation_only_s4_checkpoint import (
+        S4ExecutionEventIdentity,
+        S4ExecutionStage,
+        SqliteS4ValidationCheckpointStore,
+        ValidationOnlyS4CheckpointCoordinator,
+    )
+    from contracts.futures_contract_spec import FuturesProductType
+    from contracts.futures_identity_source_port import FuturesInstrumentIdentity
+    from contracts.types import BrokerOrderCommand, ExecutionLeg, ExecutionReport, MultiLegExecutionPlan
+    from core.strategy.track4_gamma_scalping import Track4GammaScalping
+    from environments.virtual.authoritative_vssf.firm_runtime import VirtualSecuritiesFirmRuntime
+    from shared.contracts.canonical import CanonicalAssetType, CanonicalOrderCommand, CanonicalOrderSide
+
+    run_id = "SYNTHETIC:S4:RUN:INTERRUPT-RESTART"
+    candidate_id = "SYNTHETIC:S4:CANDIDATE:INTERRUPT-RESTART"
+    strategy_id = "track4_gamma_scalping"
+    group_id = "SYNTHETIC:S4:GROUP:INTERRUPT-RESTART"
+    account_id = "SYNTHETIC:S4:ACCOUNT:INTERRUPT-RESTART"
+    namespace = "SYNTHETIC:S4:INTERRUPT-RESTART"
+    source_id = "SYNTHETIC:VSSF:ENGINE:INTERRUPT-RESTART"
+    source = "SYNTHETIC:DERIVED_SCENARIO"
+    stamp = datetime(2026, 11, 27, 9, 15, tzinfo=UTC)
+    identity = FuturesInstrumentIdentity(
+        instrument_id="SYNTHETIC:S4:MINI:INTERRUPT-RESTART",
+        symbol="SYNTHETIC:S4:MINI:INTERRUPT-RESTART",
+        product_type=FuturesProductType.MINI,
+        contract_multiplier=Decimal("50000"),
+        identity_source=source,
+    )
+
+    def make_runtime():
+        return VirtualSecuritiesFirmRuntime(
+            initial_capital=Decimal("1000000000"),
+            validation_run_id=run_id,
+            validation_candidate_id=candidate_id,
+        )
+
+    def make_bridge():
+        return _build_synthetic_bridge(run_id, group_id, strategy_id)
+
+    def make_strategy():
+        return Track4GammaScalping(
+            enabled=True, capital_gate_min=Decimal("1000"), risk_limits_available=True,
+        )
+
+    adapter = ValidationOnlyS4RuntimeSnapshotAdapter(
+        source_namespace=namespace, account_id=account_id, execution_source_id=source_id,
+    )
+    runtime = make_runtime()
+    account_command = CanonicalOrderCommand(
+        client_order_id="SYNTHETIC:S4:ACCOUNT-ORDER:INTERRUPT-RESTART",
+        track_id=strategy_id, asset_type=CanonicalAssetType.FUTURES,
+        side=CanonicalOrderSide.BUY, qty=1, price=1000.0,
+        symbol=identity.symbol, strategy_id=strategy_id, group_id=group_id,
+        leg_id="mini", instrument_id=identity.instrument_id,
+        contract_multiplier=50000.0, identity_source=source,
+    )
+    account_fill = runtime.execution_engine.execute_order(
+        account_command, Decimal("1000"), 1, timestamp=stamp,
+    )
+    runtime.account.apply_execution(account_fill)
+    bridge = make_bridge()
+    strategy = make_strategy()
+    snapshot = adapter.snapshot(
+        runtime=runtime, bridge=bridge, strategy=strategy,
+        run_id=run_id, strategy_id=strategy_id, group_id=group_id,
+        callback_state={"callback_sequence": 0},
+    )
+
+    event_identity = S4ExecutionEventIdentity(
+        source_namespace=namespace, account_id=account_id,
+        execution_source_id=source_id, execution_id=account_fill.exec_id,
+    )
+    event_payload = {
+        "run_id": run_id, "strategy_id": strategy_id, "group_id": group_id,
+        "fingerprint": "SYNTHETIC:INTERRUPT-RESTART:FINGERPRINT",
+        "client_order_id": account_fill.client_order_id,
+        "status": "FILLED", "filled_quantity": 1, "remaining_quantity": 0,
+        "execution_timestamp": stamp.isoformat(),
+    }
+    coordinator = ValidationOnlyS4CheckpointCoordinator(
+        SqliteS4ValidationCheckpointStore(tmp_path / "s4-interrupt-restart.sqlite3"),
+    )
+    assert coordinator.receive_execution(event_identity, event_payload) == "RECEIVED"
+    account_checkpoint = adapter.checkpoint_envelope(
+        snapshot, identity=event_identity, phase=S4ExecutionStage.ACCOUNT_APPLIED.value,
+        checkpoint_id="SYNTHETIC:INTERRUPT-RESTART:ACCOUNT-CP",
+        revision=1, previous_checkpoint_id=None,
+    )
+    coordinator.commit_projection(event_identity, S4ExecutionStage.ACCOUNT_APPLIED, account_checkpoint)
+
+    leg = ExecutionLeg(leg_id="mini", side="BUY", quantity=1, instrument_identity=identity)
+    plan = MultiLegExecutionPlan(group_id=group_id, strategy_id=strategy_id, legs=(leg,))
+    command = BrokerOrderCommand(
+        client_order_id=account_fill.client_order_id,
+        instrument_id=identity.instrument_id, side="BUY", quantity=1,
+        order_type="MARKET", instrument_identity=identity, asset_type="FUTURES",
+        strategy_id=strategy_id, group_id=group_id, leg_id="mini", position_role="NONE",
+    )
+    report = ExecutionReport(
+        client_order_id=command.client_order_id,
+        broker_order_id="SYNTHETIC:S4:BROKER:INTERRUPT-RESTART",
+        execution_id=account_fill.exec_id, status="FILLED", filled_quantity=1,
+        remaining_quantity=0, execution_price=Decimal("1000"),
+        execution_timestamp=stamp, fee=Decimal("0.25"), group_id=group_id, leg_id="mini",
+    )
+
+    original_record = bridge.fee_ledger.record
+
+    def interrupt_after_fee_write(fee):
+        original_record(fee)
+        raise RuntimeError("SYNTHETIC_CRASH_AFTER_FEE_WRITE")
+
+    monkeypatch.setattr(bridge.fee_ledger, "record", interrupt_after_fee_write)
+    with pytest.raises(RuntimeError, match="SYNTHETIC_CRASH_AFTER_FEE_WRITE"):
+        bridge._apply_reconciled_execution(
+            plan=plan, leg=leg, identity=identity, broker_command=command, report=report,
+        )
+    assert bridge.position_lot_store.history() == ()
+    assert bridge.fee_ledger.snapshot(run_id=run_id) == ()
+    assert bridge._applied_execution_fingerprints == {}
+
+    # Simulate process loss: discard the failed objects and restore the last committed checkpoint.
+    restarted_runtime = make_runtime()
+    restarted_bridge = make_bridge()
+    restarted_strategy = make_strategy()
+    callbacks = {}
+    restored = adapter.restore(
+        coordinator.store.load_latest_checkpoint(run_id, strategy_id, group_id, account_id),
+        runtime=restarted_runtime, bridge=restarted_bridge, strategy=restarted_strategy,
+        run_id=run_id, strategy_id=strategy_id, group_id=group_id, callback_state=callbacks,
+    )
+    assert restored["restored"] is True
+    assert callbacks == {"callback_sequence": 0}
+    assert len(restarted_runtime.account.ledger_engine.transactions) == 1
+    assert restarted_bridge.position_lot_store.history() == ()
+    assert restarted_bridge.fee_ledger.snapshot(run_id=run_id) == ()
+
+    restarted_runtime.account.apply_execution(restarted_runtime.execution_engine.reports[0])
+    assert len(restarted_runtime.account.ledger_engine.transactions) == 1
+    restarted_bridge._apply_reconciled_execution(
+        plan=plan, leg=leg, identity=identity, broker_command=command, report=report,
+    )
+    assert len(restarted_bridge.position_lot_store.history()) == 1
+    assert len(restarted_bridge.fee_ledger.snapshot(run_id=run_id)) == 1
+    assert len(restarted_bridge._applied_execution_fingerprints) == 1

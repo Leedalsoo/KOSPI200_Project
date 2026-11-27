@@ -1405,8 +1405,8 @@ def test_s4_vssf_account_apply_and_bridge_publication_failure_are_separate_bound
     assert runtime.account.balance == account_balance_after_apply
     assert runtime.account.positions[instrument_id] == account_position_after_apply
     assert len(runtime.account.ledger_engine.transactions) == 1
-    # Bridge stores show the exact partial boundary: lot applied, later fee/projections absent.
-    assert len(bridge.position_lot_store.history()) == 1
+    # Bridge-local projections are rolled back even though the prior VSSF account apply remains.
+    assert bridge.position_lot_store.history() == ()
     assert bridge.fee_ledger.snapshot(run_id=run_id) == ()
     assert bridge.leg_positions == {}
     assert bridge._applied_execution_fingerprints == {}
@@ -1653,10 +1653,9 @@ def test_s4_filled_account_apply_then_each_bridge_stage_failure_is_bridge_replay
     assert bridge.execution_legs == {}
     assert bridge.provenance == {}
 
-    # Store-level write-after-mutation faults retain only the rows written before the fault.
-    assert len(bridge.position_lot_store.history()) == 1
-    expected_fee_rows = 0 if failure_stage == "position_lot_after_write" else 1
-    assert len(bridge.fee_ledger.snapshot(run_id=run_id)) == expected_fee_rows
+    # Every injected Bridge-local failure restores both stores, even after a write mutated.
+    assert bridge.position_lot_store.history() == ()
+    assert bridge.fee_ledger.snapshot(run_id=run_id) == ()
 
     # Explicit Bridge-only replay: no second account apply. Existing lot/fee idempotency
     # and guarded projection publication must converge the in-memory Bridge views.
@@ -2485,4 +2484,79 @@ def test_s4_bridge_execution_identity_conflict_does_not_partially_apply_sibling_
     assert bridge.position_lot_store.history() == before_lots
     assert bridge.position_lot_store.open_lots() == before_lots
     assert bridge.fee_ledger.snapshot(run_id=run_id) == before_fees
+    assert bridge._applied_execution_fingerprints == {}
+
+
+@pytest.mark.parametrize("interrupt_after", ["position_lot", "fee_ledger"])
+def test_s4_bridge_interruption_between_position_lot_and_fee_write_rolls_back_all_projections(monkeypatch, interrupt_after: str) -> None:
+    """A failure after either store mutates must leave the execution unapplied."""
+    from datetime import timezone
+
+    from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
+    from contracts.futures_contract_spec import FuturesProductType
+    from contracts.futures_identity_source_port import FuturesInstrumentIdentity
+    from contracts.types import BrokerOrderCommand, ExecutionLeg, ExecutionReport, MultiLegExecutionPlan
+    from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
+    from environments.virtual.position.virtual_position_lot_store import VirtualPositionLotStore
+
+    stamp = datetime(2026, 11, 27, 9, 0, tzinfo=timezone.utc)
+    run_id = "SYNTHETIC:S4:RUN:PROJECTION-INTERRUPTION"
+    strategy_id = "track4_gamma_scalping"
+    group_id = "SYNTHETIC:S4:GROUP:PROJECTION-INTERRUPTION"
+    identity = FuturesInstrumentIdentity(
+        instrument_id="SYNTHETIC:S4:INSTRUMENT:PROJECTION-INTERRUPTION",
+        symbol="SYNTHETIC:S4:SYMBOL:PROJECTION-INTERRUPTION",
+        product_type=FuturesProductType.MINI,
+        contract_multiplier=Decimal("50000"),
+        identity_source="SYNTHETIC:DERIVED_SCENARIO",
+    )
+    leg = ExecutionLeg(leg_id="mini", side="BUY", quantity=1, instrument_identity=identity)
+    plan = MultiLegExecutionPlan(group_id=group_id, strategy_id=strategy_id, purpose="GAMMA_REBALANCE", legs=(leg,))
+    command = BrokerOrderCommand(
+        client_order_id="SYNTHETIC:S4:ORDER:PROJECTION-INTERRUPTION",
+        instrument_id=identity.instrument_id, side="BUY", quantity=1, order_type="MARKET",
+        instrument_identity=identity, asset_type="FUTURES", strategy_id=strategy_id,
+        group_id=group_id, leg_id=leg.leg_id,
+    )
+    report = ExecutionReport(
+        client_order_id=command.client_order_id, broker_order_id="SYNTHETIC:S4:BROKER:PROJECTION-INTERRUPTION",
+        execution_id="SYNTHETIC:S4:EXEC:PROJECTION-INTERRUPTION", status="FILLED",
+        filled_quantity=1, remaining_quantity=0, execution_price=Decimal("1000"),
+        execution_timestamp=stamp, fee=Decimal("1"), group_id=group_id, leg_id=leg.leg_id,
+    )
+    bridge = VirtualMultiLegExecutionBridge.__new__(VirtualMultiLegExecutionBridge)
+    bridge.run_id = run_id
+    bridge.position_lot_store = VirtualPositionLotStore()
+    bridge.fee_ledger = VirtualTrack9FeeLedger()
+    bridge.leg_positions = {}
+    bridge.execution_legs = {}
+    bridge.provenance = {}
+    bridge._applied_execution_fingerprints = {}
+
+    def interrupt_after_lot_write(lot):
+        original_apply(lot)
+        raise RuntimeError("SYNTHETIC_INTERRUPTION_BETWEEN_PROJECTION_WRITES")
+
+    def interrupt_after_fee_write(fee):
+        original_record(fee)
+        raise RuntimeError("SYNTHETIC_INTERRUPTION_BETWEEN_PROJECTION_WRITES")
+
+    original_apply = bridge.position_lot_store.apply_execution
+    original_record = bridge.fee_ledger.record
+    if interrupt_after == "position_lot":
+        monkeypatch.setattr(bridge.position_lot_store, "apply_execution", interrupt_after_lot_write)
+    else:
+        monkeypatch.setattr(bridge.fee_ledger, "record", interrupt_after_fee_write)
+    with pytest.raises(RuntimeError, match="SYNTHETIC_INTERRUPTION_BETWEEN_PROJECTION_WRITES"):
+        bridge._apply_reconciled_execution(
+            plan=plan, leg=leg, identity=identity, broker_command=command, report=report,
+        )
+
+    assert bridge.position_lot_store.history() == ()
+    assert bridge.position_lot_store.open_lots() == ()
+    assert bridge.position_lot_store.close_events() == ()
+    assert bridge.fee_ledger.snapshot(run_id=run_id) == ()
+    assert bridge.leg_positions == {}
+    assert bridge.execution_legs == {}
+    assert bridge.provenance == {}
     assert bridge._applied_execution_fingerprints == {}

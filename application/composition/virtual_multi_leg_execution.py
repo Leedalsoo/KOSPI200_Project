@@ -1045,16 +1045,10 @@ class VirtualMultiLegExecutionBridge:
             # A conflicting fee record must not leave a newly applied PositionLot.
             self.position_lot_store.validate_execution(lot)
             self.fee_ledger.validate_record(fee_record)
-            self.position_lot_store.apply_execution(lot)
-            self.fee_ledger.record(fee_record)
-            # Apply to a candidate copy and publish only after the aggregate
-            # operation returns. If it raises after mutating its receiver, the
-            # bridge's previously published aggregate remains replay-safe.
+            # Build every fallible derived value before mutating the sibling
+            # execution projections. The published aggregate is a candidate copy.
             candidate_position = replace(leg_position)
             VirtualPositionFillAdapter(candidate_position).apply(broker_command, fill_report)
-            # Publish the in-memory projection indexes as one guarded unit. If a
-            # mapping write fails after an earlier write succeeded, restore the
-            # prior published values so replay cannot double-apply the aggregate.
             execution_metadata = {
                 "strategy_id": plan.strategy_id, "side": leg.side,
                 "position_role": leg.position_role,
@@ -1079,10 +1073,27 @@ class VirtualMultiLegExecutionBridge:
                 (self.execution_legs, execution_id, self.execution_legs.get(execution_id, missing), execution_metadata),
                 (self.provenance, execution_id, self.provenance.get(execution_id, missing), provenance_metadata),
             )
+            # Keep a rollback image for both stores as well as the bridge indexes.
+            # Store values are immutable records; shallow container copies preserve
+            # the exact pre-event projection while avoiding mutation of originals.
+            lot_store_before = (
+                dict(self.position_lot_store._lots),
+                list(self.position_lot_store._history),
+                list(self.position_lot_store._close_events),
+                dict(self.position_lot_store._executions),
+            )
+            fee_records_before = dict(self.fee_ledger._records)
             try:
+                self.position_lot_store.apply_execution(lot)
+                self.fee_ledger.record(fee_record)
                 for mapping, key, _previous, value in publication:
                     mapping[key] = value
             except Exception:
+                self.position_lot_store._lots = lot_store_before[0]
+                self.position_lot_store._history = lot_store_before[1]
+                self.position_lot_store._close_events = lot_store_before[2]
+                self.position_lot_store._executions = lot_store_before[3]
+                self.fee_ledger._records = fee_records_before
                 for mapping, key, previous, _value in reversed(publication):
                     if previous is missing:
                         mapping.pop(key, None)
