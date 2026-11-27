@@ -2402,3 +2402,87 @@ def test_s4_track4_callback_state_is_idempotent_when_replayed_after_restart() ->
         restarted_strategy._exit_pending,
     )
     assert after_replay == (True, 0, Decimal("0"), False, False)
+
+
+@pytest.mark.parametrize(
+    ("conflict_store", "expected_error"),
+    [("fee", "TRACK9_FEE_DUPLICATE_CONFLICT"), ("position_lot", "POSITION_PROVENANCE_DUPLICATE_CONFLICT")],
+)
+def test_s4_bridge_execution_identity_conflict_does_not_partially_apply_sibling_projection(
+    conflict_store: str, expected_error: str,
+) -> None:
+    """Either ledger conflict is rejected before the sibling projection mutates."""
+    from datetime import timezone
+
+    from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
+    from contracts.futures_contract_spec import FuturesProductType
+    from contracts.futures_identity_source_port import FuturesInstrumentIdentity
+    from contracts.position_provenance import PositionLotProvenance, PositionRole
+    from contracts.track9_fee_ledger import Track9FeeRecord
+    from contracts.types import BrokerOrderCommand, ExecutionLeg, ExecutionReport, MultiLegExecutionPlan
+    from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
+    from environments.virtual.position.virtual_position_lot_store import VirtualPositionLotStore
+
+    stamp = datetime(2026, 11, 27, 1, 0, tzinfo=timezone.utc)
+    run_id = "SYNTHETIC:S4:RUN:FEE-CONFLICT"
+    strategy_id = "track4_gamma_scalping"
+    group_id = "SYNTHETIC:S4:GROUP:FEE-CONFLICT"
+    execution_id = "SYNTHETIC:S4:EXEC:FEE-CONFLICT"
+    client_order_id = "SYNTHETIC:S4:ORDER:FEE-CONFLICT"
+    identity = FuturesInstrumentIdentity(
+        instrument_id="SYNTHETIC:S4:INSTRUMENT:FEE-CONFLICT",
+        symbol="SYNTHETIC:S4:SYMBOL:FEE-CONFLICT",
+        product_type=FuturesProductType.MINI,
+        contract_multiplier=Decimal("50000"),
+        identity_source="SYNTHETIC:DERIVED_SCENARIO",
+    )
+    leg = ExecutionLeg(leg_id="mini", side="BUY", quantity=1, instrument_identity=identity)
+    plan = MultiLegExecutionPlan(group_id=group_id, strategy_id=strategy_id, purpose="GAMMA_REBALANCE", legs=(leg,))
+    command = BrokerOrderCommand(
+        client_order_id=client_order_id, instrument_id=identity.instrument_id, side="BUY",
+        quantity=1, order_type="MARKET", instrument_identity=identity, asset_type="FUTURES",
+        strategy_id=strategy_id, group_id=group_id, leg_id=leg.leg_id,
+    )
+    report = ExecutionReport(
+        client_order_id=client_order_id, broker_order_id="SYNTHETIC:BROKER:FEE-CONFLICT",
+        execution_id=execution_id, status="FILLED", filled_quantity=1, remaining_quantity=0,
+        execution_price=Decimal("1000"), execution_timestamp=stamp, fee=Decimal("1"),
+        group_id=group_id, leg_id=leg.leg_id,
+    )
+    bridge = VirtualMultiLegExecutionBridge.__new__(VirtualMultiLegExecutionBridge)
+    bridge.run_id = run_id
+    bridge.position_lot_store = VirtualPositionLotStore()
+    bridge.fee_ledger = VirtualTrack9FeeLedger()
+    bridge.leg_positions = {}
+    bridge.execution_legs = {}
+    bridge.provenance = {}
+    bridge._applied_execution_fingerprints = {}
+    if conflict_store == "fee":
+        bridge.fee_ledger.record(Track9FeeRecord(
+            run_id=run_id, strategy_id=strategy_id, group_id=group_id, leg_id=leg.leg_id,
+            client_order_id=client_order_id, execution_id=execution_id,
+            instrument_id=identity.instrument_id, fee_amount=Decimal("9"),
+            executed_quantity=1, executed_price=Decimal("1000"), executed_at=stamp,
+            source="SYNTHETIC:CONFLICTING_FEE_FIXTURE",
+        ))
+    else:
+        bridge.position_lot_store.apply_execution(PositionLotProvenance(
+            run_id=run_id, instrument_id=identity.instrument_id, strategy_id=strategy_id,
+            group_id=group_id, leg_id=leg.leg_id, client_order_id=client_order_id,
+            execution_id=execution_id, side="SELL", opened_quantity=1, remaining_quantity=1,
+            execution_timestamp=stamp, instrument_identity=identity,
+            contract_multiplier=identity.contract_multiplier, identity_source=identity.identity_source,
+            position_role=PositionRole.NONE,
+        ))
+    before_lots = bridge.position_lot_store.history()
+    before_fees = bridge.fee_ledger.snapshot(run_id=run_id)
+
+    with pytest.raises(ValueError, match=expected_error):
+        bridge._apply_reconciled_execution(
+            plan=plan, leg=leg, identity=identity, broker_command=command, report=report,
+        )
+
+    assert bridge.position_lot_store.history() == before_lots
+    assert bridge.position_lot_store.open_lots() == before_lots
+    assert bridge.fee_ledger.snapshot(run_id=run_id) == before_fees
+    assert bridge._applied_execution_fingerprints == {}

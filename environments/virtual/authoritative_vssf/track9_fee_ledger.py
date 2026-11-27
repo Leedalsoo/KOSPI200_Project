@@ -12,11 +12,15 @@ class VirtualTrack9FeeLedger(Track9FeeLedger):
     def __init__(self) -> None:
         self._records: dict[str, Track9FeeRecord] = {}
 
-    def record(self, fee: Track9FeeRecord) -> None:
+    def validate_record(self, fee: Track9FeeRecord) -> None:
+        """Validate an execution fee identity without mutating the ledger."""
         existing = self._records.get(fee.execution_id)
-        if existing is not None:
-            if existing != fee:
-                raise ValueError("TRACK9_FEE_DUPLICATE_CONFLICT")
+        if existing is not None and existing != fee:
+            raise ValueError("TRACK9_FEE_DUPLICATE_CONFLICT")
+
+    def record(self, fee: Track9FeeRecord) -> None:
+        self.validate_record(fee)
+        if fee.execution_id in self._records:
             return
         self._records[fee.execution_id] = fee
 

@@ -12,15 +12,23 @@ class VirtualPositionLotStore:
         self._close_events: list[PositionLotCloseEvent] = []
         self._executions: dict[str, tuple] = {}
 
-    def apply_execution(self, lot: PositionLotProvenance) -> None:
+    def validate_execution(self, lot: PositionLotProvenance) -> None:
+        """Validate an execution identity without mutating the lot projection."""
         lot.validate()
         fingerprint = (lot.run_id, lot.instrument_id, lot.side, lot.opened_quantity,
                        lot.execution_timestamp, lot.strategy_id, lot.group_id,
                        lot.leg_id, lot.client_order_id, lot.position_role)
         prior = self._executions.get(lot.execution_id)
+        if prior is not None and prior != fingerprint:
+            raise ValueError("POSITION_PROVENANCE_DUPLICATE_CONFLICT")
+
+    def apply_execution(self, lot: PositionLotProvenance) -> None:
+        self.validate_execution(lot)
+        fingerprint = (lot.run_id, lot.instrument_id, lot.side, lot.opened_quantity,
+                       lot.execution_timestamp, lot.strategy_id, lot.group_id,
+                       lot.leg_id, lot.client_order_id, lot.position_role)
+        prior = self._executions.get(lot.execution_id)
         if prior is not None:
-            if prior != fingerprint:
-                raise ValueError("POSITION_PROVENANCE_DUPLICATE_CONFLICT")
             return
         self._executions[lot.execution_id] = fingerprint
         opposite = "SELL" if lot.side == "BUY" else "BUY"

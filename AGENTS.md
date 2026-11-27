@@ -1,3 +1,13 @@
+## 2026-11-27 No.1879 ? S4 F25 PositionLot / Fee Ledger conflict preflight
+
+- Test-first reproduction: when a synthetic execution ID already has a conflicting Fee Ledger record, `_apply_reconciled_execution()` raised `TRACK9_FEE_DUPLICATE_CONFLICT` only after inserting the new PositionLot. This left sibling projections partially applied.
+- Fixed the source path by adding non-mutating `VirtualPositionLotStore.validate_execution()` and `VirtualTrack9FeeLedger.validate_record()` checks. `VirtualMultiLegExecutionBridge` now validates both execution-keyed projections before applying either. Exact duplicate replay remains idempotent; conflicting PositionLot or Fee Ledger identity is rejected without changing its sibling projection.
+- Added parameterized validation-only tests for both conflict directions. Pre-fix test: **1 failed** with the partial PositionLot mutation; post-fix conflict cases: **2 passed**.
+- Focused S4/F25 regression: **91 passed**; all `tests/validation_only`: **154 passed**; PositionLot store regression: **1 passed**. Compileall, Ruff F821/F841 and `git diff --check`: PASS.
+- This fixes in-memory Virtual projection preflight only. It does not establish cross-process transaction atomicity, OS power-loss durability, broker authority/ACK, callback exactly-once, recovery ownership/lease/fencing/retry, or Production wiring. No.1877's concurrent-reader boundary remains OPEN. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
+- No KIS/REAL_VTS/account/Live API, broker action, actual order, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original mutation.
+- Notion: https://app.notion.com/p/4255f4f6eaa1815dbb44ed38b58534aa
+
 ## 2026-11-27 No.1878 ? S4 F25 Track4 callback replay idempotency (validation-only)
 
 - Reconciled No.1877 concurrent Recovery Reader / stage-CAS result, No.1876 OS-process reconstruction, No.1875 cross-process late-fill/application ACK, No.1874 process termination, and current Notion Current Baseline / A8 SSOT / roadmap. No.1877 ownership/lease/fencing/retry decisions remain OPEN and are not superseded.

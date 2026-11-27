@@ -995,3 +995,13 @@ Focused S4 Runtime identity + spec alignment + attribution + Greek decomposition
 - ?? ??? Track4 in-memory state transition???. ?? callback side effect, durable receipt/outbox, exactly-once dispatch, recovery owner/lease/fencing ? retry policy? OPEN?? ??? ?? ?? ???? ???.
 - ?? ?? ??? ???? ?? source ??? ??. S4 ??? `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED` ??.
 - Notion: https://app.notion.com/p/4255f4f6eaa1817aa4c3cd06ff328ba4
+
+## F25 PositionLot / Fee Ledger conflict preflight ? No.1879 (2026-11-27)
+
+- `VirtualMultiLegExecutionBridge._apply_reconciled_execution()` constructs the execution-owned PositionLot and fee record, then preflights both identity-keyed projections before mutating either store.
+- `VirtualPositionLotStore.validate_execution()` rejects an existing execution ID with a different lot fingerprint without mutation. `VirtualTrack9FeeLedger.validate_record()` rejects an existing execution ID with a different fee/provenance record without mutation. The existing apply/record methods reuse these checks.
+- Synthetic test-first reproduction found a partial-write defect: a conflicting fee record raised after a new PositionLot had already been inserted. After the source fix, both Fee Ledger-conflict and PositionLot-conflict cases leave the sibling projection unchanged.
+- Evidence: conflict cases 2 passed; focused S4/F25 regression 91 passed; all `tests/validation_only` 154 passed; PositionLot store regression 1 passed; compileall, Ruff F821/F841 and diff-check PASS.
+- Scope is in-memory Virtual projection preflight only. It is not a cross-process transaction, durable OS-crash guarantee, broker ACK, callback exactly-once, automatic recovery worker, or Production/Live certification. No.1877 recovery reader ownership/lease/fencing/retry remains OPEN.
+- S4 status remains **DRAFT / UNVERIFIED / UNAPPROVED / DISABLED**.
+- Notion: https://app.notion.com/p/4255f4f6eaa1815dbb44ed38b58534aa

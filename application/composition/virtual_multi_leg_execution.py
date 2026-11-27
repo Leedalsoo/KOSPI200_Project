@@ -1030,20 +1030,23 @@ class VirtualMultiLegExecutionBridge:
                 identity_source=identity.identity_source or "",
                 position_role=PositionRole(leg.position_role),
             )
-            self.position_lot_store.apply_execution(lot)
-            self.fee_ledger.record(
-                Track9FeeRecord(
-                    run_id=self.run_id, strategy_id=plan.strategy_id,
-                    group_id=plan.group_id, leg_id=leg.leg_id,
-                    client_order_id=fill_report.client_order_id,
-                    execution_id=execution_id, instrument_id=identity.instrument_id,
-                    fee_amount=fill_report.fee,
-                    executed_quantity=fill_report.filled_quantity,
-                    executed_price=fill_report.execution_price,
-                    executed_at=fill_report.execution_timestamp,
-                    source="VSSF:CanonicalExecutionReport.fee",
-                )
+            fee_record = Track9FeeRecord(
+                run_id=self.run_id, strategy_id=plan.strategy_id,
+                group_id=plan.group_id, leg_id=leg.leg_id,
+                client_order_id=fill_report.client_order_id,
+                execution_id=execution_id, instrument_id=identity.instrument_id,
+                fee_amount=fill_report.fee,
+                executed_quantity=fill_report.filled_quantity,
+                executed_price=fill_report.execution_price,
+                executed_at=fill_report.execution_timestamp,
+                source="VSSF:CanonicalExecutionReport.fee",
             )
+            # Preflight every execution-keyed projection before mutating either one.
+            # A conflicting fee record must not leave a newly applied PositionLot.
+            self.position_lot_store.validate_execution(lot)
+            self.fee_ledger.validate_record(fee_record)
+            self.position_lot_store.apply_execution(lot)
+            self.fee_ledger.record(fee_record)
             # Apply to a candidate copy and publish only after the aggregate
             # operation returns. If it raises after mutating its receiver, the
             # bridge's previously published aggregate remains replay-safe.
