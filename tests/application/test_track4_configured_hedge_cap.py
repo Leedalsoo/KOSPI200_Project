@@ -42,6 +42,8 @@ def test_track4_delta_hedge_respects_configured_max_hedge_qty():
         deadband=Decimal("0"),
         equity=Decimal("1000000"),
         max_hedge_qty=2,
+        actual_hedge_qty=0,
+        pending_hedge_qty=0,
     )
 
     assert len(result) == 1

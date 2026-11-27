@@ -29,6 +29,11 @@ class Track4MarketInput:
     theta_decay_cost: Optional[Decimal] = None
     current_theta: Optional[Decimal] = None
     max_hedge_qty: int | None = None
+    # Signed MINI quantities for this run/strategy/group/instrument only.
+    # pending_hedge_qty is the net signed remaining quantity of non-terminal orders.
+    # The caller must reconcile identity/status; None means unavailable or ambiguous.
+    actual_hedge_qty: int | None = None
+    pending_hedge_qty: int | None = None
 
 
 @dataclass
@@ -111,6 +116,8 @@ class Track4GammaScalping:
         deadband: Decimal,
         equity: Decimal,
         max_hedge_qty: int | None = None,
+        actual_hedge_qty: int | None = None,
+        pending_hedge_qty: int | None = None,
     ) -> Sequence[Signal]:
         if self._exit_pending:
             return ()
@@ -126,14 +133,21 @@ class Track4GammaScalping:
             return ()
         if max_hedge_qty is None or max_hedge_qty <= 0:
             return ()
+        if (
+            not isinstance(actual_hedge_qty, int) or isinstance(actual_hedge_qty, bool)
+            or not isinstance(pending_hedge_qty, int) or isinstance(pending_hedge_qty, bool)
+        ):
+            return ()
         target_abs_qty = min(delta_to_mini_futures_qty(abs(delta)), max_hedge_qty)
         target_signed_qty = -target_abs_qty if delta > 0 else target_abs_qty
-        adjustment = target_signed_qty - self.state.active_hedge_qty
+        # active_hedge_qty is the desired target, never the actual-position baseline.
+        self.state.active_hedge_qty = target_signed_qty
+        projected_signed_qty = actual_hedge_qty + pending_hedge_qty
+        adjustment = target_signed_qty - projected_signed_qty
         if adjustment == 0:
             return ()
         hedge_side = "BUY" if adjustment > 0 else "SELL"
         qty = abs(adjustment)
-        self.state.active_hedge_qty = target_signed_qty
         return (Signal(
             self.strategy_id,
             hedge_side,
@@ -190,6 +204,8 @@ class Track4GammaScalping:
                 deadband=deadband,
                 equity=equity,
                 max_hedge_qty=data.max_hedge_qty,
+                actual_hedge_qty=data.actual_hedge_qty,
+                pending_hedge_qty=data.pending_hedge_qty,
             )
         )
         signals.extend(self.evaluate_profit_trailing(data, current_pnl=current_pnl, premium_spent=premium_spent))

@@ -1002,6 +1002,8 @@ def test_track4_strategy_emits_futures_hedge_without_owned_option_lot_evidence()
         deadband=Decimal("0.1"),
         equity=Decimal("1000000"),
         max_hedge_qty=5,
+        actual_hedge_qty=0,
+        pending_hedge_qty=0,
     )
     assert len(hedge) == 1
     assert hedge[0].execution_proposal is not None

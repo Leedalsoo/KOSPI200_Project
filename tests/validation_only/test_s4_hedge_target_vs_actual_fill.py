@@ -38,6 +38,8 @@ def test_track4_strategy_state_records_hedge_target_before_any_fill() -> None:
         deadband=Decimal("0"),
         equity=Decimal("1000000"),
         max_hedge_qty=2,
+        actual_hedge_qty=0,
+        pending_hedge_qty=0,
     )
 
     assert len(signals) == 1
@@ -95,6 +97,8 @@ def test_s4_group_callback_exposes_fill_events_but_not_order_side_or_instrument(
         deadband=Decimal("0"),
         equity=Decimal("1000000"),
         max_hedge_qty=2,
+        actual_hedge_qty=0,
+        pending_hedge_qty=0,
     )
     assert strategy.state.active_hedge_qty == -2
 
@@ -185,6 +189,8 @@ def test_s4_hedge_target_is_distinct_from_owned_lot_and_virtual_position_quantit
         deadband=Decimal("0"),
         equity=Decimal("1000000"),
         max_hedge_qty=2,
+        actual_hedge_qty=0,
+        pending_hedge_qty=0,
     )
     assert len(signals) == 1
     proposal = signals[0].execution_proposal
@@ -2278,3 +2284,64 @@ def test_s4_bridge_first_delivery_does_not_compare_command_group_leg_with_plan_w
     assert len(bridge.position_lot_store.history()) == 1
     assert len(bridge.fee_ledger.snapshot(run_id=bridge.run_id)) == 1
     assert fixture["expected_observations"]["command_group_leg_are_not_compared_to_plan_group_leg"] is True
+
+
+@pytest.mark.parametrize(
+    ("actual_hedge_qty", "pending_hedge_qty", "expected_side", "expected_quantity"),
+    [
+        (-1, -1, None, 0),
+        (-1, 0, "SELL", 1),
+        (-3, 0, "BUY", 1),
+        (-1, 1, "SELL", 2),
+        (0, -2, None, 0),
+    ],
+)
+def test_s4_hedge_rebalance_uses_actual_and_pending_signed_quantity(
+    actual_hedge_qty, pending_hedge_qty, expected_side, expected_quantity
+) -> None:
+    strategy = Track4GammaScalping(
+        enabled=True,
+        capital_gate_min=Decimal("1"),
+        risk_limits_available=True,
+    )
+
+    signals = strategy.evaluate_delta_hedge(
+        _market_input(),
+        delta=Decimal("1000000"),
+        deadband=Decimal("0"),
+        equity=Decimal("1000000"),
+        max_hedge_qty=2,
+        actual_hedge_qty=actual_hedge_qty,
+        pending_hedge_qty=pending_hedge_qty,
+    )
+
+    assert strategy.state.active_hedge_qty == -2
+    if expected_side is None:
+        assert signals == ()
+    else:
+        assert len(signals) == 1
+        proposal = signals[0].execution_proposal
+        assert proposal is not None
+        assert proposal.side == expected_side
+        assert proposal.proposed_quantity == expected_quantity
+
+
+def test_s4_hedge_rebalance_requires_actual_and_pending_position_snapshot() -> None:
+    strategy = Track4GammaScalping(
+        enabled=True,
+        capital_gate_min=Decimal("1"),
+        risk_limits_available=True,
+    )
+
+    signals = strategy.evaluate_delta_hedge(
+        _market_input(),
+        delta=Decimal("1000000"),
+        deadband=Decimal("0"),
+        equity=Decimal("1000000"),
+        max_hedge_qty=2,
+        actual_hedge_qty=None,
+        pending_hedge_qty=0,
+    )
+
+    assert signals == ()
+    assert strategy.state.active_hedge_qty == 0

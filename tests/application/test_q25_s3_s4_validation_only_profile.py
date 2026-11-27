@@ -111,6 +111,8 @@ def test_s4_synthetic_greek_stress_exercises_basecamp_and_futures_hedge_close():
         deadband=Decimal("0"),
         equity=data.current_equity,
         max_hedge_qty=data.max_hedge_qty,
+        actual_hedge_qty=0,
+        pending_hedge_qty=0,
     )
     assert len(basecamp_signals) == 1
     assert basecamp_signals[0].kind == SignalKind.NON_EXECUTION

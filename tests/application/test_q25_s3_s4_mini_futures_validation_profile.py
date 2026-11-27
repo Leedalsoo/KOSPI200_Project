@@ -124,6 +124,8 @@ def test_s4_synthetic_greek_stress_generates_and_closes_five_mini_futures_hedges
         deadband=0,
         equity=data.current_equity,
         max_hedge_qty=data.max_hedge_qty,
+        actual_hedge_qty=0,
+        pending_hedge_qty=0,
     )
     assert len(hedge) == 1
     assert hedge[0].execution_proposal.asset_type == "FUTURES"
