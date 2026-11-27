@@ -1149,6 +1149,7 @@ def test_s4_vssf_and_bridge_have_no_shared_restart_checkpoint_contract() -> None
     from contracts.futures_identity_source_port import FuturesInstrumentIdentity
     from contracts.position_provenance import PositionLotProvenance, PositionRole
     from contracts.track9_fee_ledger import Track9FeeRecord
+    from core.strategy.track4_gamma_scalping import Track4GammaScalping, Track4State
     from environments.virtual.authoritative_vssf.firm_runtime import VirtualSecuritiesFirmRuntime
     from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
     from environments.virtual.position.virtual_position_lot_store import VirtualPositionLotStore
@@ -1225,6 +1226,12 @@ def test_s4_vssf_and_bridge_have_no_shared_restart_checkpoint_contract() -> None
     # have no bridge-level snapshot/restore API.
     assert not callable(getattr(VirtualMultiLegExecutionBridge, "snapshot", None))
     assert not callable(getattr(VirtualMultiLegExecutionBridge, "restore", None))
+    assert not callable(getattr(Track4State, "snapshot", None))
+    assert not callable(getattr(Track4State, "restore", None))
+    assert not callable(getattr(Track4GammaScalping, "snapshot", None))
+    assert not callable(getattr(Track4GammaScalping, "restore", None))
+    assert not callable(getattr(VirtualSecuritiesFirmRuntime, "snapshot", None))
+    assert not callable(getattr(VirtualSecuritiesFirmRuntime, "restore", None))
     bridge = VirtualMultiLegExecutionBridge.__new__(VirtualMultiLegExecutionBridge)
     bridge.run_id = run_id
     bridge.position_lot_store = lot_store

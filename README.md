@@ -1929,3 +1929,20 @@ Validation-only synthetic test confirms VSSF `client_order_id` is formatted from
 - No KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original mutation.
 
 - Notion Q&A: https://app.notion.com/p/4255f4f6eaa181f8baedc8a13c9fbedd
+
+## 2026-11-27 No.1869 — S4 F25 durable checkpoint / late-fill ACK gap audit
+
+- Reconciled No.1868/1867, No.1827/1828/1829, No.1831/1834, No.1841/1842/1847 and No.1854. Existing synthetic restart, duplicate late-fill, Bridge publication-stage replay and manual same-process re-entry tests were reused rather than repeating their scenarios.
+- Source audit confirms `Track4State` and `Track4GammaScalping` expose no snapshot/restore contract. `_exit_pending` is held on the strategy object outside Track4State.
+- `VirtualMultiLegExecutionBridge` exposes no snapshot/restore contract. Its groups, pending_legs, `_pending_attempt_ids`, `_applied_execution_fingerprints`, execution_legs, provenance, leg_positions, PositionLotStore, FeeLedger and PositionGroup state are instance-local.
+- VSSF `StateRecoveryEngine.create_snapshot()` contains only sequence_id, balance, positions and optional metrics; restore changes balance/positions/metrics only. It does not restore ExecutionEngine reports/sequence, OrderBook pending orders, submitted timestamps, lifecycle results, PnL, margin, account ledger, Bridge state, Track4State or Track4 `_exit_pending`.
+- `ExecutionEngine` restarts its sequence at zero. `PaperTradingAccount.apply_execution()` mutates positions/PnL/fees and appends ledger exec_id without account-level execution-ID dedupe. No.1829's synthetic duplicate late-fill test demonstrates the resulting restored-account reapplication boundary.
+- No.1854 establishes explicit same-process Bridge re-entry can finish a previously interrupted Bridge projection without a second VSSF fill in its synthetic case. No.1841/1842 establish this is not an automatic retry/ACK owner and does not survive process restart.
+- `environments/live/settlement/sqlite_settlement_store.py` and Live execution composition are separate. Virtual VSSF/Bridge do not import or receive that Live settlement store/deduplicator. No.1605 SQLite exactly-once must not be generalized to Virtual S4.
+- Extended `test_s4_vssf_and_bridge_have_no_shared_restart_checkpoint_contract` to assert Track4State, Track4 strategy and VSSF runtime lack snapshot/restore methods. This locks the observed gap; no Production behavior was added.
+- F25 targeted restart/late-fill/ACK characterization: 7 passed. Compileall, changed-test Ruff F821/F401/F841 and diff-check PASS.
+- No implementation was added because authoritative execution identity namespace, checkpoint ownership/schema, atomic account↔Bridge commit boundary, durable ACK/retry owner and repair precedence remain unapproved/unspecified. No1605 Live persistence is not an authorized substitute.
+- F25 audit slice: PASS. Durable checkpoint implementation, restart-safe late-fill dedupe/ACK, cross-store repair and authoritative broker semantics remain OPEN. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
+- No KIS/REAL_VTS/account/Live API, broker action, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original mutation.
+
+- Notion Q&A: https://app.notion.com/p/4255f4f6eaa18198bc96c66f9ded10be
