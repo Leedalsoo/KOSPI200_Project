@@ -205,3 +205,49 @@ def test_s7_pending_call_reconciliation_keeps_original_expiry_after_market_tick_
         "SYNTHETIC_CONTRACT:strategy7_weekly:20261112:CALL:512.5",
     }
 
+    # Refresh both contract-scoped quotes for the terminal close preflight.
+    for offset, source_tick in enumerate((put_tick, improved_call_tick), start=2):
+        close_tick = replace(
+            source_tick,
+            timestamp=(datetime.fromisoformat(improved_call_tick.timestamp)
+                       + timedelta(seconds=2)).isoformat(),
+            seq_id=int(source_tick.seq_id) + 1000 + offset,
+        )
+        _publish_contract_scoped_replay_quote(
+            close_tick,
+            option_master=master,
+            market=bootstrap.bundle.market,
+            order_book=vssf.order_book,
+        )
+        sources.set_tick(close_tick)
+        bootstrap.bundle.market.publish_replay_tick(close_tick)
+        vssf.process_market_data(close_tick)
+
+    # Terminal close must release only after both PositionLots are flat and
+    # Bridge reports no pending order; the factory callback owns this path.
+    close_plan = strategy.build_execution_plan(
+        call_plan.group_id,
+        proposal=_proposal(
+            "WEEKLY_INSURANCE_CLOSE", "PUT", Decimal("487.5"), side="SELL",
+        ),
+    )
+    close_result = bridge.execute(close_plan)
+    assert close_result.group_complete is True
+    assert close_result.position_flat is True
+    assert close_result.pending_legs == 0
+    assert all(report.status == "FILLED" for report in close_result.reports)
+    assert len(bridge.position_lot_store.open_lots()) == 0
+    assert len(bridge.pending_legs) == 0
+    assert call_plan.group_id not in s7_adapter._reserved
+    assert call_plan.group_id not in s7_adapter._reserved_entry_fees
+    assert call_plan.group_id not in s7_adapter._group_expiry_by_id
+
+    # Re-delivery of the same terminal callback must leave the released group
+    # unchanged; this is an in-process duplicate-delivery characterization only.
+    bridge.execution_result_callback(close_plan, close_result)
+    bridge.execution_result_callback(close_plan, close_result)
+    assert call_plan.group_id not in s7_adapter._reserved
+    assert call_plan.group_id not in s7_adapter._reserved_entry_fees
+    assert call_plan.group_id not in s7_adapter._group_expiry_by_id
+    assert len(bridge.fee_ledger.snapshot(run_id="Q25-S7-PENDING-IDENTITY-RECONCILIATION")) == 4
+
