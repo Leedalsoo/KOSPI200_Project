@@ -251,6 +251,44 @@ def test_s7_pending_call_reconciliation_keeps_original_expiry_after_market_tick_
     }
     assert _track7_read_only_lineage_mismatches(**audit_args) == ()
 
+    # Exercise the remaining provenance dimensions independently. These are
+    # deliberately synthetic input mutations; live Bridge/aggregate objects
+    # remain untouched.
+    assert "aggregate_group_mismatch" in _track7_read_only_lineage_mismatches(
+        **{**audit_args, "aggregate_group_id": "WRONG-GROUP"}
+    )
+    assert "aggregate_expiry_mismatch" in _track7_read_only_lineage_mismatches(
+        **{**audit_args, "aggregate_expiry": "20261109"}
+    )
+    bad_pending_leg = ((pending_records[0][0], "WRONG-LEG", pending_records[0][2],
+                        pending_records[0][3], pending_records[0][4]),)
+    assert "pending_leg_mismatch" in _track7_read_only_lineage_mismatches(
+        **{**audit_args, "pending_records": bad_pending_leg}
+    )
+    bad_pending_expiry = ((pending_records[0][0], pending_records[0][1],
+                           pending_records[0][2], pending_records[0][3], "20261109"),)
+    assert "pending_expiry_mismatch" in _track7_read_only_lineage_mismatches(
+        **{**audit_args, "pending_records": bad_pending_expiry}
+    )
+    bad_position_run = (("WRONG-RUN", position_records[0][1],
+                         position_records[0][2], position_records[0][3]),)
+    assert "position_run_mismatch" in _track7_read_only_lineage_mismatches(
+        **{**audit_args, "position_records": bad_position_run}
+    )
+    bad_position_expiry = ((position_records[0][0], position_records[0][1],
+                            "20261109", position_records[0][3]),)
+    assert "position_expiry_mismatch" in _track7_read_only_lineage_mismatches(
+        **{**audit_args, "position_records": bad_position_expiry}
+    )
+    bad_fee_run = (("WRONG-RUN", fee_records[0][1], fee_records[0][2]),)
+    assert "fee_run_mismatch" in _track7_read_only_lineage_mismatches(
+        **{**audit_args, "fee_records": bad_fee_run}
+    )
+    bad_fee_group = ((fee_records[0][0], "WRONG-GROUP", fee_records[0][2]),)
+    assert "fee_group_mismatch" in _track7_read_only_lineage_mismatches(
+        **{**audit_args, "fee_records": bad_fee_group}
+    )
+
     bad_pending = ((pending_records[0][0], pending_records[0][1], "WRONG-GROUP",
                     pending_records[0][3], pending_records[0][4]),)
     assert "pending_group_mismatch" in _track7_read_only_lineage_mismatches(
