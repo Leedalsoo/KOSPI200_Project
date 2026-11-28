@@ -1,9 +1,14 @@
 from datetime import datetime, timedelta, timezone
+from dataclasses import replace
 from decimal import Decimal
 from types import MethodType, SimpleNamespace
 
+import pytest
+
 from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
 from contracts.types import ExecutionLeg, ExecutionReport, MultiLegExecutionPlan, OptionInstrumentIdentity
+from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
+from environments.virtual.position.virtual_position_lot_store import VirtualPositionLotStore
 
 KST = timezone(timedelta(hours=9))
 
@@ -181,3 +186,128 @@ def test_s9_cancel_confirmation_failure_fails_closed_without_retry():
     assert len(bridge.pending_legs) == 1
     assert bridge._s9_retry_schedule == {}
     assert calls["execute"] == []
+
+def _s9_execution_replay_inputs():
+    bridge = object.__new__(VirtualMultiLegExecutionBridge)
+    bridge.run_id = "S9-IDEMPOTENCY-RUN"
+    bridge.execution_legs = {}
+    bridge.provenance = {}
+    bridge.leg_positions = {}
+    bridge._applied_execution_fingerprints = {}
+    bridge.position_lot_store = VirtualPositionLotStore()
+    bridge.fee_ledger = VirtualTrack9FeeLedger()
+    identity = OptionInstrumentIdentity(
+        "SYNTHETIC-S9-CALL-20261112-500", "SYNTHETIC-S9-CALL-20261112-500",
+        "20261112", "CALL", Decimal("500"), Decimal("250000"),
+        "SYNTHETIC_VALIDATION_ONLY",
+    )
+    leg = SimpleNamespace(leg_id="call", side="BUY", position_role="NONE")
+    plan = MultiLegExecutionPlan(
+        group_id="S9-IDEMPOTENCY-GROUP",
+        strategy_id="track9_event_overnight_insurance",
+        purpose="OVERNIGHT_INSURANCE",
+        legs=(ExecutionLeg(
+            "call", "BUY", 1, option_type="CALL", strike=Decimal("500"),
+            instrument_identity=identity,
+        ),),
+    )
+    command = SimpleNamespace(
+        client_order_id="S9-ATTEMPT-1-CALL", instrument_id=identity.instrument_id,
+        side="BUY", instrument_identity=identity,
+    )
+    report = ExecutionReport(
+        client_order_id=command.client_order_id, broker_order_id="SYNTHETIC-BROKER-1",
+        execution_id="S9-SYNTHETIC-EXEC-001", status="FILLED",
+        filled_quantity=1, remaining_quantity=0, execution_price=Decimal("10"),
+        execution_timestamp=datetime(2026, 11, 9, 10, 0, tzinfo=KST),
+        fee=Decimal("0.10"), group_id=plan.group_id, leg_id="call",
+    )
+    return bridge, plan, leg, identity, command, report
+
+
+def test_s9_duplicate_execution_callback_is_idempotent_across_position_and_fee_projections():
+    bridge, plan, leg, identity, command, report = _s9_execution_replay_inputs()
+
+    for _ in range(2):
+        bridge._apply_reconciled_execution(
+            plan=plan, leg=leg, identity=identity,
+            broker_command=command, report=report,
+        )
+
+    assert len(bridge.position_lot_store.history()) == 1
+    assert len(bridge.fee_ledger.query(run_id=bridge.run_id)) == 1
+    assert bridge.fee_ledger.total(run_id=bridge.run_id) == Decimal("0.10")
+    assert bridge.leg_positions[identity.instrument_id].qty == 1
+    assert set(bridge._applied_execution_fingerprints) == {"S9-SYNTHETIC-EXEC-001"}
+
+
+def test_s9_conflicting_duplicate_execution_callback_fails_closed_without_projection_mutation():
+    bridge, plan, leg, identity, command, report = _s9_execution_replay_inputs()
+    bridge._apply_reconciled_execution(
+        plan=plan, leg=leg, identity=identity,
+        broker_command=command, report=report,
+    )
+    before_fingerprints = dict(bridge._applied_execution_fingerprints)
+    before_provenance = dict(bridge.provenance)
+
+    conflicting = replace(report, execution_price=Decimal("10.25"))
+    with pytest.raises(
+        RuntimeError,
+        match="MULTI_LEG_EXECUTION_ID_CONFLICT_RECONCILIATION_REQUIRED",
+    ):
+        bridge._apply_reconciled_execution(
+            plan=plan, leg=leg, identity=identity,
+            broker_command=command, report=conflicting,
+        )
+
+    assert len(bridge.position_lot_store.history()) == 1
+    assert len(bridge.fee_ledger.query(run_id=bridge.run_id)) == 1
+    assert bridge.fee_ledger.total(run_id=bridge.run_id) == Decimal("0.10")
+    assert bridge.leg_positions[identity.instrument_id].qty == 1
+    assert bridge._applied_execution_fingerprints == before_fingerprints
+    assert bridge.provenance == before_provenance
+
+def test_s9_retry_attempts_receive_distinct_client_order_identity():
+    bridge, plan, _leg, identity, _command, _report = _s9_execution_replay_inputs()
+    first = replace(plan, attempt_id="S9-RETRY-0001")
+    second = replace(plan, attempt_id="S9-RETRY-0002")
+    first_order = bridge._client_order_id(first, first.legs[0], identity)
+    second_order = bridge._client_order_id(second, second.legs[0], identity)
+
+    assert first_order != second_order
+    assert first_order.startswith(plan.group_id + "-call-")
+    assert second_order.startswith(plan.group_id + "-call-")
+
+def test_s9_late_fill_from_prior_attempt_cannot_overfill_after_retry_fill():
+    bridge, plan, leg, identity, command, first_report = _s9_execution_replay_inputs()
+    bridge.groups = {plan.group_id: [first_report]}
+    bridge._group_plans = {plan.group_id: plan}
+    retry_plan = replace(plan, attempt_id="S9-RETRY-0001")
+    retry_leg = retry_plan.legs[0]
+    retry_command = SimpleNamespace(**{**vars(command), "client_order_id": "S9-ATTEMPT-2-CALL"})
+    retry_fill = replace(
+        first_report,
+        client_order_id=retry_command.client_order_id,
+        broker_order_id="SYNTHETIC-BROKER-2",
+        execution_id="S9-SYNTHETIC-EXEC-002",
+    )
+    bridge.groups[plan.group_id] = [retry_fill]
+    late_prior_attempt_fill = replace(
+        first_report,
+        broker_order_id="SYNTHETIC-BROKER-1",
+        execution_id="S9-SYNTHETIC-EXEC-003",
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="MULTI_LEG_EXECUTION_LEG_OVERFILL_RECONCILIATION_REQUIRED",
+    ):
+        bridge._apply_reconciled_execution(
+            plan=retry_plan, leg=retry_leg, identity=identity,
+            broker_command=command, report=late_prior_attempt_fill,
+        )
+
+    assert len(bridge.position_lot_store.history()) == 0
+    assert bridge.fee_ledger.query(run_id=bridge.run_id) == ()
+    assert bridge.leg_positions == {}
+    assert bridge._applied_execution_fingerprints == {}

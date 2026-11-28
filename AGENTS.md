@@ -2440,3 +2440,15 @@ S9 pending -> cancel/retry -> fill/close lifecycle: correlate same run/group/cli
 - Non-force push to `origin/Project200` succeeded; post-push fetch and `git ls-remote` both confirmed the test commit SHA.
 - Root `git pull --ff-only origin Project200` completed. Root, isolated worktree and remote were synchronized at the test commit before this documentation-only synchronization record.
 - Root existing status remained 203 short entries / 313 with detailed untracked files; isolated worktree clean. No `reset`, `clean`, or `stash`.
+
+## 2026-11-28 No.1903 - S9 retry delayed-fill overfill guard
+
+- Reconciled No.1902/1901/1900 and controlling No.1884/1885. No.1884 pending-aware group-scoped reservation release remains in force. No.1885 authoritative reservation restore/persistence/ownership/lease/fencing/retry/callback-outbox/broker-reconciliation/restart-ack policy remains OPEN/unapproved.
+- Test-first synthetic reproduction: after a retry attempt filled the S9 entry leg target quantity, a delayed fill from the prior client-order attempt could be accepted and exceed the original group-leg target.
+- Fixed `application/composition/virtual_multi_leg_execution.py`: before PositionLot/Fee Ledger/aggregate mutation, S9 `OVERNIGHT_INSURANCE` BUY-entry reconciliation compares fills from other client-order attempts plus incoming fills against the original group-plan leg quantity. Overfill fails closed with `MULTI_LEG_EXECUTION_LEG_OVERFILL_RECONCILIATION_REQUIRED`; no projection is mutated. Prior reports for the same client order are excluded to avoid double-counting cumulative broker reports.
+- Added S9 tests for duplicate execution idempotency, conflicting duplicate execution rejection, retry-attempt-specific client-order identity, and delayed prior-attempt fill overfill prevention. Existing cancel/fill race and valid partial-fill/retry E2E remain passing.
+- S9/composition regression: **51 passed**. Full `tests/validation_only`: **158 passed**. Compileall, scoped Ruff F401/F821/F841, and diff-check PASS.
+- Only the production bridge source and S9 retry test changed. Synthetic/stub validation only; no Raw/Canonical/accepted-source/manifest originals touched. No Live/account API, actual broker order/cancel/close, collector/service/scheduler or new data collection.
+- No combined S7/S8/S9 adapter Runtime acceptance. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
+- Notion Q&A: https://app.notion.com/p/4265f4f6eaa181e09e4df89d1187ff56
+- Next: duplicate S9 terminal callback and callback-order reversal; verify StrategyHub transition and reservation release are not applied twice.

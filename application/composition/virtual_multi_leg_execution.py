@@ -969,6 +969,25 @@ class VirtualMultiLegExecutionBridge:
             raise RuntimeError("MULTI_LEG_EXECUTION_LEG_LINEAGE_MISMATCH")
 
         fill_reports = self._execution_fill_reports(report)
+        if (fill_reports
+                and plan.strategy_id == "track9_event_overnight_insurance"
+                and str(plan.purpose or "").upper() == "OVERNIGHT_INSURANCE"
+                and str(leg.side).upper() == "BUY"):
+            group_plan = getattr(self, "_group_plans", {}).get(plan.group_id, plan)
+            target_leg = next(
+                (item for item in group_plan.legs if item.leg_id == leg.leg_id), None,
+            )
+            if target_leg is None:
+                raise RuntimeError("MULTI_LEG_EXECUTION_LEG_OVERFILL_RECONCILIATION_REQUIRED")
+            prior_filled = sum(
+                int(getattr(prior, "filled_quantity", 0) or 0)
+                for prior in getattr(self, "groups", {}).get(plan.group_id, ())
+                if prior.leg_id == leg.leg_id
+                and prior.client_order_id != report.client_order_id
+            )
+            incoming_filled = sum(int(item.filled_quantity) for item in fill_reports)
+            if prior_filled + incoming_filled > int(target_leg.quantity):
+                raise RuntimeError("MULTI_LEG_EXECUTION_LEG_OVERFILL_RECONCILIATION_REQUIRED")
         if not fill_reports:
             self.provenance[report.client_order_id] = {
                 "strategy_id": plan.strategy_id, "group_id": plan.group_id,
