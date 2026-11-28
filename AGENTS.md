@@ -2396,15 +2396,14 @@ Detail: <mention url="https://app.notion.com/p/4265f4f6eaa181c29e4cf989ae171452"
 - No KIS/REAL_VTS/account/Live API, broker action/order/cancel/liquidation, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original mutation.
 - Notion Q&A: https://app.notion.com/p/4265f4f6eaa181b59a73faca297c25c4
 
-
-## 2026-11-28 No.1901 ? S7/S8/S9 Bridge lineage audit
+## 2026-11-28 No.1901 - S7/S8/S9 Bridge lineage audit
 
 - Reconciled latest Notion No.1899/1900, Current Baseline, A8 SSOT/update log/roadmap and Project200 HEAD `4fd18dfefbfb90b8d94aee5f435ae376b51f1203`. No.1884 pending-aware, group-scoped reservation release remains in force. No.1885 authoritative reservation source, restore precedence, durable persistence, ownership, lease/fencing, retry, callback outbox, broker reconciliation and restart acknowledgement remain OPEN/unapproved.
 - Added pure test-side scalar auditor `tests/application/composition/validation_only_lineage_audit.py`. It compares immutable projections only and never receives mutable runtime stores.
-- S7: retained pending CALL + filled PUT + Fee Ledger + aggregate correlation and added before/after state immutability for Bridge pending orders, PositionLots, Fee Ledger, premium/entry-fee/expiry reservation maps.
-- S8: correlated six PositionLots, nine canonical executions, nine Fee Ledger rows, two PositionGroups and close events. Verified run/strategy/group/leg/client-order/execution/instrument/expiry lineage, missing/duplicate/wrong-group/wrong-expiry probes, terminal reservation release and unchanged runtime projections.
-- S9: correlated PUT FILLED / CALL REJECTED, one PositionLot, one Fee Ledger row, execution report, active group reservation and risk audit. Missing/duplicate/wrong-group probes and pre/post state immutability pass.
-- S7/S8/S9 + shared StrategyHub + Track9 core regression: 92 passed. All `tests/validation_only`: 158 passed. Compileall, Ruff on changed tests, `git diff --check`: PASS.
+- S7: retained pending CALL + filled PUT + Fee Ledger + aggregate correlation. Added pre/post audit immutability checks for Bridge pending orders, PositionLots, Fee Ledger, and premium/entry-fee/expiry reservation maps.
+- S8: correlated six PositionLots, nine canonical executions, nine Fee Ledger rows, two PositionGroups and close events. Verified run/strategy/group/leg/client-order/execution/instrument/expiry lineage; missing fee, duplicate position, wrong group and wrong expiry probes; terminal reservation release and unchanged runtime projections.
+- S9: correlated PUT FILLED / CALL REJECTED, one PositionLot, one Fee Ledger row, execution report, active group reservation and risk audit. Missing fee, duplicate position and wrong group probes passed; runtime projections remained unchanged.
+- S7/S8/S9 + shared StrategyHub + Track9 core regression: 92 passed. All `tests/validation_only`: 158 passed. Compileall, Ruff on changed test files, and `git diff --check`: PASS.
 - Missing S7/S8 fixtures were temporarily copied only after Root SHA-256 checks. Shared StrategyHub trend-up data/anchor was synthesized as a 60-row/six-timestamp overlay with SYNTHETIC_ONLY / authority NONE / BLOCKED_IDENTITY_OWNER_UNRESOLVED / production_runtime_eligible=false. It is not an authoritative KRX Option Master. Temporary copies/overlay removed; all eight Root source fixture hashes rechecked unchanged.
 - Test-only changes; no Production source defect reproduced and no Production source changed. No combined S7/S8/S9 adapter Runtime acceptance claimed. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
 - No KIS/REAL_VTS/account/Live API, broker action/order/cancel/liquidation, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original mutation.
@@ -2412,12 +2411,12 @@ Detail: <mention url="https://app.notion.com/p/4265f4f6eaa181c29e4cf989ae171452"
 
 ### Next validation
 
-- S9 pending ? cancel/retry ? fill/close lifecycle: correlate same run/group/client-order/execution lineage across Bridge pending orders, PositionLots, Fee Ledger, canonical executions and Track9 reservation/risk audit. Verify reservations remain while pending orders remain and release only after terminal group state. Keep No.1885 recovery policy OPEN; do not infer durable restore or ownership/lease/fencing policy.
+S9 pending -> cancel/retry -> fill/close lifecycle: correlate same run/group/client-order/execution lineage across Bridge pending orders, PositionLots, Fee Ledger, canonical executions and Track9 reservation/risk audit. Verify reservations remain while pending orders remain and release only after terminal group state. Keep No.1885 recovery policy OPEN; do not infer durable restore or ownership/lease/fencing policy.
 
+## No.1901 GitHub Project200 sync result
 
-## No.1901 GitHub Project200 ?? ??
-
-- ?? stage/commit? ?? 7?: `AGENTS.md`, `README.md`, `docs/CURRENT_BASELINE_V2.md`, S7/S8/S9 lineage integration tests 3?, `tests/application/composition/validation_only_lineage_audit.py`.
-- Commit: `1ea2590fc47fa290791ed88206b641ba1c0ed316` ? `test: audit S7-S9 runtime lineage projections`.
-- Non-force push ??. Post-push `origin/Project200` HEAD? ?? SHA?? ????.
-- Root `git pull --ff-only origin Project200` ??. Root / isolated worktree / origin HEAD ?? `d6bf7bbe42e04558b30132cc2fbfc9e50124c67e`. Root ?? status 203?(?? untracked ?? 313?)? pull ?? ??. Commit ?? ??? Root ?? ?? ?? overlap ??. Isolated worktree clean. `reset/clean/stash` ???.
+- Test commit: `1ea2590fc47fa290791ed88206b641ba1c0ed316` - `test: audit S7-S9 runtime lineage projections` (7 explicitly staged files).
+- Documentation sync commit: `d6bf7bbe42e04558b30132cc2fbfc9e50124c67e` - `docs: record S7-S9 lineage audit sync`.
+- Final Root-sync documentation commit: `bd7d3a8670973473c7923c74826648969c80b999` - `docs: verify Project200 root synchronization`.
+- All pushes were non-force and succeeded. Final origin/Project200 HEAD: `bd7d3a8670973473c7923c74826648969c80b999`.
+- Root `git pull --ff-only origin Project200` completed. Root / isolated worktree / origin HEAD all match the final SHA. Root status remained 203 entries (313 including detailed untracked) before and after. No overlap with existing Root changes. Isolated worktree clean. No reset/clean/stash.

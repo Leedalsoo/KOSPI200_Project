@@ -2416,28 +2416,24 @@ Detail: <mention url="https://app.notion.com/p/4265f4f6eaa181c29e4cf989ae171452"
 - No KIS/REAL_VTS/account/Live API, broker action/order/cancel/liquidation, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original mutation.
 - Notion Q&A: https://app.notion.com/p/4265f4f6eaa181b59a73faca297c25c4
 
+## 2026-11-28 No.1901 - S7/S8/S9 Bridge lineage audit
 
-## 2026-11-28 No.1901 ? S7/S8/S9 Bridge lineage audit
-
-- Latest Notion No.1899/1900, Current Baseline, A8 SSOT/update log/roadmap and Project200 HEAD `4fd18dfefbfb90b8d94aee5f435ae376b51f1203` reconciled. No.1884 pending-aware, group-scoped reservation release remains in force. No.1885 authoritative reservation source, restore precedence, durable persistence, ownership, lease/fencing, retry, callback outbox, broker reconciliation and restart acknowledgement remain OPEN/unapproved.
-- Added pure test-side scalar auditor `tests/application/composition/validation_only_lineage_audit.py`; no mutable runtime stores passed to the auditor.
-- S7 pending CALL + filled PUT + Fee Ledger + aggregate correlation now also snapshots Bridge pending orders, PositionLots, Fee Ledger and premium/entry-fee/expiry reservation maps before/after mismatch probes.
-- S8 multi-contract partial fill: six PositionLots, nine canonical executions, nine Fee Ledger rows, two PositionGroups and close events correlated by run/strategy/group/leg/client-order/execution/instrument/expiry. Missing fee, duplicate position, wrong group and wrong expiry probes pass; terminal reservation map empty and audit projection reconciled.
+- Latest Notion No.1899/1900, Current Baseline, A8 SSOT/update log/roadmap and Project200 HEAD `4fd18dfefbfb90b8d94aee5f435ae376b51f1203` reconciled. No.1884 pending-aware group-scoped reservation release remains in force. No.1885 authoritative reservation source, restore precedence, durable persistence, ownership, lease/fencing, retry, callback outbox, broker reconciliation and restart acknowledgement remain OPEN/unapproved.
+- Added pure test-side scalar auditor `tests/application/composition/validation_only_lineage_audit.py`; no mutable runtime store is passed to the auditor.
+- S7 pending CALL + filled PUT + Fee Ledger + aggregate correlation now includes before/after state checks for Bridge pending orders, PositionLots, Fee Ledger and premium/entry-fee/expiry reservation maps.
+- S8 multi-contract partial fill: six PositionLots, nine canonical executions, nine Fee Ledger rows, two PositionGroups and close events correlated by run/strategy/group/leg/client-order/execution/instrument/expiry. Missing fee, duplicate position, wrong group and wrong expiry probes pass; terminal reservation map empty and risk audit projection reconciled.
 - S9 partial rejection: PUT FILLED / CALL REJECTED with one PositionLot, one Fee Ledger row, canonical execution, active group reservation and risk audit correlated. Missing fee, duplicate position and wrong group probes pass; all runtime projections unchanged.
-- S7/S8/S9 + StrategyHub + Track9 core regression 92 passed. Full `tests/validation_only` 158 passed. Compileall, Ruff on changed test files and `git diff --check` PASS.
-- S7/S8 missing fixtures temporarily copied after Root SHA-256 verification. Missing shared StrategyHub trend-up dataset/Option Master anchor replaced by a 60-row/six-timestamp synthetic overlay from existing high-volatility DERIVED_SCENARIO data. Anchor is SYNTHETIC_ONLY / authority NONE / BLOCKED_IDENTITY_OWNER_UNRESOLVED / production_runtime_eligible=false, not a KRX authoritative Option Master. Temporary copies/overlay removed. Eight Root source fixture SHA-256 values rechecked unchanged.
+- S7/S8/S9 + StrategyHub + Track9 core regression: 92 passed. Full `tests/validation_only`: 158 passed. Compileall, Ruff on changed test files and `git diff --check`: PASS.
+- Missing S7/S8 fixtures temporarily copied after Root SHA-256 verification. Missing shared StrategyHub trend-up dataset/Option Master anchor replaced by a 60-row/six-timestamp synthetic overlay from existing high-volatility DERIVED_SCENARIO data. Anchor is SYNTHETIC_ONLY / authority NONE / BLOCKED_IDENTITY_OWNER_UNRESOLVED / production_runtime_eligible=false, not a KRX authoritative Option Master. Temporary copies/overlay removed. Eight Root source fixture SHA-256 values rechecked unchanged.
 - Test-only change: no Production source defect reproduced; no Production source changed. No combined S7/S8/S9 adapter Runtime acceptance. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
 - No KIS/REAL_VTS/account/Live API, broker action/order/cancel/liquidation, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original mutation.
 - Notion Q&A: https://app.notion.com/p/4265f4f6eaa1817090f0d796f0b9f882
 
 ### Next validation
 
-S9 pending ? cancel/retry ? fill/close lifecycle: correlate same run/group/client-order/execution lineage across Bridge pending orders, PositionLots, Fee Ledger, canonical executions and Track9 reservation/risk audit. Verify reservation retention while pending and group-scoped release only after terminal state. Do not infer No.1885 durable restore/authority policy.
+S9 pending -> cancel/retry -> fill/close lifecycle: correlate same run/group/client-order/execution lineage across Bridge pending orders, PositionLots, Fee Ledger, canonical executions and Track9 reservation/risk audit. Verify reservation retention while pending and group-scoped release only after terminal state. Do not infer No.1885 durable restore/authority policy.
 
+### GitHub Project200 synchronization
 
-## No.1901 GitHub Project200 ?? ??
-
-- ?? stage/commit? ?? 7?: `AGENTS.md`, `README.md`, `docs/CURRENT_BASELINE_V2.md`, S7/S8/S9 lineage integration tests 3?, `tests/application/composition/validation_only_lineage_audit.py`.
-- Commit: `1ea2590fc47fa290791ed88206b641ba1c0ed316` ? `test: audit S7-S9 runtime lineage projections`.
-- Non-force push ??. Post-push `origin/Project200` HEAD? ?? SHA?? ????.
-- Root `git pull --ff-only origin Project200` ??. Root / isolated worktree / origin HEAD ?? `d6bf7bbe42e04558b30132cc2fbfc9e50124c67e`. Root ?? status 203?(?? untracked ?? 313?)? pull ?? ??. Commit ?? ??? Root ?? ?? ?? overlap ??. Isolated worktree clean. `reset/clean/stash` ???.
+- Test commit `1ea2590fc47fa290791ed88206b641ba1c0ed316`; documentation commits `d6bf7bbe42e04558b30132cc2fbfc9e50124c67e` and `bd7d3a8670973473c7923c74826648969c80b999`.
+- Final origin/Project200, Root and isolated worktree HEAD: `bd7d3a8670973473c7923c74826648969c80b999`. Non-force pushes and Root fast-forward succeeded. Root status 203 (313 with detailed untracked) preserved; isolated worktree clean. No reset/clean/stash.
