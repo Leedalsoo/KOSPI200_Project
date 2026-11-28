@@ -2302,3 +2302,18 @@ runtime_use=PROHIBITED_OUTSIDE_VALIDATION. Fixture SHA FBE61DFFE8DB9876DFD32E092
 - Test-only verification; no Production source defect reproduced and no source code changed. Pre-validation Root/isolated/origin HEAD ba77ce20a63230ae1062aea5c674f12610dbec12; Root existing 203 status entries preserved; isolated worktree clean before documentation update.
 - Next validation: a provenance-labelled synthetic, read-only correlation seam between a restored Track7 aggregate and Bridge pending order / PositionLot / Fee Ledger records sharing run/group/expiry. No policy inference.
 - No KIS/REAL_VTS/account/Live API, broker action, actual order/cancel/liquidation, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original mutation. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED. No combined S7/S8/S9 Runtime acceptance.
+
+
+## 2026-11-28 No.1894 — Track7 aggregate restore / Bridge projection correlation
+
+Detail: <mention url="https://app.notion.com/p/4265f4f6eaa181c29e4cf989ae171452">[No.1894 답변내용요약] Track7 aggregate restore·Bridge projection 상관 검증 (2026-11-28)</mention>
+
+- Reconciled No.1893/1892/1891/1890/1885/1884 and Current Baseline/A8 SSOT/roadmap. No.1885 authoritative reservation source, restore precedence, durable persistence, ownership, lease/fencing, retry, callback outbox, broker reconciliation and restart acknowledgement remain OPEN/unapproved. No.1884 pending-aware group-scoped release remains in force.
+- Extended the factory-wired synthetic partial-position + pending-CALL integration test: capture Track7 aggregate snapshot after PUT FILLED / CALL NEW, restore into a fresh Track7 strategy object, then correlate the restored group→expiry mapping and CALL_PENDING aggregate state with the live Bridge pending order, open PUT PositionLot and Fee Ledger rows.
+- Read-only identity assertions cover client-order/group/leg/expiry, run/group/expiry, and PositionLot execution IDs vs Fee Ledger execution IDs. Existing Bridge projections are not mutated; no reservation map hydration or restore precedence is implemented.
+- New aggregate↔Bridge correlation test: **1 passed**. Extended Track7 aggregate/callback ACK/entry cutoff/restore observation/sequential lifecycle/exit policy/Bridge composition/adapter/fee-aware reservation regression: **86 passed**. Compileall, Ruff F401/F821/F841 and git diff-check PASS.
+- Test-only change in one composition test file. No Production source defect reproduced; no Production source change.
+- Isolated S7 fixture was missing. Root manifest SHA-256 `9bd038eb4e41992a218bcf07d7abc54603d2cc8e7b737c454399c48d81b9b4d9` and dataset `20261103.jsonl` SHA-256 `7c3fb9ea162b727c686fe49381728b2a5932237fff5e1447a3061b5ab064dea6` verified before temporary copy; copied files removed after tests. Root originals unchanged.
+- This proves read-only correlation in one synthetic integration test execution between a restored aggregate object and live Bridge projections. It does not prove OS-process restart, durable persistence, Broker recovery, reservation map hydration, authoritative source/precedence, ownership/lease/fencing, callback outbox/retry, or combined S7/S8/S9 Runtime acceptance. No.1885 remains OPEN; S4 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+- No KIS/REAL_VTS/account/Live API, actual broker action/order/cancel/liquidation, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original mutation.
+- Pre-change Root/isolated/origin HEAD `5ec2937bb09c5b5f775bc8e46f7977100d205a2b`; Root existing 203 status entries preserved; isolated worktree clean. GitHub docs sync commit/push to be appended after completion.

@@ -11,6 +11,7 @@ from environments.high_speed.synthetic_replay_adapter import SyntheticReplayAdap
 from environments.high_speed.synthetic_runtime_sources import SyntheticRuntimeSources, build_synthetic_option_master
 from environments.high_speed.validation_only_track7_execution import S7ValidationOnlyRuntimeAdapter
 from environments.high_speed.virtual_runtime_replay import _publish_contract_scoped_replay_quote
+from tests.core.test_track7_aggregate_snapshot_contract import _capture_aggregate, _restore_aggregate
 
 ROOT = Path(__file__).resolve().parents[3]
 DATASET = ROOT / "data/derived_scenario/q25_s05_3_s7_concurrent"
@@ -139,6 +140,31 @@ def test_s7_pending_call_reconciliation_keeps_original_expiry_after_market_tick_
     assert pending_fees[0].execution_id == pending_lots[0].execution_id
     assert pending_fees[0].group_id == pending_lots[0].group_id == call_plan.group_id
 
+    # Restore the Track7 aggregate snapshot while the matching Bridge projections
+    # are still live, then correlate all records read-only by run/group/expiry.
+    aggregate_envelope = _capture_aggregate(strategy)
+    restored_strategy, restore_gate = _restore_aggregate(aggregate_envelope)
+    restored_expiry = restored_strategy._group_expiry[call_plan.group_id]
+    restored_group_state = restored_strategy._states_by_expiry[restored_expiry]
+    assert restore_gate == {"state_restored": True, "side_effect_actions_allowed": True}
+    assert restored_expiry == "20261112"
+    assert restored_group_state.entry_pending is True
+    assert restored_group_state.entry_stage == "CALL_PENDING"
+    assert restored_group_state.entry_group_id == call_plan.group_id
+
+    pending_client_order_id = call_result.reports[0].client_order_id
+    pending_group_plan, pending_leg, pending_command = bridge.pending_legs[pending_client_order_id]
+    assert pending_group_plan.group_id == call_plan.group_id
+    assert pending_leg.leg_id == pending_command.leg_id == "call"
+    assert pending_command.group_id == call_plan.group_id
+    assert pending_leg.instrument_identity.expiry == restored_expiry
+    assert {lot.run_id for lot in pending_lots} == {"Q25-S7-PENDING-IDENTITY-RECONCILIATION"}
+    assert {lot.group_id for lot in pending_lots} == {call_plan.group_id}
+    assert {lot.instrument_identity.expiry for lot in pending_lots} == {restored_expiry}
+    assert {row.run_id for row in pending_fees} == {"Q25-S7-PENDING-IDENTITY-RECONCILIATION"}
+    assert {row.group_id for row in pending_fees} == {call_plan.group_id}
+    assert {row.execution_id for row in pending_fees} == {lot.execution_id for lot in pending_lots}
+    assert len(bridge.pending_legs) == 1
     # A same-run adapter reconstruction at the partial-position + pending-order
     # boundary has no supported way to hydrate the active group's reservations.
     reconstructed_pending_adapter = S7ValidationOnlyRuntimeAdapter(
