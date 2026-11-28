@@ -260,3 +260,40 @@ def test_s9_cumulative_same_order_reports_use_unique_execution_fills_once() -> N
     assert strategy.state.state == "OVERNIGHT_INSURANCE_ACTIVE"
     assert strategy.state.put_entry_fill_price == Decimal("10")
     assert strategy.state.call_entry_fill_price == Decimal("10.5")
+
+def test_s9_mixed_cumulative_and_canonical_fill_reports_are_order_independent() -> None:
+    strategy = Track9EventOvernightInsurance()
+    fill_1 = SimpleNamespace(
+        execution_id="S9-MIXED-FILL-1", filled_quantity=1,
+        execution_price=Decimal("10"), fee=Decimal("0.1"),
+        execution_timestamp="2026-11-09T10:00:01+09:00",
+    )
+    fill_2 = SimpleNamespace(
+        execution_id="S9-MIXED-FILL-2", filled_quantity=1,
+        execution_price=Decimal("11"), fee=Decimal("0.1"),
+        execution_timestamp="2026-11-09T10:00:02+09:00",
+    )
+    put = SimpleNamespace(
+        client_order_id="S9-PUT-ORDER", execution_id="S9-PUT-FILL", leg_id="put",
+        filled_quantity=1, execution_price=Decimal("10"),
+    )
+    canonical = SimpleNamespace(
+        client_order_id="S9-CALL-ORDER", execution_id=None, leg_id="call",
+        filled_quantity=2, execution_price=Decimal("10.5"),
+        execution_fills=(fill_1, fill_2),
+    )
+    broker_cumulative = SimpleNamespace(
+        client_order_id="S9-CALL-ORDER", execution_id="S9-MIXED-FILL-2", leg_id="call",
+        filled_quantity=2, execution_price=Decimal("10.5"),
+    )
+
+    expected_prices = []
+    for ordered_reports in ((put, broker_cumulative, canonical), (put, canonical, broker_cumulative)):
+        strategy.reset()
+        strategy.on_execution_result(
+            "OVERNIGHT_INSURANCE",
+            SimpleNamespace(group_complete=True, reports=ordered_reports),
+        )
+        expected_prices.append(strategy.state.call_entry_fill_price)
+
+    assert expected_prices == [Decimal("10.5"), Decimal("10.5")]

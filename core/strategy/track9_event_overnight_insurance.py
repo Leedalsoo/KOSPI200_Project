@@ -188,7 +188,18 @@ class Track9EventOvernightInsurance:
             totals = {"put": 0, "call": 0}
             values = {"put": Decimal("0"), "call": Decimal("0")}
             seen_execution_ids: set[str] = set()
-            orders_with_fill_events: set[str] = set()
+            canonical_execution_ids = {
+                str(getattr(fill, "execution_id", "") or "")
+                for item in reports
+                for fill in tuple(getattr(item, "execution_fills", ()) or ())
+                if getattr(fill, "execution_id", None)
+            }
+            orders_with_fill_events = {
+                str(getattr(item, "client_order_id", "") or "")
+                for item in reports
+                if tuple(getattr(item, "execution_fills", ()) or ())
+                and getattr(item, "client_order_id", None)
+            }
             cumulative_reports: dict[tuple[str, str], tuple[int, Decimal]] = {}
             for index, item in enumerate(reports):
                 leg_id = str(getattr(item, "leg_id", "") or "")
@@ -197,8 +208,6 @@ class Track9EventOvernightInsurance:
                 client_order_id = str(getattr(item, "client_order_id", "") or "")
                 fills = tuple(getattr(item, "execution_fills", ()) or ())
                 if fills:
-                    if client_order_id:
-                        orders_with_fill_events.add(client_order_id)
                     for fill in fills:
                         execution_id = str(getattr(fill, "execution_id", "") or "")
                         if execution_id and execution_id in seen_execution_ids:
@@ -215,7 +224,7 @@ class Track9EventOvernightInsurance:
                     continue
                 execution_id = str(getattr(item, "execution_id", "") or "")
                 if execution_id:
-                    if execution_id in seen_execution_ids:
+                    if execution_id in canonical_execution_ids or execution_id in seen_execution_ids:
                         continue
                     seen_execution_ids.add(execution_id)
                     quantity = int(getattr(item, "filled_quantity", 0) or 0)

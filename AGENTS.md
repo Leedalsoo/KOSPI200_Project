@@ -2504,3 +2504,13 @@ S9 pending -> cancel/retry -> fill/close lifecycle: correlate same run/group/cli
 - Only Track9 strategy source and recovery tests changed. Synthetic/stub only; no Live/account API, actual broker action, collector/service/scheduler or new collection.
 - Notion Q&A: https://app.notion.com/p/4265f4f6eaa1813d8e80c9d59ce6635c
 - Next: mixed broker cumulative reports without execution_fills and canonical reports with execution_fills; ensure no duplicate fill is counted across representations.
+
+## 2026-11-28 No.1909 - S9 broker/canonical mixed-fill deduplication
+
+- Reconciled No.1908/1907/1906 and No.1884/1885. No.1884 pending-aware group-scoped release remains; No.1885 durable callback outbox/restart dedup/restore/ownership/lease-fencing remains OPEN/unapproved.
+- Test-first synthetic replay found order-dependent aggregation when a broker cumulative report (execution_id = final fill ID, cumulative quantity 2) arrived before canonical execution_fills containing the same fill ID plus the prior fill. The final fill was counted twice and average price became 10.3333 instead of 10.5.
+- Track9 callback now pre-scans canonical fill IDs/client orders and suppresses broker aggregate rows whose execution ID is already represented in canonical fill events. Report ordering no longer changes fill total/weighted price.
+- S9 core + composition regression: **67 passed**. Full `tests/validation_only`: **158 passed**. Compileall, scoped Ruff F401/F821/F841, and diff-check PASS.
+- Only Track9 strategy source and recovery tests changed. Synthetic/stub only; no Live/account API, actual broker action, collector/service/scheduler or new collection.
+- Notion Q&A: https://app.notion.com/p/4265f4f6eaa1810790d4f4849919ae46
+- Next: cross-check unique fill IDs against Fee Ledger totals, PositionLot quantities and StrategyHub weighted average.
