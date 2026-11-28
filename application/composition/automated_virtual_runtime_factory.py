@@ -68,6 +68,30 @@ from environments.high_speed.track6_validation_state_store import Track6Validati
 logger = logging.getLogger(__name__)
 
 
+def _track9_execution_result_callback_key(plan, result) -> tuple:
+    report_fingerprint = tuple(sorted(
+        (
+            str(getattr(item, "client_order_id", "") or ""),
+            str(getattr(item, "execution_id", "") or ""),
+            str(getattr(getattr(item, "status", ""), "value", getattr(item, "status", ""))),
+            int(getattr(item, "filled_quantity", 0) or 0),
+            int(getattr(item, "remaining_quantity", 0) or 0),
+            str(getattr(item, "execution_price", "") or ""),
+            str(getattr(item, "fee", "") or ""),
+            str(getattr(item, "execution_timestamp", "") or ""),
+            str(getattr(item, "group_id", "") or ""),
+            str(getattr(item, "leg_id", "") or ""),
+        )
+        for item in tuple(getattr(result, "reports", ()) or ())
+    ))
+    return (
+        str(plan.group_id), str(plan.purpose or ""), report_fingerprint,
+        bool(getattr(result, "group_complete", False)),
+        int(getattr(result, "pending_legs", 0) or 0),
+        bool(getattr(result, "position_flat", False)),
+    )
+
+
 def _should_release_validation_reservation_after_terminal_result(result) -> bool:
     """Keep validation risk reserved until the group is flat and has no pending orders."""
     return (
@@ -500,27 +524,7 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
     def on_multi_leg_execution_result(plan, result):
         if plan.strategy_id == "track9_event_overnight_insurance":
             result = replace(result, reports=multi_leg_bridge.group_reports(result.group_id))
-            report_fingerprint = tuple(sorted(
-                (
-                    str(getattr(item, "client_order_id", "") or ""),
-                    str(getattr(item, "execution_id", "") or ""),
-                    str(getattr(getattr(item, "status", ""), "value", getattr(item, "status", ""))),
-                    int(getattr(item, "filled_quantity", 0) or 0),
-                    int(getattr(item, "remaining_quantity", 0) or 0),
-                    str(getattr(item, "execution_price", "") or ""),
-                    str(getattr(item, "fee", "") or ""),
-                    str(getattr(item, "execution_timestamp", "") or ""),
-                    str(getattr(item, "group_id", "") or ""),
-                    str(getattr(item, "leg_id", "") or ""),
-                )
-                for item in result.reports
-            ))
-            callback_key = (
-                str(plan.group_id), str(plan.purpose or ""), report_fingerprint,
-                bool(getattr(result, "group_complete", False)),
-                int(getattr(result, "pending_legs", 0) or 0),
-                bool(getattr(result, "position_flat", False)),
-            )
+            callback_key = _track9_execution_result_callback_key(plan, result)
             if callback_key in delivered_s9_execution_results:
                 return
             delivered_s9_execution_results.add(callback_key)

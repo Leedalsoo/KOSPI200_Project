@@ -4,7 +4,9 @@ import hashlib
 import json
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 
 from application.composition.virtual_multi_leg_execution import (
     VirtualMultiLegExecutionBridge,
@@ -511,3 +513,61 @@ def test_s9_unpaired_put_is_kept_overnight_then_only_existing_leg_closes_next_da
     reports = bridge.group_reports(next(iter(bridge.position_groups.all().keys())))
     assert sum(1 for item in reports if item.leg_id == "call" and item.status == "CANCELLED") == 2
     assert any(item.leg_id.startswith("close-") and item.status == "FILLED" for item in reports)
+
+
+def test_s9_callback_fingerprint_is_report_order_invariant():
+    from application.composition.automated_virtual_runtime_factory import (
+        _track9_execution_result_callback_key,
+    )
+
+    plan = SimpleNamespace(group_id="S9-GROUP", purpose="OVERNIGHT_INSURANCE_CLOSE")
+    put = SimpleNamespace(
+        client_order_id="S9-PUT-ORDER", execution_id="S9-PUT-EXEC", status="FILLED",
+        filled_quantity=1, remaining_quantity=0, execution_price=Decimal("10"),
+        fee=Decimal("0.1"), execution_timestamp="2026-11-09T10:00:00+09:00",
+        group_id=plan.group_id, leg_id="put",
+    )
+    call = SimpleNamespace(
+        client_order_id="S9-CALL-ORDER", execution_id="S9-CALL-EXEC", status="FILLED",
+        filled_quantity=1, remaining_quantity=0, execution_price=Decimal("11"),
+        fee=Decimal("0.1"), execution_timestamp="2026-11-09T10:00:01+09:00",
+        group_id=plan.group_id, leg_id="call",
+    )
+    result = SimpleNamespace(
+        reports=(put, call), group_complete=True, pending_legs=0, position_flat=True,
+    )
+    reordered = SimpleNamespace(
+        reports=(call, put), group_complete=True, pending_legs=0, position_flat=True,
+    )
+
+    assert _track9_execution_result_callback_key(plan, result) == (
+        _track9_execution_result_callback_key(plan, reordered)
+    )
+
+
+def test_s9_callback_fingerprint_distinguishes_attempt_and_terminal_state():
+    from application.composition.automated_virtual_runtime_factory import (
+        _track9_execution_result_callback_key,
+    )
+
+    plan = SimpleNamespace(group_id="S9-GROUP", purpose="OVERNIGHT_INSURANCE_CLOSE")
+    first = SimpleNamespace(
+        client_order_id="S9-ATTEMPT-1", execution_id="S9-EXEC-1", status="FILLED",
+        filled_quantity=1, remaining_quantity=0, execution_price=Decimal("10"),
+        fee=Decimal("0.1"), execution_timestamp="2026-11-09T10:00:00+09:00",
+        group_id=plan.group_id, leg_id="put",
+    )
+    second = SimpleNamespace(**{**vars(first), "client_order_id": "S9-ATTEMPT-2"})
+    first_result = SimpleNamespace(
+        reports=(first,), group_complete=True, pending_legs=0, position_flat=True,
+    )
+    second_attempt_result = SimpleNamespace(
+        reports=(second,), group_complete=True, pending_legs=0, position_flat=True,
+    )
+    pending_result = SimpleNamespace(
+        reports=(first,), group_complete=False, pending_legs=1, position_flat=False,
+    )
+
+    first_key = _track9_execution_result_callback_key(plan, first_result)
+    assert first_key != _track9_execution_result_callback_key(plan, second_attempt_result)
+    assert first_key != _track9_execution_result_callback_key(plan, pending_result)

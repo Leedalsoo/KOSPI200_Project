@@ -2491,3 +2491,13 @@ S9 pending -> cancel/retry -> fill/close lifecycle: correlate same run/group/cli
 - Only Factory source and S9 E2E test changed in this step. Synthetic/stub replay only; no Live/account API, actual broker action, collector/service/scheduler or new collection.
 - Notion Q&A: https://app.notion.com/p/4265f4f6eaa1814bbf6fcce8f72dabd0
 - Next: verify callback fingerprint invariance to report ordering while keeping distinct attempts/fills separate.
+
+## 2026-11-28 No.1906 - S9 callback fingerprint ordering/attempt distinction
+
+- Reconciled No.1905/1904/1903 and No.1884/1885. No.1884 pending-aware group-scoped release remains in force; No.1885 durable callback outbox/restart dedup/restore/ownership/lease-fencing remains OPEN/unapproved.
+- Extracted S9 callback fingerprint into a pure helper and verified report ordering does not change the key, distinct client-order attempts do change the key, and terminal-state changes do change the key.
+- Real Factory -> StrategyHub E2E confirms duplicate terminal callback is not redelivered to strategy or reservation release path.
+- S9 core + composition regression: **64 passed**. Full `tests/validation_only`: **158 passed**. Compileall, scoped Ruff F401/F821/F841, and diff-check PASS.
+- Only Factory source and S9 E2E tests changed. Synthetic/stub validation only; no Live/account API, actual broker action, collector/service/scheduler or new collection.
+- Notion Q&A: https://app.notion.com/p/4265f4f6eaa18130b671fcca81413fe7
+- Next: verify partial-fill/cumulative-report fingerprint changes and ensure same-client cumulative reports are not mistaken for new execution events.
