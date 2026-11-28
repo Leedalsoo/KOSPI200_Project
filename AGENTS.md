@@ -2418,5 +2418,5 @@ S9 pending -> cancel/retry -> fill/close lifecycle: correlate same run/group/cli
 - Test commit: `1ea2590fc47fa290791ed88206b641ba1c0ed316` - `test: audit S7-S9 runtime lineage projections` (7 explicitly staged files).
 - Documentation sync commit: `d6bf7bbe42e04558b30132cc2fbfc9e50124c67e` - `docs: record S7-S9 lineage audit sync`.
 - Final Root-sync documentation commit: `bd7d3a8670973473c7923c74826648969c80b999` - `docs: verify Project200 root synchronization`.
-- All pushes were non-force and succeeded. Final origin/Project200 HEAD: `bd7d3a8670973473c7923c74826648969c80b999`.
+- Follow-up documentation normalization commit: `f96271a3a63956f1b5ca965daef2ebd026624cab`. All pushes were non-force and succeeded; final Root / isolated worktree / origin HEAD equality was verified after the latest push.
 - Root `git pull --ff-only origin Project200` completed. Root / isolated worktree / origin HEAD all match the final SHA. Root status remained 203 entries (313 including detailed untracked) before and after. No overlap with existing Root changes. Isolated worktree clean. No reset/clean/stash.
