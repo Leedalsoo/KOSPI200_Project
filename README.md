@@ -2428,3 +2428,14 @@ Detail: <mention url="https://app.notion.com/p/4265f4f6eaa181c29e4cf989ae171452"
 - Only Track9 strategy source and recovery tests changed. Synthetic/stub only; no Live/account API, actual broker action, collector/service/scheduler or new collection.
 - Notion Q&A: https://app.notion.com/p/4265f4f6eaa1810790d4f4849919ae46
 - Next: cross-check unique fill IDs against Fee Ledger totals, PositionLot quantities and StrategyHub weighted average.
+
+## 2026-11-28 No.1910 - S9 execution ID cross-projection verification
+
+- Reconciled No.1909/1908/1907 and No.1884/1885. No.1884 pending-aware group-scoped release remains; No.1885 durable callback outbox/restart dedup/restore/ownership/lease-fencing remains OPEN/unapproved.
+- Synthetic two-fill scenario cross-checked one unique execution ID set across canonical execution_fills, PositionLot history, Fee Ledger, virtual position aggregate and Track9 strategy callback state.
+- Canonical fills: 2 unique IDs; PositionLots: 2 / total quantity 2; Fee Ledger: 2 / total quantity 2 / fee total 0.20; aggregate quantity 2 / weighted average 10.5; Track9 CALL average 10.5. All projections matched.
+- No Production source defect was found in this cross-projection test; test-only addition.
+- S9 core + composition regression: **68 passed**. Full `tests/validation_only`: **158 passed**. Compileall, scoped Ruff F401/F821/F841, and diff-check PASS.
+- Synthetic/stub only; no Live/account API, actual broker action, collector/service/scheduler or new collection.
+- Notion Q&A: https://app.notion.com/p/4265f4f6eaa181c7b5fff9fc0b43e4c6
+- Next: end-to-end partial fill -> cancel -> retry -> late fill, checking StrategyHub, reservation, Fee Ledger and PositionLot consistency under overfill fail-closed.

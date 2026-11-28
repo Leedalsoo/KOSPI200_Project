@@ -6,7 +6,7 @@ from types import MethodType, SimpleNamespace
 import pytest
 
 from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
-from contracts.types import ExecutionLeg, ExecutionReport, MultiLegExecutionPlan, OptionInstrumentIdentity
+from contracts.types import ExecutionFill, ExecutionLeg, ExecutionReport, MultiLegExecutionPlan, OptionInstrumentIdentity
 from environments.virtual.authoritative_vssf.track9_fee_ledger import VirtualTrack9FeeLedger
 from environments.virtual.position.virtual_position_lot_store import VirtualPositionLotStore
 
@@ -311,3 +311,49 @@ def test_s9_late_fill_from_prior_attempt_cannot_overfill_after_retry_fill():
     assert bridge.fee_ledger.query(run_id=bridge.run_id) == ()
     assert bridge.leg_positions == {}
     assert bridge._applied_execution_fingerprints == {}
+
+def test_s9_execution_fill_ids_reconcile_position_lots_fees_and_strategy_average():
+    from core.strategy.track9_event_overnight_insurance import Track9EventOvernightInsurance
+
+    bridge, plan, leg, identity, command, report = _s9_execution_replay_inputs()
+    plan_leg = replace(plan.legs[0], quantity=2)
+    plan = replace(plan, legs=(plan_leg,))
+    bridge._group_plans = {plan.group_id: plan}
+    fills = (
+        ExecutionFill(
+            "S9-CROSS-FILL-001", 1, Decimal("10"),
+            datetime(2026, 11, 9, 10, 0, tzinfo=KST), Decimal("0.10"),
+        ),
+        ExecutionFill(
+            "S9-CROSS-FILL-002", 1, Decimal("11"),
+            datetime(2026, 11, 9, 10, 1, tzinfo=KST), Decimal("0.10"),
+        ),
+    )
+    report = replace(
+        report, filled_quantity=2, remaining_quantity=0,
+        execution_price=Decimal("10.5"), fee=Decimal("0.20"),
+        execution_fills=fills,
+    )
+    bridge._apply_reconciled_execution(
+        plan=plan, leg=leg, identity=identity,
+        broker_command=command, report=report,
+    )
+
+    strategy = Track9EventOvernightInsurance()
+    strategy.on_execution_result(
+        "OVERNIGHT_INSURANCE",
+        SimpleNamespace(
+            group_id=plan.group_id, group_complete=True, reports=(report,),
+        ),
+    )
+
+    lots = bridge.position_lot_store.history()
+    fees = bridge.fee_ledger.snapshot(run_id=bridge.run_id)
+    expected_ids = {fill.execution_id for fill in fills}
+    assert {lot.execution_id for lot in lots} == expected_ids
+    assert {fee.execution_id for fee in fees} == expected_ids
+    assert sum(lot.opened_quantity for lot in lots) == 2
+    assert sum(fee.executed_quantity for fee in fees) == 2
+    assert bridge.fee_ledger.total(run_id=bridge.run_id) == Decimal("0.20")
+    assert bridge.leg_positions[identity.instrument_id].avg_price == Decimal("10.5")
+    assert strategy.state.call_entry_fill_price == Decimal("10.5")
