@@ -8,13 +8,15 @@ from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from application.composition.virtual_multi_leg_execution import (
     VirtualMultiLegExecutionBridge,
 )
 from application.composition.track9_validation_only_runtime_adapter import (
     Track9ValidationOnlyRuntimeAdapter,
 )
-from contracts.types import ExecutionReport
+from contracts.types import ExecutionFill, ExecutionReport
 from environments.high_speed.replay_trace import ReplayLogMode
 from environments.high_speed.virtual_runtime_replay import (
     HighSpeedVirtualRuntimeReplayRunner,
@@ -197,7 +199,7 @@ class _PendingCallFirstBroker:
         return self.delegate.cancel(client_order_id)
 
 
-def _retry_dataset(tmp_path: Path, *, include_close: bool = False) -> tuple[Path, Path]:
+def _retry_dataset(tmp_path: Path, *, include_close: bool = False, include_replay_tail: bool = True) -> tuple[Path, Path]:
     source_rows = [
         json.loads(line)
         for line in (DATA / "20261106.jsonl").read_text(encoding="utf-8").splitlines()
@@ -220,7 +222,8 @@ def _retry_dataset(tmp_path: Path, *, include_close: bool = False) -> tuple[Path
             tick["option_observed_hour"] = "15:45:00"
             tick["underlying_observed_hour"] = "15:45:00"
             expanded.append(row)
-    expanded.extend(source_rows[2:])
+    if include_replay_tail:
+        expanded.extend(source_rows[2:])
     for seq, row in enumerate(expanded, start=1):
         row["tick"]["seq_id"] = seq
 
@@ -604,3 +607,184 @@ def test_s9_callback_fingerprint_includes_individual_execution_fill_lineage():
     assert _track9_execution_result_callback_key(plan, first_result) != (
         _track9_execution_result_callback_key(plan, second_result)
     )
+
+class _PartialCallThenDelegateBroker:
+    def __init__(self, delegate):
+        self.delegate = delegate
+        self.pending = {}
+        self.call_buy_submissions = 0
+        self.initial_command = None
+        self.initial_fill = ExecutionFill(
+            "S9-INITIAL-PARTIAL-FILL", 1, Decimal("10.25"),
+            datetime(2026, 11, 6, 15, 0, tzinfo=timezone(timedelta(hours=9))),
+            Decimal("0.10"),
+        )
+
+    def submit(self, command):
+        if str(getattr(command, "leg_id", "")) == "call" and str(getattr(command, "side", "")).upper() == "BUY":
+            self.call_buy_submissions += 1
+            if self.call_buy_submissions == 1:
+                self.initial_command = replace(command, quantity=2)
+                report = ExecutionReport(
+                    client_order_id=command.client_order_id,
+                    broker_order_id="S9-CALL-PARTIAL-ORDER",
+                    execution_id=self.initial_fill.execution_id,
+                    status="PARTIALLY_FILLED",
+                    filled_quantity=1,
+                    remaining_quantity=1,
+                    execution_price=self.initial_fill.execution_price,
+                    execution_timestamp=self.initial_fill.execution_timestamp,
+                    fee=self.initial_fill.fee,
+                    submitted_at=datetime(2026, 11, 6, 15, 0, tzinfo=timezone(timedelta(hours=9))),
+                    group_id=command.group_id,
+                    leg_id=command.leg_id,
+                    execution_fills=(self.initial_fill,),
+                )
+                self.pending[command.client_order_id] = report
+                return report
+            retry_fill = ExecutionFill(
+                "S9-RETRY-ORDER-FILL", 1, Decimal("11.00"),
+                datetime(2026, 11, 6, 15, 10, tzinfo=timezone(timedelta(hours=9))),
+                Decimal("0.10"),
+            )
+            return ExecutionReport(
+                client_order_id=command.client_order_id,
+                broker_order_id="S9-CALL-RETRY-ORDER",
+                execution_id=retry_fill.execution_id,
+                status="FILLED", filled_quantity=1, remaining_quantity=0,
+                execution_price=retry_fill.execution_price,
+                execution_timestamp=retry_fill.execution_timestamp,
+                fee=retry_fill.fee, group_id=command.group_id,
+                leg_id=command.leg_id, execution_fills=(retry_fill,),
+            )
+        return self.delegate.submit(command)
+
+    def query(self, client_order_id):
+        return self.pending.get(client_order_id) or self.delegate.query(client_order_id)
+
+    def cancel(self, client_order_id):
+        report = self.pending[client_order_id]
+        self.pending[client_order_id] = replace(report, status="CANCELLED")
+        return self.pending[client_order_id]
+
+
+def test_s9_partial_fill_cancel_retry_late_fill_fails_closed_across_strategy_reservation_and_ledgers(
+    monkeypatch, tmp_path,
+):
+    dataset, manifest = _retry_dataset(tmp_path, include_replay_tail=False)
+    bridges = []
+    brokers = []
+    original_init = VirtualMultiLegExecutionBridge.__init__
+
+    def patched_init(self, **kwargs):
+        original_init(self, **kwargs)
+        broker = _PartialCallThenDelegateBroker(self.ack.broker)
+        self.ack.broker = broker
+        brokers.append(broker)
+        bridges.append(self)
+
+    monkeypatch.setattr(VirtualMultiLegExecutionBridge, "__init__", patched_init)
+    runner = HighSpeedVirtualRuntimeReplayRunner(
+        dataset,
+        run_id="S9-PARTIAL-CANCEL-RETRY-LATE-FILL-E2E",
+        strategy_keys=(("track9_event_overnight_insurance", "3.0"),),
+        validation_only_synthetic=True,
+        validation_only_synthetic_manifest=manifest,
+        validation_only_s9_contract_profile=CONTRACT,
+        validation_only_s9_risk_profile=RISK,
+        log_mode=ReplayLogMode.FAST,
+    )
+    runner.run(max_events=2)
+
+    bridge, broker = bridges[-1], brokers[-1]
+    strategy = runner.s9_strategy
+    adapter = runner.s9_validation_runtime_adapter
+    assert broker.call_buy_submissions == 1
+    assert broker.initial_command is not None
+    assert broker.initial_command.quantity == 2
+    group_id = next(iter(bridge.position_groups.all()))
+    initial_order_id = broker.initial_command.client_order_id
+    pending_plan, pending_leg, pending_command = bridge.pending_legs[initial_order_id]
+    group_plan = replace(pending_plan, legs=tuple(replace(leg, quantity=2) for leg in pending_plan.legs))
+    call_leg = next(leg for leg in group_plan.legs if leg.leg_id == "call")
+    bridge._group_plans[group_id] = group_plan
+    bridge.pending_legs[initial_order_id] = (group_plan, pending_leg, broker.initial_command)
+    assert len(bridge.pending_legs) == 1
+
+    bridge.cancel_pending_order(initial_order_id)
+    assert initial_order_id not in bridge.pending_legs
+    retry_leg = replace(call_leg, quantity=1)
+    retry_plan = replace(group_plan, legs=(retry_leg,), attempt_id="S9-RETRY-0001")
+    bridge.execute(retry_plan, group_plan=group_plan)
+    assert broker.call_buy_submissions == 2
+
+    group_id = next(iter(bridge.position_groups.all()))
+    group_plan = bridge._group_plans[group_id]
+    call_leg = next(leg for leg in group_plan.legs if leg.leg_id == "call")
+    initial_order_id = broker.initial_command.client_order_id
+    retry_reports = [
+        item for item in bridge.group_reports(group_id)
+        if item.leg_id == "call" and item.client_order_id != initial_order_id
+        and item.filled_quantity > 0
+    ]
+    assert len(retry_reports) == 1
+    assert group_id in adapter._reserved
+
+    lots_before = tuple(bridge.position_lot_store.history())
+    fees_before = tuple(bridge.fee_ledger.snapshot(run_id=runner.run_id))
+    positions_before = {
+        instrument_id: (position.qty, position.avg_price)
+        for instrument_id, position in bridge.leg_positions.items()
+    }
+    fingerprints_before = dict(bridge._applied_execution_fingerprints)
+    strategy_before = strategy.state
+    reservations_before = dict(adapter._reserved)
+    call_lots_before = tuple(lot for lot in lots_before if lot.leg_id == "call")
+    call_fees_before = tuple(row for row in fees_before if row.leg_id == "call")
+    assert sum(lot.opened_quantity for lot in call_lots_before) == 2
+    assert sum(row.executed_quantity for row in call_fees_before) == 2
+    assert {lot.execution_id for lot in call_lots_before} == {row.execution_id for row in call_fees_before}
+
+    late_fill = ExecutionFill(
+        "S9-LATE-POST-CANCEL-FILL", 1, Decimal("10.50"),
+        datetime(2026, 11, 6, 15, 11, tzinfo=timezone(timedelta(hours=9))),
+        Decimal("0.10"),
+    )
+    late_report = ExecutionReport(
+        client_order_id=initial_order_id,
+        broker_order_id="S9-CALL-PARTIAL-ORDER",
+        execution_id=late_fill.execution_id,
+        status="FILLED",
+        filled_quantity=1,
+        remaining_quantity=0,
+        execution_price=late_fill.execution_price,
+        execution_timestamp=late_fill.execution_timestamp,
+        fee=late_fill.fee,
+        submitted_at=datetime(2026, 11, 6, 15, 0, tzinfo=timezone(timedelta(hours=9))),
+        group_id=group_id,
+        leg_id="call",
+        execution_fills=(late_fill,),
+    )
+    late_plan = replace(group_plan, legs=(pending_leg,), attempt_id=None)
+
+    with pytest.raises(
+        RuntimeError,
+        match="MULTI_LEG_EXECUTION_LEG_OVERFILL_RECONCILIATION_REQUIRED",
+    ):
+        bridge.execute(
+            late_plan,
+            group_plan=group_plan,
+            reconciled_reports={initial_order_id: late_report},
+            reconciled_commands={initial_order_id: broker.initial_command},
+        )
+
+    assert tuple(bridge.position_lot_store.history()) == lots_before
+    assert tuple(bridge.fee_ledger.snapshot(run_id=runner.run_id)) == fees_before
+    assert {
+        instrument_id: (position.qty, position.avg_price)
+        for instrument_id, position in bridge.leg_positions.items()
+    } == positions_before
+    assert bridge._applied_execution_fingerprints == fingerprints_before
+    assert strategy.state == strategy_before
+    assert adapter._reserved == reservations_before
+    assert group_id in adapter._reserved

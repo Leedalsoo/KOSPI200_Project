@@ -2542,3 +2542,14 @@ S9 pending -> cancel/retry -> fill/close lifecycle: correlate same run/group/cli
 - Synthetic/stub only; no Live/account API, actual broker action, collector/service/scheduler or new collection.
 - Notion Q&A: https://app.notion.com/p/4265f4f6eaa181c7b5fff9fc0b43e4c6
 - Next: end-to-end partial fill -> cancel -> retry -> late fill, checking StrategyHub, reservation, Fee Ledger and PositionLot consistency under overfill fail-closed.
+
+## 2026-11-28 No.1911 - S9 partial-fill / cancel / retry / late-fill overfill guard
+
+- Test-first reproduced a defect: the Bridge overfill guard excluded prior fills from the same client-order ID. A new late Execution ID from a cancelled attempt could therefore be accepted after a retry had filled the remaining group-leg quantity.
+- Fixed `application/composition/virtual_multi_leg_execution.py`: aggregate prior group reports plus the incoming report by unique Execution ID; suppress broker aggregate rows already represented by canonical `execution_fills`; for no-ID cumulative snapshots use the maximum quantity per client order. Reject above the original group-plan leg quantity before any PositionLot, Fee Ledger, Virtual position, fingerprint or StrategyHub callback mutation.
+- Added direct regression and synthetic Factory/StrategyHub/Bridge integration test for partial fill -> cancel -> retry -> late fill. The late fill fails closed; StrategyHub state and group reservation remain unchanged; PositionLot and Fee Ledger CALL quantities both equal 2 with matching Execution IDs.
+- S9 core + composition + Track9 recovery: **33 passed**. `tests/validation_only`: **158 passed**. Compileall, Ruff F401/F821/F841 and `git diff --check`: PASS.
+- No.1884 pending-aware group-scoped reservation release remains in force. No.1885 authoritative reservation restore/persistence/ownership/lease/fencing/retry/callback-outbox/broker-reconciliation/restart-ack remains OPEN / UNAPPROVED. No policy inferred.
+- Synthetic/in-process validation only. No KIS Live/account API, real broker order/cancel/close, collector/service/scheduler, new data collection or Raw/Canonical/accepted-source/manifest original mutation. No combined S7/S8/S9 adapter Runtime acceptance claimed.
+- Notion Q&A: https://app.notion.com/p/4265f4f6eaa181a1be66dcd0ea959025
+- Next: No.1912 - StrategyHub callback and reservation-release ordering under late-fill/retry races.

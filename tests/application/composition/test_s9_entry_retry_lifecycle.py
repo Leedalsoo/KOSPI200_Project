@@ -357,3 +357,74 @@ def test_s9_execution_fill_ids_reconcile_position_lots_fees_and_strategy_average
     assert bridge.fee_ledger.total(run_id=bridge.run_id) == Decimal("0.20")
     assert bridge.leg_positions[identity.instrument_id].avg_price == Decimal("10.5")
     assert strategy.state.call_entry_fill_price == Decimal("10.5")
+
+
+def test_s9_late_incremental_fill_same_cancelled_attempt_counts_prior_same_order_fills():
+    bridge, plan, leg, identity, command, base_report = _s9_execution_replay_inputs()
+    target_leg = replace(plan.legs[0], quantity=2)
+    plan = replace(plan, legs=(target_leg,))
+    bridge._group_plans = {plan.group_id: plan}
+
+    first_fill = ExecutionFill(
+        "S9-PARTIAL-INITIAL-EXEC", 1, Decimal("10"),
+        datetime(2026, 11, 9, 10, 0, tzinfo=KST), Decimal("0.10"),
+    )
+    first_report = replace(
+        base_report, execution_id=first_fill.execution_id,
+        status="CANCELLED", filled_quantity=1, remaining_quantity=1,
+        execution_price=first_fill.execution_price, fee=first_fill.fee,
+        execution_fills=(first_fill,),
+    )
+    bridge._apply_reconciled_execution(
+        plan=plan, leg=target_leg, identity=identity,
+        broker_command=command, report=first_report,
+    )
+
+    retry_command = SimpleNamespace(**{
+        **vars(command), "client_order_id": "S9-ATTEMPT-2-CALL",
+    })
+    retry_fill = ExecutionFill(
+        "S9-PARTIAL-RETRY-EXEC", 1, Decimal("11"),
+        datetime(2026, 11, 9, 10, 10, tzinfo=KST), Decimal("0.10"),
+    )
+    retry_report = replace(
+        first_report, client_order_id=retry_command.client_order_id,
+        broker_order_id="SYNTHETIC-BROKER-2", execution_id=retry_fill.execution_id,
+        status="FILLED", filled_quantity=1, remaining_quantity=0,
+        execution_price=retry_fill.execution_price, fee=retry_fill.fee,
+        execution_fills=(retry_fill,),
+    )
+    bridge._apply_reconciled_execution(
+        plan=plan, leg=target_leg, identity=identity,
+        broker_command=retry_command, report=retry_report,
+    )
+    bridge.groups = {plan.group_id: [first_report, retry_report]}
+
+    before_lots = tuple(bridge.position_lot_store.history())
+    before_fees = tuple(bridge.fee_ledger.snapshot(run_id=bridge.run_id))
+    before_position = bridge.leg_positions[identity.instrument_id].qty
+    before_fingerprints = dict(bridge._applied_execution_fingerprints)
+    late_fill = ExecutionFill(
+        "S9-PARTIAL-LATE-POST-CANCEL-EXEC", 1, Decimal("12"),
+        datetime(2026, 11, 9, 10, 11, tzinfo=KST), Decimal("0.10"),
+    )
+    late_report = replace(
+        first_report, execution_id=late_fill.execution_id,
+        status="FILLED", filled_quantity=1, remaining_quantity=0,
+        execution_price=late_fill.execution_price, fee=late_fill.fee,
+        execution_fills=(late_fill,),
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="MULTI_LEG_EXECUTION_LEG_OVERFILL_RECONCILIATION_REQUIRED",
+    ):
+        bridge._apply_reconciled_execution(
+            plan=plan, leg=target_leg, identity=identity,
+            broker_command=command, report=late_report,
+        )
+
+    assert tuple(bridge.position_lot_store.history()) == before_lots
+    assert tuple(bridge.fee_ledger.snapshot(run_id=bridge.run_id)) == before_fees
+    assert bridge.leg_positions[identity.instrument_id].qty == before_position == 2
+    assert bridge._applied_execution_fingerprints == before_fingerprints

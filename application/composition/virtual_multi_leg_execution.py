@@ -979,14 +979,52 @@ class VirtualMultiLegExecutionBridge:
             )
             if target_leg is None:
                 raise RuntimeError("MULTI_LEG_EXECUTION_LEG_OVERFILL_RECONCILIATION_REQUIRED")
-            prior_filled = sum(
-                int(getattr(prior, "filled_quantity", 0) or 0)
+            leg_reports = tuple(
+                prior
                 for prior in getattr(self, "groups", {}).get(plan.group_id, ())
                 if prior.leg_id == leg.leg_id
-                and prior.client_order_id != report.client_order_id
-            )
-            incoming_filled = sum(int(item.filled_quantity) for item in fill_reports)
-            if prior_filled + incoming_filled > int(target_leg.quantity):
+            ) + (report,)
+            canonical_fill_ids = {
+                str(getattr(fill, "execution_id", "") or "")
+                for item in leg_reports
+                for fill in tuple(getattr(item, "execution_fills", ()) or ())
+                if getattr(fill, "execution_id", None)
+            }
+            orders_with_fill_events = {
+                str(getattr(item, "client_order_id", "") or "")
+                for item in leg_reports
+                if tuple(getattr(item, "execution_fills", ()) or ())
+            }
+            unique_fill_quantities: dict[str, int] = {}
+            cumulative_quantities: dict[str, int] = {}
+            for index, item in enumerate(leg_reports):
+                fills = tuple(getattr(item, "execution_fills", ()) or ())
+                if fills:
+                    for fill in fills:
+                        execution_id = str(getattr(fill, "execution_id", "") or "")
+                        quantity = int(getattr(
+                            fill, "filled_quantity", getattr(fill, "quantity", 0),
+                        ) or 0)
+                        if execution_id and quantity > 0:
+                            unique_fill_quantities.setdefault(execution_id, quantity)
+                    continue
+                execution_id = str(getattr(item, "execution_id", "") or "")
+                if execution_id:
+                    if execution_id not in canonical_fill_ids:
+                        unique_fill_quantities.setdefault(
+                            execution_id, int(getattr(item, "filled_quantity", 0) or 0),
+                        )
+                    continue
+                client_order_id = str(getattr(item, "client_order_id", "") or "")
+                if client_order_id in orders_with_fill_events:
+                    continue
+                order_key = client_order_id or f"__report_{index}"
+                cumulative_quantities[order_key] = max(
+                    cumulative_quantities.get(order_key, 0),
+                    int(getattr(item, "filled_quantity", 0) or 0),
+                )
+            total_filled = sum(unique_fill_quantities.values()) + sum(cumulative_quantities.values())
+            if total_filled > int(target_leg.quantity):
                 raise RuntimeError("MULTI_LEG_EXECUTION_LEG_OVERFILL_RECONCILIATION_REQUIRED")
         if not fill_reports:
             self.provenance[report.client_order_id] = {
