@@ -2369,3 +2369,15 @@ Detail: <mention url="https://app.notion.com/p/4265f4f6eaa181c29e4cf989ae171452"
 - This is same-process synthetic Factory callback isolation, not OS-process restart, durable persistence, authoritative restore precedence, ownership/lease/fencing, callback outbox/retry, broker recovery or combined S7/S8/S9 Runtime acceptance. No.1885 remains OPEN; No.1884 release semantics unchanged. S4 remains DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
 - No KIS/REAL_VTS/account/Live API, broker action/order/cancel/liquidation, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original mutation.
 - Notion Q&A: https://app.notion.com/p/4265f4f6eaa181bc93ebc211bb53bb12
+
+
+## 2026-11-28 No.1899 ? S7/S8/S9 shared Runtime regression
+
+- Reconciled latest Notion No.1898/1897/1896 and controlling No.1885/1884 with Current Baseline, A8 SSOT/update log/roadmap and Project200 HEAD. No.1885 recovery source-of-truth/restore precedence/durable persistence/ownership/lease/fencing/retry/callback outbox/broker reconciliation/restart acknowledgement remains OPEN. No.1884 pending-aware group-scoped release remains in force.
+- Missing original shared-runtime trend-up dataset and Option Master anchor were not treated as immediate BLOCKED. Root high-volatility DERIVED_SCENARIO source manifest and 20261008 tick file were hash-verified; an isolated 60-row/six-timestamp synthetic overlay and a clearly non-authoritative SYNTHETIC_ONLY anchor were created for validation only. The anchor states authority NONE and BLOCKED_IDENTITY_OWNER_UNRESOLVED; it is not a KRX Option Master or Standard identity source.
+- Shared StrategyHub runtime composition: 13 passed (nine Standard strategy keys individually, shared-account isolation case, three fault injections). S7: 9 passed; S8: 42 passed; S9: 28 passed. Combined regression: 92 passed. All tests/validation_only: 158 passed.
+- Root S7/S8 fixture originals were SHA-256 checked before temporary copying and after validation; all original hashes unchanged. Temporary copies and synthetic overlay were removed from isolated worktree.
+- Ruff F401 reproduced one unused Track9OptionContractSource import in application/composition/automated_virtual_runtime_factory.py. Removed that import only. Post-fix 92/158 tests, compileall, Ruff F401/F821/F841 and git diff --check PASS. No strategy behavior/policy change; no tests changed.
+- This is per-strategy validation plus shared StrategyHub routing. Factory validation-adapter gate constraints remain unchanged; no single Runtime with S7/S8/S9 adapters simultaneously attached is claimed. No.1885 remains OPEN; S4 DRAFT / UNVERIFIED / UNAPPROVED / DISABLED.
+- No KIS/REAL_VTS/account/Live API, broker action/order/cancel/liquidation, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original mutation.
+- Notion Q&A: https://app.notion.com/p/4265f4f6eaa18172b585d15783ec6e03
