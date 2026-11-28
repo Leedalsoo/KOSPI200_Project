@@ -30,6 +30,67 @@ def _proposal(tag_id: str, option_type: str, strike: Decimal, *, side: str = "BU
     )
 
 
+def _track7_read_only_lineage_mismatches(
+    *,
+    expected_run_id: str,
+    expected_group_id: str,
+    expected_expiry: str,
+    aggregate_group_id: str,
+    aggregate_expiry: str,
+    pending_records: tuple[tuple[str, str, str, str, str], ...],
+    position_records: tuple[tuple[str, str, str, str], ...],
+    fee_records: tuple[tuple[str, str, str], ...],
+) -> tuple[str, ...]:
+    """Test-side read-only identity audit; it never receives mutable stores."""
+    mismatches: set[str] = set()
+    if aggregate_group_id != expected_group_id:
+        mismatches.add("aggregate_group_mismatch")
+    if aggregate_expiry != expected_expiry:
+        mismatches.add("aggregate_expiry_mismatch")
+
+    if not pending_records:
+        mismatches.add("pending_projection_missing")
+    if len(pending_records) > 1:
+        mismatches.add("pending_projection_duplicate")
+    for plan_group, leg_id, command_group, command_leg, expiry in pending_records:
+        if plan_group != expected_group_id or command_group != expected_group_id:
+            mismatches.add("pending_group_mismatch")
+        if leg_id != command_leg:
+            mismatches.add("pending_leg_mismatch")
+        if expiry != expected_expiry:
+            mismatches.add("pending_expiry_mismatch")
+
+    if not position_records:
+        mismatches.add("position_projection_missing")
+    if len(position_records) > 1:
+        mismatches.add("position_projection_duplicate")
+    for run_id, group_id, expiry, _execution_id in position_records:
+        if run_id != expected_run_id:
+            mismatches.add("position_run_mismatch")
+        if group_id != expected_group_id:
+            mismatches.add("position_group_mismatch")
+        if expiry != expected_expiry:
+            mismatches.add("position_expiry_mismatch")
+
+    if not fee_records:
+        mismatches.add("fee_projection_missing")
+    if len(fee_records) > 1:
+        mismatches.add("fee_projection_duplicate")
+    for run_id, group_id, _execution_id in fee_records:
+        if run_id != expected_run_id:
+            mismatches.add("fee_run_mismatch")
+        if group_id != expected_group_id:
+            mismatches.add("fee_group_mismatch")
+    if {record[3] for record in position_records} != {record[2] for record in fee_records}:
+        mismatches.add("fee_execution_lineage_mismatch")
+
+    if len({record[3] for record in position_records}) != len(position_records):
+        mismatches.add("position_execution_duplicate")
+    if len({record[2] for record in fee_records}) != len(fee_records):
+        mismatches.add("fee_execution_duplicate")
+    return tuple(sorted(mismatches))
+
+
 def test_s7_pending_call_reconciliation_keeps_original_expiry_after_market_tick_rolls():
     replay_adapter = SyntheticReplayAdapter(DATASET, manifest_path=MANIFEST)
     master = build_synthetic_option_master(DATASET, validation_only_adapter=replay_adapter)
@@ -165,6 +226,62 @@ def test_s7_pending_call_reconciliation_keeps_original_expiry_after_market_tick_
     assert {row.group_id for row in pending_fees} == {call_plan.group_id}
     assert {row.execution_id for row in pending_fees} == {lot.execution_id for lot in pending_lots}
     assert len(bridge.pending_legs) == 1
+
+    # Read-only mismatch characterization: the audit receives immutable scalar
+    # projections, not the Bridge stores, aggregate object, or reservation maps.
+    pending_records = tuple(
+        (plan.group_id, leg.leg_id, command.group_id, command.leg_id, leg.instrument_identity.expiry)
+        for plan, leg, command in bridge.pending_legs.values()
+    )
+    position_records = tuple(
+        (lot.run_id, lot.group_id, lot.instrument_identity.expiry, lot.execution_id)
+        for lot in pending_lots
+    )
+    fee_records = tuple((row.run_id, row.group_id, row.execution_id) for row in pending_fees)
+    projections_before = (pending_records, position_records, fee_records)
+    audit_args = {
+        "expected_run_id": "Q25-S7-PENDING-IDENTITY-RECONCILIATION",
+        "expected_group_id": call_plan.group_id,
+        "expected_expiry": restored_expiry,
+        "aggregate_group_id": restored_group_state.entry_group_id,
+        "aggregate_expiry": restored_expiry,
+        "pending_records": pending_records,
+        "position_records": position_records,
+        "fee_records": fee_records,
+    }
+    assert _track7_read_only_lineage_mismatches(**audit_args) == ()
+
+    bad_pending = ((pending_records[0][0], pending_records[0][1], "WRONG-GROUP",
+                    pending_records[0][3], pending_records[0][4]),)
+    assert "pending_group_mismatch" in _track7_read_only_lineage_mismatches(
+        **{**audit_args, "pending_records": bad_pending}
+    )
+    bad_position = ((position_records[0][0], "WRONG-GROUP",
+                     position_records[0][2], position_records[0][3]),)
+    assert "position_group_mismatch" in _track7_read_only_lineage_mismatches(
+        **{**audit_args, "position_records": bad_position}
+    )
+    bad_fee = ((fee_records[0][0], fee_records[0][1], "WRONG-EXECUTION"),)
+    assert "fee_execution_lineage_mismatch" in _track7_read_only_lineage_mismatches(
+        **{**audit_args, "fee_records": bad_fee}
+    )
+    missing = _track7_read_only_lineage_mismatches(
+        **{**audit_args, "pending_records": (), "position_records": (), "fee_records": ()}
+    )
+    assert {"pending_projection_missing", "position_projection_missing",
+            "fee_projection_missing"}.issubset(missing)
+    duplicated = _track7_read_only_lineage_mismatches(
+        **{**audit_args, "pending_records": pending_records * 2,
+           "position_records": position_records * 2, "fee_records": fee_records * 2}
+    )
+    assert {"pending_projection_duplicate", "position_projection_duplicate",
+            "fee_projection_duplicate", "position_execution_duplicate",
+            "fee_execution_duplicate"}.issubset(duplicated)
+    assert (pending_records, position_records, fee_records) == projections_before
+    assert len(bridge.pending_legs) == 1
+    assert len(bridge.position_lot_store.open_lots()) == 1
+    assert len(bridge.fee_ledger.snapshot(run_id=audit_args["expected_run_id"])) == 1
+    assert restored_group_state.entry_group_id == call_plan.group_id
     # A same-run adapter reconstruction at the partial-position + pending-order
     # boundary has no supported way to hydrate the active group's reservations.
     reconstructed_pending_adapter = S7ValidationOnlyRuntimeAdapter(
