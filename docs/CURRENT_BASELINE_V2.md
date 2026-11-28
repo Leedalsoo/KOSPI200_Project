@@ -2469,3 +2469,14 @@ S9 pending -> cancel/retry -> fill/close lifecycle: correlate same run/group/cli
 - No combined S7/S8/S9 adapter Runtime acceptance. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
 - Notion Q&A: https://app.notion.com/p/4265f4f6eaa181e09e4df89d1187ff56
 - Next: duplicate S9 terminal callback and callback-order reversal; verify StrategyHub transition and reservation release are not applied twice.
+
+## 2026-11-28 No.1904 - S9 duplicate terminal callback / callback-order reversal
+
+- Reconciled No.1903/1902/1901 and No.1884/1885. No.1884 pending-aware group-scoped reservation release remains in force; No.1885 durable restore/ownership/lease-fencing/callback-outbox/broker-reconciliation/restart-ack remains OPEN/unapproved.
+- Test-first synthetic replay reproduced a stale ENTRY callback arriving after terminal CLOSE for the same group and reopening Track9 state from CLOSED to OVERNIGHT_INSURANCE_ACTIVE.
+- Fixed Track9 strategy with an in-process closed-group ID set: terminal close records the group; later entry callbacks for that same group are ignored. Group ID is read from result or its reports. reset clears the set. Duplicate terminal close callback remains idempotent.
+- This is process-local ordering protection only; it does not replace or approve No.1885 durable callback outbox/restart deduplication.
+- S9 core + composition regression: **62 passed**. Full `tests/validation_only`: **158 passed**. Compileall, Ruff F401/F821/F841, and diff-check PASS.
+- Only Track9 strategy source and its recovery tests changed in this step. Synthetic callback replay only; no Live/account API, broker action, collector/service/scheduler or new collection.
+- Notion Q&A: https://app.notion.com/p/4265f4f6eaa181e8a41ff085fe3c9353
+- Next: verify StrategyHub callback delivery, reservation release and terminal event synchronization within one group.

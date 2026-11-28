@@ -175,3 +175,44 @@ def test_s9_entry_plan_is_strictly_buy_buy_and_sell_entry_is_rejected() -> None:
     sell_proposal = replace(signals[0].execution_proposal, side="SELL")
     with pytest.raises(ValueError, match="TRACK9_ENTRY_MUST_BE_BUY_BUY"):
         strategy.build_execution_plan("S9-SELL-ENTRY-BLOCKED", proposal=sell_proposal)
+
+def test_late_duplicate_s9_entry_callback_cannot_reopen_closed_group() -> None:
+    strategy = Track9EventOvernightInsurance()
+    strategy.state = Track9State(state="EXIT_PENDING")
+    strategy._exit_pending = True
+    close_result = SimpleNamespace(
+        group_id="S9-CALLBACK-GROUP-1", group_complete=True,
+        position_flat=True, reports=(),
+    )
+    entry_result = SimpleNamespace(
+        group_id="S9-CALLBACK-GROUP-1", group_complete=True,
+        position_flat=False,
+        reports=(
+            SimpleNamespace(leg_id="put", filled_quantity=1, execution_price=Decimal("10")),
+            SimpleNamespace(leg_id="call", filled_quantity=1, execution_price=Decimal("11")),
+        ),
+    )
+
+    strategy.on_execution_result("OVERNIGHT_INSURANCE_CLOSE", close_result)
+    strategy.on_execution_result("OVERNIGHT_INSURANCE", entry_result)
+
+    assert strategy.state.state == "OVERNIGHT_INSURANCE_CLOSED"
+    assert strategy._exit_pending is False
+
+
+def test_duplicate_s9_terminal_close_callback_is_idempotent() -> None:
+    strategy = Track9EventOvernightInsurance()
+    strategy.state = Track9State(state="EXIT_PENDING")
+    strategy._exit_pending = True
+    close_result = SimpleNamespace(
+        group_id="S9-CALLBACK-GROUP-2", group_complete=True,
+        position_flat=True, reports=(),
+    )
+
+    strategy.on_execution_result("OVERNIGHT_INSURANCE_CLOSE", close_result)
+    first_state = strategy.state
+    strategy.on_execution_result("OVERNIGHT_INSURANCE_CLOSE", close_result)
+
+    assert strategy.state == first_state
+    assert strategy.state.state == "OVERNIGHT_INSURANCE_CLOSED"
+    assert strategy._exit_pending is False

@@ -1,8 +1,8 @@
-"""Independent Strategy 9: buy an ATM PUT+CALL pair for overnight insurance."""
+﻿"""Independent Strategy 9: buy an ATM PUT+CALL pair for overnight insurance."""
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from datetime import date, datetime, time
+from datetime import date, time
 from decimal import Decimal
 from typing import Sequence
 
@@ -59,6 +59,7 @@ class Track9EventOvernightInsurance:
         self.ENTRY_TIME = ENTRY_EVALUATION_TIME
         self.state = Track9State()
         self._exit_pending = False
+        self._closed_group_ids: set[str] = set()
         self.validation_only_runtime = False
 
     def initialize(self, context: StrategyContext) -> None:
@@ -71,6 +72,7 @@ class Track9EventOvernightInsurance:
     def reset(self) -> None:
         self.state = Track9State()
         self._exit_pending = False
+        self._closed_group_ids.clear()
 
     @staticmethod
     def _runtime_input(context: StrategyContext) -> Track9RuntimeInput | None:
@@ -175,7 +177,14 @@ class Track9EventOvernightInsurance:
 
     def on_execution_result(self, purpose: str, result: object) -> None:
         reports = tuple(getattr(result, "reports", ()) or ())
+        group_id = str(
+            getattr(result, "group_id", None)
+            or next((getattr(item, "group_id", None) for item in reports
+                     if getattr(item, "group_id", None)), "")
+        )
         if purpose == "OVERNIGHT_INSURANCE":
+            if group_id and group_id in self._closed_group_ids:
+                return
             totals = {"put": 0, "call": 0}
             values = {"put": Decimal("0"), "call": Decimal("0")}
             for item in reports:
@@ -201,6 +210,8 @@ class Track9EventOvernightInsurance:
         if bool(getattr(result, "group_complete", False)) and bool(getattr(result, "position_flat", False)):
             self.state = replace(self.state, state="OVERNIGHT_INSURANCE_CLOSED")
             self._exit_pending = False
+            if group_id:
+                self._closed_group_ids.add(group_id)
         else:
             self.state = replace(self.state, state="EXIT_PENDING")
 
