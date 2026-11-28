@@ -139,6 +139,22 @@ def test_s7_pending_call_reconciliation_keeps_original_expiry_after_market_tick_
     assert pending_fees[0].execution_id == pending_lots[0].execution_id
     assert pending_fees[0].group_id == pending_lots[0].group_id == call_plan.group_id
 
+    # A same-run adapter reconstruction at the partial-position + pending-order
+    # boundary has no supported way to hydrate the active group's reservations.
+    reconstructed_pending_adapter = S7ValidationOnlyRuntimeAdapter(
+        dataset=DATASET,
+        manifest_path=MANIFEST,
+        risk_profile_path=ROOT / "config/validation_only/q25_s05_3_s7_concurrent/risk_profile.json",
+    )
+    reconstructed_pending_adapter.bind_run_id("Q25-S7-PENDING-IDENTITY-RECONCILIATION")
+    assert len(bridge.pending_legs) == 1
+    assert len(pending_lots) == 1
+    assert len(pending_fees) == 1
+    assert reconstructed_pending_adapter._reserved == {}
+    assert reconstructed_pending_adapter._reserved_entry_fees == {}
+    assert reconstructed_pending_adapter._group_expiry_by_id == {}
+    assert set(s7_adapter._reserved[call_plan.group_id]) == {"put", "call"}
+
     client_order_id = call_result.reports[0].client_order_id
     stored_group_plan, stored_leg, stored_command = bridge.pending_legs[client_order_id]
     assert stored_command.client_order_id == client_order_id
