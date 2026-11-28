@@ -2420,3 +2420,15 @@ S9 pending -> cancel/retry -> fill/close lifecycle: correlate same run/group/cli
 - Final Root-sync documentation commit: `bd7d3a8670973473c7923c74826648969c80b999` - `docs: verify Project200 root synchronization`.
 - Follow-up documentation normalization commit: `f96271a3a63956f1b5ca965daef2ebd026624cab`. All pushes were non-force and succeeded; final Root / isolated worktree / origin HEAD equality was verified after the latest push.
 - Root `git pull --ff-only origin Project200` completed. Root / isolated worktree / origin HEAD all match the final SHA. Root status remained 203 entries (313 including detailed untracked) before and after. No overlap with existing Root changes. Isolated worktree clean. No reset/clean/stash.
+
+## 2026-11-28 No.1902 - S9 pending/cancel/retry/fill/close reservation lifecycle
+
+- Reconciled No.1901/1900 and controlling No.1884/1885 with Current Baseline, A8 SSOT/update log/roadmap and Project200 HEAD `b09ef06f75c1111c0930d408108e1add320536de`. No.1884 pending-aware group-scoped reservation release remains in force. No.1885 authoritative reservation source, restore precedence, durable persistence, ownership, lease/fencing, retry, callback outbox, broker reconciliation and restart acknowledgement remain OPEN/unapproved.
+- Extended `tests/application/composition/test_s9_partial_reject_runtime_e2e.py` with read-only lifecycle observations around synthetic S9 replay and the real Factory callback. Reservation remains while pending orders exist and while open PositionLots remain; the same group reservation releases exactly once only after both are empty.
+- Covered timeout cancel confirmation -> five-minute wait -> retry fill -> next-day close, and pending retry that remains unfilled -> close-boundary cancel -> existing PUT lot close.
+- Correlated same run/strategy/group/leg/client-order/execution/instrument across PositionLot history, close events, canonical execution reports and Fee Ledger. Execution IDs and fee IDs are one-to-one; close events reference the source lot and same group.
+- S9/composition regression: **47 passed**. Full `tests/validation_only`: **158 passed**. `py -m compileall -q application tests`, scoped Ruff F401/F821/F841 and `git diff --check`: PASS.
+- Test-only change. No Production defect reproduced and no Production source changed. Synthetic replay data was generated under pytest temporary paths. No Raw/Canonical/accepted-source/manifest original mutation.
+- No KIS/REAL_VTS/account/Live API, actual broker order/cancel/close, collector/service/scheduler or new collection. No combined S7/S8/S9 adapter Runtime acceptance. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
+- Notion Q&A: https://app.notion.com/p/4265f4f6eaa181768f1dd82f766c89a2
+- Next: S9 cancel/fill race, duplicate terminal callback, duplicate execution idempotency and stale prior-attempt response isolation.

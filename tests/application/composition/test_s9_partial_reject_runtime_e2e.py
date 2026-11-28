@@ -9,6 +9,9 @@ from pathlib import Path
 from application.composition.virtual_multi_leg_execution import (
     VirtualMultiLegExecutionBridge,
 )
+from application.composition.track9_validation_only_runtime_adapter import (
+    Track9ValidationOnlyRuntimeAdapter,
+)
 from contracts.types import ExecutionReport
 from environments.high_speed.replay_trace import ReplayLogMode
 from environments.high_speed.virtual_runtime_replay import (
@@ -241,6 +244,116 @@ def _retry_dataset(tmp_path: Path, *, include_close: bool = False) -> tuple[Path
     return root, manifest_path
 
 
+def _observe_s9_reservation_lifecycle(monkeypatch, runner, bridges):
+    observations = []
+    releases = []
+    original_process = VirtualMultiLegExecutionBridge.process_s9_entry_retries
+    original_release = Track9ValidationOnlyRuntimeAdapter.release_group
+
+    def observe_process(self, now, strategy=None):
+        result = original_process(self, now, strategy=strategy)
+        adapter = runner.s9_validation_runtime_adapter
+        if adapter is not None:
+            pending_groups = tuple(sorted({
+                str(plan.group_id) for plan, _leg, _command in self.pending_legs.values()
+            }))
+            open_groups = tuple(sorted({
+                str(lot.group_id) for lot in self.position_lot_store.open_lots()
+            }))
+            observations.append({
+                "pending_groups": pending_groups,
+                "open_groups": open_groups,
+                "reserved_groups": tuple(sorted(adapter._reserved)),
+            })
+        return result
+
+    def observe_release(self, group_id):
+        if self is runner.s9_validation_runtime_adapter:
+            bridge = bridges[-1]
+            releases.append({
+                "group_id": str(group_id),
+                "was_reserved": str(group_id) in self._reserved,
+                "pending_groups": tuple(sorted({
+                    str(plan.group_id) for plan, _leg, _command in bridge.pending_legs.values()
+                })),
+                "open_groups": tuple(sorted({
+                    str(lot.group_id) for lot in bridge.position_lot_store.open_lots()
+                })),
+            })
+        return original_release(self, group_id)
+
+    monkeypatch.setattr(
+        VirtualMultiLegExecutionBridge, "process_s9_entry_retries", observe_process,
+    )
+    monkeypatch.setattr(Track9ValidationOnlyRuntimeAdapter, "release_group", observe_release)
+    return observations, releases
+
+
+def _assert_s9_reservation_lifecycle(adapter, observations, releases):
+    assert observations
+    assert any(
+        event["pending_groups"]
+        and set(event["pending_groups"]).issubset(event["reserved_groups"])
+        for event in observations
+    )
+    assert any(
+        event["open_groups"]
+        and set(event["open_groups"]).issubset(event["reserved_groups"])
+        for event in observations
+    )
+    assert len(releases) == 1
+    release = releases[0]
+    assert release["was_reserved"] is True
+    assert release["pending_groups"] == ()
+    assert release["open_groups"] == ()
+    assert release["group_id"] not in adapter._reserved
+    assert adapter._reserved == {}
+
+
+def _assert_s9_closed_lifecycle_lineage(runner, bridge):
+    run_id = runner.run_id
+    strategy_id = "track9_event_overnight_insurance"
+    groups = bridge.position_groups.all()
+    assert len(groups) == 1
+    group_id = next(iter(groups))
+    reports = tuple(runner.s9_runtime_snapshot["execution_reports"])
+    fees = tuple(bridge.fee_ledger.snapshot(run_id=run_id))
+    history = tuple(bridge.position_lot_store.history())
+    close_events = tuple(bridge.position_lot_store.close_events())
+    reports_by_id = {row.exec_id: row for row in reports}
+    fees_by_id = {row.execution_id: row for row in fees}
+
+    assert reports and len(reports_by_id) == len(reports)
+    assert set(reports_by_id) == set(fees_by_id)
+    assert history and close_events
+    for execution_id, report in reports_by_id.items():
+        fee = fees_by_id[execution_id]
+        assert report.strategy_id == strategy_id
+        assert report.group_id == group_id
+        assert fee.run_id == run_id
+        assert fee.strategy_id == strategy_id
+        assert fee.group_id == group_id
+        assert (fee.leg_id, fee.client_order_id, fee.instrument_id) == (
+            report.leg_id, report.client_order_id, report.instrument_id,
+        )
+    for lot in history:
+        report = reports_by_id[lot.execution_id]
+        assert (lot.run_id, lot.strategy_id, lot.group_id) == (
+            run_id, strategy_id, group_id,
+        )
+        assert (lot.leg_id, lot.client_order_id, lot.instrument_id) == (
+            report.leg_id, report.client_order_id, report.instrument_id,
+        )
+    for event in close_events:
+        source_lot = next(
+            lot for lot in history if lot.execution_id == event.source_lot_execution_id
+        )
+        close_report = reports_by_id[event.execution_id]
+        assert close_report.group_id == source_lot.group_id == group_id
+        assert close_report.strategy_id == strategy_id
+        assert close_report.client_order_id == fees_by_id[event.execution_id].client_order_id
+
+
 def test_s9_natural_signal_pending_leg_timeout_cancel_confirm_wait_retry_then_next_day_close(
     monkeypatch, tmp_path,
 ):
@@ -267,9 +380,16 @@ def test_s9_natural_signal_pending_leg_timeout_cancel_confirm_wait_retry_then_ne
         validation_only_s9_risk_profile=RISK,
         log_mode=ReplayLogMode.FAST,
     )
+    observations, releases = _observe_s9_reservation_lifecycle(
+        monkeypatch, runner, bridges,
+    )
     report = runner.run(max_events=8)
+    _assert_s9_reservation_lifecycle(
+        runner.s9_validation_runtime_adapter, observations, releases,
+    )
 
     bridge = bridges[-1]
+    _assert_s9_closed_lifecycle_lineage(runner, bridge)
     broker = brokers[-1]
     broker = brokers[-1]
     assert broker.call_buy_submissions == 2  # initial pending BUY + one retry BUY
@@ -348,9 +468,16 @@ def test_s9_unpaired_put_is_kept_overnight_then_only_existing_leg_closes_next_da
         validation_only_s9_risk_profile=RISK,
         log_mode=ReplayLogMode.FAST,
     )
+    observations, releases = _observe_s9_reservation_lifecycle(
+        monkeypatch, runner, bridges,
+    )
     runner.run(max_events=10)
+    _assert_s9_reservation_lifecycle(
+        runner.s9_validation_runtime_adapter, observations, releases,
+    )
 
     bridge, broker = bridges[-1], brokers[-1]
+    _assert_s9_closed_lifecycle_lineage(runner, bridge)
     assert broker.call_buy_submissions == 2  # initial order and one retry before close
     assert broker.cancelled_call_orders == 2  # timeout cancel, then close-boundary cancel
     assert runner.s9_strategy.state.state == "OVERNIGHT_INSURANCE_CLOSED"
