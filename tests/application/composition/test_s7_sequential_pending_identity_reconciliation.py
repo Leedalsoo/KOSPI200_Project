@@ -630,3 +630,158 @@ def _track7_multi_group_read_only_lineage_mismatches(
             mismatches.add("fee_execution_lineage_mismatch")
     return tuple(sorted(mismatches))
 
+
+def test_s7_factory_callback_releases_only_the_terminal_group_when_another_group_remains_open():
+    replay_adapter = SyntheticReplayAdapter(DATASET, manifest_path=MANIFEST)
+    master = build_synthetic_option_master(DATASET, validation_only_adapter=replay_adapter)
+    ticks = list(HighSpeedReplayRunner(DATASET, synthetic_adapter=replay_adapter).events())
+    expiries = ("20261109", "20261112")
+    put_ticks = {
+        expiry: next(
+            tick for tick in ticks
+            if tick.expiry == expiry
+            and str(tick.option_type).upper() == "PUT"
+        )
+        for expiry in expiries
+    }
+
+    sources = SyntheticRuntimeSources()
+    bootstrap = create_virtual_runtime_bootstrap(
+        option_master=master,
+        initial_capital=250_000_000.0,
+        risk_guard_status_source=sources,
+    )
+    if bootstrap.automated_loop is not None:
+        bootstrap.bundle.market.unsubscribe(bootstrap.automated_loop.on_tick)
+    run_id = "Q25-S7-FACTORY-MULTI-GROUP-RELEASE"
+    adapter = S7ValidationOnlyRuntimeAdapter(
+        dataset=DATASET,
+        manifest_path=MANIFEST,
+        risk_profile_path=ROOT / "config/validation_only/q25_s05_3_s7_concurrent/risk_profile.json",
+    )
+    adapter.bind_run_id(run_id)
+    loop = attach_standard_automated_loop(
+        bootstrap,
+        strategy_keys=(("track7_volatility_skew_weekly_insurance", "1.0"),),
+        run_id=run_id,
+        synthetic_runtime_sources=sources,
+        track4_greeks_provider=sources,
+        risk_guard_status_source=sources,
+        validation_only_s7_runtime_adapter=adapter,
+    )
+    bootstrap.bundle.market.unsubscribe(loop.on_tick)
+    bridge = loop.multi_leg_bridge
+    strategy = loop.strategy_hub._orchestrator._registry.get(
+        "track7_volatility_skew_weekly_insurance", "1.0",
+    )
+
+    group_ids = {}
+    for index, expiry in enumerate(expiries, start=1):
+        tick = put_ticks[expiry]
+        group_id = f"Q25-S7-MULTI-GROUP-{index}"
+        group_ids[expiry] = group_id
+        strategy._activate_expiry(expiry)
+        strategy.state = strategy.state.__class__(
+            entry_pending=True,
+            expiry=expiry,
+            put_strike=Decimal("487.5"),
+            call_strike=Decimal("512.5"),
+            contract_multiplier=Decimal("250000"),
+            entry_stage="PUT_READY",
+        )
+        _publish_contract_scoped_replay_quote(
+            tick,
+            option_master=master,
+            market=bootstrap.bundle.market,
+            order_book=bootstrap.bundle.execution._authoritative_execute.__self__.vssf_runtime.order_book,
+        )
+        sources.set_tick(tick)
+        bootstrap.bundle.market.publish_replay_tick(tick)
+        plan = strategy.build_execution_plan(
+            group_id,
+            proposal=_proposal("WEEKLY_INSURANCE_ENTRY_PUT", "PUT", Decimal("487.5")),
+        )
+        result = bridge.execute(plan)
+        assert result.reports[0].status == "FILLED"
+        assert strategy.state.put_open is True
+        assert group_id in adapter._reserved
+        assert group_id in adapter._reserved_entry_fees
+        assert adapter._group_expiry_by_id[group_id] == expiry
+
+    assert len(bridge.position_lot_store.open_lots()) == 2
+    assert set(adapter._reserved) == set(group_ids.values())
+    assert set(adapter._group_expiry_by_id.values()) == set(expiries)
+
+    first_expiry, second_expiry = expiries
+    first_group = group_ids[first_expiry]
+    second_group = group_ids[second_expiry]
+    strategy._activate_expiry(first_expiry)
+    close_tick = replace(
+        put_ticks[first_expiry],
+        timestamp=(
+            datetime.fromisoformat(put_ticks[first_expiry].timestamp)
+            + timedelta(seconds=2)
+        ).isoformat(),
+        seq_id=int(put_ticks[first_expiry].seq_id) + 2000,
+    )
+    _publish_contract_scoped_replay_quote(
+        close_tick,
+        option_master=master,
+        market=bootstrap.bundle.market,
+        order_book=bridge.bundle.execution._authoritative_execute.__self__.vssf_runtime.order_book,
+    )
+    sources.set_tick(close_tick)
+    bootstrap.bundle.market.publish_replay_tick(close_tick)
+    close_plan = strategy.build_execution_plan(
+        first_group,
+        proposal=_proposal(
+            "WEEKLY_INSURANCE_CLOSE_PUT", "PUT", Decimal("487.5"), side="SELL",
+        ),
+    )
+    close_result = bridge.execute(close_plan)
+
+    assert close_result.group_complete is True
+    assert close_result.position_flat is True
+    assert close_result.pending_legs == 0
+    assert first_group not in adapter._reserved
+    assert first_group not in adapter._reserved_entry_fees
+    assert first_group not in adapter._group_expiry_by_id
+    assert second_group in adapter._reserved
+    assert second_group in adapter._reserved_entry_fees
+    assert adapter._group_expiry_by_id[second_group] == second_expiry
+    remaining_lots = bridge.position_lot_store.open_lots()
+    assert len(remaining_lots) == 1
+    assert remaining_lots[0].group_id == second_group
+    assert remaining_lots[0].instrument_identity.expiry == second_expiry
+
+    strategy._activate_expiry(second_expiry)
+    second_close_tick = replace(
+        put_ticks[second_expiry],
+        timestamp=(
+            datetime.fromisoformat(close_tick.timestamp) + timedelta(seconds=1)
+        ).isoformat(),
+        seq_id=int(put_ticks[second_expiry].seq_id) + 3000,
+    )
+    _publish_contract_scoped_replay_quote(
+        second_close_tick,
+        option_master=master,
+        market=bootstrap.bundle.market,
+        order_book=bridge.bundle.execution._authoritative_execute.__self__.vssf_runtime.order_book,
+    )
+    sources.set_tick(second_close_tick)
+    bootstrap.bundle.market.publish_replay_tick(second_close_tick)
+    second_close_plan = strategy.build_execution_plan(
+        second_group,
+        proposal=_proposal(
+            "WEEKLY_INSURANCE_CLOSE_PUT", "PUT", Decimal("487.5"), side="SELL",
+        ),
+    )
+    second_close_result = bridge.execute(second_close_plan)
+    assert second_close_result.group_complete is True
+    assert second_close_result.position_flat is True
+    assert second_close_result.pending_legs == 0
+    assert adapter._reserved == {}
+    assert adapter._reserved_entry_fees == {}
+    assert adapter._group_expiry_by_id == {}
+    assert bridge.position_lot_store.open_lots() == ()
+
