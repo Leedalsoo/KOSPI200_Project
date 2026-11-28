@@ -1,15 +1,22 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
-from pathlib import Path
-from dataclasses import replace
-from datetime import datetime, timedelta, timezone
 import hashlib
 import json
+from dataclasses import replace
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
+from application.composition.virtual_multi_leg_execution import (
+    VirtualMultiLegExecutionBridge,
+)
 from contracts.types import ExecutionReport
-from application.composition.virtual_multi_leg_execution import VirtualMultiLegExecutionBridge
-from environments.high_speed.virtual_runtime_replay import HighSpeedVirtualRuntimeReplayRunner
 from environments.high_speed.replay_trace import ReplayLogMode
+from environments.high_speed.virtual_runtime_replay import (
+    HighSpeedVirtualRuntimeReplayRunner,
+)
+from tests.application.composition.validation_only_lineage_audit import (
+    lineage_mismatches,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 DATA = ROOT / "data/derived_scenario/q25_s9_independent_overnight_stop_loss_20261108"
@@ -85,6 +92,63 @@ def test_s9_natural_signal_one_leg_rejection_keeps_filled_buy_leg_overnight(monk
     assert len(lots) == 1
     assert lots[0].instrument_identity.option_type == "PUT"
     assert lots[0].remaining_quantity == 1
+
+    # Read-only correlation of the surviving PUT PositionLot, its Fee Ledger
+    # execution, rejected CALL group leg, and the S9 per-group reservation audit.
+    run_id = runner.run_id
+    fee_rows = tuple(bridge.fee_ledger.snapshot(run_id=run_id))
+    execution_rows = tuple(runner.s9_runtime_snapshot["execution_reports"])
+    adapter = runner.s9_validation_runtime_adapter
+    group_records = tuple((item.group_id, item.strategy_id) for item in groups.values())
+    position_records = tuple((
+        lot.run_id, lot.strategy_id, lot.group_id, lot.leg_id, lot.client_order_id,
+        lot.execution_id, lot.instrument_id, str(lot.instrument_identity.expiry),
+    ) for lot in lots)
+    fee_records = tuple((
+        row.run_id, row.strategy_id, row.group_id, row.leg_id, row.client_order_id,
+        row.execution_id, row.instrument_id,
+    ) for row in fee_rows)
+    execution_records = tuple((
+        row.strategy_id, row.group_id, row.leg_id, row.client_order_id,
+        row.exec_id, row.instrument_id, str(row.expiry),
+    ) for row in execution_rows)
+    pending_records = tuple((
+        plan.group_id, leg.leg_id, command.group_id, command.leg_id, command.client_order_id,
+    ) for plan, leg, command in bridge.pending_legs.values())
+    reservation_records = tuple((group_id,) for group_id in adapter._reserved)
+    risk_audit_records = tuple((row["run_id"], row["group_id"]) for row in adapter.risk_audit_records)
+    audit_args = {
+        "expected_run_id": run_id, "expected_strategy_id": "track9_event_overnight_insurance",
+        "group_records": group_records, "pending_records": pending_records,
+        "position_records": position_records, "fee_records": fee_records,
+        "execution_records": execution_records, "reservation_records": reservation_records,
+        "risk_audit_records": risk_audit_records,
+    }
+    before_audit_state = (
+        tuple(bridge.position_groups.all().items()), tuple(bridge.position_lot_store.open_lots()),
+        tuple(bridge.fee_ledger.snapshot(run_id=run_id)), tuple(bridge.pending_legs.items()),
+        tuple(sorted(adapter._reserved.items())), tuple(dict(row) for row in adapter.risk_audit_records),
+        tuple(runner.s9_runtime_snapshot["execution_reports"]),
+    )
+    assert lineage_mismatches(**audit_args) == ()
+    assert len(reservation_records) == 1
+    assert reservation_records[0][0] == lots[0].group_id
+    assert any(item.startswith("fee_projection_missing:") for item in lineage_mismatches(
+        **{**audit_args, "fee_records": ()}
+    ))
+    assert any(item.startswith("position_execution_duplicate:") for item in lineage_mismatches(
+        **{**audit_args, "position_records": position_records + (position_records[0],)}
+    ))
+    wrong_fee = (fee_records[0][0], fee_records[0][1], "WRONG-GROUP", *fee_records[0][3:])
+    assert any(item.startswith("fee_execution_lineage_mismatch:") for item in lineage_mismatches(
+        **{**audit_args, "fee_records": (wrong_fee,)}
+    ))
+    assert before_audit_state == (
+        tuple(bridge.position_groups.all().items()), tuple(bridge.position_lot_store.open_lots()),
+        tuple(bridge.fee_ledger.snapshot(run_id=run_id)), tuple(bridge.pending_legs.items()),
+        tuple(sorted(adapter._reserved.items())), tuple(dict(row) for row in adapter.risk_audit_records),
+        tuple(runner.s9_runtime_snapshot["execution_reports"]),
+    )
 
 
 class _PendingCallFirstBroker:

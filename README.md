@@ -2321,3 +2321,12 @@ Detail: <mention url="https://app.notion.com/p/4265f4f6eaa181c29e4cf989ae171452"
 - Compileall, Ruff F401/F821/F841 and git diff-check PASS.
 - No.1885 recovery policy remains OPEN; No.1884 pending-aware group-scoped release remains in force. No combined S7/S8/S9 adapter Runtime acceptance.
 - Details: https://app.notion.com/p/4265f4f6eaa181b59a73faca297c25c4
+
+
+## Latest validation ? No.1901 (2026-11-28)
+
+- Added test-only read-only lineage auditing for S7/S8/S9 across Bridge groups/pending orders, PositionLots, Fee Ledger, canonical execution reports and strategy reservation/risk-audit projections.
+- S7/S8/S9 + StrategyHub + Track9 core regression: 92 passed. All `tests/validation_only`: 158 passed. Compileall/Ruff/diff-check PASS.
+- Synthetic fallback data was hash-verified and used only in the isolated worktree; temporary copies and overlay removed. Root originals unchanged.
+- No Production source defect reproduced or Production source changed. No.1884 pending-aware group-scoped release remains active; No.1885 authoritative recovery policy remains OPEN. No combined S7/S8/S9 adapter Runtime acceptance.
+- Q&A: https://app.notion.com/p/4265f4f6eaa1817090f0d796f0b9f882

@@ -4,14 +4,26 @@ from decimal import Decimal
 from pathlib import Path
 
 from application.bootstrap import create_virtual_runtime_bootstrap
-from application.composition.automated_virtual_runtime_factory import attach_standard_automated_loop
+from application.composition.automated_virtual_runtime_factory import (
+    attach_standard_automated_loop,
+)
 from core.strategy.strategy_execution_proposal import StrategyExecutionProposal
 from environments.high_speed.replay_runner import HighSpeedReplayRunner
 from environments.high_speed.synthetic_replay_adapter import SyntheticReplayAdapter
-from environments.high_speed.synthetic_runtime_sources import SyntheticRuntimeSources, build_synthetic_option_master
-from environments.high_speed.validation_only_track7_execution import S7ValidationOnlyRuntimeAdapter
-from environments.high_speed.virtual_runtime_replay import _publish_contract_scoped_replay_quote
-from tests.core.test_track7_aggregate_snapshot_contract import _capture_aggregate, _restore_aggregate
+from environments.high_speed.synthetic_runtime_sources import (
+    SyntheticRuntimeSources,
+    build_synthetic_option_master,
+)
+from environments.high_speed.validation_only_track7_execution import (
+    S7ValidationOnlyRuntimeAdapter,
+)
+from environments.high_speed.virtual_runtime_replay import (
+    _publish_contract_scoped_replay_quote,
+)
+from tests.core.test_track7_aggregate_snapshot_contract import (
+    _capture_aggregate,
+    _restore_aggregate,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 DATASET = ROOT / "data/derived_scenario/q25_s05_3_s7_concurrent"
@@ -147,7 +159,7 @@ def test_s7_pending_call_reconciliation_keeps_original_expiry_after_market_tick_
         expiry="20261112",
         put_strike=Decimal("487.5"),
         call_strike=Decimal("512.5"),
-        contract_multiplier=Decimal("250000"),
+        contract_multiplier=Decimal(250000),
         entry_stage="PUT_READY",
     )
     _publish_contract_scoped_replay_quote(
@@ -239,6 +251,13 @@ def test_s7_pending_call_reconciliation_keeps_original_expiry_after_market_tick_
     )
     fee_records = tuple((row.run_id, row.group_id, row.execution_id) for row in pending_fees)
     projections_before = (pending_records, position_records, fee_records)
+    runtime_state_before_audit = (
+        tuple(bridge.pending_legs.items()), tuple(bridge.position_lot_store.open_lots()),
+        tuple(bridge.fee_ledger.snapshot(run_id="Q25-S7-PENDING-IDENTITY-RECONCILIATION")),
+        tuple((group_id, tuple(sorted(values.items()))) for group_id, values in sorted(s7_adapter._reserved.items())),
+        tuple(sorted(s7_adapter._reserved_entry_fees.items())),
+        tuple(sorted(s7_adapter._group_expiry_by_id.items())),
+    )
     audit_args = {
         "expected_run_id": "Q25-S7-PENDING-IDENTITY-RECONCILIATION",
         "expected_group_id": call_plan.group_id,
@@ -316,6 +335,13 @@ def test_s7_pending_call_reconciliation_keeps_original_expiry_after_market_tick_
             "fee_projection_duplicate", "position_execution_duplicate",
             "fee_execution_duplicate"}.issubset(duplicated)
     assert (pending_records, position_records, fee_records) == projections_before
+    assert runtime_state_before_audit == (
+        tuple(bridge.pending_legs.items()), tuple(bridge.position_lot_store.open_lots()),
+        tuple(bridge.fee_ledger.snapshot(run_id="Q25-S7-PENDING-IDENTITY-RECONCILIATION")),
+        tuple((group_id, tuple(sorted(values.items()))) for group_id, values in sorted(s7_adapter._reserved.items())),
+        tuple(sorted(s7_adapter._reserved_entry_fees.items())),
+        tuple(sorted(s7_adapter._group_expiry_by_id.items())),
+    )
     assert len(bridge.pending_legs) == 1
     assert len(bridge.position_lot_store.open_lots()) == 1
     assert len(bridge.fee_ledger.snapshot(run_id=audit_args["expected_run_id"])) == 1
@@ -686,7 +712,7 @@ def test_s7_factory_callback_releases_only_the_terminal_group_when_another_group
             expiry=expiry,
             put_strike=Decimal("487.5"),
             call_strike=Decimal("512.5"),
-            contract_multiplier=Decimal("250000"),
+            contract_multiplier=Decimal(250000),
             entry_stage="PUT_READY",
         )
         _publish_contract_scoped_replay_quote(

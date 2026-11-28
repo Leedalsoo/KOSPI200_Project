@@ -2415,3 +2415,21 @@ Detail: <mention url="https://app.notion.com/p/4265f4f6eaa181c29e4cf989ae171452"
 - Compileall, Ruff F401/F821/F841, `git diff --check` PASS. No combined S7/S8/S9 adapter Runtime acceptance claimed. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
 - No KIS/REAL_VTS/account/Live API, broker action/order/cancel/liquidation, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original mutation.
 - Notion Q&A: https://app.notion.com/p/4265f4f6eaa181b59a73faca297c25c4
+
+
+## 2026-11-28 No.1901 ? S7/S8/S9 Bridge lineage audit
+
+- Latest Notion No.1899/1900, Current Baseline, A8 SSOT/update log/roadmap and Project200 HEAD `4fd18dfefbfb90b8d94aee5f435ae376b51f1203` reconciled. No.1884 pending-aware, group-scoped reservation release remains in force. No.1885 authoritative reservation source, restore precedence, durable persistence, ownership, lease/fencing, retry, callback outbox, broker reconciliation and restart acknowledgement remain OPEN/unapproved.
+- Added pure test-side scalar auditor `tests/application/composition/validation_only_lineage_audit.py`; no mutable runtime stores passed to the auditor.
+- S7 pending CALL + filled PUT + Fee Ledger + aggregate correlation now also snapshots Bridge pending orders, PositionLots, Fee Ledger and premium/entry-fee/expiry reservation maps before/after mismatch probes.
+- S8 multi-contract partial fill: six PositionLots, nine canonical executions, nine Fee Ledger rows, two PositionGroups and close events correlated by run/strategy/group/leg/client-order/execution/instrument/expiry. Missing fee, duplicate position, wrong group and wrong expiry probes pass; terminal reservation map empty and audit projection reconciled.
+- S9 partial rejection: PUT FILLED / CALL REJECTED with one PositionLot, one Fee Ledger row, canonical execution, active group reservation and risk audit correlated. Missing fee, duplicate position and wrong group probes pass; all runtime projections unchanged.
+- S7/S8/S9 + StrategyHub + Track9 core regression 92 passed. Full `tests/validation_only` 158 passed. Compileall, Ruff on changed test files and `git diff --check` PASS.
+- S7/S8 missing fixtures temporarily copied after Root SHA-256 verification. Missing shared StrategyHub trend-up dataset/Option Master anchor replaced by a 60-row/six-timestamp synthetic overlay from existing high-volatility DERIVED_SCENARIO data. Anchor is SYNTHETIC_ONLY / authority NONE / BLOCKED_IDENTITY_OWNER_UNRESOLVED / production_runtime_eligible=false, not a KRX authoritative Option Master. Temporary copies/overlay removed. Eight Root source fixture SHA-256 values rechecked unchanged.
+- Test-only change: no Production source defect reproduced; no Production source changed. No combined S7/S8/S9 adapter Runtime acceptance. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
+- No KIS/REAL_VTS/account/Live API, broker action/order/cancel/liquidation, collector/service/scheduler, new collection, or Raw/Canonical/accepted-source/manifest original mutation.
+- Notion Q&A: https://app.notion.com/p/4265f4f6eaa1817090f0d796f0b9f882
+
+### Next validation
+
+S9 pending ? cancel/retry ? fill/close lifecycle: correlate same run/group/client-order/execution lineage across Bridge pending orders, PositionLots, Fee Ledger, canonical executions and Track9 reservation/risk audit. Verify reservation retention while pending and group-scoped release only after terminal state. Do not infer No.1885 durable restore/authority policy.

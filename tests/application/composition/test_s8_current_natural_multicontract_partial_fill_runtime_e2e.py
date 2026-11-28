@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime
-from decimal import Decimal
 import hashlib
 import json
-from pathlib import Path
 import shutil
+from datetime import datetime
+from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
@@ -29,6 +29,9 @@ from environments.high_speed.virtual_runtime_replay import (
     _publish_contract_scoped_replay_quote,
 )
 from environments.virtual.clock import VirtualClock
+from tests.application.composition.validation_only_lineage_audit import (
+    lineage_mismatches,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 DATASET = ROOT / "data/derived_scenario/q25_s8_v3/strategy8_monthly/normal"
@@ -116,6 +119,69 @@ def _run_mode(*, speed: float) -> dict[str, object]:
     close_events = tuple(bridge.position_lot_store.close_events())
     fee_rows = tuple(bridge.fee_ledger.query(run_id=run_id))
     strategy = loop.strategy_hub._orchestrator._registry.get(STRATEGY_ID, "2.0")
+
+    # Read-only scalar correlation across Bridge groups, PositionLots, Fee Ledger,
+    # canonical executions and the S8 reservation/risk-audit projections.
+    group_records = tuple((group.group_id, group.strategy_id) for group in groups.values())
+    position_records = tuple((
+        lot.run_id, lot.strategy_id, lot.group_id, lot.leg_id, lot.client_order_id,
+        lot.execution_id, lot.instrument_id, str(lot.instrument_identity.expiry),
+    ) for lot in lots)
+    fee_records = tuple((
+        row.run_id, row.strategy_id, row.group_id, row.leg_id, row.client_order_id,
+        row.execution_id, row.instrument_id,
+    ) for row in fee_rows)
+    execution_records = tuple((
+        row.strategy_id, row.group_id, row.leg_id, row.client_order_id,
+        row.exec_id, row.instrument_id, str(row.expiry),
+    ) for row in vssf.execution_engine.reports)
+    pending_records = tuple((
+        plan.group_id, leg.leg_id, command.group_id, command.leg_id, command.client_order_id,
+    ) for plan, leg, command in bridge.pending_legs.values())
+    reservation_records = tuple((group_id,) for group_id in validation_gate._reserved)
+    risk_audit_records = tuple((row["run_id"], row["group_id"]) for row in validation_gate.risk_audit_records)
+    audit_args = {
+        "expected_run_id": run_id, "expected_strategy_id": STRATEGY_ID,
+        "group_records": group_records, "pending_records": pending_records,
+        "position_records": position_records, "fee_records": fee_records,
+        "execution_records": execution_records, "reservation_records": reservation_records,
+        "risk_audit_records": risk_audit_records,
+    }
+    before_audit_state = (
+        tuple(bridge.position_groups.all().items()), tuple(bridge.position_lot_store.history()),
+        tuple(bridge.fee_ledger.query(run_id=run_id)), tuple(bridge.pending_legs.items()),
+        tuple((key, tuple(sorted((leg, str(value)) for leg, value in values.items())))
+              for key, values in sorted(validation_gate._reserved.items())),
+        tuple(dict(row) for row in validation_gate.risk_audit_records),
+        tuple(vssf.execution_engine.reports),
+    )
+    assert lineage_mismatches(**audit_args) == ()
+
+    # Missing, duplicate and crossed-provenance probes operate on scalar copies only.
+    assert any(item.startswith("fee_projection_missing:") for item in lineage_mismatches(
+        **{**audit_args, "fee_records": fee_records[:-1]}
+    ))
+    assert any(item.startswith("position_execution_duplicate:") for item in lineage_mismatches(
+        **{**audit_args, "position_records": position_records + (position_records[0],)}
+    ))
+    wrong_fee = (fee_records[0][0], fee_records[0][1], "WRONG-GROUP", *fee_records[0][3:])
+    assert any(item.startswith("fee_execution_lineage_mismatch:") for item in lineage_mismatches(
+        **{**audit_args, "fee_records": (wrong_fee, *fee_records[1:])}
+    ))
+    wrong_expiry = (*position_records[0][:-1], "20991231")
+    assert any(item.startswith("position_execution_lineage_mismatch:") for item in lineage_mismatches(
+        **{**audit_args, "position_records": (wrong_expiry, *position_records[1:])}
+    ))
+    assert before_audit_state == (
+        tuple(bridge.position_groups.all().items()), tuple(bridge.position_lot_store.history()),
+        tuple(bridge.fee_ledger.query(run_id=run_id)), tuple(bridge.pending_legs.items()),
+        tuple((key, tuple(sorted((leg, str(value)) for leg, value in values.items())))
+              for key, values in sorted(validation_gate._reserved.items())),
+        tuple(dict(row) for row in validation_gate.risk_audit_records),
+        tuple(vssf.execution_engine.reports),
+    )
+    assert all(event.execution_id in {row[4] for row in execution_records} for event in close_events)
+    assert all(event.source_lot_execution_id in {row[5] for row in position_records} for event in close_events)
     assert report.events == 216
     assert report.exhausted is True
     assert vssf.metrics["market_ticks"] == 216
