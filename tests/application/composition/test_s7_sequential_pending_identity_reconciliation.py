@@ -465,3 +465,168 @@ def test_s7_pending_call_reconciliation_keeps_original_expiry_after_market_tick_
     assert call_plan.group_id not in s7_adapter._group_expiry_by_id
     assert len(bridge.fee_ledger.snapshot(run_id="Q25-S7-PENDING-IDENTITY-RECONCILIATION")) == 4
 
+
+def test_s7_read_only_lineage_audit_keeps_two_group_expiries_and_executions_isolated():
+    expected_expiries = {
+        "GROUP-A": "20261112",
+        "GROUP-B": "20261119",
+    }
+    aggregate_records = (
+        ("GROUP-A", "20261112"),
+        ("GROUP-B", "20261119"),
+    )
+    pending_records = (
+        ("GROUP-A", "put", "GROUP-A", "put", "20261112"),
+        ("GROUP-B", "call", "GROUP-B", "call", "20261119"),
+    )
+    position_records = (
+        ("RUN-MULTI", "GROUP-A", "20261112", "EXEC-A"),
+        ("RUN-MULTI", "GROUP-B", "20261119", "EXEC-B"),
+    )
+    fee_records = (
+        ("RUN-MULTI", "GROUP-A", "EXEC-A"),
+        ("RUN-MULTI", "GROUP-B", "EXEC-B"),
+    )
+
+    assert _track7_multi_group_read_only_lineage_mismatches(
+        expected_run_id="RUN-MULTI",
+        expected_expiries=expected_expiries,
+        aggregate_records=aggregate_records,
+        pending_records=pending_records,
+        position_records=position_records,
+        fee_records=fee_records,
+    ) == ()
+
+    crossed_pending = (pending_records[0], ("GROUP-B", "call", "GROUP-B", "call", "20261112"))
+    crossed_positions = (position_records[0], ("RUN-MULTI", "GROUP-B", "20261112", "EXEC-A"))
+    crossed_fees = (fee_records[0], ("RUN-MULTI", "GROUP-B", "EXEC-WRONG"))
+    mismatches = _track7_multi_group_read_only_lineage_mismatches(
+        expected_run_id="RUN-MULTI",
+        expected_expiries=expected_expiries,
+        aggregate_records=aggregate_records,
+        pending_records=crossed_pending,
+        position_records=crossed_positions,
+        fee_records=crossed_fees,
+    )
+    assert "pending_expiry_mismatch" in mismatches
+    assert "position_expiry_mismatch" in mismatches
+    assert "fee_execution_lineage_mismatch" in mismatches
+    assert "position_execution_cross_group_duplicate" in mismatches
+
+    missing_group_b = _track7_multi_group_read_only_lineage_mismatches(
+        expected_run_id="RUN-MULTI",
+        expected_expiries=expected_expiries,
+        aggregate_records=aggregate_records,
+        pending_records=pending_records[:1],
+        position_records=position_records[:1],
+        fee_records=fee_records[:1],
+    )
+    assert "pending_projection_missing:GROUP-B" in missing_group_b
+    assert "position_projection_missing:GROUP-B" in missing_group_b
+    assert "fee_projection_missing:GROUP-B" in missing_group_b
+
+    duplicated_group_a = _track7_multi_group_read_only_lineage_mismatches(
+        expected_run_id="RUN-MULTI",
+        expected_expiries=expected_expiries,
+        aggregate_records=aggregate_records,
+        pending_records=pending_records + (pending_records[0],),
+        position_records=position_records + (position_records[0],),
+        fee_records=fee_records + (fee_records[0],),
+    )
+    assert "pending_projection_duplicate:GROUP-A" in duplicated_group_a
+    assert "position_projection_duplicate:GROUP-A" in duplicated_group_a
+    assert "fee_projection_duplicate:GROUP-A" in duplicated_group_a
+
+
+def _track7_multi_group_read_only_lineage_mismatches(
+    *,
+    expected_run_id: str,
+    expected_expiries: dict[str, str],
+    aggregate_records: tuple[tuple[str, str], ...],
+    pending_records: tuple[tuple[str, str, str, str, str], ...],
+    position_records: tuple[tuple[str, str, str, str], ...],
+    fee_records: tuple[tuple[str, str, str], ...],
+) -> tuple[str, ...]:
+    """Test-side read-only audit scoped independently to each concurrent group."""
+    mismatches: set[str] = set()
+    groups = set(expected_expiries)
+
+    aggregate_by_group: dict[str, list[str]] = {group: [] for group in groups}
+    for group_id, expiry in aggregate_records:
+        if group_id in aggregate_by_group:
+            aggregate_by_group[group_id].append(expiry)
+        else:
+            mismatches.add("aggregate_unexpected_group")
+    for group_id, expiry in expected_expiries.items():
+        rows = aggregate_by_group[group_id]
+        if not rows:
+            mismatches.add(f"aggregate_missing:{group_id}")
+        if len(rows) > 1:
+            mismatches.add(f"aggregate_duplicate:{group_id}")
+        if any(value != expiry for value in rows):
+            mismatches.add("aggregate_expiry_mismatch")
+
+    pending_by_group: dict[str, list[tuple[str, str, str, str, str]]] = {
+        group: [] for group in groups
+    }
+    for record in pending_records:
+        plan_group, leg_id, command_group, command_leg, expiry = record
+        if plan_group in pending_by_group:
+            pending_by_group[plan_group].append(record)
+        if plan_group != command_group:
+            mismatches.add("pending_group_mismatch")
+        if leg_id != command_leg:
+            mismatches.add("pending_leg_mismatch")
+        expected_group = plan_group if plan_group in expected_expiries else command_group
+        if expected_group in expected_expiries and expiry != expected_expiries[expected_group]:
+            mismatches.add("pending_expiry_mismatch")
+    for group_id, rows in pending_by_group.items():
+        if not rows:
+            mismatches.add(f"pending_projection_missing:{group_id}")
+        keys = [(row[0], row[1]) for row in rows]
+        if len(keys) != len(set(keys)):
+            mismatches.add(f"pending_projection_duplicate:{group_id}")
+
+    positions_by_group: dict[str, list[tuple[str, str, str, str]]] = {
+        group: [] for group in groups
+    }
+    execution_groups: dict[str, set[str]] = {}
+    for record in position_records:
+        run_id, group_id, expiry, execution_id = record
+        if group_id in positions_by_group:
+            positions_by_group[group_id].append(record)
+        if run_id != expected_run_id:
+            mismatches.add("position_run_mismatch")
+        if group_id in expected_expiries and expiry != expected_expiries[group_id]:
+            mismatches.add("position_expiry_mismatch")
+        execution_groups.setdefault(execution_id, set()).add(group_id)
+    for group_id, rows in positions_by_group.items():
+        if not rows:
+            mismatches.add(f"position_projection_missing:{group_id}")
+        keys = [(row[1], row[3]) for row in rows]
+        if len(keys) != len(set(keys)):
+            mismatches.add(f"position_projection_duplicate:{group_id}")
+    if any(len(group_ids) > 1 for group_ids in execution_groups.values()):
+        mismatches.add("position_execution_cross_group_duplicate")
+
+    fees_by_group: dict[str, list[tuple[str, str, str]]] = {
+        group: [] for group in groups
+    }
+    for record in fee_records:
+        run_id, group_id, _execution_id = record
+        if group_id in fees_by_group:
+            fees_by_group[group_id].append(record)
+        if run_id != expected_run_id:
+            mismatches.add("fee_run_mismatch")
+    for group_id, rows in fees_by_group.items():
+        if not rows:
+            mismatches.add(f"fee_projection_missing:{group_id}")
+        keys = [(row[1], row[2]) for row in rows]
+        if len(keys) != len(set(keys)):
+            mismatches.add(f"fee_projection_duplicate:{group_id}")
+        position_ids = {row[3] for row in positions_by_group[group_id]}
+        fee_ids = {row[2] for row in rows}
+        if position_ids != fee_ids:
+            mismatches.add("fee_execution_lineage_mismatch")
+    return tuple(sorted(mismatches))
+
