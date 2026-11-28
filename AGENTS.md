@@ -2432,3 +2432,11 @@ S9 pending -> cancel/retry -> fill/close lifecycle: correlate same run/group/cli
 - No KIS/REAL_VTS/account/Live API, actual broker order/cancel/close, collector/service/scheduler or new collection. No combined S7/S8/S9 adapter Runtime acceptance. S4 remains `DRAFT / UNVERIFIED / UNAPPROVED / DISABLED`.
 - Notion Q&A: https://app.notion.com/p/4265f4f6eaa181768f1dd82f766c89a2
 - Next: S9 cancel/fill race, duplicate terminal callback, duplicate execution idempotency and stale prior-attempt response isolation.
+
+### No.1902 Project200 synchronization verification
+
+- Test commit: `5bba9c8a2e09ae32ab7595b7caa42eeb6f79bdab` (`test: verify S9 reservation lifecycle through close`).
+- Four explicit files committed: `AGENTS.md`, `README.md`, `docs/CURRENT_BASELINE_V2.md`, and `tests/application/composition/test_s9_partial_reject_runtime_e2e.py`.
+- Non-force push to `origin/Project200` succeeded; post-push fetch and `git ls-remote` both confirmed the test commit SHA.
+- Root `git pull --ff-only origin Project200` completed. Root, isolated worktree and remote were synchronized at the test commit before this documentation-only synchronization record.
+- Root existing status remained 203 short entries / 313 with detailed untracked files; isolated worktree clean. No `reset`, `clean`, or `stash`.
