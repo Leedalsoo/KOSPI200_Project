@@ -2310,3 +2310,14 @@ Detail: <mention url="https://app.notion.com/p/4265f4f6eaa181c29e4cf989ae171452"
 - Removed one pre-existing unused Track9OptionContractSource import from application/composition/automated_virtual_runtime_factory.py after reproducing Ruff F401. No runtime policy changed.
 - No.1885 durable reservation recovery policy remains OPEN; No.1884 pending-aware group-scoped release remains in force. S7/S8/S9 adapter simultaneous Runtime acceptance is not claimed.
 - Details: https://app.notion.com/p/4265f4f6eaa18172b585d15783ec6e03
+
+
+## Latest validation status ? No.1900 (2026-11-28)
+
+- Fixed Factory validation-adapter gate ordering: S7/S8/S9 adapters are mutually exclusive and cannot be combined with Track6 signal mode, execution gate or lifecycle config. Invalid combinations are rejected before adapter run-ID binding or strategy mutation.
+- New gate matrix: 12 tests; provider-boundary module 21 passed. S7/S8/S9 success-path + shared StrategyHub regression 113 passed. All `tests/validation_only` 158 passed.
+- Missing shared-runtime inputs were replaced only for validation by a hash-verified SYNTHETIC_ONLY overlay; no KRX identity/tradability authority is asserted. Temporary copies removed; Root originals unchanged.
+- Fixed one intermittent S4 validation test-harness shared-append race with per-worker callback markers. Test passed 10 repetitions; no S4 Production code changed.
+- Compileall, Ruff F401/F821/F841 and git diff-check PASS.
+- No.1885 recovery policy remains OPEN; No.1884 pending-aware group-scoped release remains in force. No combined S7/S8/S9 adapter Runtime acceptance.
+- Details: https://app.notion.com/p/4265f4f6eaa181b59a73faca297c25c4

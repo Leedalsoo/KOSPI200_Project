@@ -631,8 +631,7 @@ while not (directory / "release").exists():
         raise TimeoutError("release barrier timeout")
     time.sleep(0.01)
 # Synthetic callback side effect occurs before the durable stage CAS.
-with (directory / "callbacks.log").open("a", encoding="utf-8") as stream:
-    stream.write(worker_id + "\n")
+(directory / (worker_id + ".callback")).write_text(worker_id, encoding="utf-8")
 identity = S4ExecutionEventIdentity(**item["identity"])
 checkpoint = {
     "schema_version": 1,
@@ -692,10 +691,11 @@ except ValueError as error:
                 process.kill()
                 process.wait(timeout=5)
 
-    callback_calls = (tmp_path / "callbacks.log").read_text(encoding="utf-8").splitlines()
+    callback_calls = [(tmp_path / (name + ".callback")).read_text(encoding="utf-8")
+                      for name in ("worker-a", "worker-b")]
     results = [(tmp_path / (name + ".result")).read_text(encoding="utf-8")
                for name in ("worker-a", "worker-b")]
-    assert len(callback_calls) == 2
+    assert callback_calls == ["worker-a", "worker-b"]
     assert sorted(results) == ["COMMITTED", "S4_CHECKPOINT_STAGE_CONFLICT"]
     assert store.get_event_status(event) == "BRIDGE_APPLIED"
     assert len(store.pending_events()) == 1

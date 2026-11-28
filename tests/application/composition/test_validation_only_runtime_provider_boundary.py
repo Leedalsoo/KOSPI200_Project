@@ -1,5 +1,6 @@
 import hashlib
 import json
+from dataclasses import dataclass, field
 from types import SimpleNamespace
 
 import pytest
@@ -87,3 +88,110 @@ def test_synthetic_runtime_source_wrappers_preserve_validation_only_provenance()
         assert provider.identity_authority == "SYNTHETIC_ONLY"
         assert provider.source_manifest_sha256 == "b" * 64
         assert provider.scenario_id == "T1-WRAPPER"
+
+@dataclass
+class _RecordingValidationAdapter:
+    bound_run_ids: list[str] = field(default_factory=list)
+    applied_strategy_ids: list[str] = field(default_factory=list)
+
+    def bind_run_id(self, run_id):
+        self.bound_run_ids.append(str(run_id))
+
+    def apply_to_strategy(self, strategy, *, synthetic_sources):
+        self.applied_strategy_ids.append(str(strategy.strategy_id))
+
+
+_VALIDATION_ADAPTERS = {
+    "s7": "validation_only_s7_runtime_adapter",
+    "s8": "validation_only_s8_runtime_adapter",
+    "s9": "validation_only_s9_runtime_adapter",
+}
+_VALIDATION_STRATEGY_KEYS = {
+    "s7": ("track7_volatility_skew_weekly_insurance", "1.0"),
+    "s8": ("track8_macro_regime_monthly_strangle", "2.0"),
+    "s9": ("track9_event_overnight_insurance", "3.0"),
+}
+
+
+@pytest.mark.parametrize(
+    "adapter_pair",
+    (("s7", "s8"), ("s7", "s9"), ("s8", "s9")),
+)
+def test_factory_rejects_multiple_strategy_validation_adapters_before_any_adapter_mutation(adapter_pair):
+    adapters = {name: _RecordingValidationAdapter() for name in adapter_pair}
+    kwargs = {
+        _VALIDATION_ADAPTERS[name]: adapter
+        for name, adapter in adapters.items()
+    }
+    # Select a strategy accepted by the adapter that currently runs first.
+    strategy_name = "s8" if adapter_pair == ("s7", "s8") else "s9"
+    strategy_key = _VALIDATION_STRATEGY_KEYS[strategy_name]
+    with pytest.raises(ValueError, match="S7_S8_S9_VALIDATION_ADAPTERS_MUST_BE_ISOLATED"):
+        attach_standard_automated_loop(
+            None,
+            strategy_keys=(strategy_key,),
+            run_id="SYNTHETIC-ADAPTER-CONFLICT",
+            synthetic_runtime_sources=SyntheticRuntimeSources(
+                source_manifest_sha256="a" * 64,
+                scenario_id="SYNTHETIC-ADAPTER-CONFLICT",
+            ),
+            **kwargs,
+        )
+    assert all(not adapter.bound_run_ids for adapter in adapters.values())
+    assert all(not adapter.applied_strategy_ids for adapter in adapters.values())
+
+
+@pytest.mark.parametrize("adapter_name", ("s7", "s8", "s9"))
+def test_factory_rejects_strategy_adapter_with_track6_lifecycle_before_adapter_mutation(adapter_name):
+    adapter = _RecordingValidationAdapter()
+    with pytest.raises(ValueError, match="S7_S8_S9_VALIDATION_ADAPTER_CANNOT_SHARE_TRACK6_GATES"):
+        attach_standard_automated_loop(
+            None,
+            strategy_keys=(_VALIDATION_STRATEGY_KEYS[adapter_name],),
+            run_id=f"SYNTHETIC-{adapter_name.upper()}-TRACK6-LIFECYCLE-CONFLICT",
+            synthetic_runtime_sources=SyntheticRuntimeSources(
+                source_manifest_sha256="b" * 64,
+                scenario_id=f"SYNTHETIC-{adapter_name.upper()}-TRACK6-LIFECYCLE-CONFLICT",
+            ),
+            validation_only_track6_lifecycle_config=object(),
+            **{_VALIDATION_ADAPTERS[adapter_name]: adapter},
+        )
+    assert adapter.bound_run_ids == []
+    assert adapter.applied_strategy_ids == []
+
+
+@pytest.mark.parametrize("adapter_name", ("s7", "s8", "s9"))
+def test_factory_rejects_strategy_adapter_with_track6_signal_mode_before_adapter_mutation(adapter_name):
+    adapter = _RecordingValidationAdapter()
+    with pytest.raises(ValueError, match="S7_S8_S9_VALIDATION_ADAPTER_CANNOT_SHARE_TRACK6_GATES"):
+        attach_standard_automated_loop(
+            None,
+            strategy_keys=(_VALIDATION_STRATEGY_KEYS[adapter_name],),
+            run_id=f"SYNTHETIC-{adapter_name.upper()}-TRACK6-SIGNAL-CONFLICT",
+            synthetic_runtime_sources=SyntheticRuntimeSources(
+                source_manifest_sha256="c" * 64,
+                scenario_id=f"SYNTHETIC-{adapter_name.upper()}-TRACK6-SIGNAL-CONFLICT",
+            ),
+            validation_only_track6_signal_mode=True,
+            **{_VALIDATION_ADAPTERS[adapter_name]: adapter},
+        )
+    assert adapter.bound_run_ids == []
+    assert adapter.applied_strategy_ids == []
+
+@pytest.mark.parametrize("adapter_name", ("s7", "s8", "s9"))
+def test_factory_rejects_strategy_adapter_with_track6_execution_gate_before_adapter_mutation(adapter_name):
+    adapter = _RecordingValidationAdapter()
+    with pytest.raises(ValueError, match="S7_S8_S9_VALIDATION_ADAPTER_CANNOT_SHARE_TRACK6_GATES"):
+        attach_standard_automated_loop(
+            None,
+            strategy_keys=(_VALIDATION_STRATEGY_KEYS[adapter_name],),
+            run_id=f"SYNTHETIC-{adapter_name.upper()}-TRACK6-EXECUTION-CONFLICT",
+            synthetic_runtime_sources=SyntheticRuntimeSources(
+                source_manifest_sha256="d" * 64,
+                scenario_id=f"SYNTHETIC-{adapter_name.upper()}-TRACK6-EXECUTION-CONFLICT",
+            ),
+            validation_only_track6_execution_gate=object(),
+            **{_VALIDATION_ADAPTERS[adapter_name]: adapter},
+        )
+    assert adapter.bound_run_ids == []
+    assert adapter.applied_strategy_ids == []

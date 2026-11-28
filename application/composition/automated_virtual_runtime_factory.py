@@ -121,6 +121,19 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
     selected_keys = tuple(strategy_keys) if strategy_keys else STANDARD_STRATEGY_KEYS
     selected_ids = {key[0] if isinstance(key, tuple) else str(key) for key in selected_keys}
     run_id = run_id or getattr(getattr(bootstrap, "run_context", None), "run_id", "")
+    validation_strategy_adapters = (
+        validation_only_s7_runtime_adapter,
+        validation_only_s8_runtime_adapter,
+        validation_only_s9_runtime_adapter,
+    )
+    if sum(adapter is not None for adapter in validation_strategy_adapters) > 1:
+        raise ValueError("S7_S8_S9_VALIDATION_ADAPTERS_MUST_BE_ISOLATED")
+    if any(adapter is not None for adapter in validation_strategy_adapters) and (
+        validation_only_track6_signal_mode
+        or validation_only_track6_execution_gate is not None
+        or validation_only_track6_lifecycle_config is not None
+    ):
+        raise ValueError("S7_S8_S9_VALIDATION_ADAPTER_CANNOT_SHARE_TRACK6_GATES")
     if (validation_only_u16_quote_policy is None) != (validation_only_u16_repair_price_resolver is None):
         raise ValueError("U16_VALIDATION_POLICY_AND_PRICE_RESOLVER_MUST_BE_INJECTED_TOGETHER")
     if validation_only_u16_quote_policy is not None:
