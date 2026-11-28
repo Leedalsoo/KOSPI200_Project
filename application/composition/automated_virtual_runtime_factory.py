@@ -79,6 +79,16 @@ def _track9_execution_result_callback_key(plan, result) -> tuple:
             str(getattr(item, "execution_price", "") or ""),
             str(getattr(item, "fee", "") or ""),
             str(getattr(item, "execution_timestamp", "") or ""),
+            tuple(sorted(
+                (
+                    str(getattr(fill, "execution_id", "") or ""),
+                    int(getattr(fill, "filled_quantity", getattr(fill, "quantity", 0)) or 0),
+                    str(getattr(fill, "execution_price", "") or ""),
+                    str(getattr(fill, "execution_timestamp", "") or ""),
+                    str(getattr(fill, "fee", "") or ""),
+                )
+                for fill in tuple(getattr(item, "execution_fills", ()) or ())
+            )),
             str(getattr(item, "group_id", "") or ""),
             str(getattr(item, "leg_id", "") or ""),
         )

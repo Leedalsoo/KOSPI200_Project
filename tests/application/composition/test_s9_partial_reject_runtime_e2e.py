@@ -571,3 +571,36 @@ def test_s9_callback_fingerprint_distinguishes_attempt_and_terminal_state():
     first_key = _track9_execution_result_callback_key(plan, first_result)
     assert first_key != _track9_execution_result_callback_key(plan, second_attempt_result)
     assert first_key != _track9_execution_result_callback_key(plan, pending_result)
+
+def test_s9_callback_fingerprint_includes_individual_execution_fill_lineage():
+    from application.composition.automated_virtual_runtime_factory import (
+        _track9_execution_result_callback_key,
+    )
+
+    plan = SimpleNamespace(group_id="S9-GROUP", purpose="OVERNIGHT_INSURANCE")
+    base_report = SimpleNamespace(
+        client_order_id="S9-CALL-ORDER", execution_id=None, status="PARTIALLY_FILLED",
+        filled_quantity=1, remaining_quantity=1, execution_price=Decimal("10"),
+        fee=Decimal("0.1"), execution_timestamp="2026-11-09T10:00:00+09:00",
+        group_id=plan.group_id, leg_id="call",
+    )
+    first_fill = SimpleNamespace(
+        execution_id="S9-FILL-001", filled_quantity=1, execution_price=Decimal("10"),
+        execution_timestamp="2026-11-09T10:00:00+09:00", fee=Decimal("0.1"),
+    )
+    second_fill = SimpleNamespace(
+        execution_id="S9-FILL-002", filled_quantity=1, execution_price=Decimal("10"),
+        execution_timestamp="2026-11-09T10:00:00+09:00", fee=Decimal("0.1"),
+    )
+    first_result = SimpleNamespace(
+        reports=(SimpleNamespace(**{**vars(base_report), "execution_fills": (first_fill,)}),),
+        group_complete=False, pending_legs=1, position_flat=False,
+    )
+    second_result = SimpleNamespace(
+        reports=(SimpleNamespace(**{**vars(base_report), "execution_fills": (second_fill,)}),),
+        group_complete=False, pending_legs=1, position_flat=False,
+    )
+
+    assert _track9_execution_result_callback_key(plan, first_result) != (
+        _track9_execution_result_callback_key(plan, second_result)
+    )

@@ -2484,3 +2484,13 @@ S9 pending -> cancel/retry -> fill/close lifecycle: correlate same run/group/cli
 - Only Factory source and S9 E2E tests changed. Synthetic/stub validation only; no Live/account API, actual broker action, collector/service/scheduler or new collection.
 - Notion Q&A: https://app.notion.com/p/4265f4f6eaa18130b671fcca81413fe7
 - Next: verify partial-fill/cumulative-report fingerprint changes and ensure same-client cumulative reports are not mistaken for new execution events.
+
+## 2026-11-28 No.1907 - S9 partial-fill execution fingerprint completeness
+
+- Reconciled No.1906/1905/1904 and No.1884/1885. No.1884 pending-aware group-scoped release remains; No.1885 durable callback outbox/restart dedup/restore/ownership/lease-fencing remains OPEN/unapproved.
+- Test-first synthetic test found that reports with identical aggregate fields but different execution_fills execution IDs produced the same S9 callback fingerprint.
+- Added per-fill execution_id, quantity, price, timestamp and fee to the normalized fingerprint. Fill ordering is normalized; same cumulative report redelivery is stable, while a distinct fill ID changes the key.
+- S9 core + composition regression: **65 passed**. Full `tests/validation_only`: **158 passed**. Compileall, scoped Ruff F401/F821/F841, and diff-check PASS.
+- Only Factory source and S9 E2E tests changed. Synthetic/stub only; no Live/account API, actual broker action, collector/service/scheduler or new collection.
+- Notion Q&A: https://app.notion.com/p/4265f4f6eaa18197bee2e926af0bc420
+- Next: verify cumulative broker reports are not double-counted in PositionLot/Fee Ledger/StrategyHub while distinct fill IDs remain additive.
