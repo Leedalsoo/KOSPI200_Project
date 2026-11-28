@@ -2553,3 +2553,15 @@ S9 pending -> cancel/retry -> fill/close lifecycle: correlate same run/group/cli
 - Synthetic/in-process validation only. No KIS Live/account API, real broker order/cancel/close, collector/service/scheduler, new data collection or Raw/Canonical/accepted-source/manifest original mutation. No combined S7/S8/S9 adapter Runtime acceptance claimed.
 - Notion Q&A: https://app.notion.com/p/4265f4f6eaa181a1be66dcd0ea959025
 - Next: No.1912 - StrategyHub callback and reservation-release ordering under late-fill/retry races.
+
+## 2026-11-29 No.1912 - S9 callback / reservation-release retry ordering
+
+- Test-first reproduced two callback boundary defects: (1) StrategyHub callback failure was fingerprinted as delivered before the callback returned, suppressing retry; (2) reservation release failure occurred after the callback fingerprint was marked complete, suppressing release retry.
+- Fixed `application/composition/automated_virtual_runtime_factory.py` with separate process-local sets: `delivered_s9_strategy_callbacks` records successful StrategyHub delivery; `completed_s9_execution_results` records completion only after all S9 callback side effects, including reservation release, succeed.
+- StrategyHub failure permits callback retry while retaining No.1884 reservation. If StrategyHub succeeded but release failed, retry skips duplicate StrategyHub delivery and retries only group release. Completed duplicate callbacks remain suppressed.
+- Synthetic fault-injection tests: StrategyHub failure/retry PASS; terminal callback failure retains reservation until retry succeeds PASS; release failure retries release without redelivering StrategyHub PASS.
+- S9 core + composition + Track9 recovery: **36 passed**. `tests/validation_only`: **158 passed**. Compileall, Ruff F401/F821/F841 and `git diff --check`: PASS.
+- No.1884 pending-aware group-scoped release remains in force. No.1885 durable source-of-truth/restore/persistence/ownership/lease/fencing/retry/outbox/broker-reconciliation/restart-ack remains OPEN / UNAPPROVED.
+- This is process-local ordering only. Partial StrategyHub mutation followed by exception, process crash/restart, durable outbox, cross-process exactly-once and broker authority/ACK remain unresolved. No Live/account API, real broker action, collector/service/scheduler, new data collection or Raw/Canonical/accepted-source/manifest original mutation. No combined S7/S8/S9 adapter Runtime acceptance claimed.
+- Notion Q&A: https://app.notion.com/p/4265f4f6eaa181a69070d5a5cc7cfab4
+- Next: No.1913 - synthetic S7/S8 callback and reservation-release failure/retry ordering comparison, preserving No.1884/1885 boundaries.

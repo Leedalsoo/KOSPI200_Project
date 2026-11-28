@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from application.strategy_hub.hub import StrategyHub
 from application.composition.virtual_multi_leg_execution import (
     VirtualMultiLegExecutionBridge,
 )
@@ -666,6 +667,208 @@ class _PartialCallThenDelegateBroker:
         report = self.pending[client_order_id]
         self.pending[client_order_id] = replace(report, status="CANCELLED")
         return self.pending[client_order_id]
+
+
+def test_s9_factory_callback_failure_can_be_retried_without_losing_reservation(monkeypatch, tmp_path):
+    dataset, manifest = _retry_dataset(tmp_path)
+    bridges = []
+    captured_callbacks = []
+    original_init = VirtualMultiLegExecutionBridge.__init__
+    original_hub_callback = StrategyHub.on_execution_result
+
+    def patched_init(self, **kwargs):
+        original_init(self, **kwargs)
+        callback = self.execution_result_callback
+        def capture(plan, result):
+            captured_callbacks.append((plan, result))
+            return callback(plan, result)
+        self.execution_result_callback = capture
+        bridges.append(self)
+
+    failed = {"value": False}
+    attempts = []
+    def fail_once(self, strategy_id, purpose, result):
+        if strategy_id == "track9_event_overnight_insurance" and not failed["value"]:
+            failed["value"] = True
+            attempts.append("failed-before-delivery")
+            raise RuntimeError("SYNTHETIC_STRATEGYHUB_CALLBACK_FAILURE")
+        attempts.append("delivered")
+        return original_hub_callback(self, strategy_id, purpose, result)
+
+    monkeypatch.setattr(VirtualMultiLegExecutionBridge, "__init__", patched_init)
+    monkeypatch.setattr(StrategyHub, "on_execution_result", fail_once)
+    runner = HighSpeedVirtualRuntimeReplayRunner(
+        dataset,
+        run_id="S9-CALLBACK-RETRY-ON-FAILURE",
+        strategy_keys=(("track9_event_overnight_insurance", "3.0"),),
+        validation_only_synthetic=True,
+        validation_only_synthetic_manifest=manifest,
+        validation_only_s9_contract_profile=CONTRACT,
+        validation_only_s9_risk_profile=RISK,
+        log_mode=ReplayLogMode.FAST,
+    )
+
+    with pytest.raises(RuntimeError, match="SYNTHETIC_STRATEGYHUB_CALLBACK_FAILURE"):
+        runner.run(max_events=2)
+
+    assert captured_callbacks
+    plan, result = captured_callbacks[-1]
+    bridge = bridges[-1]
+    adapter = runner.s9_validation_runtime_adapter
+    assert plan.group_id in adapter._reserved
+    assert attempts == ["failed-before-delivery"]
+
+    def record_success(self, strategy_id, purpose, result):
+        attempts.append("delivered")
+        return original_hub_callback(self, strategy_id, purpose, result)
+
+    monkeypatch.setattr(StrategyHub, "on_execution_result", record_success)
+    bridge.execution_result_callback(plan, result)
+
+    assert attempts == ["failed-before-delivery", "delivered"]
+    assert plan.group_id in adapter._reserved
+
+
+def test_s9_terminal_callback_failure_keeps_reservation_until_successful_retry(monkeypatch, tmp_path):
+    dataset, manifest = _retry_dataset(tmp_path)
+    bridges = []
+    terminal_callbacks = []
+    original_init = VirtualMultiLegExecutionBridge.__init__
+    original_hub_callback = StrategyHub.on_execution_result
+    original_release = Track9ValidationOnlyRuntimeAdapter.release_group
+
+    def patched_init(self, **kwargs):
+        original_init(self, **kwargs)
+        callback = self.execution_result_callback
+        def capture(plan, result):
+            if plan.purpose == "OVERNIGHT_INSURANCE_CLOSE":
+                terminal_callbacks.append((plan, result))
+            return callback(plan, result)
+        self.execution_result_callback = capture
+        bridges.append(self)
+
+    failed = {"value": False}
+    callback_attempts = []
+    def fail_terminal_once(self, strategy_id, purpose, result):
+        if purpose == "OVERNIGHT_INSURANCE_CLOSE" and not failed["value"]:
+            failed["value"] = True
+            callback_attempts.append("failed")
+            raise RuntimeError("SYNTHETIC_TERMINAL_CALLBACK_FAILURE")
+        if purpose == "OVERNIGHT_INSURANCE_CLOSE":
+            callback_attempts.append("delivered")
+        return original_hub_callback(self, strategy_id, purpose, result)
+
+    monkeypatch.setattr(VirtualMultiLegExecutionBridge, "__init__", patched_init)
+    monkeypatch.setattr(StrategyHub, "on_execution_result", fail_terminal_once)
+    runner = HighSpeedVirtualRuntimeReplayRunner(
+        dataset,
+        run_id="S9-TERMINAL-CALLBACK-RESERVATION-ORDER",
+        strategy_keys=(("track9_event_overnight_insurance", "3.0"),),
+        validation_only_synthetic=True,
+        validation_only_synthetic_manifest=manifest,
+        validation_only_s9_contract_profile=CONTRACT,
+        validation_only_s9_risk_profile=RISK,
+        log_mode=ReplayLogMode.FAST,
+    )
+
+    with pytest.raises(RuntimeError, match="SYNTHETIC_TERMINAL_CALLBACK_FAILURE"):
+        runner.run(max_events=8)
+
+    assert terminal_callbacks
+    plan, result = terminal_callbacks[-1]
+    bridge = bridges[-1]
+    adapter = runner.s9_validation_runtime_adapter
+    assert plan.group_id in adapter._reserved
+    assert bridge.pending_legs == {}
+    assert bridge.position_lot_store.open_lots() == ()
+    assert callback_attempts == ["failed"]
+
+    releases = []
+    def count_release(self, group_id):
+        if self is adapter:
+            releases.append(group_id)
+        return original_release(self, group_id)
+
+    def record_terminal_success(self, strategy_id, purpose, result):
+        if purpose == "OVERNIGHT_INSURANCE_CLOSE":
+            callback_attempts.append("delivered")
+        return original_hub_callback(self, strategy_id, purpose, result)
+
+    monkeypatch.setattr(StrategyHub, "on_execution_result", record_terminal_success)
+    monkeypatch.setattr(Track9ValidationOnlyRuntimeAdapter, "release_group", count_release)
+    bridge.execution_result_callback(plan, result)
+
+    assert callback_attempts == ["failed", "delivered"]
+    assert releases == [plan.group_id]
+    assert plan.group_id not in adapter._reserved
+
+    bridge.execution_result_callback(plan, result)
+    assert callback_attempts == ["failed", "delivered"]
+    assert releases == [plan.group_id]
+
+
+def test_s9_reservation_release_failure_retries_release_without_redelivering_strategy_callback(monkeypatch, tmp_path):
+    dataset, manifest = _retry_dataset(tmp_path)
+    bridges = []
+    terminal_callbacks = []
+    original_init = VirtualMultiLegExecutionBridge.__init__
+    original_hub_callback = StrategyHub.on_execution_result
+    original_release = Track9ValidationOnlyRuntimeAdapter.release_group
+
+    def patched_init(self, **kwargs):
+        original_init(self, **kwargs)
+        callback = self.execution_result_callback
+        def capture(plan, result):
+            if plan.purpose == "OVERNIGHT_INSURANCE_CLOSE":
+                terminal_callbacks.append((plan, result))
+            return callback(plan, result)
+        self.execution_result_callback = capture
+        bridges.append(self)
+
+    hub_deliveries = []
+    def count_hub_delivery(self, strategy_id, purpose, result):
+        if purpose == "OVERNIGHT_INSURANCE_CLOSE":
+            hub_deliveries.append(purpose)
+        return original_hub_callback(self, strategy_id, purpose, result)
+
+    release_attempts = []
+    def fail_release_once(self, group_id):
+        if self is runner.s9_validation_runtime_adapter:
+            release_attempts.append(group_id)
+            if len(release_attempts) == 1:
+                raise RuntimeError("SYNTHETIC_RESERVATION_RELEASE_FAILURE")
+        return original_release(self, group_id)
+
+    monkeypatch.setattr(VirtualMultiLegExecutionBridge, "__init__", patched_init)
+    monkeypatch.setattr(StrategyHub, "on_execution_result", count_hub_delivery)
+    runner = HighSpeedVirtualRuntimeReplayRunner(
+        dataset,
+        run_id="S9-RESERVATION-RELEASE-RETRY-ORDER",
+        strategy_keys=(("track9_event_overnight_insurance", "3.0"),),
+        validation_only_synthetic=True,
+        validation_only_synthetic_manifest=manifest,
+        validation_only_s9_contract_profile=CONTRACT,
+        validation_only_s9_risk_profile=RISK,
+        log_mode=ReplayLogMode.FAST,
+    )
+    monkeypatch.setattr(Track9ValidationOnlyRuntimeAdapter, "release_group", fail_release_once)
+
+    with pytest.raises(RuntimeError, match="SYNTHETIC_RESERVATION_RELEASE_FAILURE"):
+        runner.run(max_events=8)
+
+    assert terminal_callbacks
+    plan, result = terminal_callbacks[-1]
+    bridge = bridges[-1]
+    adapter = runner.s9_validation_runtime_adapter
+    assert plan.group_id in adapter._reserved
+    assert hub_deliveries == ["OVERNIGHT_INSURANCE_CLOSE"]
+    assert release_attempts == [plan.group_id]
+
+    bridge.execution_result_callback(plan, result)
+
+    assert hub_deliveries == ["OVERNIGHT_INSURANCE_CLOSE"]
+    assert release_attempts == [plan.group_id, plan.group_id]
+    assert plan.group_id not in adapter._reserved
 
 
 def test_s9_partial_fill_cancel_retry_late_fill_fails_closed_across_strategy_reservation_and_ledgers(
