@@ -2494,3 +2494,13 @@ S9 pending -> cancel/retry -> fill/close lifecycle: correlate same run/group/cli
 - Only Factory source and S9 E2E tests changed. Synthetic/stub only; no Live/account API, actual broker action, collector/service/scheduler or new collection.
 - Notion Q&A: https://app.notion.com/p/4265f4f6eaa18197bee2e926af0bc420
 - Next: verify cumulative broker reports are not double-counted in PositionLot/Fee Ledger/StrategyHub while distinct fill IDs remain additive.
+
+## 2026-11-28 No.1908 - S9 cumulative report duplicate-fill aggregation guard
+
+- Reconciled No.1907/1906/1905 and No.1884/1885. No.1884 pending-aware group-scoped release remains; No.1885 durable callback outbox/restart dedup/restore/ownership/lease-fencing remains OPEN/unapproved.
+- Test-first synthetic scenario reproduced cumulative same-client reports (first quantity 1, next cumulative quantity 2 with prior+new fill IDs) being summed as 3 and producing incorrect average fill price 10.3333 instead of 10.5.
+- Track9 strategy callback now aggregates unique execution_fills by execution_id; repeated fill IDs are ignored and new fill IDs are additive. Reports without execution_fills are deduped by execution_id; no-ID cumulative snapshots use the maximum quantity per client order.
+- S9 core + composition regression: **66 passed**. Full `tests/validation_only`: **158 passed**. Compileall, scoped Ruff F401/F821/F841, and diff-check PASS.
+- Only Track9 strategy source and recovery tests changed. Synthetic/stub only; no Live/account API, actual broker action, collector/service/scheduler or new collection.
+- Notion Q&A: https://app.notion.com/p/4265f4f6eaa1813d8e80c9d59ce6635c
+- Next: mixed broker cumulative reports without execution_fills and canonical reports with execution_fills; ensure no duplicate fill is counted across representations.

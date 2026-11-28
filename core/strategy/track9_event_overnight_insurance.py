@@ -187,13 +187,56 @@ class Track9EventOvernightInsurance:
                 return
             totals = {"put": 0, "call": 0}
             values = {"put": Decimal("0"), "call": Decimal("0")}
-            for item in reports:
+            seen_execution_ids: set[str] = set()
+            orders_with_fill_events: set[str] = set()
+            cumulative_reports: dict[tuple[str, str], tuple[int, Decimal]] = {}
+            for index, item in enumerate(reports):
                 leg_id = str(getattr(item, "leg_id", "") or "")
+                if leg_id not in totals:
+                    continue
+                client_order_id = str(getattr(item, "client_order_id", "") or "")
+                fills = tuple(getattr(item, "execution_fills", ()) or ())
+                if fills:
+                    if client_order_id:
+                        orders_with_fill_events.add(client_order_id)
+                    for fill in fills:
+                        execution_id = str(getattr(fill, "execution_id", "") or "")
+                        if execution_id and execution_id in seen_execution_ids:
+                            continue
+                        if execution_id:
+                            seen_execution_ids.add(execution_id)
+                        quantity = int(getattr(
+                            fill, "filled_quantity", getattr(fill, "quantity", 0),
+                        ) or 0)
+                        price = getattr(fill, "execution_price", None)
+                        if quantity > 0 and price is not None:
+                            totals[leg_id] += quantity
+                            values[leg_id] += Decimal(str(price)) * quantity
+                    continue
+                execution_id = str(getattr(item, "execution_id", "") or "")
+                if execution_id:
+                    if execution_id in seen_execution_ids:
+                        continue
+                    seen_execution_ids.add(execution_id)
+                    quantity = int(getattr(item, "filled_quantity", 0) or 0)
+                    price = getattr(item, "execution_price", None)
+                    if quantity > 0 and price is not None:
+                        totals[leg_id] += quantity
+                        values[leg_id] += Decimal(str(price)) * quantity
+                    continue
                 quantity = int(getattr(item, "filled_quantity", 0) or 0)
                 price = getattr(item, "execution_price", None)
-                if leg_id in totals and quantity > 0 and price is not None:
-                    totals[leg_id] += quantity
-                    values[leg_id] += Decimal(str(price)) * quantity
+                if quantity <= 0 or price is None:
+                    continue
+                order_key = (leg_id, client_order_id or f"__report_{index}")
+                prior = cumulative_reports.get(order_key)
+                if prior is None or quantity > prior[0]:
+                    cumulative_reports[order_key] = (quantity, Decimal(str(price)))
+            for (leg_id, client_order_id), (quantity, price) in cumulative_reports.items():
+                if client_order_id in orders_with_fill_events:
+                    continue
+                totals[leg_id] += quantity
+                values[leg_id] += price * quantity
             put_price = values["put"] / totals["put"] if totals["put"] else self.state.put_entry_fill_price
             call_price = values["call"] / totals["call"] if totals["call"] else self.state.call_entry_fill_price
             if bool(getattr(result, "group_complete", False)) and totals["put"] > 0 and totals["call"] > 0:

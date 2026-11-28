@@ -216,3 +216,47 @@ def test_duplicate_s9_terminal_close_callback_is_idempotent() -> None:
     assert strategy.state == first_state
     assert strategy.state.state == "OVERNIGHT_INSURANCE_CLOSED"
     assert strategy._exit_pending is False
+
+def test_s9_cumulative_same_order_reports_use_unique_execution_fills_once() -> None:
+    strategy = Track9EventOvernightInsurance()
+    put_fill = SimpleNamespace(
+        execution_id="S9-PUT-FILL-1", filled_quantity=1,
+        execution_price=Decimal("10"), fee=Decimal("0.1"),
+        execution_timestamp="2026-11-09T10:00:00+09:00",
+    )
+    call_fill_1 = SimpleNamespace(
+        execution_id="S9-CALL-FILL-1", filled_quantity=1,
+        execution_price=Decimal("10"), fee=Decimal("0.1"),
+        execution_timestamp="2026-11-09T10:00:01+09:00",
+    )
+    call_fill_2 = SimpleNamespace(
+        execution_id="S9-CALL-FILL-2", filled_quantity=1,
+        execution_price=Decimal("11"), fee=Decimal("0.1"),
+        execution_timestamp="2026-11-09T10:00:02+09:00",
+    )
+    reports = (
+        SimpleNamespace(
+            client_order_id="S9-PUT-ORDER", execution_id=None, leg_id="put",
+            filled_quantity=1, execution_price=Decimal("10"),
+            execution_fills=(put_fill,),
+        ),
+        SimpleNamespace(
+            client_order_id="S9-CALL-ORDER", execution_id=None, leg_id="call",
+            filled_quantity=1, execution_price=Decimal("10"),
+            execution_fills=(call_fill_1,),
+        ),
+        SimpleNamespace(
+            client_order_id="S9-CALL-ORDER", execution_id=None, leg_id="call",
+            filled_quantity=2, execution_price=Decimal("10.5"),
+            execution_fills=(call_fill_1, call_fill_2),
+        ),
+    )
+
+    strategy.on_execution_result(
+        "OVERNIGHT_INSURANCE",
+        SimpleNamespace(group_complete=True, reports=reports),
+    )
+
+    assert strategy.state.state == "OVERNIGHT_INSURANCE_ACTIVE"
+    assert strategy.state.put_entry_fill_price == Decimal("10")
+    assert strategy.state.call_entry_fill_price == Decimal("10.5")
