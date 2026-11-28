@@ -495,9 +495,35 @@ def attach_standard_automated_loop(bootstrap, *, track3_runtime_input_source=Non
         except Exception as exc:
             # Keep the Virtual runtime available, but never fall back to a stale local master.
             logger.warning("VIRTUAL_FUTURES_IDENTITY_SOURCE_UNAVAILABLE: %s", exc)
+    delivered_s9_execution_results: set[tuple] = set()
+
     def on_multi_leg_execution_result(plan, result):
         if plan.strategy_id == "track9_event_overnight_insurance":
             result = replace(result, reports=multi_leg_bridge.group_reports(result.group_id))
+            report_fingerprint = tuple(sorted(
+                (
+                    str(getattr(item, "client_order_id", "") or ""),
+                    str(getattr(item, "execution_id", "") or ""),
+                    str(getattr(getattr(item, "status", ""), "value", getattr(item, "status", ""))),
+                    int(getattr(item, "filled_quantity", 0) or 0),
+                    int(getattr(item, "remaining_quantity", 0) or 0),
+                    str(getattr(item, "execution_price", "") or ""),
+                    str(getattr(item, "fee", "") or ""),
+                    str(getattr(item, "execution_timestamp", "") or ""),
+                    str(getattr(item, "group_id", "") or ""),
+                    str(getattr(item, "leg_id", "") or ""),
+                )
+                for item in result.reports
+            ))
+            callback_key = (
+                str(plan.group_id), str(plan.purpose or ""), report_fingerprint,
+                bool(getattr(result, "group_complete", False)),
+                int(getattr(result, "pending_legs", 0) or 0),
+                bool(getattr(result, "position_flat", False)),
+            )
+            if callback_key in delivered_s9_execution_results:
+                return
+            delivered_s9_execution_results.add(callback_key)
         strategy_hub.on_execution_result(plan.strategy_id, plan.purpose or "", result)
         if (validation_only_s8_runtime_adapter is not None
                 and plan.strategy_id == "track8_macro_regime_monthly_strangle"

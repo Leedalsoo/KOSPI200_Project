@@ -2377,3 +2377,14 @@ Detail: <mention url="https://app.notion.com/p/4265f4f6eaa181c29e4cf989ae171452"
 - Only Track9 strategy source and its recovery tests changed in this step. Synthetic callback replay only; no Live/account API, broker action, collector/service/scheduler or new collection.
 - Notion Q&A: https://app.notion.com/p/4265f4f6eaa181e8a41ff085fe3c9353
 - Next: verify StrategyHub callback delivery, reservation release and terminal event synchronization within one group.
+
+## 2026-11-28 No.1905 - S9 Factory/StrategyHub duplicate callback delivery guard
+
+- Reconciled No.1904/1903/1902 and No.1884/1885. No.1884 pending-aware group-scoped reservation release remains in force; No.1885 durable callback outbox/restore/ownership/lease-fencing/broker-reconciliation/restart-ack remains OPEN/unapproved.
+- Test-first replay through the real Factory -> StrategyHub -> Track9 strategy path reproduced an identical terminal close callback delivered twice to StrategyHub and the reservation release path.
+- Added an in-process S9 callback fingerprint at the Factory boundary. The key includes group, purpose, execution report client-order/execution/status/filled/remaining/price/fee/time/group/leg fields and terminal state flags. Exact duplicates are ignored before StrategyHub delivery and reservation release; distinct attempt/fill/report states remain separate.
+- This is process-local duplicate delivery protection only; no durable exactly-once/outbox/restart guarantee is claimed.
+- S9 core + composition regression: **62 passed**. Full `tests/validation_only`: **158 passed**. Compileall, scoped Ruff F401/F821/F841, and diff-check PASS.
+- Only Factory source and S9 E2E test changed in this step. Synthetic/stub replay only; no Live/account API, actual broker action, collector/service/scheduler or new collection.
+- Notion Q&A: https://app.notion.com/p/4265f4f6eaa1814bbf6fcce8f72dabd0
+- Next: verify callback fingerprint invariance to report ordering while keeping distinct attempts/fills separate.

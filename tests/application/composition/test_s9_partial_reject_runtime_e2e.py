@@ -360,7 +360,9 @@ def test_s9_natural_signal_pending_leg_timeout_cancel_confirm_wait_retry_then_ne
     dataset, manifest = _retry_dataset(tmp_path)
     bridges = []
     brokers = []
+    executions = []
     original_init = VirtualMultiLegExecutionBridge.__init__
+    original_execute = VirtualMultiLegExecutionBridge.execute
 
     def patched_init(self, **kwargs):
         original_init(self, **kwargs)
@@ -369,7 +371,14 @@ def test_s9_natural_signal_pending_leg_timeout_cancel_confirm_wait_retry_then_ne
         brokers.append(broker)
         bridges.append(self)
 
+    def capture_execute(self, plan, **kwargs):
+        result = original_execute(self, plan, **kwargs)
+        if plan.strategy_id == "track9_event_overnight_insurance":
+            executions.append((plan, result))
+        return result
+
     monkeypatch.setattr(VirtualMultiLegExecutionBridge, "__init__", patched_init)
+    monkeypatch.setattr(VirtualMultiLegExecutionBridge, "execute", capture_execute)
     runner = HighSpeedVirtualRuntimeReplayRunner(
         dataset,
         run_id="S9-BUY-BUY-5M-RETRY-E2E-20261108",
@@ -405,6 +414,22 @@ def test_s9_natural_signal_pending_leg_timeout_cancel_confirm_wait_retry_then_ne
     group = next(iter(groups.values()))
     assert group.is_complete is True
     assert report.rejected == 0
+
+    close_plan, close_result = executions[-1]
+    assert close_plan.purpose == "OVERNIGHT_INSURANCE_CLOSE"
+    callback_deliveries = []
+    original_strategy_callback = runner.s9_strategy.on_execution_result
+
+    def count_strategy_callback(purpose, result):
+        callback_deliveries.append((purpose, result))
+        return original_strategy_callback(purpose, result)
+
+    monkeypatch.setattr(runner.s9_strategy, "on_execution_result", count_strategy_callback)
+    bridge.execution_result_callback(close_plan, close_result)
+    bridge.execution_result_callback(close_plan, close_result)
+    assert callback_deliveries == []
+    assert len(releases) == 1
+    assert runner.s9_strategy.state.state == "OVERNIGHT_INSURANCE_CLOSED"
 
 
 class _NeverFillCallBroker:
