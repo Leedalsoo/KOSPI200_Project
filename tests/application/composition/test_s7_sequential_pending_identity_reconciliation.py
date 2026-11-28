@@ -198,6 +198,23 @@ def test_s7_pending_call_reconciliation_keeps_original_expiry_after_market_tick_
     assert set(s7_adapter._reserved[call_plan.group_id]) == {"put", "call"}
     assert s7_adapter._reserved_entry_fees[call_plan.group_id]
     assert s7_adapter._group_expiry_by_id[call_plan.group_id] == "20261112"
+
+    # Cross-store restart boundary: reconstructing only the validation adapter
+    # with the same run ID cannot infer reservations from live Bridge projections.
+    reconstructed_adapter = S7ValidationOnlyRuntimeAdapter(
+        dataset=DATASET,
+        manifest_path=MANIFEST,
+        risk_profile_path=ROOT / "config/validation_only/q25_s05_3_s7_concurrent/risk_profile.json",
+    )
+    reconstructed_adapter.bind_run_id("Q25-S7-PENDING-IDENTITY-RECONCILIATION")
+    assert len(bridge.position_lot_store.open_lots()) == 2
+    assert len(bridge.fee_ledger.snapshot(run_id="Q25-S7-PENDING-IDENTITY-RECONCILIATION")) == 2
+    assert reconstructed_adapter._reserved == {}
+    assert reconstructed_adapter._reserved_entry_fees == {}
+    assert reconstructed_adapter._group_expiry_by_id == {}
+    # No restore policy is implied: original adapter still owns the live
+    # in-process reservation and the reconstructed adapter remains unhydrated.
+    assert set(s7_adapter._reserved[call_plan.group_id]) == {"put", "call"}
     snapshot = bridge.position_groups.snapshot(call_plan.group_id)
     assert snapshot is not None
     assert {leg.instrument_id for leg in snapshot.legs} == {
